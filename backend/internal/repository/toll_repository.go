@@ -242,7 +242,7 @@ func (r *TollRepository) CompletedDays(
 }
 
 func (r *TollRepository) ReconcileTruckAssignments(ctx context.Context) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -270,7 +270,7 @@ func (r *TollRepository) UpsertDay(
 	syncedAt time.Time,
 	markComplete bool,
 ) (TollSyncDayResult, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return TollSyncDayResult{}, err
 	}

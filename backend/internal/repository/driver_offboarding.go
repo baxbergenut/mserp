@@ -195,7 +195,7 @@ func previewTerminationCleanup(ctx context.Context, tx pgx.Tx) (TerminationClean
 // external provider calls. Historical boundaries use today's date, never a
 // guessed retrospective termination date.
 func (r *FleetRepository) ApplyTerminationCleanup(ctx context.Context, revision string) (TerminationCleanup, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return TerminationCleanup{}, err
 	}
@@ -230,7 +230,7 @@ func (r *FleetRepository) ApplyTerminationCleanup(ctx context.Context, revision 
 	if err = recordTerminatedOwnerTrucks(ctx, tx, "", "", "termination_cleanup"); err != nil {
 		return out, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return out, err
 	}
 	return r.PreviewTerminationCleanup(ctx)

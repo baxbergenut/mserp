@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -10,6 +12,15 @@ import (
 )
 
 type payrollCostDetailKey struct{}
+type payrollCostTraceKey struct{}
+type payrollCostTrace struct {
+	tx                         pgx.Tx
+	weeks                      map[string][2]DriverPayWeek
+	native                     map[string][]PayCostTransaction
+	costs                      []payCostRecord
+	sources                    []paySourceRecord
+	costsLoaded, sourcesLoaded bool
+}
 
 func payrollCostDetails(ctx context.Context) bool {
 	v, _ := ctx.Value(payrollCostDetailKey{}).(bool)
@@ -37,6 +48,7 @@ type PayCostTransaction struct {
 	driverAttributed        bool
 }
 type PayCostTransactions struct {
+	Preparation  *PayrollPreparation  `json:"preparation,omitempty"`
 	Transactions []PayCostTransaction `json:"transactions"`
 	SourceTotal  string               `json:"sourceTotal"`
 	Carry        string               `json:"carry"`
@@ -45,6 +57,23 @@ type PayCostTransactions struct {
 }
 
 func readNativeCostTransactions(ctx context.Context, tx pgx.Tx, week string) ([]PayCostTransaction, error) {
+	memo, _ := ctx.Value(payrollCostTraceKey{}).(*payrollCostTrace)
+	if memo != nil && memo.tx == tx {
+		if items, ok := memo.native[week]; ok {
+			return append([]PayCostTransaction{}, items...), nil
+		}
+	}
+	items, err := readPreparedNativeCostTransactions(ctx, tx, week)
+	if err == nil && memo != nil && memo.tx == tx {
+		if memo.native == nil {
+			memo.native = map[string][]PayCostTransaction{}
+		}
+		memo.native[week] = append([]PayCostTransaction{}, items...)
+	}
+	return items, err
+}
+
+func readNativeCostTransactionsUncached(ctx context.Context, tx pgx.Tx, week string) ([]PayCostTransaction, error) {
 	rows, err := tx.Query(ctx, `WITH aliases AS (
  SELECT unit_key,(array_agg(DISTINCT truck_id))[1] id FROM truck_unit_aliases GROUP BY unit_key HAVING count(DISTINCT truck_id)=1
  ), items AS (
@@ -90,6 +119,27 @@ func readNativeCostTransactions(ctx context.Context, tx pgx.Tx, week string) ([]
 }
 
 func traceRoutedCostWeek(ctx context.Context, tx pgx.Tx, week, kind, id string) ([]PayCostTransaction, error) {
+	memo, _ := ctx.Value(payrollCostTraceKey{}).(*payrollCostTrace)
+	if memo != nil && memo.tx == tx {
+		if reports, ok := memo.weeks[week]; ok {
+			return selectTracedCost(reports, kind, id), nil
+		}
+	}
+	// Routing can only redistribute original native transactions. A complete
+	// empty source week needs no payer reconstruction; any frozen total or carry
+	// discrepancy is still reported by preparedCostEvidence below.
+	if payrollNormalizedInputs(ctx) {
+		items, err := readNativeCostTransactions(ctx, tx, week)
+		if err != nil {
+			return nil, err
+		}
+		if len(items) == 0 {
+			if memo != nil && memo.tx == tx {
+				memo.weeks[week] = [2]DriverPayWeek{}
+			}
+			return nil, nil
+		}
+	}
 	w, _ := chargeWeek(week)
 	ctx = payrollWeekContext(ctx, week)
 	ctx = context.WithValue(ctx, payrollReadKey{}, (*payrollReadState)(nil))
@@ -104,9 +154,17 @@ func traceRoutedCostWeek(ctx context.Context, tx pgx.Tx, week, kind, id string) 
 	if err = routeTeamPay(ctx, tx, &drivers); err != nil {
 		return nil, err
 	}
-	report := drivers
+	reports := [2]DriverPayWeek{drivers, investors}
+	if memo != nil && memo.tx == tx {
+		memo.weeks[week] = reports
+	}
+	return selectTracedCost(reports, kind, id), nil
+}
+
+func selectTracedCost(reports [2]DriverPayWeek, kind, id string) []PayCostTransaction {
+	report := reports[0]
 	if kind == "investor" {
-		report = investors
+		report = reports[1]
 	}
 	for _, d := range report.Drivers {
 		if d.ID == id {
@@ -120,10 +178,10 @@ func traceRoutedCostWeek(ctx context.Context, tx pgx.Tx, week, kind, id string) 
 				}
 				return a.ID < b.ID
 			})
-			return d.costTransactions, nil
+			return append([]PayCostTransaction(nil), d.costTransactions...)
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 type costHistoryWeek struct{ week, base, amount, kind, id string }
@@ -176,7 +234,10 @@ func allocateCostCarry(pending []PayCostTransaction, rows []PayCostTransaction, 
 	return kept
 }
 
-func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id string, week time.Time, cost string) (PayCostTransactions, error) {
+func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id string, week time.Time, cost string, revisions ...string) (PayCostTransactions, error) {
+	if r.preparedReads {
+		return r.PreparedCostTransactions(ctx, kind, id, week, cost, revisions...)
+	}
 	result := PayCostTransactions{Transactions: []PayCostTransaction{}}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -214,6 +275,59 @@ func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id str
 	if card == nil {
 		return result, pgx.ErrNoRows
 	}
+	result, err = preparedCostEvidence(ctx, tx, kind, id, week.Format(time.DateOnly), cost, *card)
+	if err != nil {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+// Evidence belongs to the same immutable version as the displayed financial
+// result. Stale evidence is explicit and never reconstructed on this read path.
+func (r *DriverPayRepository) PreparedCostTransactions(ctx context.Context, kind, id string, week time.Time, cost string, revisions ...string) (PayCostTransactions, error) {
+	var result PayCostTransactions
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback(ctx)
+	current, err := payrollProjectionFence(ctx, tx)
+	if err != nil {
+		return result, err
+	}
+	var body []byte
+	var snapshot, calendar, calculator string
+	var schema int
+	var revision string
+	if len(revisions) > 0 {
+		revision = revisions[0]
+	}
+	err = tx.QueryRow(ctx, `SELECT v.cost_evidence->$4,g.input_snapshot,g.calendar_week::text,g.calculator_version,g.schema_version
+FROM payroll_statement_versions v LEFT JOIN payroll_statement_state s ON s.kind=v.kind AND s.statement_id=v.statement_id AND s.week_start=v.week_start
+LEFT JOIN payroll_projection_weeks w ON w.week_start=v.week_start
+JOIN payroll_projection_generations g ON g.id=CASE WHEN s.version_id=v.id THEN w.generation_id ELSE v.generation_id END
+WHERE v.kind=$1 AND v.statement_id=$2::uuid AND v.week_start=$3 AND v.id=coalesce(nullif($5,'')::uuid,s.version_id)`, kind, id, week, cost, revision).Scan(&body, &snapshot, &calendar, &calculator, &schema)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if revision != "" {
+			return result, ErrPayrollVersionExpired
+		}
+		return result, ErrPayrollPreparing
+	}
+	if err != nil {
+		return result, err
+	}
+	if err = json.Unmarshal(body, &result); err != nil {
+		return result, err
+	}
+	result.Preparation = &PayrollPreparation{State: "ready"}
+	if current != snapshot || calendar != ChargeCurrentWeek() || calculator != payrollCalculatorVersion || schema != payrollProjectionSchemaVersion {
+		result.Preparation.State = "updating"
+	}
+	return result, tx.Commit(ctx)
+}
+
+func preparedCostEvidence(ctx context.Context, tx pgx.Tx, kind, id, week, cost string, card DriverPayDriver) (PayCostTransactions, error) {
+	result := PayCostTransactions{Transactions: []PayCostTransaction{}}
 	result.SourceTotal = card.FuelTotal
 	result.Carry = "0.00"
 	if cost == "toll" {
@@ -232,15 +346,26 @@ func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id str
 		}
 	}
 	history := []costHistoryWeek{}
+	carry, _ := chargeCents(result.Carry)
+	memo, _ := ctx.Value(payrollCostTraceKey{}).(*payrollCostTrace)
 	// Exact weeks are needed here, unlike the grouped report fast path.
 	ctx = context.WithValue(ctx, payrollCostDetailKey{}, true)
-	if kind == "driver" {
-		records, e := readPayCostRecords(context.WithValue(ctx, payrollReadKey{}, (*payrollReadState)(nil)), tx)
+	if carry != 0 && kind == "driver" {
+		var records []payCostRecord
+		var e error
+		if memo != nil && memo.tx == tx && memo.costsLoaded {
+			records = memo.costs
+		} else {
+			records, e = readPayCostRecords(context.WithValue(ctx, payrollReadKey{}, (*payrollReadState)(nil)), tx)
+			if e == nil && memo != nil && memo.tx == tx {
+				memo.costs, memo.costsLoaded = records, true
+			}
+		}
 		if e != nil {
 			return result, e
 		}
 		for _, v := range records {
-			if v.Driver != id || v.Week >= report.WeekStart {
+			if v.Driver != id || v.Week >= week {
 				continue
 			}
 			base, amount := v.Fuel, v.FuelAmount
@@ -249,13 +374,22 @@ func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id str
 			}
 			history = append(history, costHistoryWeek{v.Week, base, amount, "driver", id})
 		}
-	} else {
-		records, e := readPaySources(ctx, tx)
+	} else if carry != 0 {
+		var records []paySourceRecord
+		var e error
+		if memo != nil && memo.tx == tx && memo.sourcesLoaded {
+			records = memo.sources
+		} else {
+			records, e = readPaySources(ctx, tx)
+			if e == nil && memo != nil && memo.tx == tx {
+				memo.sources, memo.sourcesLoaded = records, true
+			}
+		}
 		if e != nil {
 			return result, e
 		}
 		for _, v := range records {
-			if v.Source != "investor_cost:"+id+":"+cost || v.Owner != card.InvestorID || v.Week >= report.WeekStart {
+			if v.Source != "investor_cost:"+id+":"+cost || v.Owner != card.InvestorID || v.Week >= week {
 				continue
 			}
 			n, _ := chargeCents(v.Base)
@@ -275,7 +409,6 @@ func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id str
 	}
 	history = history[start:]
 	pending := []PayCostTransaction{}
-	carry, _ := chargeCents(result.Carry)
 	if carry != 0 {
 		for _, h := range history {
 			rows, e := traceRoutedCostWeek(ctx, tx, h.week, h.kind, h.id)
@@ -302,7 +435,7 @@ func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id str
 		pending = append(pending, PayCostTransaction{ID: "balance:unresolved", Description: "Saved historical balance · source details unavailable", Amount: chargeMoney(carry - traced), Remaining: chargeMoney(carry - traced), Carried: true, BalanceOnly: true})
 	}
 	result.Transactions = append(result.Transactions, pending...)
-	rows, err := traceRoutedCostWeek(ctx, tx, report.WeekStart, kind, id)
+	rows, err := traceRoutedCostWeek(ctx, tx, week, kind, id)
 	if err != nil {
 		return result, err
 	}
@@ -322,5 +455,5 @@ func (r *DriverPayRepository) CostTransactions(ctx context.Context, kind, id str
 	if carry != 0 {
 		result.Notice = strings.TrimSpace(result.Notice + " Carried balances are allocated to the oldest transactions first; Remaining shows the amount carried into this week.")
 	}
-	return result, tx.Commit(ctx)
+	return result, nil
 }

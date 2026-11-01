@@ -633,7 +633,7 @@ func (r *FleetSyncRepository) deliverOne(ctx context.Context, epoch, mode string
 		_, e = r.pool.Exec(ctx, `UPDATE fleetscope_sync_operations SET state=$3,last_error=$4,last_http_status=$5,next_attempt_at=now()+make_interval(secs=>$6),lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2`, id, lease, state, code, status, delay.Seconds())
 		return true, e
 	}
-	tx, e := r.pool.Begin(ctx)
+	tx, e := beginPayrollSourceMutation(ctx, r.pool)
 	if e != nil {
 		return true, e
 	}

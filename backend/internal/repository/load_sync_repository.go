@@ -71,7 +71,7 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 	if len(records) == 0 {
 		return nil
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}

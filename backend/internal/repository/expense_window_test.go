@@ -12,7 +12,8 @@ import (
 )
 
 // Runs against both fresh and migrated schemas as the application role.
-func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.Conn, pool *pgxpool.Pool) {
+func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.Conn, pool *pgxpool.Pool, prepared ...bool) {
+	preparedSettlement := len(prepared) > 0 && prepared[0]
 	for _, route := range []string{"driver", "investor", "owner-driver"} {
 		t.Run("expense-window-"+route, func(t *testing.T) {
 			id := func(query string, args ...any) string {
@@ -160,12 +161,12 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 					t.Fatalf("partial/zero/new balance: %+v", next)
 				}
 			}
-			settle := pay.Settle
+			kind := "driver"
 			if route == "investor" {
-				settle = pay.SettleInvestor
+				kind = "investor"
 			}
 			report := read(week)
-			frozen, err := settle(ctx, week, statement, report.Revision, actor, "", false, false)
+			frozen, err := settlePayrollFixture(t, ctx, pay, kind, week, statement, report.Revision, actor, "", false, false, preparedSettlement)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -176,7 +177,7 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			if len(card(read(week)).Edits.ExpenseDeductions) != 6 {
 				t.Fatal("finalized snapshot changed")
 			}
-			reopened, err := settle(ctx, week, statement, read(week).Revision, actor, "Review late expense", true, false)
+			reopened, err := settlePayrollFixture(t, ctx, pay, kind, week, statement, read(week).Revision, actor, "Review late expense", true, false, preparedSettlement)
 			if err != nil {
 				t.Fatal(err)
 			}

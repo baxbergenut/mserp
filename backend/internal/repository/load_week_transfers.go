@@ -31,6 +31,7 @@ var dispatchBoardEntriesSQL = boardPlacementSQL(false)
 var payrollBoardEntriesSQL = payrollPlacementSQL()
 
 type LoadWeekTransferInput struct {
+	PayrollCommandMetadata
 	DriverID        string `json:"driverId"`
 	Date            string `json:"date"`
 	Slot            int    `json:"slot"`
@@ -58,13 +59,20 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 	if input.Mode == "everyone" {
 		settlement = next
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
+	}
+	command, replay, err := beginPayrollSourceCommand(ctx, tx, actor, "load.transfer", input.PayrollCommandMetadata, input)
+	if err != nil {
+		return err
+	}
+	if replay != nil {
+		return nil
 	}
 	if err = lockChargeDrivers(ctx, tx, []string{input.DriverID}); err != nil {
 		return err
@@ -170,7 +178,7 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 	if _, err = tx.Exec(ctx, `SELECT pg_notify('mserp_gross_board','')`); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollSourceCommand(ctx, tx, command, true)
 }
 
 func assertTransferSettlementsOpen(ctx context.Context, tx pgx.Tx, driver string, truck *string, weeks ...string) error {

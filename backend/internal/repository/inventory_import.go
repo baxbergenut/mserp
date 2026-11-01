@@ -450,7 +450,7 @@ func (r *InventoryRepository) ReviewImport(ctx context.Context, id string, input
 	if !inventoryUUID.MatchString(id) {
 		return result, inventoryInvalid("Invalid import identity")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return result, err
 	}
@@ -496,7 +496,7 @@ func (r *InventoryRepository) CommitImport(ctx context.Context, id string, versi
 	if !inventoryUUID.MatchString(id) {
 		return result, inventoryInvalid("Invalid import identity")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return result, err
 	}

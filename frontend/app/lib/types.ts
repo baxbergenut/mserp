@@ -1247,6 +1247,7 @@ export interface PayCostTransaction {
   balanceOnly?: boolean;
 }
 export interface PayCostTransactions {
+	preparation?: PayrollPreparation;
   transactions: PayCostTransaction[];
   sourceTotal: string;
   carry: string;
@@ -1254,6 +1255,11 @@ export interface PayCostTransactions {
   notice?: string;
 }
 export interface DriverPayEdits {
+	requestId?: string;
+	expectedStatementRevision?: string;
+	statementRevision?: string;
+	committedStatement?: DriverPayDriver;
+	affectedStatements?: { kind: "driver" | "investor"; id: string; weekStart: string }[];
   inputRevision?: string;
   sourceCharges?: PaySourceCharge[];
   /** Read-only exclusions retained for legacy finalized statements. */
@@ -1307,7 +1313,14 @@ export interface DriverPayLoad {
   fee: string;
   issues: string[];
 }
-export interface PayLoadPlacementInput {
+export interface PayrollCommandMetadata {
+  requestId?: string;
+  expectedStatementRevision?: string;
+  statementKind?: "driver" | "investor";
+  statementId?: string;
+  statementWeekStart?: string;
+}
+export interface PayLoadPlacementInput extends PayrollCommandMetadata {
   driverId: string;
   weekStart: string;
   action: "add" | "remove" | "gross";
@@ -1324,6 +1337,7 @@ export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
+	statementRevision?: string;
   brokerReimbursements?: { expenseId: string; loadNumber: string; expenseType: string; expenseDate: string; amount: string }[];
   displayEmploymentTypes?: EmploymentType[];
   homeWeek?: boolean;
@@ -1356,8 +1370,12 @@ export interface DriverPayDriver {
   loads: DriverPayLoad[];
   edits: DriverPayEdits;
 }
-export interface PaySourceReceipt { undoId: string }
-export interface PaySourceAcceptance {
+export interface PayrollSourceCommandReceipt {
+  requestId: string;
+  affectedStatements: { kind: "driver" | "investor"; id: string; weekStart: string }[];
+}
+export interface PaySourceReceipt extends Partial<PayrollSourceCommandReceipt> { undoId: string }
+export interface PaySourceAcceptance extends PayrollCommandMetadata {
   field?: "originalRate" | "totalMiles";
   driverId: string;
   date: string;
@@ -1390,7 +1408,16 @@ export interface PayPageInfo {
   fee: string;
   payable: string;
 }
+export interface PayrollPreparation {
+  state: "preparing" | "ready" | "updating" | "failed";
+  generation?: string;
+  preparedAt?: string;
+  calculatorVersion?: string;
+  failure?: string;
+}
 export interface DriverPayWeek {
+  affectedStatements?: { kind: "driver" | "investor"; id: string; weekStart: string }[];
+  preparation?: PayrollPreparation;
   receipt?: boolean;
   affectedStatementIds?: string[];
  notices?: string[];
@@ -1508,7 +1535,7 @@ export interface ChargeBulk {
 export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }
 
 export interface PayrollSettlement { finalized: boolean; override?: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
-export interface PayrollSettlementInput { weekStart: string; revision: string; driverId?: string; reason: string; override: boolean }
+export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; weekStart: string; revision: string; driverId?: string; reason: string; override: boolean }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
 export interface SettlementEvent { action: string; version: number; actor: string; reason: string; createdAt: string; report: DriverPayDriver }
 

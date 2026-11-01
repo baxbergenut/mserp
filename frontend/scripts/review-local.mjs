@@ -3,6 +3,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
+import { createWriteStream } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve, sep } from 'node:path';
@@ -17,6 +18,8 @@ const database = new URL(dsn);
 if (!['localhost', '127.0.0.1'].includes(database.hostname) || !database.pathname.endsWith('_test')) throw new Error('Only local _test databases are permitted');
 const retainedPayrollFixture = process.env.MSERP_REVIEW_PAYROLL_PERF_SCHEMA;
 if (retainedPayrollFixture && !/^payroll_perf_[0-9]+$/.test(retainedPayrollFixture)) throw new Error('Expected an isolated payroll_perf_ test schema');
+const payrollProtocol = process.env.MSERP_REVIEW_PAYROLL_PROTOCOL;
+if (payrollProtocol && !['global', 'dual', 'resources'].includes(payrollProtocol)) throw new Error('Invalid local payroll protocol');
 const schema = retainedPayrollFixture || `review_${randomBytes(8).toString('hex')}`;
 const temp = await mkdtemp(join(tmpdir(), 'mserp-review-'));
 const password = randomBytes(18).toString('base64url');
@@ -36,9 +39,13 @@ process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });
 try {
  if (retainedPayrollFixture) {
+  sql('CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public; ALTER EXTENSION pgcrypto SET SCHEMA public;');
   sql(`SET search_path TO ${schema},public; DO $$ BEGIN IF (SELECT count(*) FROM drivers WHERE full_name LIKE 'Perf Driver %')<>176 THEN RAISE EXCEPTION 'Expected active synthetic payroll fixture'; END IF; END $$;`);
   ownsSchema=true;
   sql(`SET search_path TO ${schema},public; INSERT INTO app_users(username,password_hash,email,role_id) VALUES('Local Review',crypt('${password}',gen_salt('bf')),'${email}',(SELECT id FROM app_roles WHERE system_role));`);
+  sql(`SET search_path TO ${schema},public;
+    UPDATE loads SET raw_payload='{"trip":{"mile":400,"empty_mile":0},"stops":[{"stop_type":"pickup","ordering":1,"location":{"city":"Dallas","state":"TX"}},{"stop_type":"delivery","ordering":2,"location":{"city":"Houston","state":"TX"}}]}'::jsonb;
+    INSERT INTO app_users(username,email,password_hash,role_id) SELECT 'Perf Session '||n,'perf-session-'||n||'@example.test',u.password_hash,u.role_id FROM app_users u CROSS JOIN generate_series(0,4)n WHERE u.email='review@example.test' ON CONFLICT DO NOTHING;`);
  } else {
   const init = await readFile(join(backend, 'sql/init.sql'), 'utf8');
   sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public; ALTER EXTENSION pgcrypto SET SCHEMA public; CREATE SCHEMA ${schema}; SET search_path TO ${schema},public;\n${init}\n
@@ -71,16 +78,32 @@ try {
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
   database.searchParams.set('search_path', `${schema},public`);
   database.searchParams.set('role', 'mserp_app');
-  api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
+  const apiEnv = {
     ...process.env, DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
     DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', SCHEDULED_SYNCS_ENABLED: 'false',
     FIVE_ELD_API_KEY: '', FIVE_ELD_PROVIDER_TOKEN: '', FIVE_ELD_USDOT: '',
     SAMSARA_API_TOKEN: '', SAMSARA_API_VERSION: '',
     RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled',
+    RELAY_API_URL: 'http://127.0.0.1:1/api', PREPASS_API_URL: 'http://127.0.0.1:1',
+    WEIGHMYTRUCK_CLIENT_ID: '', WEIGHMYTRUCK_CLIENT_SECRET: '', FLEETSCOPE_SYNC_MODE: 'off',
     RELAY_PRODUCTION_API_KEY: 'test-disabled', RELAY_STAGING_API_KEY: '', PREPASS_PRODUCTION_CLIENT_ID: '', PREPASS_PRODUCTION_CLIENT_SECRET: '', PREPASS_NONPRODUCTION_CLIENT_ID: '', PREPASS_NONPRODUCTION_CLIENT_SECRET: '',
     FLEETSCOPE_COMPANY_ID: process.env.MSERP_REVIEW_FLEETSCOPE_COMPANY_ID || '', FLEETSCOPE_WEBHOOK_SECRET: process.env.MSERP_REVIEW_FLEETSCOPE_SECRET || '', GROQ_API_KEY: '', OPENAI_API_KEY: process.env.MSERP_REVIEW_OPENAI_ENABLED === '1' ? process.env.OPENAI_API_KEY || '' : '',
     AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: base,
-  }});
+    ...(payrollProtocol ? { PAYROLL_PROJECTION_MODE: 'shadow', PAYROLL_PREPARED_READS: 'true',
+      PAYROLL_PREPARED_COMMANDS: 'true', PAYROLL_PREPARED_FINALIZATION: 'true',
+      PAYROLL_RESOURCE_LOCKS: String(payrollProtocol === 'resources') } : {}),
+  };
+  if (payrollProtocol) {
+    // All fixture writers are stopped and the API has not started. Exercise the
+    // actual fenced operator transition, never an online protocol toggle.
+    sql(`SET search_path TO ${schema},public; UPDATE payroll_projection_control SET capture_enabled=true WHERE singleton;`);
+    const status = JSON.parse(execFileSync(binary, ['-payroll-protocol-status'], { cwd: temp, env: apiEnv, encoding: 'utf8', windowsHide: true }));
+    execFileSync(binary, ['-payroll-protocol-switch', payrollProtocol, '-payroll-protocol-epoch', String(status.epoch)], { cwd: temp, env: apiEnv, windowsHide: true });
+  }
+  api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: apiEnv });
+  const apiLog = join(temp, 'api.log'), logStream = createWriteStream(apiLog);
+  api.stdout.pipe(logStream, { end: false }); api.stderr.pipe(logStream, { end: false });
+  api.once('close', () => logStream.end());
   let log = ''; api.stdout.on('data', chunk => { log += chunk; }); api.stderr.on('data', chunk => { log += chunk; });
   for (let attempt = 0; ; attempt++) {
     if (api.exitCode !== null) throw new Error(`Preview API exited: ${log}`);
@@ -117,7 +140,7 @@ try {
   });
   await new Promise((done, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', done); });
   const access = join(temp, 'review-access.json');
-  await writeFile(access, JSON.stringify({ base, email, password, schema, pid: process.pid, apiPid: api.pid }, null, 2));
+  await writeFile(access, JSON.stringify({ base, email, password, schema, pid: process.pid, apiPid: api.pid, apiLog }, null, 2));
   console.log(`Local review ready: ${base}/accounting/escrow\nLocal-only access details: ${access}\nSynthetic data; external syncs disabled. Ctrl+C stops both servers and removes the test schema.`);
   api.once('exit', () => { if (!stopping) { console.error('Preview API exited'); void stop(); } });
 } catch (error) { console.error(error.message); await stop(); process.exitCode = 1; }

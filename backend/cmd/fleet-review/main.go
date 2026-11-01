@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"mserp/internal/fleetreview"
+	"mserp/internal/repository"
 	"net/http"
 	"os"
 	"os/signal"
@@ -35,7 +36,12 @@ func main() {
 	file := flag.String("config", "", "private JSON configuration file")
 	provision := flag.Bool("provision-receipts", false, "explicitly install receipt storage in both configured databases")
 	credentials := flag.String("generate-credentials", "", "write generated credentials to a private file, then exit")
+	capability := flag.Bool("payroll-protocol-capability", false, "print the supported payroll lock protocol without reading private configuration")
 	flag.Parse()
+	if *capability {
+		fmt.Println(repository.PayrollProtocolCapability)
+		return
+	}
 	if *credentials != "" {
 		u, p, h, e := fleetreview.Credentials()
 		if e != nil {

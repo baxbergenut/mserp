@@ -166,7 +166,7 @@ func revokeUser(ctx context.Context, tx pgx.Tx, id string) error {
 
 func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input ManagedUser, passwordHash string) (string, error) {
 	input.Password = ""
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return "", err
 	}
@@ -239,7 +239,7 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 }
 
 func (r *AuthRepository) SaveRole(ctx context.Context, actor string, input AccessRole) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -284,7 +284,7 @@ func (r *AuthRepository) SaveRole(ctx context.Context, actor string, input Acces
 }
 
 func (r *AuthRepository) RevokeAccess(ctx context.Context, actor, id string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}

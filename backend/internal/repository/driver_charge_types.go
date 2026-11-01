@@ -40,7 +40,7 @@ func (r *DriverChargeRepository) SaveType(ctx context.Context, t ChargeType, act
 	if len([]rune(t.Name)) < 1 || len([]rune(t.Name)) > 200 || (t.Direction != "charge" && t.Direction != "reimbursement") {
 		return t, chargeInvalid("Provide a name and direction")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return t, err
 	}
@@ -108,11 +108,11 @@ func (r *DriverChargeRepository) SaveType(ctx context.Context, t ChargeType, act
 	if err = chargeAudit(ctx, tx, "", t.ID, actor, "type_saved", t); err != nil {
 		return t, err
 	}
-	return t, tx.Commit(ctx)
+	return t, commitPayrollMutation(ctx, tx)
 }
 
 func (r *DriverChargeRepository) DeleteType(ctx context.Context, id string, version int, actor string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -143,5 +143,5 @@ func (r *DriverChargeRepository) DeleteType(ctx context.Context, id string, vers
 	if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_types WHERE id=$1`, id); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

@@ -191,7 +191,7 @@ func (repo *FeedbackRepository) Detail(ctx context.Context, id, userID string) (
 	return d, rows.Err()
 }
 func (repo *FeedbackRepository) Create(ctx context.Context, in FeedbackInput, user AuthUser, hash string, files []FeedbackAttachment) (string, error) {
-	tx, err := repo.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, repo.pool)
 	if err != nil {
 		return "", err
 	}
@@ -219,7 +219,7 @@ func (repo *FeedbackRepository) Create(ctx context.Context, in FeedbackInput, us
 	return in.ID, tx.Commit(ctx)
 }
 func (repo *FeedbackRepository) Update(ctx context.Context, id string, in FeedbackInput, user AuthUser) error {
-	tx, err := repo.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, repo.pool)
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func (repo *FeedbackRepository) Update(ctx context.Context, id string, in Feedba
 }
 func (repo *FeedbackRepository) Vote(ctx context.Context, id, userID string, voted bool) error {
 	// Serialize this user's explicit desired vote on the post; repeated PUTs never toggle.
-	tx, err := repo.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, repo.pool)
 	if err != nil {
 		return err
 	}

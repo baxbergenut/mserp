@@ -57,6 +57,9 @@ func reimbursementLedgerAvailable(ctx context.Context, tx pgx.Tx) (bool, error) 
 	return available, err
 }
 func expenseReimbursementDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]ExpenseDeduction, error) {
+	if rows, ok := payrollBatchedDeductions(ctx, tx, drivers, week, "reimburse"); ok {
+		return rows, nil
+	}
 	result := map[string][]ExpenseDeduction{}
 	available, err := reimbursementLedgerAvailable(ctx, tx)
 	if err != nil || !available {

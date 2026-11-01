@@ -1,0 +1,980 @@
+Initial preparation finished in 159 ms; excluded from prepared-read timing
+Measuring driver/2026-09-28/coldPage
+{"kind":"driver","week":"2026-09-28","action":"coldPage","visibleMS":891,"requests":3,"serverMS":[{"method":"GET","ms":44.44,"queries":7},{"method":"GET","ms":24.29,"queries":7},{"method":"GET","ms":16.99,"queries":7}]}
+Measuring driver/2026-09-28/firstExpansion
+{"kind":"driver","week":"2026-09-28","action":"firstExpansion","visibleMS":232,"requests":1,"serverMS":[{"method":"GET","ms":9.25,"queries":7}]}
+Measuring driver/2026-09-28/cachedExpansion
+{"kind":"driver","week":"2026-09-28","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":233,"requests":2,"serverMS":[{"method":"GET","ms":11.28,"queries":7},{"method":"GET","ms":16.54,"queries":8}]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":249,"requests":1,"serverMS":[{"method":"GET","ms":9.72,"queries":7}]}
+Measuring driver/2026-09-28/save
+{"kind":"driver","week":"2026-09-28","action":"save","visibleMS":310,"requests":3,"serverMS":[{"method":"PUT","ms":77.2,"queries":42},{"method":"GET","ms":24.21,"queries":8},{"method":"GET","ms":19.34,"queries":8}]}
+Measuring driver/2026-09-28/finalize
+{"kind":"driver","week":"2026-09-28","action":"finalize","visibleMS":327,"requests":3,"serverMS":[{"method":"POST","ms":103.23,"queries":57},{"method":"GET","ms":28.43,"queries":8},{"method":"GET","ms":19.72,"queries":8}]}
+Measuring driver/2026-09-28/reopenDialog
+{"kind":"driver","week":"2026-09-28","action":"reopenDialog","visibleMS":77,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/reopen
+{"kind":"driver","week":"2026-09-28","action":"reopen","visibleMS":419,"requests":3,"serverMS":[{"method":"POST","ms":191.07,"queries":124},{"method":"GET","ms":27.29,"queries":8},{"method":"GET","ms":19.36,"queries":8}]}
+Measuring driver/2026-09-28/warmPage
+{"kind":"driver","week":"2026-09-28","action":"warmPage","visibleMS":911,"requests":3,"serverMS":[{"method":"GET","ms":35.69,"queries":8},{"method":"GET","ms":26.52,"queries":8},{"method":"GET","ms":22.98,"queries":8}]}
+Measuring driver/2026-09-28/coldPage
+{"kind":"driver","week":"2026-09-28","action":"coldPage","visibleMS":875,"requests":3,"serverMS":[{"method":"GET","ms":39.57,"queries":7},{"method":"GET","ms":23.86,"queries":7},{"method":"GET","ms":20.86,"queries":7}]}
+Measuring driver/2026-09-28/firstExpansion
+{"kind":"driver","week":"2026-09-28","action":"firstExpansion","visibleMS":218,"requests":1,"serverMS":[{"method":"GET","ms":10.93,"queries":7}]}
+Measuring driver/2026-09-28/cachedExpansion
+{"kind":"driver","week":"2026-09-28","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":230,"requests":2,"serverMS":[{"method":"GET","ms":9.41,"queries":7},{"method":"GET","ms":49.37,"queries":8}]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":229,"requests":1,"serverMS":[{"method":"GET","ms":9.79,"queries":7}]}
+Measuring driver/2026-09-28/save
+{"kind":"driver","week":"2026-09-28","action":"save","visibleMS":326,"requests":3,"serverMS":[{"method":"PUT","ms":97.81,"queries":42},{"method":"GET","ms":17.55,"queries":8},{"method":"GET","ms":38.1,"queries":8}]}
+Measuring driver/2026-09-28/finalize
+{"kind":"driver","week":"2026-09-28","action":"finalize","visibleMS":345,"requests":3,"serverMS":[{"method":"POST","ms":118.97,"queries":57},{"method":"GET","ms":23.98,"queries":8},{"method":"GET","ms":19.72,"queries":8}]}
+Measuring driver/2026-09-28/reopenDialog
+{"kind":"driver","week":"2026-09-28","action":"reopenDialog","visibleMS":63,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/reopen
+{"kind":"driver","week":"2026-09-28","action":"reopen","visibleMS":394,"requests":3,"serverMS":[{"method":"POST","ms":173.99,"queries":124},{"method":"GET","ms":23.98,"queries":8},{"method":"GET","ms":20.01,"queries":8}]}
+Measuring driver/2026-09-28/warmPage
+{"kind":"driver","week":"2026-09-28","action":"warmPage","visibleMS":959,"requests":3,"serverMS":[{"method":"GET","ms":45.15,"queries":8},{"method":"GET","ms":22.24,"queries":8},{"method":"GET","ms":18.27,"queries":8}]}
+Measuring driver/2026-09-28/coldPage
+{"kind":"driver","week":"2026-09-28","action":"coldPage","visibleMS":896,"requests":3,"serverMS":[{"method":"GET","ms":31.46,"queries":7},{"method":"GET","ms":30.94,"queries":7},{"method":"GET","ms":15.18,"queries":7}]}
+Measuring driver/2026-09-28/firstExpansion
+{"kind":"driver","week":"2026-09-28","action":"firstExpansion","visibleMS":217,"requests":1,"serverMS":[{"method":"GET","ms":8.87,"queries":7}]}
+Measuring driver/2026-09-28/cachedExpansion
+{"kind":"driver","week":"2026-09-28","action":"cachedExpansion","visibleMS":28,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":248,"requests":2,"serverMS":[{"method":"GET","ms":8.86,"queries":7},{"method":"GET","ms":17.26,"queries":8}]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":268,"requests":1,"serverMS":[{"method":"GET","ms":7.57,"queries":7}]}
+Measuring driver/2026-09-28/save
+{"kind":"driver","week":"2026-09-28","action":"save","visibleMS":260,"requests":3,"serverMS":[{"method":"PUT","ms":46.21,"queries":42},{"method":"GET","ms":21.81,"queries":8},{"method":"GET","ms":20.07,"queries":8}]}
+Measuring driver/2026-09-28/finalize
+{"kind":"driver","week":"2026-09-28","action":"finalize","visibleMS":279,"requests":3,"serverMS":[{"method":"POST","ms":64.99,"queries":57},{"method":"GET","ms":23.69,"queries":8},{"method":"GET","ms":16.16,"queries":8}]}
+Measuring driver/2026-09-28/reopenDialog
+{"kind":"driver","week":"2026-09-28","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/reopen
+{"kind":"driver","week":"2026-09-28","action":"reopen","visibleMS":428,"requests":3,"serverMS":[{"method":"POST","ms":205.19,"queries":124},{"method":"GET","ms":25.35,"queries":8},{"method":"GET","ms":53.33,"queries":8}]}
+Measuring driver/2026-09-28/warmPage
+{"kind":"driver","week":"2026-09-28","action":"warmPage","visibleMS":936,"requests":3,"serverMS":[{"method":"GET","ms":38.67,"queries":8},{"method":"GET","ms":22.93,"queries":8},{"method":"GET","ms":15.81,"queries":8}]}
+Measuring driver/2026-09-28/coldPage
+{"kind":"driver","week":"2026-09-28","action":"coldPage","visibleMS":855,"requests":3,"serverMS":[{"method":"GET","ms":36.6,"queries":7},{"method":"GET","ms":17.23,"queries":7},{"method":"GET","ms":21.01,"queries":7}]}
+Measuring driver/2026-09-28/firstExpansion
+{"kind":"driver","week":"2026-09-28","action":"firstExpansion","visibleMS":233,"requests":1,"serverMS":[{"method":"GET","ms":13.8,"queries":7}]}
+Measuring driver/2026-09-28/cachedExpansion
+{"kind":"driver","week":"2026-09-28","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":230,"requests":2,"serverMS":[{"method":"GET","ms":12.88,"queries":7},{"method":"GET","ms":15.55,"queries":8}]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":259,"requests":1,"serverMS":[{"method":"GET","ms":10.47,"queries":7}]}
+Measuring driver/2026-09-28/save
+{"kind":"driver","week":"2026-09-28","action":"save","visibleMS":278,"requests":3,"serverMS":[{"method":"PUT","ms":51.97,"queries":42},{"method":"GET","ms":23.69,"queries":8},{"method":"GET","ms":19.7,"queries":8}]}
+Measuring driver/2026-09-28/finalize
+{"kind":"driver","week":"2026-09-28","action":"finalize","visibleMS":296,"requests":3,"serverMS":[{"method":"POST","ms":63.67,"queries":57},{"method":"GET","ms":26.11,"queries":8},{"method":"GET","ms":14.62,"queries":8}]}
+Measuring driver/2026-09-28/reopenDialog
+{"kind":"driver","week":"2026-09-28","action":"reopenDialog","visibleMS":61,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/reopen
+{"kind":"driver","week":"2026-09-28","action":"reopen","visibleMS":395,"requests":3,"serverMS":[{"method":"POST","ms":171,"queries":124},{"method":"GET","ms":19.2,"queries":8},{"method":"GET","ms":16.85,"queries":8}]}
+Measuring driver/2026-09-28/warmPage
+{"kind":"driver","week":"2026-09-28","action":"warmPage","visibleMS":900,"requests":3,"serverMS":[{"method":"GET","ms":35.31,"queries":8},{"method":"GET","ms":25.93,"queries":8},{"method":"GET","ms":16.66,"queries":8}]}
+Measuring driver/2026-09-28/coldPage
+{"kind":"driver","week":"2026-09-28","action":"coldPage","visibleMS":893,"requests":3,"serverMS":[{"method":"GET","ms":48.77,"queries":7},{"method":"GET","ms":25.72,"queries":7},{"method":"GET","ms":16.6,"queries":7}]}
+Measuring driver/2026-09-28/firstExpansion
+{"kind":"driver","week":"2026-09-28","action":"firstExpansion","visibleMS":243,"requests":1,"serverMS":[{"method":"GET","ms":13.45,"queries":7}]}
+Measuring driver/2026-09-28/cachedExpansion
+{"kind":"driver","week":"2026-09-28","action":"cachedExpansion","visibleMS":28,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":265,"requests":2,"serverMS":[{"method":"GET","ms":9.96,"queries":7},{"method":"GET","ms":15.68,"queries":8}]}
+Measuring driver/2026-09-28/multipleOpen
+{"kind":"driver","week":"2026-09-28","action":"multipleOpen","visibleMS":235,"requests":1,"serverMS":[{"method":"GET","ms":8.66,"queries":7}]}
+Measuring driver/2026-09-28/save
+{"kind":"driver","week":"2026-09-28","action":"save","visibleMS":278,"requests":3,"serverMS":[{"method":"PUT","ms":49.86,"queries":42},{"method":"GET","ms":21.04,"queries":8},{"method":"GET","ms":16.24,"queries":8}]}
+Measuring driver/2026-09-28/finalize
+{"kind":"driver","week":"2026-09-28","action":"finalize","visibleMS":288,"requests":3,"serverMS":[{"method":"POST","ms":64.52,"queries":57},{"method":"GET","ms":24.12,"queries":8},{"method":"GET","ms":20.28,"queries":8}]}
+Measuring driver/2026-09-28/reopenDialog
+{"kind":"driver","week":"2026-09-28","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring driver/2026-09-28/reopen
+{"kind":"driver","week":"2026-09-28","action":"reopen","visibleMS":411,"requests":3,"serverMS":[{"method":"POST","ms":193.32,"queries":124},{"method":"GET","ms":23.73,"queries":8},{"method":"GET","ms":14.76,"queries":8}]}
+Measuring driver/2026-09-28/warmPage
+{"kind":"driver","week":"2026-09-28","action":"warmPage","visibleMS":948,"requests":3,"serverMS":[{"method":"GET","ms":42.22,"queries":8},{"method":"GET","ms":23.17,"queries":8},{"method":"GET","ms":18.61,"queries":8}]}
+Measuring driver/2026-09-28/reopenWeekPreview
+{"kind":"driver","week":"2026-09-28","action":"reopenWeekPreview","visibleMS":312,"requests":1,"serverMS":[{"method":"GET","ms":24.09,"queries":6}]}
+Measuring driver/2026-09-28/reopenWeek
+{"kind":"driver","week":"2026-09-28","action":"reopenWeek","visibleMS":2736,"requests":3,"serverMS":[{"method":"POST","ms":2433.17,"queries":487},{"method":"GET","ms":29.54,"queries":8},{"method":"GET","ms":26.99,"queries":8}]}
+Measuring driver/2026-09-28/reopenWeekPreview
+{"kind":"driver","week":"2026-09-28","action":"reopenWeekPreview","visibleMS":277,"requests":1,"serverMS":[{"method":"GET","ms":21.73,"queries":6}]}
+Measuring driver/2026-09-28/reopenWeek
+{"kind":"driver","week":"2026-09-28","action":"reopenWeek","visibleMS":2613,"requests":3,"serverMS":[{"method":"POST","ms":2328.1,"queries":483},{"method":"GET","ms":24.16,"queries":8},{"method":"GET","ms":19.11,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":592.712890625}
+{"kind":"driver","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":1554.408935546875}
+{"kind":"driver","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":620.617919921875}
+{"kind":"driver","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":570.76806640625}
+{"kind":"driver","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":599.840087890625}
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":504,"requests":2,"serverMS":[{"method":"PUT","ms":242.96,"queries":46},{"method":"GET","ms":24.39,"queries":9}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":571,"requests":2,"serverMS":[{"method":"PUT","ms":324.93,"queries":46},{"method":"GET","ms":26.46,"queries":9}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":466,"requests":3,"serverMS":[{"method":"PUT","ms":183.48,"queries":46},{"method":"GET","ms":30.75,"queries":9},{"method":"GET","ms":29.98,"queries":9}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":644,"requests":2,"serverMS":[{"method":"PUT","ms":401.69,"queries":46},{"method":"GET","ms":30.03,"queries":9}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":546,"requests":4,"serverMS":[{"method":"PUT","ms":242.73,"queries":46},{"method":"GET","ms":35.77,"queries":9},{"method":"GET","ms":30.03,"queries":9},{"method":"GET","ms":41.2,"queries":9}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":378,"requests":21,"serverMS":[{"method":"PUT","ms":88.1,"queries":42},{"method":"GET","ms":26.15,"queries":8},{"method":"GET","ms":23.53,"queries":8},{"method":"GET","ms":24.71,"queries":8},{"method":"GET","ms":24.79,"queries":8},{"method":"GET","ms":48.87,"queries":8},{"method":"GET","ms":28.46,"queries":8},{"method":"GET","ms":29.28,"queries":8},{"method":"GET","ms":27.63,"queries":8},{"method":"GET","ms":42.37,"queries":8},{"method":"GET","ms":30.22,"queries":8},{"method":"GET","ms":33.06,"queries":8},{"method":"GET","ms":23.61,"queries":8},{"method":"GET","ms":17.76,"queries":8},{"method":"GET","ms":25.43,"queries":8},{"method":"GET","ms":25.92,"queries":8},{"method":"GET","ms":31.27,"queries":8},{"method":"GET","ms":28.8,"queries":8},{"method":"GET","ms":34.26,"queries":8},{"method":"GET","ms":25.63,"queries":8},{"method":"GET","ms":24.9,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":444,"requests":20,"serverMS":[{"method":"PUT","ms":164.26,"queries":42},{"method":"GET","ms":23.12,"queries":8},{"method":"GET","ms":17.13,"queries":8},{"method":"GET","ms":20.8,"queries":8},{"method":"GET","ms":24.91,"queries":8},{"method":"GET","ms":26.47,"queries":8},{"method":"GET","ms":25.11,"queries":8},{"method":"GET","ms":23.89,"queries":8},{"method":"GET","ms":29.33,"queries":8},{"method":"GET","ms":28.89,"queries":8},{"method":"GET","ms":22.58,"queries":8},{"method":"GET","ms":19.36,"queries":8},{"method":"GET","ms":21.4,"queries":8},{"method":"GET","ms":32.06,"queries":8},{"method":"GET","ms":22.95,"queries":8},{"method":"GET","ms":28.81,"queries":8},{"method":"GET","ms":19.95,"queries":8},{"method":"GET","ms":31.49,"queries":8},{"method":"GET","ms":29.25,"queries":8},{"method":"GET","ms":20.52,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":388,"requests":21,"serverMS":[{"method":"PUT","ms":135.64,"queries":42},{"method":"GET","ms":24.57,"queries":8},{"method":"GET","ms":19.25,"queries":8},{"method":"GET","ms":17.29,"queries":8},{"method":"GET","ms":23.88,"queries":8},{"method":"GET","ms":34.37,"queries":8},{"method":"GET","ms":29.68,"queries":8},{"method":"GET","ms":26.19,"queries":8},{"method":"GET","ms":25.68,"queries":8},{"method":"GET","ms":38.97,"queries":8},{"method":"GET","ms":27.7,"queries":8},{"method":"GET","ms":21.65,"queries":8},{"method":"GET","ms":22.91,"queries":8},{"method":"GET","ms":22.97,"queries":8},{"method":"GET","ms":25.39,"queries":8},{"method":"GET","ms":25.94,"queries":8},{"method":"GET","ms":27.2,"queries":8},{"method":"GET","ms":27.12,"queries":8},{"method":"GET","ms":30.54,"queries":8},{"method":"GET","ms":28.54,"queries":8},{"method":"GET","ms":24.99,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":362,"requests":20,"serverMS":[{"method":"PUT","ms":121.84,"queries":42},{"method":"GET","ms":24.82,"queries":8},{"method":"GET","ms":26.78,"queries":8},{"method":"GET","ms":22.62,"queries":8},{"method":"GET","ms":52.54,"queries":8},{"method":"GET","ms":29.65,"queries":8},{"method":"GET","ms":24.47,"queries":8},{"method":"GET","ms":24.67,"queries":8},{"method":"GET","ms":30.59,"queries":8},{"method":"GET","ms":30,"queries":8},{"method":"GET","ms":16.32,"queries":8},{"method":"GET","ms":21.58,"queries":8},{"method":"GET","ms":23.93,"queries":8},{"method":"GET","ms":33.91,"queries":8},{"method":"GET","ms":60.31,"queries":8},{"method":"GET","ms":30.67,"queries":8},{"method":"GET","ms":27.57,"queries":8},{"method":"GET","ms":35.36,"queries":8},{"method":"GET","ms":28.05,"queries":8},{"method":"GET","ms":26.05,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":399,"requests":21,"serverMS":[{"method":"PUT","ms":130.81,"queries":42},{"method":"GET","ms":26.39,"queries":8},{"method":"GET","ms":19.85,"queries":8},{"method":"GET","ms":18.6,"queries":8},{"method":"GET","ms":32.09,"queries":8},{"method":"GET","ms":26.91,"queries":8},{"method":"GET","ms":20.56,"queries":8},{"method":"GET","ms":20.25,"queries":8},{"method":"GET","ms":24.99,"queries":8},{"method":"GET","ms":66.31,"queries":8},{"method":"GET","ms":22.01,"queries":8},{"method":"GET","ms":22.96,"queries":8},{"method":"GET","ms":15.9,"queries":8},{"method":"GET","ms":21.29,"queries":8},{"method":"GET","ms":17.04,"queries":8},{"method":"GET","ms":25.18,"queries":8},{"method":"GET","ms":18.75,"queries":8},{"method":"GET","ms":22.41,"queries":8},{"method":"GET","ms":22.18,"queries":8},{"method":"GET","ms":23.09,"queries":8},{"method":"GET","ms":16.43,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":343,"requests":2,"serverMS":[{"method":"PUT","ms":103.31,"queries":42},{"method":"GET","ms":21.26,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":389,"requests":2,"serverMS":[{"method":"PUT","ms":138.38,"queries":42},{"method":"GET","ms":20.77,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":396,"requests":2,"serverMS":[{"method":"PUT","ms":152.42,"queries":42},{"method":"GET","ms":22.87,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":424,"requests":2,"serverMS":[{"method":"PUT","ms":186.45,"queries":42},{"method":"GET","ms":22.23,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":513,"requests":2,"serverMS":[{"method":"PUT","ms":260.14,"queries":42},{"method":"GET","ms":23.82,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":332,"requests":2,"serverMS":[{"method":"PUT","ms":80.14,"queries":42},{"method":"GET","ms":15.85,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":365,"requests":2,"serverMS":[{"method":"PUT","ms":109.65,"queries":42},{"method":"GET","ms":16.71,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":416,"requests":2,"serverMS":[{"method":"PUT","ms":156.14,"queries":42},{"method":"GET","ms":17.18,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":318,"requests":3,"serverMS":[{"method":"PUT","ms":67.76,"queries":42},{"method":"GET","ms":23.93,"queries":8},{"method":"GET","ms":21.29,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":316,"requests":2,"serverMS":[{"method":"PUT","ms":94.66,"queries":42},{"method":"GET","ms":18.16,"queries":8}]}
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+Measuring driver/2026-09-28/fiveUsersWithSync
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":334,"requests":2,"serverMS":[{"method":"PUT","ms":70.86,"queries":42},{"method":"GET","ms":24.48,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":401,"requests":2,"serverMS":[{"method":"PUT","ms":137.39,"queries":42},{"method":"GET","ms":24.51,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":399,"requests":2,"serverMS":[{"method":"PUT","ms":135.56,"queries":42},{"method":"GET","ms":29.56,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":361,"requests":2,"serverMS":[{"method":"PUT","ms":105.63,"queries":42},{"method":"GET","ms":21.43,"queries":8}]}
+{"kind":"driver","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":378,"requests":2,"serverMS":[{"method":"PUT","ms":140.41,"queries":42},{"method":"GET","ms":24.16,"queries":8}]}
+Measuring investor/2026-09-28/coldPage
+{"kind":"investor","week":"2026-09-28","action":"coldPage","visibleMS":945,"requests":3,"serverMS":[{"method":"GET","ms":43.14,"queries":7},{"method":"GET","ms":21.45,"queries":7},{"method":"GET","ms":14.28,"queries":7}]}
+Measuring investor/2026-09-28/firstExpansion
+{"kind":"investor","week":"2026-09-28","action":"firstExpansion","visibleMS":276,"requests":1,"serverMS":[{"method":"GET","ms":45.71,"queries":7}]}
+Measuring investor/2026-09-28/cachedExpansion
+{"kind":"investor","week":"2026-09-28","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":261,"requests":2,"serverMS":[{"method":"GET","ms":17.34,"queries":7},{"method":"GET","ms":17.22,"queries":8}]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":231,"requests":1,"serverMS":[{"method":"GET","ms":11.12,"queries":7}]}
+Measuring investor/2026-09-28/save
+{"kind":"investor","week":"2026-09-28","action":"save","visibleMS":1814,"requests":3,"serverMS":[{"method":"PUT","ms":1587.52,"queries":1458},{"method":"GET","ms":19.69,"queries":8},{"method":"GET","ms":16.68,"queries":8}]}
+Measuring investor/2026-09-28/finalize
+{"kind":"investor","week":"2026-09-28","action":"finalize","visibleMS":294,"requests":3,"serverMS":[{"method":"POST","ms":79.12,"queries":49},{"method":"GET","ms":17.71,"queries":8},{"method":"GET","ms":16.54,"queries":8}]}
+Measuring investor/2026-09-28/reopenDialog
+{"kind":"investor","week":"2026-09-28","action":"reopenDialog","visibleMS":63,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/reopen
+{"kind":"investor","week":"2026-09-28","action":"reopen","visibleMS":427,"requests":3,"serverMS":[{"method":"POST","ms":216.59,"queries":125},{"method":"GET","ms":36.71,"queries":8},{"method":"GET","ms":15.35,"queries":8}]}
+Measuring investor/2026-09-28/warmPage
+{"kind":"investor","week":"2026-09-28","action":"warmPage","visibleMS":1074,"requests":3,"serverMS":[{"method":"GET","ms":49.49,"queries":8},{"method":"GET","ms":22.38,"queries":8},{"method":"GET","ms":25.44,"queries":8}]}
+Measuring investor/2026-09-28/coldPage
+{"kind":"investor","week":"2026-09-28","action":"coldPage","visibleMS":895,"requests":3,"serverMS":[{"method":"GET","ms":20.53,"queries":7},{"method":"GET","ms":17.57,"queries":7},{"method":"GET","ms":14.7,"queries":7}]}
+Measuring investor/2026-09-28/firstExpansion
+{"kind":"investor","week":"2026-09-28","action":"firstExpansion","visibleMS":244,"requests":1,"serverMS":[{"method":"GET","ms":12.33,"queries":7}]}
+Measuring investor/2026-09-28/cachedExpansion
+{"kind":"investor","week":"2026-09-28","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":256,"requests":2,"serverMS":[{"method":"GET","ms":9.45,"queries":7},{"method":"GET","ms":12.86,"queries":8}]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":217,"requests":1,"serverMS":[{"method":"GET","ms":11.05,"queries":7}]}
+Measuring investor/2026-09-28/save
+{"kind":"investor","week":"2026-09-28","action":"save","visibleMS":278,"requests":3,"serverMS":[{"method":"PUT","ms":52.53,"queries":39},{"method":"GET","ms":18.66,"queries":8},{"method":"GET","ms":13.72,"queries":8}]}
+Measuring investor/2026-09-28/finalize
+{"kind":"investor","week":"2026-09-28","action":"finalize","visibleMS":280,"requests":3,"serverMS":[{"method":"POST","ms":62.65,"queries":49},{"method":"GET","ms":15.72,"queries":8},{"method":"GET","ms":14.51,"queries":8}]}
+Measuring investor/2026-09-28/reopenDialog
+{"kind":"investor","week":"2026-09-28","action":"reopenDialog","visibleMS":64,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/reopen
+{"kind":"investor","week":"2026-09-28","action":"reopen","visibleMS":393,"requests":3,"serverMS":[{"method":"POST","ms":171.11,"queries":125},{"method":"GET","ms":29.82,"queries":8},{"method":"GET","ms":43.88,"queries":8}]}
+Measuring investor/2026-09-28/warmPage
+{"kind":"investor","week":"2026-09-28","action":"warmPage","visibleMS":932,"requests":3,"serverMS":[{"method":"GET","ms":31.75,"queries":8},{"method":"GET","ms":22.83,"queries":8},{"method":"GET","ms":57.57,"queries":8}]}
+Measuring investor/2026-09-28/coldPage
+{"kind":"investor","week":"2026-09-28","action":"coldPage","visibleMS":861,"requests":3,"serverMS":[{"method":"GET","ms":22.46,"queries":7},{"method":"GET","ms":20.71,"queries":7},{"method":"GET","ms":20.27,"queries":7}]}
+Measuring investor/2026-09-28/firstExpansion
+{"kind":"investor","week":"2026-09-28","action":"firstExpansion","visibleMS":229,"requests":1,"serverMS":[{"method":"GET","ms":18.91,"queries":7}]}
+Measuring investor/2026-09-28/cachedExpansion
+{"kind":"investor","week":"2026-09-28","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":231,"requests":2,"serverMS":[{"method":"GET","ms":10.63,"queries":7},{"method":"GET","ms":26.39,"queries":8}]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":227,"requests":1,"serverMS":[{"method":"GET","ms":14.44,"queries":7}]}
+Measuring investor/2026-09-28/save
+{"kind":"investor","week":"2026-09-28","action":"save","visibleMS":279,"requests":3,"serverMS":[{"method":"PUT","ms":48.92,"queries":39},{"method":"GET","ms":22.79,"queries":8},{"method":"GET","ms":15.17,"queries":8}]}
+Measuring investor/2026-09-28/finalize
+{"kind":"investor","week":"2026-09-28","action":"finalize","visibleMS":297,"requests":3,"serverMS":[{"method":"POST","ms":78.01,"queries":49},{"method":"GET","ms":18.82,"queries":8},{"method":"GET","ms":13.59,"queries":8}]}
+Measuring investor/2026-09-28/reopenDialog
+{"kind":"investor","week":"2026-09-28","action":"reopenDialog","visibleMS":68,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/reopen
+{"kind":"investor","week":"2026-09-28","action":"reopen","visibleMS":421,"requests":3,"serverMS":[{"method":"POST","ms":199.53,"queries":125},{"method":"GET","ms":19.19,"queries":8},{"method":"GET","ms":18.93,"queries":8}]}
+Measuring investor/2026-09-28/warmPage
+{"kind":"investor","week":"2026-09-28","action":"warmPage","visibleMS":944,"requests":3,"serverMS":[{"method":"GET","ms":35.8,"queries":8},{"method":"GET","ms":29.14,"queries":8},{"method":"GET","ms":17.53,"queries":8}]}
+Measuring investor/2026-09-28/coldPage
+{"kind":"investor","week":"2026-09-28","action":"coldPage","visibleMS":859,"requests":3,"serverMS":[{"method":"GET","ms":28.99,"queries":7},{"method":"GET","ms":30.71,"queries":7},{"method":"GET","ms":11.78,"queries":7}]}
+Measuring investor/2026-09-28/firstExpansion
+{"kind":"investor","week":"2026-09-28","action":"firstExpansion","visibleMS":232,"requests":1,"serverMS":[{"method":"GET","ms":12.15,"queries":7}]}
+Measuring investor/2026-09-28/cachedExpansion
+{"kind":"investor","week":"2026-09-28","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":217,"requests":1,"serverMS":[{"method":"GET","ms":11.64,"queries":7}]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":248,"requests":2,"serverMS":[{"method":"GET","ms":14.53,"queries":8},{"method":"GET","ms":9.56,"queries":7}]}
+Measuring investor/2026-09-28/save
+{"kind":"investor","week":"2026-09-28","action":"save","visibleMS":262,"requests":3,"serverMS":[{"method":"PUT","ms":47.5,"queries":39},{"method":"GET","ms":17.37,"queries":8},{"method":"GET","ms":16.42,"queries":8}]}
+Measuring investor/2026-09-28/finalize
+{"kind":"investor","week":"2026-09-28","action":"finalize","visibleMS":327,"requests":3,"serverMS":[{"method":"POST","ms":93.98,"queries":49},{"method":"GET","ms":20.07,"queries":8},{"method":"GET","ms":25.53,"queries":8}]}
+Measuring investor/2026-09-28/reopenDialog
+{"kind":"investor","week":"2026-09-28","action":"reopenDialog","visibleMS":64,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/reopen
+{"kind":"investor","week":"2026-09-28","action":"reopen","visibleMS":398,"requests":3,"serverMS":[{"method":"POST","ms":188.43,"queries":125},{"method":"GET","ms":22.32,"queries":8},{"method":"GET","ms":20.19,"queries":8}]}
+Measuring investor/2026-09-28/warmPage
+{"kind":"investor","week":"2026-09-28","action":"warmPage","visibleMS":936,"requests":3,"serverMS":[{"method":"GET","ms":29.89,"queries":8},{"method":"GET","ms":36.12,"queries":8},{"method":"GET","ms":15.52,"queries":8}]}
+Measuring investor/2026-09-28/coldPage
+{"kind":"investor","week":"2026-09-28","action":"coldPage","visibleMS":887,"requests":3,"serverMS":[{"method":"GET","ms":23.39,"queries":7},{"method":"GET","ms":18.44,"queries":7},{"method":"GET","ms":17.86,"queries":7}]}
+Measuring investor/2026-09-28/firstExpansion
+{"kind":"investor","week":"2026-09-28","action":"firstExpansion","visibleMS":230,"requests":1,"serverMS":[{"method":"GET","ms":11.54,"queries":7}]}
+Measuring investor/2026-09-28/cachedExpansion
+{"kind":"investor","week":"2026-09-28","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":258,"requests":2,"serverMS":[{"method":"GET","ms":13.91,"queries":7},{"method":"GET","ms":12.79,"queries":8}]}
+Measuring investor/2026-09-28/multipleOpen
+{"kind":"investor","week":"2026-09-28","action":"multipleOpen","visibleMS":216,"requests":1,"serverMS":[{"method":"GET","ms":8.92,"queries":7}]}
+Measuring investor/2026-09-28/save
+{"kind":"investor","week":"2026-09-28","action":"save","visibleMS":277,"requests":3,"serverMS":[{"method":"PUT","ms":50.78,"queries":39},{"method":"GET","ms":27.41,"queries":8},{"method":"GET","ms":14.55,"queries":8}]}
+Measuring investor/2026-09-28/finalize
+{"kind":"investor","week":"2026-09-28","action":"finalize","visibleMS":280,"requests":3,"serverMS":[{"method":"POST","ms":63.15,"queries":49},{"method":"GET","ms":15.65,"queries":8},{"method":"GET","ms":36.01,"queries":8}]}
+Measuring investor/2026-09-28/reopenDialog
+{"kind":"investor","week":"2026-09-28","action":"reopenDialog","visibleMS":78,"requests":0,"serverMS":[]}
+Measuring investor/2026-09-28/reopen
+{"kind":"investor","week":"2026-09-28","action":"reopen","visibleMS":435,"requests":3,"serverMS":[{"method":"POST","ms":221.68,"queries":125},{"method":"GET","ms":37.24,"queries":8},{"method":"GET","ms":14.83,"queries":8}]}
+Measuring investor/2026-09-28/warmPage
+{"kind":"investor","week":"2026-09-28","action":"warmPage","visibleMS":928,"requests":3,"serverMS":[{"method":"GET","ms":31.01,"queries":8},{"method":"GET","ms":19.91,"queries":8},{"method":"GET","ms":14.19,"queries":8}]}
+Measuring investor/2026-09-28/reopenWeekPreview
+{"kind":"investor","week":"2026-09-28","action":"reopenWeekPreview","visibleMS":389,"requests":1,"serverMS":[{"method":"GET","ms":36.97,"queries":6}]}
+Measuring investor/2026-09-28/reopenWeek
+{"kind":"investor","week":"2026-09-28","action":"reopenWeek","visibleMS":2537,"requests":3,"serverMS":[{"method":"POST","ms":2257.75,"queries":416},{"method":"GET","ms":21.95,"queries":8},{"method":"GET","ms":16.06,"queries":8}]}
+Measuring investor/2026-09-28/reopenWeekPreview
+{"kind":"investor","week":"2026-09-28","action":"reopenWeekPreview","visibleMS":297,"requests":1,"serverMS":[{"method":"GET","ms":17.7,"queries":6}]}
+Measuring investor/2026-09-28/reopenWeek
+{"kind":"investor","week":"2026-09-28","action":"reopenWeek","visibleMS":1956,"requests":3,"serverMS":[{"method":"POST","ms":1664.33,"queries":412},{"method":"GET","ms":26.82,"queries":8},{"method":"GET","ms":19.13,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":717.469970703125}
+{"kind":"investor","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":659.626953125}
+{"kind":"investor","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":668.639892578125}
+{"kind":"investor","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":690.34814453125}
+{"kind":"investor","week":"2026-09-28","action":"externalSourceVisibility","visibleMS":681.261962890625}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":419,"requests":2,"serverMS":[{"method":"PUT","ms":148.3,"queries":43},{"method":"GET","ms":25.2,"queries":9}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":430,"requests":2,"serverMS":[{"method":"PUT","ms":145.96,"queries":43},{"method":"GET","ms":27.84,"queries":9}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":406,"requests":2,"serverMS":[{"method":"PUT","ms":140.62,"queries":43},{"method":"GET","ms":20.17,"queries":9}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":439,"requests":2,"serverMS":[{"method":"PUT","ms":163.85,"queries":43},{"method":"GET","ms":21.09,"queries":9}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":408,"requests":2,"serverMS":[{"method":"PUT","ms":162.88,"queries":43},{"method":"GET","ms":19.25,"queries":9}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":388,"requests":17,"serverMS":[{"method":"PUT","ms":145.46,"queries":39},{"method":"GET","ms":20.44,"queries":8},{"method":"GET","ms":16.31,"queries":8},{"method":"GET","ms":13.29,"queries":8},{"method":"GET","ms":14.46,"queries":8},{"method":"GET","ms":17.55,"queries":8},{"method":"GET","ms":18.48,"queries":8},{"method":"GET","ms":16.68,"queries":8},{"method":"GET","ms":23.24,"queries":8},{"method":"GET","ms":20.96,"queries":8},{"method":"GET","ms":20.81,"queries":8},{"method":"GET","ms":14.18,"queries":8},{"method":"GET","ms":18.13,"queries":8},{"method":"GET","ms":18.93,"queries":8},{"method":"GET","ms":15.94,"queries":8},{"method":"GET","ms":18.01,"queries":8},{"method":"GET","ms":15.49,"queries":8}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":381,"requests":18,"serverMS":[{"method":"PUT","ms":94.65,"queries":39},{"method":"GET","ms":27.44,"queries":8},{"method":"GET","ms":21.79,"queries":8},{"method":"GET","ms":15.45,"queries":8},{"method":"GET","ms":16.28,"queries":8},{"method":"GET","ms":15.5,"queries":8},{"method":"GET","ms":15.19,"queries":8},{"method":"GET","ms":17.17,"queries":8},{"method":"GET","ms":16.54,"queries":8},{"method":"GET","ms":14.49,"queries":8},{"method":"GET","ms":16.6,"queries":8},{"method":"GET","ms":20.8,"queries":8},{"method":"GET","ms":14.77,"queries":8},{"method":"GET","ms":15.41,"queries":8},{"method":"GET","ms":16.9,"queries":8},{"method":"GET","ms":19.52,"queries":8},{"method":"GET","ms":18.25,"queries":8},{"method":"GET","ms":15.65,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":320,"requests":18,"serverMS":[{"method":"PUT","ms":83.6,"queries":39},{"method":"GET","ms":23.99,"queries":8},{"method":"GET","ms":23.34,"queries":8},{"method":"GET","ms":14.93,"queries":8},{"method":"GET","ms":13.34,"queries":8},{"method":"GET","ms":14.83,"queries":8},{"method":"GET","ms":16.97,"queries":8},{"method":"GET","ms":14.7,"queries":8},{"method":"GET","ms":18.25,"queries":8},{"method":"GET","ms":17.05,"queries":8},{"method":"GET","ms":14.73,"queries":8},{"method":"GET","ms":17.02,"queries":8},{"method":"GET","ms":15.06,"queries":8},{"method":"GET","ms":18.05,"queries":8},{"method":"GET","ms":14.32,"queries":8},{"method":"GET","ms":14.89,"queries":8},{"method":"GET","ms":17.75,"queries":8},{"method":"GET","ms":14.57,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":348,"requests":18,"serverMS":[{"method":"PUT","ms":79.34,"queries":39},{"method":"GET","ms":23.08,"queries":8},{"method":"GET","ms":19.87,"queries":8},{"method":"GET","ms":17.07,"queries":8},{"method":"GET","ms":19.68,"queries":8},{"method":"GET","ms":13.85,"queries":8},{"method":"GET","ms":13.71,"queries":8},{"method":"GET","ms":15.21,"queries":8},{"method":"GET","ms":19.25,"queries":8},{"method":"GET","ms":17.45,"queries":8},{"method":"GET","ms":14.49,"queries":8},{"method":"GET","ms":12.96,"queries":8},{"method":"GET","ms":14.59,"queries":8},{"method":"GET","ms":15.74,"queries":8},{"method":"GET","ms":16.25,"queries":8},{"method":"GET","ms":15.32,"queries":8},{"method":"GET","ms":18.33,"queries":8},{"method":"GET","ms":16.67,"queries":8}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":394,"requests":18,"serverMS":[{"method":"PUT","ms":127.25,"queries":39},{"method":"GET","ms":22.49,"queries":8},{"method":"GET","ms":22.71,"queries":8},{"method":"GET","ms":16.42,"queries":8},{"method":"GET","ms":20.63,"queries":8},{"method":"GET","ms":16.97,"queries":8},{"method":"GET","ms":14.91,"queries":8},{"method":"GET","ms":18.11,"queries":8},{"method":"GET","ms":17.08,"queries":8},{"method":"GET","ms":18.74,"queries":8},{"method":"GET","ms":17.61,"queries":8},{"method":"GET","ms":14.27,"queries":8},{"method":"GET","ms":15.17,"queries":8},{"method":"GET","ms":14.09,"queries":8},{"method":"GET","ms":15.78,"queries":8},{"method":"GET","ms":15.5,"queries":8},{"method":"GET","ms":19.34,"queries":8},{"method":"GET","ms":14.38,"queries":8}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":344,"requests":2,"serverMS":[{"method":"PUT","ms":70.47,"queries":39},{"method":"GET","ms":22.76,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":374,"requests":2,"serverMS":[{"method":"PUT","ms":93.02,"queries":39},{"method":"GET","ms":19.29,"queries":8}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":333,"requests":2,"serverMS":[{"method":"PUT","ms":76.69,"queries":39},{"method":"GET","ms":26.66,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":316,"requests":2,"serverMS":[{"method":"PUT","ms":82.82,"queries":39},{"method":"GET","ms":25.47,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":344,"requests":2,"serverMS":[{"method":"PUT","ms":112.1,"queries":39},{"method":"GET","ms":18.82,"queries":8}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":309,"requests":3,"serverMS":[{"method":"PUT","ms":74.78,"queries":39},{"method":"GET","ms":31.04,"queries":8},{"method":"GET","ms":29.02,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":290,"requests":3,"serverMS":[{"method":"PUT","ms":64.54,"queries":39},{"method":"GET","ms":31.04,"queries":8},{"method":"GET","ms":30.36,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":297,"requests":2,"serverMS":[{"method":"PUT","ms":84.38,"queries":39},{"method":"GET","ms":26.26,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":331,"requests":2,"serverMS":[{"method":"PUT","ms":99.89,"queries":39},{"method":"GET","ms":27.52,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":360,"requests":2,"serverMS":[{"method":"PUT","ms":121.55,"queries":39},{"method":"GET","ms":14.6,"queries":8}]}
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+Measuring investor/2026-09-28/fiveUsersWithSync
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":371,"requests":2,"serverMS":[{"method":"PUT","ms":85.65,"queries":39},{"method":"GET","ms":16.11,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":344,"requests":2,"serverMS":[{"method":"PUT","ms":81.61,"queries":39},{"method":"GET","ms":23.14,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":375,"requests":2,"serverMS":[{"method":"PUT","ms":99.05,"queries":39},{"method":"GET","ms":29.49,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":409,"requests":2,"serverMS":[{"method":"PUT","ms":130.19,"queries":39},{"method":"GET","ms":26.62,"queries":8}]}
+{"kind":"investor","week":"2026-09-28","action":"fiveUsersWithSync","visibleMS":326,"requests":2,"serverMS":[{"method":"PUT","ms":82.26,"queries":39},{"method":"GET","ms":23.23,"queries":8}]}
+Measuring driver/2026-10-19/coldPage
+{"kind":"driver","week":"2026-10-19","action":"coldPage","visibleMS":922,"requests":3,"serverMS":[{"method":"GET","ms":39.52,"queries":7},{"method":"GET","ms":43.9,"queries":7},{"method":"GET","ms":15.86,"queries":7}]}
+Measuring driver/2026-10-19/firstExpansion
+{"kind":"driver","week":"2026-10-19","action":"firstExpansion","visibleMS":215,"requests":1,"serverMS":[{"method":"GET","ms":9.25,"queries":7}]}
+Measuring driver/2026-10-19/cachedExpansion
+{"kind":"driver","week":"2026-10-19","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":229,"requests":2,"serverMS":[{"method":"GET","ms":10.8,"queries":7},{"method":"GET","ms":17.01,"queries":8}]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":280,"requests":1,"serverMS":[{"method":"GET","ms":10.64,"queries":7}]}
+Measuring driver/2026-10-19/save
+{"kind":"driver","week":"2026-10-19","action":"save","visibleMS":1546,"requests":3,"serverMS":[{"method":"PUT","ms":1326.87,"queries":1225},{"method":"GET","ms":23.18,"queries":8},{"method":"GET","ms":19.22,"queries":8}]}
+Measuring driver/2026-10-19/finalize
+{"kind":"driver","week":"2026-10-19","action":"finalize","visibleMS":313,"requests":3,"serverMS":[{"method":"POST","ms":90.36,"queries":57},{"method":"GET","ms":18.96,"queries":8},{"method":"GET","ms":14.98,"queries":8}]}
+Measuring driver/2026-10-19/reopenDialog
+{"kind":"driver","week":"2026-10-19","action":"reopenDialog","visibleMS":63,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/reopen
+{"kind":"driver","week":"2026-10-19","action":"reopen","visibleMS":328,"requests":3,"serverMS":[{"method":"POST","ms":118.63,"queries":101},{"method":"GET","ms":23.04,"queries":8},{"method":"GET","ms":17.22,"queries":8}]}
+Measuring driver/2026-10-19/warmPage
+{"kind":"driver","week":"2026-10-19","action":"warmPage","visibleMS":941,"requests":3,"serverMS":[{"method":"GET","ms":39.3,"queries":8},{"method":"GET","ms":22.13,"queries":8},{"method":"GET","ms":18.83,"queries":8}]}
+Measuring driver/2026-10-19/coldPage
+{"kind":"driver","week":"2026-10-19","action":"coldPage","visibleMS":943,"requests":3,"serverMS":[{"method":"GET","ms":55.47,"queries":7},{"method":"GET","ms":24.74,"queries":7},{"method":"GET","ms":15.98,"queries":7}]}
+Measuring driver/2026-10-19/firstExpansion
+{"kind":"driver","week":"2026-10-19","action":"firstExpansion","visibleMS":230,"requests":1,"serverMS":[{"method":"GET","ms":10.75,"queries":7}]}
+Measuring driver/2026-10-19/cachedExpansion
+{"kind":"driver","week":"2026-10-19","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":212,"requests":2,"serverMS":[{"method":"GET","ms":8.29,"queries":7},{"method":"GET","ms":24.5,"queries":8}]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":282,"requests":1,"serverMS":[{"method":"GET","ms":16.47,"queries":7}]}
+Measuring driver/2026-10-19/save
+{"kind":"driver","week":"2026-10-19","action":"save","visibleMS":276,"requests":3,"serverMS":[{"method":"PUT","ms":53.9,"queries":42},{"method":"GET","ms":17.01,"queries":8},{"method":"GET","ms":15.95,"queries":8}]}
+Measuring driver/2026-10-19/finalize
+{"kind":"driver","week":"2026-10-19","action":"finalize","visibleMS":294,"requests":3,"serverMS":[{"method":"POST","ms":73.27,"queries":57},{"method":"GET","ms":19.25,"queries":8},{"method":"GET","ms":16.69,"queries":8}]}
+Measuring driver/2026-10-19/reopenDialog
+{"kind":"driver","week":"2026-10-19","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/reopen
+{"kind":"driver","week":"2026-10-19","action":"reopen","visibleMS":309,"requests":3,"serverMS":[{"method":"POST","ms":97.19,"queries":101},{"method":"GET","ms":18.83,"queries":8},{"method":"GET","ms":14.65,"queries":8}]}
+Measuring driver/2026-10-19/warmPage
+{"kind":"driver","week":"2026-10-19","action":"warmPage","visibleMS":912,"requests":3,"serverMS":[{"method":"GET","ms":27.12,"queries":8},{"method":"GET","ms":25.54,"queries":8},{"method":"GET","ms":17.77,"queries":8}]}
+Measuring driver/2026-10-19/coldPage
+{"kind":"driver","week":"2026-10-19","action":"coldPage","visibleMS":843,"requests":3,"serverMS":[{"method":"GET","ms":23.01,"queries":7},{"method":"GET","ms":16.84,"queries":7},{"method":"GET","ms":16.38,"queries":7}]}
+Measuring driver/2026-10-19/firstExpansion
+{"kind":"driver","week":"2026-10-19","action":"firstExpansion","visibleMS":240,"requests":1,"serverMS":[{"method":"GET","ms":13.15,"queries":7}]}
+Measuring driver/2026-10-19/cachedExpansion
+{"kind":"driver","week":"2026-10-19","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":234,"requests":2,"serverMS":[{"method":"GET","ms":9.43,"queries":7},{"method":"GET","ms":29.79,"queries":8}]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":295,"requests":1,"serverMS":[{"method":"GET","ms":11.7,"queries":7}]}
+Measuring driver/2026-10-19/save
+{"kind":"driver","week":"2026-10-19","action":"save","visibleMS":295,"requests":3,"serverMS":[{"method":"PUT","ms":59.89,"queries":42},{"method":"GET","ms":21.99,"queries":8},{"method":"GET","ms":53.3,"queries":8}]}
+Measuring driver/2026-10-19/finalize
+{"kind":"driver","week":"2026-10-19","action":"finalize","visibleMS":313,"requests":3,"serverMS":[{"method":"POST","ms":76.2,"queries":57},{"method":"GET","ms":20.3,"queries":8},{"method":"GET","ms":16.58,"queries":8}]}
+Measuring driver/2026-10-19/reopenDialog
+{"kind":"driver","week":"2026-10-19","action":"reopenDialog","visibleMS":64,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/reopen
+{"kind":"driver","week":"2026-10-19","action":"reopen","visibleMS":310,"requests":3,"serverMS":[{"method":"POST","ms":96.48,"queries":101},{"method":"GET","ms":19.94,"queries":8},{"method":"GET","ms":16.7,"queries":8}]}
+Measuring driver/2026-10-19/warmPage
+{"kind":"driver","week":"2026-10-19","action":"warmPage","visibleMS":909,"requests":3,"serverMS":[{"method":"GET","ms":29.46,"queries":8},{"method":"GET","ms":17.43,"queries":8},{"method":"GET","ms":19.57,"queries":8}]}
+Measuring driver/2026-10-19/coldPage
+{"kind":"driver","week":"2026-10-19","action":"coldPage","visibleMS":878,"requests":3,"serverMS":[{"method":"GET","ms":21.83,"queries":7},{"method":"GET","ms":21.67,"queries":7},{"method":"GET","ms":34.05,"queries":7}]}
+Measuring driver/2026-10-19/firstExpansion
+{"kind":"driver","week":"2026-10-19","action":"firstExpansion","visibleMS":250,"requests":1,"serverMS":[{"method":"GET","ms":20.02,"queries":7}]}
+Measuring driver/2026-10-19/cachedExpansion
+{"kind":"driver","week":"2026-10-19","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":247,"requests":2,"serverMS":[{"method":"GET","ms":13,"queries":7},{"method":"GET","ms":19.45,"queries":8}]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":263,"requests":1,"serverMS":[{"method":"GET","ms":10.5,"queries":7}]}
+Measuring driver/2026-10-19/save
+{"kind":"driver","week":"2026-10-19","action":"save","visibleMS":295,"requests":3,"serverMS":[{"method":"PUT","ms":64.73,"queries":42},{"method":"GET","ms":23.86,"queries":8},{"method":"GET","ms":19.44,"queries":8}]}
+Measuring driver/2026-10-19/finalize
+{"kind":"driver","week":"2026-10-19","action":"finalize","visibleMS":298,"requests":3,"serverMS":[{"method":"POST","ms":71.25,"queries":57},{"method":"GET","ms":17.33,"queries":8},{"method":"GET","ms":15.04,"queries":8}]}
+Measuring driver/2026-10-19/reopenDialog
+{"kind":"driver","week":"2026-10-19","action":"reopenDialog","visibleMS":81,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/reopen
+{"kind":"driver","week":"2026-10-19","action":"reopen","visibleMS":332,"requests":3,"serverMS":[{"method":"POST","ms":115.88,"queries":101},{"method":"GET","ms":42.72,"queries":8},{"method":"GET","ms":15.61,"queries":8}]}
+Measuring driver/2026-10-19/warmPage
+{"kind":"driver","week":"2026-10-19","action":"warmPage","visibleMS":888,"requests":3,"serverMS":[{"method":"GET","ms":31.33,"queries":8},{"method":"GET","ms":18.09,"queries":8},{"method":"GET","ms":14.74,"queries":8}]}
+Measuring driver/2026-10-19/coldPage
+{"kind":"driver","week":"2026-10-19","action":"coldPage","visibleMS":859,"requests":3,"serverMS":[{"method":"GET","ms":27.64,"queries":7},{"method":"GET","ms":19.99,"queries":7},{"method":"GET","ms":14,"queries":7}]}
+Measuring driver/2026-10-19/firstExpansion
+{"kind":"driver","week":"2026-10-19","action":"firstExpansion","visibleMS":217,"requests":1,"serverMS":[{"method":"GET","ms":7.96,"queries":7}]}
+Measuring driver/2026-10-19/cachedExpansion
+{"kind":"driver","week":"2026-10-19","action":"cachedExpansion","visibleMS":27,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":252,"requests":2,"serverMS":[{"method":"GET","ms":12.97,"queries":7},{"method":"GET","ms":16.03,"queries":8}]}
+Measuring driver/2026-10-19/multipleOpen
+{"kind":"driver","week":"2026-10-19","action":"multipleOpen","visibleMS":257,"requests":1,"serverMS":[{"method":"GET","ms":7.63,"queries":7}]}
+Measuring driver/2026-10-19/save
+{"kind":"driver","week":"2026-10-19","action":"save","visibleMS":280,"requests":3,"serverMS":[{"method":"PUT","ms":57.91,"queries":42},{"method":"GET","ms":22.36,"queries":8},{"method":"GET","ms":17.09,"queries":8}]}
+Measuring driver/2026-10-19/finalize
+{"kind":"driver","week":"2026-10-19","action":"finalize","visibleMS":278,"requests":3,"serverMS":[{"method":"POST","ms":65.4,"queries":57},{"method":"GET","ms":19.22,"queries":8},{"method":"GET","ms":17.21,"queries":8}]}
+Measuring driver/2026-10-19/reopenDialog
+{"kind":"driver","week":"2026-10-19","action":"reopenDialog","visibleMS":62,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-19/reopen
+{"kind":"driver","week":"2026-10-19","action":"reopen","visibleMS":313,"requests":3,"serverMS":[{"method":"POST","ms":101.73,"queries":101},{"method":"GET","ms":21.43,"queries":8},{"method":"GET","ms":46.52,"queries":8}]}
+Measuring driver/2026-10-19/warmPage
+{"kind":"driver","week":"2026-10-19","action":"warmPage","visibleMS":937,"requests":3,"serverMS":[{"method":"GET","ms":34.94,"queries":8},{"method":"GET","ms":27.23,"queries":8},{"method":"GET","ms":23.53,"queries":8}]}
+Measuring driver/2026-10-19/reopenWeekPreview
+{"kind":"driver","week":"2026-10-19","action":"reopenWeekPreview","visibleMS":276,"requests":1,"serverMS":[{"method":"GET","ms":19,"queries":6}]}
+Measuring driver/2026-10-19/reopenWeek
+{"kind":"driver","week":"2026-10-19","action":"reopenWeek","visibleMS":2429,"requests":3,"serverMS":[{"method":"POST","ms":2155.61,"queries":468},{"method":"GET","ms":20.86,"queries":8},{"method":"GET","ms":49.56,"queries":8}]}
+Measuring driver/2026-10-19/reopenWeekPreview
+{"kind":"driver","week":"2026-10-19","action":"reopenWeekPreview","visibleMS":287,"requests":1,"serverMS":[{"method":"GET","ms":26.29,"queries":6}]}
+Measuring driver/2026-10-19/reopenWeek
+{"kind":"driver","week":"2026-10-19","action":"reopenWeek","visibleMS":2194,"requests":3,"serverMS":[{"method":"POST","ms":1917.69,"queries":468},{"method":"GET","ms":30.81,"queries":8},{"method":"GET","ms":28.75,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":343.734130859375}
+{"kind":"driver","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":338.834228515625}
+{"kind":"driver","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":1572.737060546875}
+{"kind":"driver","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":1586.842041015625}
+{"kind":"driver","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":569.647216796875}
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":781,"requests":2,"serverMS":[{"method":"PUT","ms":489.02,"queries":46},{"method":"GET","ms":17.15,"queries":9}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":470,"requests":4,"serverMS":[{"method":"PUT","ms":183.83,"queries":46},{"method":"GET","ms":27.65,"queries":9},{"method":"GET","ms":18.69,"queries":9},{"method":"GET","ms":17.84,"queries":9}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":521,"requests":4,"serverMS":[{"method":"PUT","ms":221.03,"queries":46},{"method":"GET","ms":28.55,"queries":9},{"method":"GET","ms":27.34,"queries":9},{"method":"GET","ms":25.43,"queries":9}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":704,"requests":3,"serverMS":[{"method":"PUT","ms":403.75,"queries":46},{"method":"GET","ms":33.41,"queries":9},{"method":"GET","ms":29.86,"queries":9}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":424,"requests":5,"serverMS":[{"method":"PUT","ms":139.25,"queries":46},{"method":"GET","ms":21.24,"queries":9},{"method":"GET","ms":19.26,"queries":9},{"method":"GET","ms":16.05,"queries":9},{"method":"GET","ms":16.06,"queries":9}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":367,"requests":20,"serverMS":[{"method":"PUT","ms":58.59,"queries":42},{"method":"GET","ms":27.77,"queries":8},{"method":"GET","ms":20.08,"queries":8},{"method":"GET","ms":25.85,"queries":8},{"method":"GET","ms":24.36,"queries":8},{"method":"GET","ms":22.56,"queries":8},{"method":"GET","ms":27.36,"queries":8},{"method":"GET","ms":25.85,"queries":8},{"method":"GET","ms":23.07,"queries":8},{"method":"GET","ms":35.54,"queries":8},{"method":"GET","ms":18.47,"queries":8},{"method":"GET","ms":17.67,"queries":8},{"method":"GET","ms":19.37,"queries":8},{"method":"GET","ms":17.96,"queries":8},{"method":"GET","ms":17.03,"queries":8},{"method":"GET","ms":14.59,"queries":8},{"method":"GET","ms":16.94,"queries":8},{"method":"GET","ms":19.35,"queries":8},{"method":"GET","ms":67.91,"queries":8},{"method":"GET","ms":21.07,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":367,"requests":19,"serverMS":[{"method":"PUT","ms":87.61,"queries":42},{"method":"GET","ms":24.87,"queries":8},{"method":"GET","ms":18.88,"queries":8},{"method":"GET","ms":24.52,"queries":8},{"method":"GET","ms":18.27,"queries":8},{"method":"GET","ms":17.7,"queries":8},{"method":"GET","ms":20.76,"queries":8},{"method":"GET","ms":22.97,"queries":8},{"method":"GET","ms":52.19,"queries":8},{"method":"GET","ms":19.15,"queries":8},{"method":"GET","ms":18.64,"queries":8},{"method":"GET","ms":18.86,"queries":8},{"method":"GET","ms":20.94,"queries":8},{"method":"GET","ms":17.04,"queries":8},{"method":"GET","ms":18.07,"queries":8},{"method":"GET","ms":17.13,"queries":8},{"method":"GET","ms":19.05,"queries":8},{"method":"GET","ms":21.65,"queries":8},{"method":"GET","ms":25.38,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":381,"requests":18,"serverMS":[{"method":"PUT","ms":143.45,"queries":42},{"method":"GET","ms":34.13,"queries":8},{"method":"GET","ms":27.7,"queries":8},{"method":"GET","ms":25.73,"queries":8},{"method":"GET","ms":27.36,"queries":8},{"method":"GET","ms":21.99,"queries":8},{"method":"GET","ms":25.15,"queries":8},{"method":"GET","ms":81.78,"queries":8},{"method":"GET","ms":26.3,"queries":8},{"method":"GET","ms":28.94,"queries":8},{"method":"GET","ms":29.88,"queries":8},{"method":"GET","ms":19.48,"queries":8},{"method":"GET","ms":23.17,"queries":8},{"method":"GET","ms":22.32,"queries":8},{"method":"GET","ms":25.67,"queries":8},{"method":"GET","ms":20.66,"queries":8},{"method":"GET","ms":30.68,"queries":8},{"method":"GET","ms":28.66,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":373,"requests":19,"serverMS":[{"method":"PUT","ms":105.72,"queries":42},{"method":"GET","ms":23.92,"queries":8},{"method":"GET","ms":21.45,"queries":8},{"method":"GET","ms":24.14,"queries":8},{"method":"GET","ms":19.35,"queries":8},{"method":"GET","ms":15.11,"queries":8},{"method":"GET","ms":15.5,"queries":8},{"method":"GET","ms":19.56,"queries":8},{"method":"GET","ms":52.32,"queries":8},{"method":"GET","ms":20.56,"queries":8},{"method":"GET","ms":23.03,"queries":8},{"method":"GET","ms":23.9,"queries":8},{"method":"GET","ms":19.99,"queries":8},{"method":"GET","ms":23.17,"queries":8},{"method":"GET","ms":25.06,"queries":8},{"method":"GET","ms":24.3,"queries":8},{"method":"GET","ms":26.43,"queries":8},{"method":"GET","ms":28.29,"queries":8},{"method":"GET","ms":35.73,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":331,"requests":19,"serverMS":[{"method":"PUT","ms":110.46,"queries":42},{"method":"GET","ms":24.76,"queries":8},{"method":"GET","ms":22.56,"queries":8},{"method":"GET","ms":18.26,"queries":8},{"method":"GET","ms":15.69,"queries":8},{"method":"GET","ms":15.33,"queries":8},{"method":"GET","ms":16.89,"queries":8},{"method":"GET","ms":17.33,"queries":8},{"method":"GET","ms":18.72,"queries":8},{"method":"GET","ms":18.43,"queries":8},{"method":"GET","ms":20.28,"queries":8},{"method":"GET","ms":17.91,"queries":8},{"method":"GET","ms":15.6,"queries":8},{"method":"GET","ms":21.51,"queries":8},{"method":"GET","ms":22.61,"queries":8},{"method":"GET","ms":21.1,"queries":8},{"method":"GET","ms":21.57,"queries":8},{"method":"GET","ms":22.09,"queries":8},{"method":"GET","ms":27.55,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":342,"requests":2,"serverMS":[{"method":"PUT","ms":71.32,"queries":42},{"method":"GET","ms":29.22,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":347,"requests":2,"serverMS":[{"method":"PUT","ms":102.84,"queries":42},{"method":"GET","ms":19.5,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":379,"requests":2,"serverMS":[{"method":"PUT","ms":136.21,"queries":42},{"method":"GET","ms":18.18,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":418,"requests":2,"serverMS":[{"method":"PUT","ms":170.91,"queries":42},{"method":"GET","ms":20.68,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":440,"requests":2,"serverMS":[{"method":"PUT","ms":190.4,"queries":42},{"method":"GET","ms":16.1,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":318,"requests":2,"serverMS":[{"method":"PUT","ms":75.29,"queries":42},{"method":"GET","ms":18.88,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":351,"requests":2,"serverMS":[{"method":"PUT","ms":112.82,"queries":42},{"method":"GET","ms":19.2,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":386,"requests":2,"serverMS":[{"method":"PUT","ms":151.67,"queries":42},{"method":"GET","ms":17.86,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":362,"requests":2,"serverMS":[{"method":"PUT","ms":135.73,"queries":42},{"method":"GET","ms":23.01,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":420,"requests":2,"serverMS":[{"method":"PUT","ms":166.45,"queries":42},{"method":"GET","ms":29.06,"queries":8}]}
+Measuring driver/2026-10-19/fiveUsersWithSync
+Measuring driver/2026-10-19/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":376,"requests":2,"serverMS":[{"method":"PUT","ms":86.55,"queries":42},{"method":"GET","ms":22.05,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":361,"requests":2,"serverMS":[{"method":"PUT","ms":125.51,"queries":42},{"method":"GET","ms":21.01,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":397,"requests":2,"serverMS":[{"method":"PUT","ms":152.87,"queries":42},{"method":"GET","ms":20.02,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":377,"requests":2,"serverMS":[{"method":"PUT","ms":141.21,"queries":42},{"method":"GET","ms":25.25,"queries":8}]}
+{"kind":"driver","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":343,"requests":3,"serverMS":[{"method":"PUT","ms":80.67,"queries":42},{"method":"GET","ms":23.88,"queries":8},{"method":"GET","ms":26.16,"queries":8}]}
+Measuring investor/2026-10-19/coldPage
+{"kind":"investor","week":"2026-10-19","action":"coldPage","visibleMS":853,"requests":3,"serverMS":[{"method":"GET","ms":33.3,"queries":7},{"method":"GET","ms":15.9,"queries":7},{"method":"GET","ms":51.44,"queries":7}]}
+Measuring investor/2026-10-19/firstExpansion
+{"kind":"investor","week":"2026-10-19","action":"firstExpansion","visibleMS":240,"requests":1,"serverMS":[{"method":"GET","ms":11.76,"queries":7}]}
+Measuring investor/2026-10-19/cachedExpansion
+{"kind":"investor","week":"2026-10-19","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":267,"requests":2,"serverMS":[{"method":"GET","ms":11.59,"queries":7},{"method":"GET","ms":14.39,"queries":8}]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":220,"requests":1,"serverMS":[{"method":"GET","ms":7.95,"queries":7}]}
+Measuring investor/2026-10-19/save
+{"kind":"investor","week":"2026-10-19","action":"save","visibleMS":293,"requests":3,"serverMS":[{"method":"PUT","ms":58.9,"queries":39},{"method":"GET","ms":24.41,"queries":8},{"method":"GET","ms":14.47,"queries":8}]}
+Measuring investor/2026-10-19/finalize
+{"kind":"investor","week":"2026-10-19","action":"finalize","visibleMS":313,"requests":3,"serverMS":[{"method":"POST","ms":77.95,"queries":49},{"method":"GET","ms":15.8,"queries":8},{"method":"GET","ms":18.58,"queries":8}]}
+Measuring investor/2026-10-19/reopenDialog
+{"kind":"investor","week":"2026-10-19","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/reopen
+{"kind":"investor","week":"2026-10-19","action":"reopen","visibleMS":346,"requests":3,"serverMS":[{"method":"POST","ms":135.02,"queries":102},{"method":"GET","ms":24.82,"queries":8},{"method":"GET","ms":14.85,"queries":8}]}
+Measuring investor/2026-10-19/warmPage
+{"kind":"investor","week":"2026-10-19","action":"warmPage","visibleMS":956,"requests":3,"serverMS":[{"method":"GET","ms":33.99,"queries":8},{"method":"GET","ms":22.06,"queries":8},{"method":"GET","ms":17.8,"queries":8}]}
+Measuring investor/2026-10-19/coldPage
+{"kind":"investor","week":"2026-10-19","action":"coldPage","visibleMS":852,"requests":3,"serverMS":[{"method":"GET","ms":25.59,"queries":7},{"method":"GET","ms":23.87,"queries":7},{"method":"GET","ms":15.22,"queries":7}]}
+Measuring investor/2026-10-19/firstExpansion
+{"kind":"investor","week":"2026-10-19","action":"firstExpansion","visibleMS":212,"requests":1,"serverMS":[{"method":"GET","ms":7.92,"queries":7}]}
+Measuring investor/2026-10-19/cachedExpansion
+{"kind":"investor","week":"2026-10-19","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":228,"requests":1,"serverMS":[{"method":"GET","ms":9.56,"queries":7}]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":237,"requests":2,"serverMS":[{"method":"GET","ms":19.44,"queries":8},{"method":"GET","ms":13.92,"queries":7}]}
+Measuring investor/2026-10-19/save
+{"kind":"investor","week":"2026-10-19","action":"save","visibleMS":327,"requests":3,"serverMS":[{"method":"PUT","ms":99.53,"queries":39},{"method":"GET","ms":27.15,"queries":8},{"method":"GET","ms":13.26,"queries":8}]}
+Measuring investor/2026-10-19/finalize
+{"kind":"investor","week":"2026-10-19","action":"finalize","visibleMS":310,"requests":3,"serverMS":[{"method":"POST","ms":69.85,"queries":49},{"method":"GET","ms":18.76,"queries":8},{"method":"GET","ms":16.33,"queries":8}]}
+Measuring investor/2026-10-19/reopenDialog
+{"kind":"investor","week":"2026-10-19","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/reopen
+{"kind":"investor","week":"2026-10-19","action":"reopen","visibleMS":361,"requests":3,"serverMS":[{"method":"POST","ms":143.26,"queries":102},{"method":"GET","ms":20.15,"queries":8},{"method":"GET","ms":13.37,"queries":8}]}
+Measuring investor/2026-10-19/warmPage
+{"kind":"investor","week":"2026-10-19","action":"warmPage","visibleMS":886,"requests":3,"serverMS":[{"method":"GET","ms":24.87,"queries":8},{"method":"GET","ms":19.35,"queries":8},{"method":"GET","ms":20.32,"queries":8}]}
+Measuring investor/2026-10-19/coldPage
+{"kind":"investor","week":"2026-10-19","action":"coldPage","visibleMS":913,"requests":3,"serverMS":[{"method":"GET","ms":30.34,"queries":7},{"method":"GET","ms":23.27,"queries":7},{"method":"GET","ms":14.52,"queries":7}]}
+Measuring investor/2026-10-19/firstExpansion
+{"kind":"investor","week":"2026-10-19","action":"firstExpansion","visibleMS":239,"requests":1,"serverMS":[{"method":"GET","ms":12.28,"queries":7}]}
+Measuring investor/2026-10-19/cachedExpansion
+{"kind":"investor","week":"2026-10-19","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":221,"requests":1,"serverMS":[{"method":"GET","ms":11.29,"queries":7}]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":255,"requests":2,"serverMS":[{"method":"GET","ms":27.21,"queries":8},{"method":"GET","ms":8.35,"queries":7}]}
+Measuring investor/2026-10-19/save
+{"kind":"investor","week":"2026-10-19","action":"save","visibleMS":278,"requests":3,"serverMS":[{"method":"PUT","ms":49.44,"queries":39},{"method":"GET","ms":15.8,"queries":8},{"method":"GET","ms":17.39,"queries":8}]}
+Measuring investor/2026-10-19/finalize
+{"kind":"investor","week":"2026-10-19","action":"finalize","visibleMS":311,"requests":3,"serverMS":[{"method":"POST","ms":76.05,"queries":49},{"method":"GET","ms":20.05,"queries":8},{"method":"GET","ms":12.76,"queries":8}]}
+Measuring investor/2026-10-19/reopenDialog
+{"kind":"investor","week":"2026-10-19","action":"reopenDialog","visibleMS":63,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/reopen
+{"kind":"investor","week":"2026-10-19","action":"reopen","visibleMS":313,"requests":3,"serverMS":[{"method":"POST","ms":101.53,"queries":102},{"method":"GET","ms":19.83,"queries":8},{"method":"GET","ms":15.64,"queries":8}]}
+Measuring investor/2026-10-19/warmPage
+{"kind":"investor","week":"2026-10-19","action":"warmPage","visibleMS":909,"requests":3,"serverMS":[{"method":"GET","ms":26.41,"queries":8},{"method":"GET","ms":16.57,"queries":8},{"method":"GET","ms":19.88,"queries":8}]}
+Measuring investor/2026-10-19/coldPage
+{"kind":"investor","week":"2026-10-19","action":"coldPage","visibleMS":858,"requests":3,"serverMS":[{"method":"GET","ms":20.08,"queries":7},{"method":"GET","ms":21.18,"queries":7},{"method":"GET","ms":13.88,"queries":7}]}
+Measuring investor/2026-10-19/firstExpansion
+{"kind":"investor","week":"2026-10-19","action":"firstExpansion","visibleMS":230,"requests":1,"serverMS":[{"method":"GET","ms":12.97,"queries":7}]}
+Measuring investor/2026-10-19/cachedExpansion
+{"kind":"investor","week":"2026-10-19","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":230,"requests":1,"serverMS":[{"method":"GET","ms":9.21,"queries":7}]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":249,"requests":2,"serverMS":[{"method":"GET","ms":17.57,"queries":8},{"method":"GET","ms":8.74,"queries":7}]}
+Measuring investor/2026-10-19/save
+{"kind":"investor","week":"2026-10-19","action":"save","visibleMS":276,"requests":3,"serverMS":[{"method":"PUT","ms":46.33,"queries":39},{"method":"GET","ms":20.98,"queries":8},{"method":"GET","ms":19.96,"queries":8}]}
+Measuring investor/2026-10-19/finalize
+{"kind":"investor","week":"2026-10-19","action":"finalize","visibleMS":326,"requests":3,"serverMS":[{"method":"POST","ms":91.83,"queries":49},{"method":"GET","ms":19.2,"queries":8},{"method":"GET","ms":17.71,"queries":8}]}
+Measuring investor/2026-10-19/reopenDialog
+{"kind":"investor","week":"2026-10-19","action":"reopenDialog","visibleMS":75,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/reopen
+{"kind":"investor","week":"2026-10-19","action":"reopen","visibleMS":344,"requests":3,"serverMS":[{"method":"POST","ms":130.85,"queries":102},{"method":"GET","ms":21.66,"queries":8},{"method":"GET","ms":13.07,"queries":8}]}
+Measuring investor/2026-10-19/warmPage
+{"kind":"investor","week":"2026-10-19","action":"warmPage","visibleMS":964,"requests":3,"serverMS":[{"method":"GET","ms":23.02,"queries":8},{"method":"GET","ms":33.69,"queries":8},{"method":"GET","ms":15.14,"queries":8}]}
+Measuring investor/2026-10-19/coldPage
+{"kind":"investor","week":"2026-10-19","action":"coldPage","visibleMS":842,"requests":3,"serverMS":[{"method":"GET","ms":24.84,"queries":7},{"method":"GET","ms":17,"queries":7},{"method":"GET","ms":16.44,"queries":7}]}
+Measuring investor/2026-10-19/firstExpansion
+{"kind":"investor","week":"2026-10-19","action":"firstExpansion","visibleMS":246,"requests":1,"serverMS":[{"method":"GET","ms":14.47,"queries":7}]}
+Measuring investor/2026-10-19/cachedExpansion
+{"kind":"investor","week":"2026-10-19","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":228,"requests":1,"serverMS":[{"method":"GET","ms":10.48,"queries":7}]}
+Measuring investor/2026-10-19/multipleOpen
+{"kind":"investor","week":"2026-10-19","action":"multipleOpen","visibleMS":215,"requests":2,"serverMS":[{"method":"GET","ms":30.69,"queries":8},{"method":"GET","ms":10.09,"queries":7}]}
+Measuring investor/2026-10-19/save
+{"kind":"investor","week":"2026-10-19","action":"save","visibleMS":277,"requests":3,"serverMS":[{"method":"PUT","ms":47.71,"queries":39},{"method":"GET","ms":23.18,"queries":8},{"method":"GET","ms":17.87,"queries":8}]}
+Measuring investor/2026-10-19/finalize
+{"kind":"investor","week":"2026-10-19","action":"finalize","visibleMS":294,"requests":3,"serverMS":[{"method":"POST","ms":69.68,"queries":49},{"method":"GET","ms":17.03,"queries":8},{"method":"GET","ms":15.9,"queries":8}]}
+Measuring investor/2026-10-19/reopenDialog
+{"kind":"investor","week":"2026-10-19","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-19/reopen
+{"kind":"investor","week":"2026-10-19","action":"reopen","visibleMS":319,"requests":3,"serverMS":[{"method":"POST","ms":110.91,"queries":102},{"method":"GET","ms":29.66,"queries":8},{"method":"GET","ms":51.84,"queries":8}]}
+Measuring investor/2026-10-19/warmPage
+{"kind":"investor","week":"2026-10-19","action":"warmPage","visibleMS":886,"requests":3,"serverMS":[{"method":"GET","ms":27.48,"queries":8},{"method":"GET","ms":19.6,"queries":8},{"method":"GET","ms":17.12,"queries":8}]}
+Measuring investor/2026-10-19/reopenWeekPreview
+{"kind":"investor","week":"2026-10-19","action":"reopenWeekPreview","visibleMS":265,"requests":1,"serverMS":[{"method":"GET","ms":15.28,"queries":6}]}
+Measuring investor/2026-10-19/reopenWeek
+{"kind":"investor","week":"2026-10-19","action":"reopenWeek","visibleMS":2345,"requests":3,"serverMS":[{"method":"POST","ms":2057.66,"queries":401},{"method":"GET","ms":35.75,"queries":8},{"method":"GET","ms":22.26,"queries":8}]}
+Measuring investor/2026-10-19/reopenWeekPreview
+{"kind":"investor","week":"2026-10-19","action":"reopenWeekPreview","visibleMS":294,"requests":1,"serverMS":[{"method":"GET","ms":18.2,"queries":6}]}
+Measuring investor/2026-10-19/reopenWeek
+{"kind":"investor","week":"2026-10-19","action":"reopenWeek","visibleMS":2010,"requests":3,"serverMS":[{"method":"POST","ms":1703.13,"queries":397},{"method":"GET","ms":23.77,"queries":8},{"method":"GET","ms":24.79,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":1595.548095703125}
+{"kind":"investor","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":1560.7919921875}
+{"kind":"investor","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":640.751220703125}
+{"kind":"investor","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":1556.938232421875}
+{"kind":"investor","week":"2026-10-19","action":"externalSourceVisibility","visibleMS":616.923095703125}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":439,"requests":2,"serverMS":[{"method":"PUT","ms":126.2,"queries":43},{"method":"GET","ms":17.19,"queries":9}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":419,"requests":2,"serverMS":[{"method":"PUT","ms":114.16,"queries":43},{"method":"GET","ms":18.73,"queries":9}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":540,"requests":3,"serverMS":[{"method":"PUT","ms":247.99,"queries":43},{"method":"GET","ms":26.42,"queries":9},{"method":"GET","ms":26.14,"queries":9}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":504,"requests":3,"serverMS":[{"method":"PUT","ms":225.4,"queries":43},{"method":"GET","ms":27.27,"queries":9},{"method":"GET","ms":27.13,"queries":9}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":575,"requests":5,"serverMS":[{"method":"PUT","ms":275.75,"queries":43},{"method":"GET","ms":28.09,"queries":9},{"method":"GET","ms":19.39,"queries":9},{"method":"GET","ms":29.16,"queries":9},{"method":"GET","ms":29.38,"queries":9}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":357,"requests":16,"serverMS":[{"method":"PUT","ms":80.31,"queries":39},{"method":"GET","ms":24.26,"queries":8},{"method":"GET","ms":20.36,"queries":8},{"method":"GET","ms":19.08,"queries":8},{"method":"GET","ms":20.7,"queries":8},{"method":"GET","ms":18.34,"queries":8},{"method":"GET","ms":17.09,"queries":8},{"method":"GET","ms":24.41,"queries":8},{"method":"GET","ms":18.41,"queries":8},{"method":"GET","ms":23.26,"queries":8},{"method":"GET","ms":21.01,"queries":8},{"method":"GET","ms":25.82,"queries":8},{"method":"GET","ms":16.34,"queries":8},{"method":"GET","ms":13.81,"queries":8},{"method":"GET","ms":16.65,"queries":8},{"method":"GET","ms":23.39,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":357,"requests":15,"serverMS":[{"method":"PUT","ms":118.07,"queries":39},{"method":"GET","ms":20.56,"queries":8},{"method":"GET","ms":18.18,"queries":8},{"method":"GET","ms":18.64,"queries":8},{"method":"GET","ms":20.59,"queries":8},{"method":"GET","ms":19.31,"queries":8},{"method":"GET","ms":19.31,"queries":8},{"method":"GET","ms":21.86,"queries":8},{"method":"GET","ms":18.06,"queries":8},{"method":"GET","ms":22.58,"queries":8},{"method":"GET","ms":22.38,"queries":8},{"method":"GET","ms":14.28,"queries":8},{"method":"GET","ms":15.38,"queries":8},{"method":"GET","ms":17.16,"queries":8},{"method":"GET","ms":16.83,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":301,"requests":3,"serverMS":[{"method":"PUT","ms":59.78,"queries":39},{"method":"GET","ms":22.5,"queries":8},{"method":"GET","ms":16.79,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":302,"requests":3,"serverMS":[{"method":"PUT","ms":68.45,"queries":39},{"method":"GET","ms":17.96,"queries":8},{"method":"GET","ms":13.7,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":355,"requests":22,"serverMS":[{"method":"PUT","ms":121.97,"queries":39},{"method":"GET","ms":35.92,"queries":8},{"method":"GET","ms":19.82,"queries":8},{"method":"GET","ms":18.64,"queries":8},{"method":"GET","ms":14.95,"queries":8},{"method":"GET","ms":13.76,"queries":8},{"method":"GET","ms":18.18,"queries":8},{"method":"GET","ms":28.9,"queries":8},{"method":"GET","ms":21.38,"queries":8},{"method":"GET","ms":22.06,"queries":8},{"method":"GET","ms":22.36,"queries":8},{"method":"GET","ms":23.31,"queries":8},{"method":"GET","ms":17.76,"queries":8},{"method":"GET","ms":14.07,"queries":8},{"method":"GET","ms":20.18,"queries":8},{"method":"GET","ms":17.42,"queries":8},{"method":"GET","ms":16.35,"queries":8},{"method":"GET","ms":38.86,"queries":8},{"method":"GET","ms":31.09,"queries":8},{"method":"GET","ms":22.05,"queries":8},{"method":"GET","ms":23.82,"queries":8},{"method":"GET","ms":22.72,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":335,"requests":21,"serverMS":[{"method":"PUT","ms":79.39,"queries":39},{"method":"GET","ms":17.81,"queries":8},{"method":"GET","ms":14.66,"queries":8},{"method":"GET","ms":15.55,"queries":8},{"method":"GET","ms":13.62,"queries":8},{"method":"GET","ms":14.07,"queries":8},{"method":"GET","ms":27.58,"queries":8},{"method":"GET","ms":23.37,"queries":8},{"method":"GET","ms":28.14,"queries":8},{"method":"GET","ms":22.08,"queries":8},{"method":"GET","ms":22.88,"queries":8},{"method":"GET","ms":14.8,"queries":8},{"method":"GET","ms":14.01,"queries":8},{"method":"GET","ms":12.93,"queries":8},{"method":"GET","ms":20.31,"queries":8},{"method":"GET","ms":13.87,"queries":8},{"method":"GET","ms":32.11,"queries":8},{"method":"GET","ms":31.6,"queries":8},{"method":"GET","ms":25.84,"queries":8},{"method":"GET","ms":26.93,"queries":8},{"method":"GET","ms":21.09,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":354,"requests":21,"serverMS":[{"method":"PUT","ms":108.71,"queries":39},{"method":"GET","ms":19.12,"queries":8},{"method":"GET","ms":14.83,"queries":8},{"method":"GET","ms":14.56,"queries":8},{"method":"GET","ms":13.47,"queries":8},{"method":"GET","ms":17.18,"queries":8},{"method":"GET","ms":24.06,"queries":8},{"method":"GET","ms":30.17,"queries":8},{"method":"GET","ms":19.63,"queries":8},{"method":"GET","ms":19.74,"queries":8},{"method":"GET","ms":22.14,"queries":8},{"method":"GET","ms":18.59,"queries":8},{"method":"GET","ms":14.23,"queries":8},{"method":"GET","ms":14.04,"queries":8},{"method":"GET","ms":15.71,"queries":8},{"method":"GET","ms":14.18,"queries":8},{"method":"GET","ms":40.96,"queries":8},{"method":"GET","ms":30.28,"queries":8},{"method":"GET","ms":24.92,"queries":8},{"method":"GET","ms":25.74,"queries":8},{"method":"GET","ms":22.72,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":322,"requests":2,"serverMS":[{"method":"PUT","ms":66.52,"queries":39},{"method":"GET","ms":20,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":303,"requests":2,"serverMS":[{"method":"PUT","ms":55.72,"queries":39},{"method":"GET","ms":25.48,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":324,"requests":2,"serverMS":[{"method":"PUT","ms":75.81,"queries":39},{"method":"GET","ms":18.4,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":298,"requests":2,"serverMS":[{"method":"PUT","ms":67.98,"queries":39},{"method":"GET","ms":25.67,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":280,"requests":2,"serverMS":[{"method":"PUT","ms":52.05,"queries":39},{"method":"GET","ms":20.4,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":332,"requests":3,"serverMS":[{"method":"PUT","ms":61.52,"queries":39},{"method":"GET","ms":20.29,"queries":8},{"method":"GET","ms":19.56,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":306,"requests":3,"serverMS":[{"method":"PUT","ms":59.87,"queries":39},{"method":"GET","ms":21.38,"queries":8},{"method":"GET","ms":22,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":324,"requests":2,"serverMS":[{"method":"PUT","ms":73.01,"queries":39},{"method":"GET","ms":24.01,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":300,"requests":2,"serverMS":[{"method":"PUT","ms":58.16,"queries":39},{"method":"GET","ms":25.25,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":262,"requests":2,"serverMS":[{"method":"PUT","ms":46.54,"queries":39},{"method":"GET","ms":22.08,"queries":8}]}
+Measuring investor/2026-10-19/fiveUsersWithSync
+Measuring investor/2026-10-19/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":313,"requests":2,"serverMS":[{"method":"PUT","ms":83.62,"queries":39},{"method":"GET","ms":24.13,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":293,"requests":2,"serverMS":[{"method":"PUT","ms":71.75,"queries":39},{"method":"GET","ms":21.38,"queries":8}]}
+{"kind":"investor","week":"2026-10-19","action":"fiveUsersWithSync","visibleMS":346,"requests":2,"serverMS":[{"method":"PUT","ms":122.74,"queries":39},{"method":"GET","ms":15.8,"queries":8}]}
+Measuring driver/2026-10-26/coldPage
+{"kind":"driver","week":"2026-10-26","action":"coldPage","visibleMS":851,"requests":3,"serverMS":[{"method":"GET","ms":31.62,"queries":7},{"method":"GET","ms":22.08,"queries":7},{"method":"GET","ms":20.46,"queries":7}]}
+Measuring driver/2026-10-26/firstExpansion
+{"kind":"driver","week":"2026-10-26","action":"firstExpansion","visibleMS":216,"requests":1,"serverMS":[{"method":"GET","ms":9.32,"queries":7}]}
+Measuring driver/2026-10-26/cachedExpansion
+{"kind":"driver","week":"2026-10-26","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":212,"requests":1,"serverMS":[{"method":"GET","ms":8.06,"queries":7}]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":239,"requests":2,"serverMS":[{"method":"GET","ms":8.36,"queries":7},{"method":"GET","ms":15.77,"queries":8}]}
+Measuring driver/2026-10-26/save
+{"kind":"driver","week":"2026-10-26","action":"save","visibleMS":1574,"requests":3,"serverMS":[{"method":"PUT","ms":1337.25,"queries":1207},{"method":"GET","ms":23.55,"queries":8},{"method":"GET","ms":25.75,"queries":8}]}
+Measuring driver/2026-10-26/finalize
+{"kind":"driver","week":"2026-10-26","action":"finalize","visibleMS":311,"requests":3,"serverMS":[{"method":"POST","ms":82.92,"queries":57},{"method":"GET","ms":27.85,"queries":8},{"method":"GET","ms":26.17,"queries":8}]}
+Measuring driver/2026-10-26/reopenDialog
+{"kind":"driver","week":"2026-10-26","action":"reopenDialog","visibleMS":61,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/reopen
+{"kind":"driver","week":"2026-10-26","action":"reopen","visibleMS":328,"requests":3,"serverMS":[{"method":"POST","ms":107.06,"queries":101},{"method":"GET","ms":26.27,"queries":8},{"method":"GET","ms":24.19,"queries":8}]}
+Measuring driver/2026-10-26/warmPage
+{"kind":"driver","week":"2026-10-26","action":"warmPage","visibleMS":936,"requests":3,"serverMS":[{"method":"GET","ms":41.46,"queries":8},{"method":"GET","ms":27.05,"queries":8},{"method":"GET","ms":21.03,"queries":8}]}
+Measuring driver/2026-10-26/coldPage
+{"kind":"driver","week":"2026-10-26","action":"coldPage","visibleMS":837,"requests":3,"serverMS":[{"method":"GET","ms":25.23,"queries":7},{"method":"GET","ms":19.42,"queries":7},{"method":"GET","ms":18.13,"queries":7}]}
+Measuring driver/2026-10-26/firstExpansion
+{"kind":"driver","week":"2026-10-26","action":"firstExpansion","visibleMS":238,"requests":1,"serverMS":[{"method":"GET","ms":17.5,"queries":7}]}
+Measuring driver/2026-10-26/cachedExpansion
+{"kind":"driver","week":"2026-10-26","action":"cachedExpansion","visibleMS":28,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":248,"requests":2,"serverMS":[{"method":"GET","ms":10.94,"queries":7},{"method":"GET","ms":31.82,"queries":8}]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":229,"requests":1,"serverMS":[{"method":"GET","ms":16.3,"queries":7}]}
+Measuring driver/2026-10-26/save
+{"kind":"driver","week":"2026-10-26","action":"save","visibleMS":275,"requests":3,"serverMS":[{"method":"PUT","ms":52.39,"queries":42},{"method":"GET","ms":24.39,"queries":8},{"method":"GET","ms":19.05,"queries":8}]}
+Measuring driver/2026-10-26/finalize
+{"kind":"driver","week":"2026-10-26","action":"finalize","visibleMS":337,"requests":3,"serverMS":[{"method":"POST","ms":97.83,"queries":57},{"method":"GET","ms":20.27,"queries":8},{"method":"GET","ms":16.69,"queries":8}]}
+Measuring driver/2026-10-26/reopenDialog
+{"kind":"driver","week":"2026-10-26","action":"reopenDialog","visibleMS":62,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/reopen
+{"kind":"driver","week":"2026-10-26","action":"reopen","visibleMS":342,"requests":3,"serverMS":[{"method":"POST","ms":124.6,"queries":101},{"method":"GET","ms":29.99,"queries":8},{"method":"GET","ms":20.64,"queries":8}]}
+Measuring driver/2026-10-26/warmPage
+{"kind":"driver","week":"2026-10-26","action":"warmPage","visibleMS":853,"requests":3,"serverMS":[{"method":"GET","ms":23.39,"queries":8},{"method":"GET","ms":19.08,"queries":8},{"method":"GET","ms":22.09,"queries":8}]}
+Measuring driver/2026-10-26/coldPage
+{"kind":"driver","week":"2026-10-26","action":"coldPage","visibleMS":840,"requests":3,"serverMS":[{"method":"GET","ms":33.14,"queries":7},{"method":"GET","ms":18.51,"queries":7},{"method":"GET","ms":14.6,"queries":7}]}
+Measuring driver/2026-10-26/firstExpansion
+{"kind":"driver","week":"2026-10-26","action":"firstExpansion","visibleMS":230,"requests":1,"serverMS":[{"method":"GET","ms":9.45,"queries":7}]}
+Measuring driver/2026-10-26/cachedExpansion
+{"kind":"driver","week":"2026-10-26","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":249,"requests":2,"serverMS":[{"method":"GET","ms":11.91,"queries":7},{"method":"GET","ms":20.68,"queries":8}]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":214,"requests":1,"serverMS":[{"method":"GET","ms":9.03,"queries":7}]}
+Measuring driver/2026-10-26/save
+{"kind":"driver","week":"2026-10-26","action":"save","visibleMS":293,"requests":3,"serverMS":[{"method":"PUT","ms":59.69,"queries":42},{"method":"GET","ms":23.29,"queries":8},{"method":"GET","ms":22.64,"queries":8}]}
+Measuring driver/2026-10-26/finalize
+{"kind":"driver","week":"2026-10-26","action":"finalize","visibleMS":351,"requests":3,"serverMS":[{"method":"POST","ms":96.87,"queries":57},{"method":"GET","ms":24.77,"queries":8},{"method":"GET","ms":15.71,"queries":8}]}
+Measuring driver/2026-10-26/reopenDialog
+{"kind":"driver","week":"2026-10-26","action":"reopenDialog","visibleMS":63,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/reopen
+{"kind":"driver","week":"2026-10-26","action":"reopen","visibleMS":311,"requests":3,"serverMS":[{"method":"POST","ms":93.3,"queries":101},{"method":"GET","ms":24.03,"queries":8},{"method":"GET","ms":20.45,"queries":8}]}
+Measuring driver/2026-10-26/warmPage
+{"kind":"driver","week":"2026-10-26","action":"warmPage","visibleMS":915,"requests":3,"serverMS":[{"method":"GET","ms":30.08,"queries":8},{"method":"GET","ms":19.56,"queries":8},{"method":"GET","ms":16.03,"queries":8}]}
+Measuring driver/2026-10-26/coldPage
+{"kind":"driver","week":"2026-10-26","action":"coldPage","visibleMS":823,"requests":3,"serverMS":[{"method":"GET","ms":25.2,"queries":7},{"method":"GET","ms":18.39,"queries":7},{"method":"GET","ms":15.79,"queries":7}]}
+Measuring driver/2026-10-26/firstExpansion
+{"kind":"driver","week":"2026-10-26","action":"firstExpansion","visibleMS":233,"requests":1,"serverMS":[{"method":"GET","ms":13.2,"queries":7}]}
+Measuring driver/2026-10-26/cachedExpansion
+{"kind":"driver","week":"2026-10-26","action":"cachedExpansion","visibleMS":29,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":245,"requests":2,"serverMS":[{"method":"GET","ms":13.73,"queries":7},{"method":"GET","ms":18.18,"queries":8}]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":290,"requests":1,"serverMS":[{"method":"GET","ms":18.33,"queries":7}]}
+Measuring driver/2026-10-26/save
+{"kind":"driver","week":"2026-10-26","action":"save","visibleMS":278,"requests":3,"serverMS":[{"method":"PUT","ms":45.19,"queries":42},{"method":"GET","ms":23.43,"queries":8},{"method":"GET","ms":22.71,"queries":8}]}
+Measuring driver/2026-10-26/finalize
+{"kind":"driver","week":"2026-10-26","action":"finalize","visibleMS":337,"requests":3,"serverMS":[{"method":"POST","ms":103.18,"queries":57},{"method":"GET","ms":20.94,"queries":8},{"method":"GET","ms":14.91,"queries":8}]}
+Measuring driver/2026-10-26/reopenDialog
+{"kind":"driver","week":"2026-10-26","action":"reopenDialog","visibleMS":62,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/reopen
+{"kind":"driver","week":"2026-10-26","action":"reopen","visibleMS":311,"requests":3,"serverMS":[{"method":"POST","ms":100.79,"queries":101},{"method":"GET","ms":18.98,"queries":8},{"method":"GET","ms":34.66,"queries":8}]}
+Measuring driver/2026-10-26/warmPage
+{"kind":"driver","week":"2026-10-26","action":"warmPage","visibleMS":940,"requests":3,"serverMS":[{"method":"GET","ms":32.43,"queries":8},{"method":"GET","ms":31.32,"queries":8},{"method":"GET","ms":15.34,"queries":8}]}
+Measuring driver/2026-10-26/coldPage
+{"kind":"driver","week":"2026-10-26","action":"coldPage","visibleMS":844,"requests":3,"serverMS":[{"method":"GET","ms":35.21,"queries":7},{"method":"GET","ms":23.43,"queries":7},{"method":"GET","ms":14.9,"queries":7}]}
+Measuring driver/2026-10-26/firstExpansion
+{"kind":"driver","week":"2026-10-26","action":"firstExpansion","visibleMS":230,"requests":1,"serverMS":[{"method":"GET","ms":13.42,"queries":7}]}
+Measuring driver/2026-10-26/cachedExpansion
+{"kind":"driver","week":"2026-10-26","action":"cachedExpansion","visibleMS":28,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":248,"requests":2,"serverMS":[{"method":"GET","ms":12.71,"queries":7},{"method":"GET","ms":21.12,"queries":8}]}
+Measuring driver/2026-10-26/multipleOpen
+{"kind":"driver","week":"2026-10-26","action":"multipleOpen","visibleMS":262,"requests":1,"serverMS":[{"method":"GET","ms":22.24,"queries":7}]}
+Measuring driver/2026-10-26/save
+{"kind":"driver","week":"2026-10-26","action":"save","visibleMS":277,"requests":3,"serverMS":[{"method":"PUT","ms":45.35,"queries":42},{"method":"GET","ms":23.29,"queries":8},{"method":"GET","ms":19.92,"queries":8}]}
+Measuring driver/2026-10-26/finalize
+{"kind":"driver","week":"2026-10-26","action":"finalize","visibleMS":315,"requests":3,"serverMS":[{"method":"POST","ms":74.9,"queries":57},{"method":"GET","ms":50.1,"queries":8},{"method":"GET","ms":38.85,"queries":8}]}
+Measuring driver/2026-10-26/reopenDialog
+{"kind":"driver","week":"2026-10-26","action":"reopenDialog","visibleMS":62,"requests":0,"serverMS":[]}
+Measuring driver/2026-10-26/reopen
+{"kind":"driver","week":"2026-10-26","action":"reopen","visibleMS":312,"requests":3,"serverMS":[{"method":"POST","ms":101.04,"queries":101},{"method":"GET","ms":19.63,"queries":8},{"method":"GET","ms":50.57,"queries":8}]}
+Measuring driver/2026-10-26/warmPage
+{"kind":"driver","week":"2026-10-26","action":"warmPage","visibleMS":922,"requests":3,"serverMS":[{"method":"GET","ms":36.18,"queries":8},{"method":"GET","ms":27.75,"queries":8},{"method":"GET","ms":18.83,"queries":8}]}
+Measuring driver/2026-10-26/reopenWeekPreview
+{"kind":"driver","week":"2026-10-26","action":"reopenWeekPreview","visibleMS":272,"requests":1,"serverMS":[{"method":"GET","ms":24.03,"queries":6}]}
+Measuring driver/2026-10-26/reopenWeek
+{"kind":"driver","week":"2026-10-26","action":"reopenWeek","visibleMS":2120,"requests":3,"serverMS":[{"method":"POST","ms":1856.92,"queries":442},{"method":"GET","ms":26.39,"queries":8},{"method":"GET","ms":19.29,"queries":8}]}
+Measuring driver/2026-10-26/reopenWeekPreview
+{"kind":"driver","week":"2026-10-26","action":"reopenWeekPreview","visibleMS":263,"requests":1,"serverMS":[{"method":"GET","ms":17.3,"queries":6}]}
+Measuring driver/2026-10-26/reopenWeek
+{"kind":"driver","week":"2026-10-26","action":"reopenWeek","visibleMS":2301,"requests":3,"serverMS":[{"method":"POST","ms":2011.22,"queries":442},{"method":"GET","ms":26.59,"queries":8},{"method":"GET","ms":22.32,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":1547.687255859375}
+{"kind":"driver","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":1556.175048828125}
+{"kind":"driver","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":589.2451171875}
+{"kind":"driver","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":368.548095703125}
+{"kind":"driver","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":626.360107421875}
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":399,"requests":2,"serverMS":[{"method":"PUT","ms":144.68,"queries":46},{"method":"GET","ms":23.99,"queries":9}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":483,"requests":2,"serverMS":[{"method":"PUT","ms":208.6,"queries":46},{"method":"GET","ms":30.16,"queries":9}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":517,"requests":2,"serverMS":[{"method":"PUT","ms":254.63,"queries":46},{"method":"GET","ms":28.25,"queries":9}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":397,"requests":3,"serverMS":[{"method":"PUT","ms":105.31,"queries":46},{"method":"GET","ms":25.29,"queries":9},{"method":"GET","ms":25.94,"queries":9}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":523,"requests":2,"serverMS":[{"method":"PUT","ms":277.81,"queries":46},{"method":"GET","ms":29.78,"queries":9}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":333,"requests":18,"serverMS":[{"method":"PUT","ms":95.72,"queries":42},{"method":"GET","ms":25.52,"queries":8},{"method":"GET","ms":14.89,"queries":8},{"method":"GET","ms":24.62,"queries":8},{"method":"GET","ms":16.89,"queries":8},{"method":"GET","ms":20.25,"queries":8},{"method":"GET","ms":19.86,"queries":8},{"method":"GET","ms":25.97,"queries":8},{"method":"GET","ms":25.28,"queries":8},{"method":"GET","ms":30.22,"queries":8},{"method":"GET","ms":18.81,"queries":8},{"method":"GET","ms":18.59,"queries":8},{"method":"GET","ms":23.72,"queries":8},{"method":"GET","ms":22.09,"queries":8},{"method":"GET","ms":26.66,"queries":8},{"method":"GET","ms":33.01,"queries":8},{"method":"GET","ms":45.04,"queries":8},{"method":"GET","ms":27.53,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":339,"requests":19,"serverMS":[{"method":"PUT","ms":86.08,"queries":42},{"method":"GET","ms":25.79,"queries":8},{"method":"GET","ms":20.48,"queries":8},{"method":"GET","ms":17.58,"queries":8},{"method":"GET","ms":28.09,"queries":8},{"method":"GET","ms":17.36,"queries":8},{"method":"GET","ms":18.39,"queries":8},{"method":"GET","ms":18.13,"queries":8},{"method":"GET","ms":25.67,"queries":8},{"method":"GET","ms":19.86,"queries":8},{"method":"GET","ms":25.35,"queries":8},{"method":"GET","ms":23.89,"queries":8},{"method":"GET","ms":22.65,"queries":8},{"method":"GET","ms":22.57,"queries":8},{"method":"GET","ms":27.85,"queries":8},{"method":"GET","ms":21.92,"queries":8},{"method":"GET","ms":34.01,"queries":8},{"method":"GET","ms":44.26,"queries":8},{"method":"GET","ms":26.5,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":381,"requests":19,"serverMS":[{"method":"PUT","ms":123.57,"queries":42},{"method":"GET","ms":24.1,"queries":8},{"method":"GET","ms":22.97,"queries":8},{"method":"GET","ms":21.18,"queries":8},{"method":"GET","ms":17.17,"queries":8},{"method":"GET","ms":20.25,"queries":8},{"method":"GET","ms":18.25,"queries":8},{"method":"GET","ms":22.13,"queries":8},{"method":"GET","ms":25.33,"queries":8},{"method":"GET","ms":19.76,"queries":8},{"method":"GET","ms":69.97,"queries":8},{"method":"GET","ms":15.3,"queries":8},{"method":"GET","ms":16.28,"queries":8},{"method":"GET","ms":19.6,"queries":8},{"method":"GET","ms":18.76,"queries":8},{"method":"GET","ms":16.37,"queries":8},{"method":"GET","ms":26.89,"queries":8},{"method":"GET","ms":40.65,"queries":8},{"method":"GET","ms":27.02,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":420,"requests":18,"serverMS":[{"method":"PUT","ms":154.75,"queries":42},{"method":"GET","ms":23.01,"queries":8},{"method":"GET","ms":17.26,"queries":8},{"method":"GET","ms":20.25,"queries":8},{"method":"GET","ms":16.75,"queries":8},{"method":"GET","ms":17.74,"queries":8},{"method":"GET","ms":17.64,"queries":8},{"method":"GET","ms":22.9,"queries":8},{"method":"GET","ms":22.36,"queries":8},{"method":"GET","ms":19.27,"queries":8},{"method":"GET","ms":21.18,"queries":8},{"method":"GET","ms":22.65,"queries":8},{"method":"GET","ms":24.29,"queries":8},{"method":"GET","ms":27.52,"queries":8},{"method":"GET","ms":25.22,"queries":8},{"method":"GET","ms":35.48,"queries":8},{"method":"GET","ms":46.85,"queries":8},{"method":"GET","ms":25.97,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":326,"requests":19,"serverMS":[{"method":"PUT","ms":74.17,"queries":42},{"method":"GET","ms":25.71,"queries":8},{"method":"GET","ms":20.04,"queries":8},{"method":"GET","ms":18.54,"queries":8},{"method":"GET","ms":21.21,"queries":8},{"method":"GET","ms":23.97,"queries":8},{"method":"GET","ms":19.68,"queries":8},{"method":"GET","ms":33.85,"queries":8},{"method":"GET","ms":29.52,"queries":8},{"method":"GET","ms":29.68,"queries":8},{"method":"GET","ms":19.88,"queries":8},{"method":"GET","ms":16.05,"queries":8},{"method":"GET","ms":17.87,"queries":8},{"method":"GET","ms":19.15,"queries":8},{"method":"GET","ms":17.27,"queries":8},{"method":"GET","ms":17.85,"queries":8},{"method":"GET","ms":28.02,"queries":8},{"method":"GET","ms":31.09,"queries":8},{"method":"GET","ms":21.95,"queries":8}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":339,"requests":2,"serverMS":[{"method":"PUT","ms":79.35,"queries":42},{"method":"GET","ms":21.75,"queries":8}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":357,"requests":2,"serverMS":[{"method":"PUT","ms":92.98,"queries":42},{"method":"GET","ms":18.97,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":389,"requests":2,"serverMS":[{"method":"PUT","ms":123.23,"queries":42},{"method":"GET","ms":17.29,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":379,"requests":2,"serverMS":[{"method":"PUT","ms":130.71,"queries":42},{"method":"GET","ms":20.27,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":412,"requests":2,"serverMS":[{"method":"PUT","ms":180.7,"queries":42},{"method":"GET","ms":18.32,"queries":8}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":360,"requests":2,"serverMS":[{"method":"PUT","ms":78.86,"queries":42},{"method":"GET","ms":29.44,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":347,"requests":2,"serverMS":[{"method":"PUT","ms":101.22,"queries":42},{"method":"GET","ms":32.26,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":391,"requests":2,"serverMS":[{"method":"PUT","ms":132.71,"queries":42},{"method":"GET","ms":21.74,"queries":8}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":365,"requests":2,"serverMS":[{"method":"PUT","ms":130.82,"queries":42},{"method":"GET","ms":30.3,"queries":8}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":415,"requests":2,"serverMS":[{"method":"PUT","ms":167.58,"queries":42},{"method":"GET","ms":24.13,"queries":8}]}
+Measuring driver/2026-10-26/fiveUsersWithSync
+Measuring driver/2026-10-26/fiveUsersWithSync
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":430,"requests":2,"serverMS":[{"method":"PUT","ms":138.88,"queries":42},{"method":"GET","ms":24.48,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":374,"requests":2,"serverMS":[{"method":"PUT","ms":116.73,"queries":42},{"method":"GET","ms":20.1,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":417,"requests":2,"serverMS":[{"method":"PUT","ms":134.61,"queries":42},{"method":"GET","ms":19.63,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":370,"requests":2,"serverMS":[{"method":"PUT","ms":150.27,"queries":42},{"method":"GET","ms":22.66,"queries":8}]}
+{"kind":"driver","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":384,"requests":3,"serverMS":[{"method":"PUT","ms":102.69,"queries":42},{"method":"GET","ms":25.03,"queries":8},{"method":"GET","ms":21.68,"queries":8}]}
+Measuring investor/2026-10-26/coldPage
+{"kind":"investor","week":"2026-10-26","action":"coldPage","visibleMS":865,"requests":3,"serverMS":[{"method":"GET","ms":38.15,"queries":7},{"method":"GET","ms":21.04,"queries":7},{"method":"GET","ms":13.55,"queries":7}]}
+Measuring investor/2026-10-26/firstExpansion
+{"kind":"investor","week":"2026-10-26","action":"firstExpansion","visibleMS":248,"requests":1,"serverMS":[{"method":"GET","ms":11.92,"queries":7}]}
+Measuring investor/2026-10-26/cachedExpansion
+{"kind":"investor","week":"2026-10-26","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":229,"requests":2,"serverMS":[{"method":"GET","ms":8.94,"queries":7},{"method":"GET","ms":34.31,"queries":8}]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":223,"requests":1,"serverMS":[{"method":"GET","ms":8.8,"queries":7}]}
+Measuring investor/2026-10-26/save
+{"kind":"investor","week":"2026-10-26","action":"save","visibleMS":277,"requests":3,"serverMS":[{"method":"PUT","ms":60.7,"queries":39},{"method":"GET","ms":19.64,"queries":8},{"method":"GET","ms":12.85,"queries":8}]}
+Measuring investor/2026-10-26/finalize
+{"kind":"investor","week":"2026-10-26","action":"finalize","visibleMS":319,"requests":3,"serverMS":[{"method":"POST","ms":75.72,"queries":49},{"method":"GET","ms":19.35,"queries":8},{"method":"GET","ms":15.09,"queries":8}]}
+Measuring investor/2026-10-26/reopenDialog
+{"kind":"investor","week":"2026-10-26","action":"reopenDialog","visibleMS":78,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/reopen
+{"kind":"investor","week":"2026-10-26","action":"reopen","visibleMS":327,"requests":3,"serverMS":[{"method":"POST","ms":114.88,"queries":102},{"method":"GET","ms":19.88,"queries":8},{"method":"GET","ms":14.16,"queries":8}]}
+Measuring investor/2026-10-26/warmPage
+{"kind":"investor","week":"2026-10-26","action":"warmPage","visibleMS":890,"requests":3,"serverMS":[{"method":"GET","ms":22.43,"queries":8},{"method":"GET","ms":15.19,"queries":8},{"method":"GET","ms":19.2,"queries":8}]}
+Measuring investor/2026-10-26/coldPage
+{"kind":"investor","week":"2026-10-26","action":"coldPage","visibleMS":873,"requests":3,"serverMS":[{"method":"GET","ms":38.44,"queries":7},{"method":"GET","ms":22.33,"queries":7},{"method":"GET","ms":16.71,"queries":7}]}
+Measuring investor/2026-10-26/firstExpansion
+{"kind":"investor","week":"2026-10-26","action":"firstExpansion","visibleMS":232,"requests":1,"serverMS":[{"method":"GET","ms":10.09,"queries":7}]}
+Measuring investor/2026-10-26/cachedExpansion
+{"kind":"investor","week":"2026-10-26","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":268,"requests":2,"serverMS":[{"method":"GET","ms":11.74,"queries":7},{"method":"GET","ms":24.18,"queries":8}]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":237,"requests":1,"serverMS":[{"method":"GET","ms":8.1,"queries":7}]}
+Measuring investor/2026-10-26/save
+{"kind":"investor","week":"2026-10-26","action":"save","visibleMS":293,"requests":3,"serverMS":[{"method":"PUT","ms":61.88,"queries":39},{"method":"GET","ms":23.75,"queries":8},{"method":"GET","ms":16.99,"queries":8}]}
+Measuring investor/2026-10-26/finalize
+{"kind":"investor","week":"2026-10-26","action":"finalize","visibleMS":336,"requests":3,"serverMS":[{"method":"POST","ms":85.37,"queries":49},{"method":"GET","ms":20.31,"queries":8},{"method":"GET","ms":13.53,"queries":8}]}
+Measuring investor/2026-10-26/reopenDialog
+{"kind":"investor","week":"2026-10-26","action":"reopenDialog","visibleMS":78,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/reopen
+{"kind":"investor","week":"2026-10-26","action":"reopen","visibleMS":345,"requests":3,"serverMS":[{"method":"POST","ms":136.48,"queries":102},{"method":"GET","ms":27.63,"queries":8},{"method":"GET","ms":49.66,"queries":8}]}
+Measuring investor/2026-10-26/warmPage
+{"kind":"investor","week":"2026-10-26","action":"warmPage","visibleMS":937,"requests":3,"serverMS":[{"method":"GET","ms":33.07,"queries":8},{"method":"GET","ms":23.73,"queries":8},{"method":"GET","ms":13.98,"queries":8}]}
+Measuring investor/2026-10-26/coldPage
+{"kind":"investor","week":"2026-10-26","action":"coldPage","visibleMS":863,"requests":3,"serverMS":[{"method":"GET","ms":28.62,"queries":7},{"method":"GET","ms":25.1,"queries":7},{"method":"GET","ms":15.13,"queries":7}]}
+Measuring investor/2026-10-26/firstExpansion
+{"kind":"investor","week":"2026-10-26","action":"firstExpansion","visibleMS":236,"requests":1,"serverMS":[{"method":"GET","ms":12.32,"queries":7}]}
+Measuring investor/2026-10-26/cachedExpansion
+{"kind":"investor","week":"2026-10-26","action":"cachedExpansion","visibleMS":31,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":232,"requests":2,"serverMS":[{"method":"GET","ms":8.98,"queries":7},{"method":"GET","ms":13.49,"queries":8}]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":257,"requests":1,"serverMS":[{"method":"GET","ms":7.74,"queries":7}]}
+Measuring investor/2026-10-26/save
+{"kind":"investor","week":"2026-10-26","action":"save","visibleMS":294,"requests":3,"serverMS":[{"method":"PUT","ms":59.84,"queries":39},{"method":"GET","ms":17.72,"queries":8},{"method":"GET","ms":14.27,"queries":8}]}
+Measuring investor/2026-10-26/finalize
+{"kind":"investor","week":"2026-10-26","action":"finalize","visibleMS":295,"requests":3,"serverMS":[{"method":"POST","ms":74.65,"queries":49},{"method":"GET","ms":20.16,"queries":8},{"method":"GET","ms":35.17,"queries":8}]}
+Measuring investor/2026-10-26/reopenDialog
+{"kind":"investor","week":"2026-10-26","action":"reopenDialog","visibleMS":62,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/reopen
+{"kind":"investor","week":"2026-10-26","action":"reopen","visibleMS":360,"requests":3,"serverMS":[{"method":"POST","ms":147.71,"queries":102},{"method":"GET","ms":21.45,"queries":8},{"method":"GET","ms":17.43,"queries":8}]}
+Measuring investor/2026-10-26/warmPage
+{"kind":"investor","week":"2026-10-26","action":"warmPage","visibleMS":930,"requests":3,"serverMS":[{"method":"GET","ms":26.87,"queries":8},{"method":"GET","ms":29.37,"queries":8},{"method":"GET","ms":21.81,"queries":8}]}
+Measuring investor/2026-10-26/coldPage
+{"kind":"investor","week":"2026-10-26","action":"coldPage","visibleMS":873,"requests":3,"serverMS":[{"method":"GET","ms":28.84,"queries":7},{"method":"GET","ms":22.86,"queries":7},{"method":"GET","ms":13.08,"queries":7}]}
+Measuring investor/2026-10-26/firstExpansion
+{"kind":"investor","week":"2026-10-26","action":"firstExpansion","visibleMS":246,"requests":1,"serverMS":[{"method":"GET","ms":12.66,"queries":7}]}
+Measuring investor/2026-10-26/cachedExpansion
+{"kind":"investor","week":"2026-10-26","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":236,"requests":1,"serverMS":[{"method":"GET","ms":9.6,"queries":7}]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":219,"requests":2,"serverMS":[{"method":"GET","ms":15.28,"queries":8},{"method":"GET","ms":10.7,"queries":7}]}
+Measuring investor/2026-10-26/save
+{"kind":"investor","week":"2026-10-26","action":"save","visibleMS":293,"requests":3,"serverMS":[{"method":"PUT","ms":70.4,"queries":39},{"method":"GET","ms":24.55,"queries":8},{"method":"GET","ms":14.63,"queries":8}]}
+Measuring investor/2026-10-26/finalize
+{"kind":"investor","week":"2026-10-26","action":"finalize","visibleMS":317,"requests":3,"serverMS":[{"method":"POST","ms":66.67,"queries":49},{"method":"GET","ms":19.43,"queries":8},{"method":"GET","ms":14.78,"queries":8}]}
+Measuring investor/2026-10-26/reopenDialog
+{"kind":"investor","week":"2026-10-26","action":"reopenDialog","visibleMS":79,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/reopen
+{"kind":"investor","week":"2026-10-26","action":"reopen","visibleMS":328,"requests":3,"serverMS":[{"method":"POST","ms":103.4,"queries":102},{"method":"GET","ms":26.77,"queries":8},{"method":"GET","ms":14.61,"queries":8}]}
+Measuring investor/2026-10-26/warmPage
+{"kind":"investor","week":"2026-10-26","action":"warmPage","visibleMS":914,"requests":3,"serverMS":[{"method":"GET","ms":33.06,"queries":8},{"method":"GET","ms":21.19,"queries":8},{"method":"GET","ms":12.98,"queries":8}]}
+Measuring investor/2026-10-26/coldPage
+{"kind":"investor","week":"2026-10-26","action":"coldPage","visibleMS":825,"requests":3,"serverMS":[{"method":"GET","ms":22.37,"queries":7},{"method":"GET","ms":17.23,"queries":7},{"method":"GET","ms":41.64,"queries":7}]}
+Measuring investor/2026-10-26/firstExpansion
+{"kind":"investor","week":"2026-10-26","action":"firstExpansion","visibleMS":226,"requests":1,"serverMS":[{"method":"GET","ms":12,"queries":7}]}
+Measuring investor/2026-10-26/cachedExpansion
+{"kind":"investor","week":"2026-10-26","action":"cachedExpansion","visibleMS":30,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":252,"requests":2,"serverMS":[{"method":"GET","ms":16.06,"queries":7},{"method":"GET","ms":16.24,"queries":8}]}
+Measuring investor/2026-10-26/multipleOpen
+{"kind":"investor","week":"2026-10-26","action":"multipleOpen","visibleMS":283,"requests":1,"serverMS":[{"method":"GET","ms":7.8,"queries":7}]}
+Measuring investor/2026-10-26/save
+{"kind":"investor","week":"2026-10-26","action":"save","visibleMS":278,"requests":3,"serverMS":[{"method":"PUT","ms":45.87,"queries":39},{"method":"GET","ms":44.37,"queries":8},{"method":"GET","ms":16.38,"queries":8}]}
+Measuring investor/2026-10-26/finalize
+{"kind":"investor","week":"2026-10-26","action":"finalize","visibleMS":296,"requests":3,"serverMS":[{"method":"POST","ms":67.57,"queries":49},{"method":"GET","ms":20.18,"queries":8},{"method":"GET","ms":31.07,"queries":8}]}
+Measuring investor/2026-10-26/reopenDialog
+{"kind":"investor","week":"2026-10-26","action":"reopenDialog","visibleMS":62,"requests":0,"serverMS":[]}
+Measuring investor/2026-10-26/reopen
+{"kind":"investor","week":"2026-10-26","action":"reopen","visibleMS":344,"requests":3,"serverMS":[{"method":"POST","ms":125.6,"queries":102},{"method":"GET","ms":23.11,"queries":8},{"method":"GET","ms":21.25,"queries":8}]}
+Measuring investor/2026-10-26/warmPage
+{"kind":"investor","week":"2026-10-26","action":"warmPage","visibleMS":963,"requests":3,"serverMS":[{"method":"GET","ms":31.97,"queries":8},{"method":"GET","ms":21.82,"queries":8},{"method":"GET","ms":17.34,"queries":8}]}
+Measuring investor/2026-10-26/reopenWeekPreview
+{"kind":"investor","week":"2026-10-26","action":"reopenWeekPreview","visibleMS":293,"requests":1,"serverMS":[{"method":"GET","ms":39.18,"queries":6}]}
+Measuring investor/2026-10-26/reopenWeek
+{"kind":"investor","week":"2026-10-26","action":"reopenWeek","visibleMS":2218,"requests":3,"serverMS":[{"method":"POST","ms":1941.66,"queries":401},{"method":"GET","ms":51.94,"queries":8},{"method":"GET","ms":50.39,"queries":8}]}
+Measuring investor/2026-10-26/reopenWeekPreview
+{"kind":"investor","week":"2026-10-26","action":"reopenWeekPreview","visibleMS":361,"requests":1,"serverMS":[{"method":"GET","ms":47.06,"queries":6}]}
+Measuring investor/2026-10-26/reopenWeek
+{"kind":"investor","week":"2026-10-26","action":"reopenWeek","visibleMS":2012,"requests":3,"serverMS":[{"method":"POST","ms":1709.36,"queries":397},{"method":"GET","ms":75.05,"queries":8},{"method":"GET","ms":46.49,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":395.7080078125}
+{"kind":"investor","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":679.994873046875}
+{"kind":"investor","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":699.75}
+{"kind":"investor","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":382.702880859375}
+{"kind":"investor","week":"2026-10-26","action":"externalSourceVisibility","visibleMS":658.9228515625}
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":539,"requests":2,"serverMS":[{"method":"PUT","ms":259.28,"queries":43},{"method":"GET","ms":53.2,"queries":9}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":436,"requests":3,"serverMS":[{"method":"PUT","ms":137.46,"queries":43},{"method":"GET","ms":62.97,"queries":9},{"method":"GET","ms":65.58,"queries":9}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":396,"requests":3,"serverMS":[{"method":"PUT","ms":99.11,"queries":43},{"method":"GET","ms":60.86,"queries":9},{"method":"GET","ms":68.1,"queries":9}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":437,"requests":3,"serverMS":[{"method":"PUT","ms":139.83,"queries":43},{"method":"GET","ms":67.73,"queries":9},{"method":"GET","ms":64.56,"queries":9}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":476,"requests":3,"serverMS":[{"method":"PUT","ms":172.86,"queries":43},{"method":"GET","ms":60.74,"queries":9},{"method":"GET","ms":63.19,"queries":9}]}
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":313,"requests":17,"serverMS":[{"method":"PUT","ms":86.07,"queries":39},{"method":"GET","ms":58.99,"queries":8},{"method":"GET","ms":65.86,"queries":8},{"method":"GET","ms":63.98,"queries":8},{"method":"GET","ms":66.94,"queries":8},{"method":"GET","ms":60.76,"queries":8},{"method":"GET","ms":63.34,"queries":8},{"method":"GET","ms":67.34,"queries":8},{"method":"GET","ms":52.81,"queries":8},{"method":"GET","ms":65.11,"queries":8},{"method":"GET","ms":66.94,"queries":8},{"method":"GET","ms":66.34,"queries":8},{"method":"GET","ms":60.3,"queries":8},{"method":"GET","ms":61.17,"queries":8},{"method":"GET","ms":54.05,"queries":8},{"method":"GET","ms":71.5,"queries":8},{"method":"GET","ms":63.81,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":417,"requests":19,"serverMS":[{"method":"PUT","ms":83.39,"queries":39},{"method":"GET","ms":77.66,"queries":8},{"method":"GET","ms":77.21,"queries":8},{"method":"GET","ms":73.79,"queries":8},{"method":"GET","ms":63.02,"queries":8},{"method":"GET","ms":66.6,"queries":8},{"method":"GET","ms":51.99,"queries":8},{"method":"GET","ms":48.25,"queries":8},{"method":"GET","ms":33.18,"queries":8},{"method":"GET","ms":36.29,"queries":8},{"method":"GET","ms":48.34,"queries":8},{"method":"GET","ms":49.6,"queries":8},{"method":"GET","ms":39.61,"queries":8},{"method":"GET","ms":44.2,"queries":8},{"method":"GET","ms":39.63,"queries":8},{"method":"GET","ms":51.12,"queries":8},{"method":"GET","ms":48.18,"queries":8},{"method":"GET","ms":69.64,"queries":8},{"method":"GET","ms":62.66,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":356,"requests":18,"serverMS":[{"method":"PUT","ms":78.38,"queries":39},{"method":"GET","ms":52.06,"queries":8},{"method":"GET","ms":57.7,"queries":8},{"method":"GET","ms":50.63,"queries":8},{"method":"GET","ms":36.42,"queries":8},{"method":"GET","ms":38.67,"queries":8},{"method":"GET","ms":35.53,"queries":8},{"method":"GET","ms":42.76,"queries":8},{"method":"GET","ms":53.24,"queries":8},{"method":"GET","ms":53.39,"queries":8},{"method":"GET","ms":60.08,"queries":8},{"method":"GET","ms":62.77,"queries":8},{"method":"GET","ms":57.94,"queries":8},{"method":"GET","ms":64.31,"queries":8},{"method":"GET","ms":60.17,"queries":8},{"method":"GET","ms":59.74,"queries":8},{"method":"GET","ms":71.89,"queries":8},{"method":"GET","ms":62.89,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":333,"requests":17,"serverMS":[{"method":"PUT","ms":74.66,"queries":39},{"method":"GET","ms":63.06,"queries":8},{"method":"GET","ms":60.81,"queries":8},{"method":"GET","ms":62.91,"queries":8},{"method":"GET","ms":67.12,"queries":8},{"method":"GET","ms":61.79,"queries":8},{"method":"GET","ms":61.8,"queries":8},{"method":"GET","ms":63.6,"queries":8},{"method":"GET","ms":53.77,"queries":8},{"method":"GET","ms":61.2,"queries":8},{"method":"GET","ms":67.48,"queries":8},{"method":"GET","ms":60.91,"queries":8},{"method":"GET","ms":67.61,"queries":8},{"method":"GET","ms":60.3,"queries":8},{"method":"GET","ms":51.09,"queries":8},{"method":"GET","ms":77.49,"queries":8},{"method":"GET","ms":66.52,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":369,"requests":17,"serverMS":[{"method":"PUT","ms":100.42,"queries":39},{"method":"GET","ms":89.58,"queries":8},{"method":"GET","ms":74.31,"queries":8},{"method":"GET","ms":65.19,"queries":8},{"method":"GET","ms":62.37,"queries":8},{"method":"GET","ms":61.22,"queries":8},{"method":"GET","ms":62.82,"queries":8},{"method":"GET","ms":62.53,"queries":8},{"method":"GET","ms":56.19,"queries":8},{"method":"GET","ms":63.5,"queries":8},{"method":"GET","ms":64.49,"queries":8},{"method":"GET","ms":67.47,"queries":8},{"method":"GET","ms":59.06,"queries":8},{"method":"GET","ms":63.34,"queries":8},{"method":"GET","ms":51.09,"queries":8},{"method":"GET","ms":74.04,"queries":8},{"method":"GET","ms":64.06,"queries":8}]}
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":317,"requests":2,"serverMS":[{"method":"PUT","ms":76.36,"queries":39},{"method":"GET","ms":72.28,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":302,"requests":2,"serverMS":[{"method":"PUT","ms":63.7,"queries":39},{"method":"GET","ms":65.11,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":285,"requests":2,"serverMS":[{"method":"PUT","ms":63.65,"queries":39},{"method":"GET","ms":60.44,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":376,"requests":2,"serverMS":[{"method":"PUT","ms":117.16,"queries":39},{"method":"GET","ms":52.75,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":372,"requests":2,"serverMS":[{"method":"PUT","ms":134.98,"queries":39},{"method":"GET","ms":36.3,"queries":8}]}
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":359,"requests":2,"serverMS":[{"method":"PUT","ms":88.21,"queries":39},{"method":"GET","ms":69.01,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":354,"requests":2,"serverMS":[{"method":"PUT","ms":95.19,"queries":39},{"method":"GET","ms":72.59,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":323,"requests":2,"serverMS":[{"method":"PUT","ms":66.95,"queries":39},{"method":"GET","ms":67.77,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":334,"requests":2,"serverMS":[{"method":"PUT","ms":88.06,"queries":39},{"method":"GET","ms":57.15,"queries":8}]}
+Measuring investor/2026-10-26/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":388,"requests":2,"serverMS":[{"method":"PUT","ms":130.74,"queries":39},{"method":"GET","ms":55.43,"queries":8}]}
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+Measuring investor/2026-10-26/fiveUsersWithSync
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":342,"requests":2,"serverMS":[{"method":"PUT","ms":54.14,"queries":39},{"method":"GET","ms":37.31,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":319,"requests":2,"serverMS":[{"method":"PUT","ms":63.24,"queries":39},{"method":"GET","ms":32.97,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":321,"requests":2,"serverMS":[{"method":"PUT","ms":51.04,"queries":39},{"method":"GET","ms":45.61,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":321,"requests":2,"serverMS":[{"method":"PUT","ms":93.85,"queries":39},{"method":"GET","ms":51.33,"queries":8}]}
+{"kind":"investor","week":"2026-10-26","action":"fiveUsersWithSync","visibleMS":352,"requests":2,"serverMS":[{"method":"PUT","ms":90.38,"queries":39},{"method":"GET","ms":45.88,"queries":8}]}
+{"output":"D:\\Projects\\mserp\\docs\\performance\\payroll-persistent-release-browser-performance.json","results":{"driver/2026-09-28/coldPage":{"samples":5,"failures":0,"p50":890.8000001907349,"p95":895.5,"p99":895.5,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":105,"calculationCount":0,"payloadBytes":459414,"lockWaitP95":null,"aggregateRefreshP95":1317.4190999999992},"driver/2026-09-28/firstExpansion":{"samples":5,"failures":0,"p50":232,"p95":243.2000002861023,"p99":243.2000002861023,"targetMS":300,"targetMet":true,"requestCount":5,"queryCount":35,"calculationCount":0,"payloadBytes":25991,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-09-28/cachedExpansion":{"samples":5,"failures":0,"p50":30.40000009536743,"p95":30.799999713897705,"p99":30.799999713897705,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-09-28/multipleOpen":{"samples":10,"failures":0,"p50":234.59999990463257,"p95":267.7999997138977,"p99":267.7999997138977,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":110,"calculationCount":0,"payloadBytes":242696,"lockWaitP95":null,"aggregateRefreshP95":576.3130003814695},"driver/2026-09-28/save":{"samples":5,"failures":0,"p50":278.30000019073486,"p95":325.59999990463257,"p99":325.59999990463257,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":290,"calculationCount":0,"payloadBytes":83239,"lockWaitP95":2.03,"aggregateRefreshP95":804.5883999046309},"driver/2026-09-28/finalize":{"samples":5,"failures":0,"p50":296.30000019073486,"p95":345.1000003814697,"p99":345.1000003814697,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":365,"calculationCount":0,"payloadBytes":79535,"lockWaitP95":2.58,"aggregateRefreshP95":774.4429000953678},"driver/2026-09-28/reopenDialog":{"samples":5,"failures":0,"p50":76.80000019073486,"p95":78.7000002861023,"p99":78.7000002861023,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-09-28/reopen":{"samples":5,"failures":0,"p50":411,"p95":428.30000019073486,"p99":428.30000019073486,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":700,"calculationCount":10,"payloadBytes":80955,"lockWaitP95":1.44,"aggregateRefreshP95":891.8303002860994},"driver/2026-09-28/warmPage":{"samples":5,"failures":0,"p50":936,"p95":959.4000000953674,"p99":959.4000000953674,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":120,"calculationCount":0,"payloadBytes":628245,"lockWaitP95":null,"aggregateRefreshP95":1353.9493000000002},"driver/2026-09-28/reopenWeekPreview":{"samples":2,"failures":0,"p50":276.8999996185303,"p95":311.59999990463257,"p99":311.59999990463257,"targetMS":1000,"targetMet":true,"requestCount":2,"queryCount":12,"calculationCount":0,"payloadBytes":391104,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-09-28/reopenWeek":{"samples":2,"failures":0,"p50":2613.300000190735,"p95":2735.6000003814697,"p99":2735.6000003814697,"targetMS":2000,"targetMet":false,"requestCount":6,"queryCount":1002,"calculationCount":6,"payloadBytes":1925770,"lockWaitP95":2.18,"aggregateRefreshP95":3188.294600095367},"driver/2026-09-28/externalSourceVisibility":{"samples":5,"failures":0,"p50":599.840087890625,"p95":1554.408935546875,"p99":1554.408935546875,"targetMS":2000,"targetMet":true,"requestCount":86,"queryCount":693,"calculationCount":0,"payloadBytes":468066,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-09-28/fiveUsersWithSync":{"samples":25,"failures":0,"p50":396.3999996185303,"p95":571.1999998092651,"p99":644,"targetMS":300,"targetMet":false,"requestCount":147,"queryCount":2054,"calculationCount":0,"payloadBytes":798441,"lockWaitP95":210.62,"aggregateRefreshP95":4667.418099713905},"investor/2026-09-28/coldPage":{"samples":5,"failures":0,"p50":886.5999999046326,"p95":944.9000000953674,"p99":944.9000000953674,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":105,"calculationCount":0,"payloadBytes":416958,"lockWaitP95":null,"aggregateRefreshP95":1334.2026000000042},"investor/2026-09-28/firstExpansion":{"samples":5,"failures":0,"p50":232.09999990463257,"p95":276.30000019073486,"p99":276.30000019073486,"targetMS":300,"targetMet":true,"requestCount":5,"queryCount":35,"calculationCount":0,"payloadBytes":31376,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-09-28/cachedExpansion":{"samples":5,"failures":0,"p50":30,"p95":31.200000286102295,"p99":31.200000286102295,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-09-28/multipleOpen":{"samples":10,"failures":0,"p50":230.69999980926514,"p95":261,"p99":261,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":110,"calculationCount":0,"payloadBytes":250991,"lockWaitP95":null,"aggregateRefreshP95":575.4827998092806},"investor/2026-09-28/save":{"samples":5,"failures":0,"p50":277.90000009536743,"p95":1813.7000002861023,"p99":1813.7000002861023,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":1694,"calculationCount":92,"payloadBytes":110847,"lockWaitP95":1.67,"aggregateRefreshP95":2243.6651000953716},"investor/2026-09-28/finalize":{"samples":5,"failures":0,"p50":293.90000009536743,"p95":327,"p99":327,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":325,"calculationCount":0,"payloadBytes":99144,"lockWaitP95":3.64,"aggregateRefreshP95":740.7878998092783},"investor/2026-09-28/reopenDialog":{"samples":5,"failures":0,"p50":63.80000019073486,"p95":78,"p99":78,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-09-28/reopen":{"samples":5,"failures":0,"p50":421.09999990463257,"p95":435.40000009536743,"p99":435.40000009536743,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":705,"calculationCount":10,"payloadBytes":97296,"lockWaitP95":2.12,"aggregateRefreshP95":866.4590999046341},"investor/2026-09-28/warmPage":{"samples":5,"failures":0,"p50":936.1999998092651,"p95":1073.7000002861023,"p99":1073.7000002861023,"targetMS":1000,"targetMet":false,"requestCount":15,"queryCount":120,"calculationCount":0,"payloadBytes":639066,"lockWaitP95":null,"aggregateRefreshP95":1517.9773000000132},"investor/2026-09-28/reopenWeekPreview":{"samples":2,"failures":0,"p50":297.40000009536743,"p95":388.8999996185303,"p99":388.8999996185303,"targetMS":1000,"targetMet":true,"requestCount":2,"queryCount":12,"calculationCount":0,"payloadBytes":317238,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-09-28/reopenWeek":{"samples":2,"failures":0,"p50":1955.5,"p95":2537.2999997138977,"p99":2537.2999997138977,"targetMS":2000,"targetMet":false,"requestCount":6,"queryCount":860,"calculationCount":6,"payloadBytes":1805704,"lockWaitP95":4.83,"aggregateRefreshP95":2972.8261996185465},"investor/2026-09-28/externalSourceVisibility":{"samples":5,"failures":0,"p50":681.261962890625,"p95":717.469970703125,"p99":717.469970703125,"targetMS":2000,"targetMet":true,"requestCount":116,"queryCount":933,"calculationCount":0,"payloadBytes":757819,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-09-28/fiveUsersWithSync":{"samples":25,"failures":0,"p50":360.19999980926514,"p95":430,"p99":439.2999997138977,"targetMS":300,"targetMet":false,"requestCount":131,"queryCount":1848,"calculationCount":0,"payloadBytes":879563,"lockWaitP95":74.88,"aggregateRefreshP95":3813.026300095371},"driver/2026-10-19/coldPage":{"samples":5,"failures":0,"p50":878,"p95":942.9000000953674,"p99":942.9000000953674,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":105,"calculationCount":0,"payloadBytes":381735,"lockWaitP95":null,"aggregateRefreshP95":1353.31210000001},"driver/2026-10-19/firstExpansion":{"samples":5,"failures":0,"p50":230.40000009536743,"p95":250.40000009536743,"p99":250.40000009536743,"targetMS":300,"targetMet":true,"requestCount":5,"queryCount":35,"calculationCount":0,"payloadBytes":25125,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-19/cachedExpansion":{"samples":5,"failures":0,"p50":29.100000381469727,"p95":29.90000009536743,"p99":29.90000009536743,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-19/multipleOpen":{"samples":10,"failures":0,"p50":251.59999990463257,"p95":294.8999996185303,"p99":294.8999996185303,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":110,"calculationCount":0,"payloadBytes":211505,"lockWaitP95":null,"aggregateRefreshP95":549.7277999046491},"driver/2026-10-19/save":{"samples":5,"failures":0,"p50":294.5,"p95":1545.8000001907349,"p99":1545.8000001907349,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":1473,"calculationCount":92,"payloadBytes":86447,"lockWaitP95":1.51,"aggregateRefreshP95":1960.0102002860804},"driver/2026-10-19/finalize":{"samples":5,"failures":0,"p50":298.40000009536743,"p95":313.40000009536743,"p99":313.40000009536743,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":365,"calculationCount":0,"payloadBytes":77722,"lockWaitP95":1.57,"aggregateRefreshP95":728.6229000953608},"driver/2026-10-19/reopenDialog":{"samples":5,"failures":0,"p50":63.69999980926514,"p95":80.5,"p99":80.5,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-19/reopen":{"samples":5,"failures":0,"p50":312.7999997138977,"p95":331.59999990463257,"p99":331.59999990463257,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":585,"calculationCount":10,"payloadBytes":79139,"lockWaitP95":2.73,"aggregateRefreshP95":760.7202999046422},"driver/2026-10-19/warmPage":{"samples":5,"failures":0,"p50":912.0999999046326,"p95":940.9000000953674,"p99":940.9000000953674,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":120,"calculationCount":0,"payloadBytes":544374,"lockWaitP95":null,"aggregateRefreshP95":1353.5619999999763},"driver/2026-10-19/reopenWeekPreview":{"samples":2,"failures":0,"p50":275.6000003814697,"p95":286.90000009536743,"p99":286.90000009536743,"targetMS":1000,"targetMet":true,"requestCount":2,"queryCount":12,"calculationCount":0,"payloadBytes":391476,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-19/reopenWeek":{"samples":2,"failures":0,"p50":2193.7999997138977,"p95":2429,"p99":2429,"targetMS":2000,"targetMet":false,"requestCount":6,"queryCount":968,"calculationCount":6,"payloadBytes":1892470,"lockWaitP95":1.5,"aggregateRefreshP95":2959.278200190747},"driver/2026-10-19/externalSourceVisibility":{"samples":5,"failures":0,"p50":569.647216796875,"p95":1586.842041015625,"p99":1586.842041015625,"targetMS":2000,"targetMet":true,"requestCount":51,"queryCount":411,"calculationCount":0,"payloadBytes":271482,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-19/fiveUsersWithSync":{"samples":25,"failures":0,"p50":376.5,"p95":703.5999999046326,"p99":781.2999997138977,"targetMS":300,"targetMet":false,"requestCount":144,"queryCount":2035,"calculationCount":0,"payloadBytes":767885,"lockWaitP95":308.74,"aggregateRefreshP95":4141.981100381468},"investor/2026-10-19/coldPage":{"samples":5,"failures":0,"p50":853.2000002861023,"p95":912.8999996185303,"p99":912.8999996185303,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":105,"calculationCount":0,"payloadBytes":416478,"lockWaitP95":null,"aggregateRefreshP95":1340.8185999999987},"investor/2026-10-19/firstExpansion":{"samples":5,"failures":0,"p50":239,"p95":245.80000019073486,"p99":245.80000019073486,"targetMS":300,"targetMet":true,"requestCount":5,"queryCount":35,"calculationCount":0,"payloadBytes":31210,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-19/cachedExpansion":{"samples":5,"failures":0,"p50":29.699999809265137,"p95":30.799999713897705,"p99":30.799999713897705,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-19/multipleOpen":{"samples":10,"failures":0,"p50":228,"p95":266.7999997138977,"p99":266.7999997138977,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":110,"calculationCount":0,"payloadBytes":250335,"lockWaitP95":null,"aggregateRefreshP95":525.0684999046498},"investor/2026-10-19/save":{"samples":5,"failures":0,"p50":278,"p95":326.8999996185303,"p99":326.8999996185303,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":275,"calculationCount":0,"payloadBytes":100968,"lockWaitP95":2.5,"aggregateRefreshP95":732.435399713926},"investor/2026-10-19/finalize":{"samples":5,"failures":0,"p50":311,"p95":326.3999996185303,"p99":326.3999996185303,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":325,"calculationCount":0,"payloadBytes":98622,"lockWaitP95":3.21,"aggregateRefreshP95":748.309199713869},"investor/2026-10-19/reopenDialog":{"samples":5,"failures":0,"p50":78.59999990463257,"p95":79.09999990463257,"p99":79.09999990463257,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-19/reopen":{"samples":5,"failures":0,"p50":343.5,"p95":360.5,"p99":360.5,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":590,"calculationCount":10,"payloadBytes":96771,"lockWaitP95":1.92,"aggregateRefreshP95":780.4594998092507},"investor/2026-10-19/warmPage":{"samples":5,"failures":0,"p50":908.5,"p95":964.3000001907349,"p99":964.3000001907349,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":120,"calculationCount":0,"payloadBytes":637461,"lockWaitP95":null,"aggregateRefreshP95":1418.954299999983},"investor/2026-10-19/reopenWeekPreview":{"samples":2,"failures":0,"p50":264.5,"p95":293.80000019073486,"p99":293.80000019073486,"targetMS":1000,"targetMet":true,"requestCount":2,"queryCount":12,"calculationCount":0,"payloadBytes":316906,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-19/reopenWeek":{"samples":2,"failures":0,"p50":2010,"p95":2344.800000190735,"p99":2344.800000190735,"targetMS":2000,"targetMet":false,"requestCount":6,"queryCount":830,"calculationCount":6,"payloadBytes":1797406,"lockWaitP95":2.11,"aggregateRefreshP95":2805.9263002860826},"investor/2026-10-19/externalSourceVisibility":{"samples":5,"failures":0,"p50":1556.938232421875,"p95":1595.548095703125,"p99":1595.548095703125,"targetMS":2000,"targetMet":true,"requestCount":114,"queryCount":917,"calculationCount":0,"payloadBytes":740810,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-19/fiveUsersWithSync":{"samples":25,"failures":0,"p50":323.7000002861023,"p95":539.7999997138977,"p99":574.7000002861023,"targetMS":300,"targetMet":false,"requestCount":144,"queryCount":1957,"calculationCount":0,"payloadBytes":959956,"lockWaitP95":184.03,"aggregateRefreshP95":4598.317499904602},"driver/2026-10-26/coldPage":{"samples":5,"failures":0,"p50":839.9000000953674,"p95":851.4000000953674,"p99":851.4000000953674,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":105,"calculationCount":0,"payloadBytes":382029,"lockWaitP95":null,"aggregateRefreshP95":1301.2838000000338},"driver/2026-10-26/firstExpansion":{"samples":5,"failures":0,"p50":230.2000002861023,"p95":237.80000019073486,"p99":237.80000019073486,"targetMS":300,"targetMet":true,"requestCount":5,"queryCount":35,"calculationCount":0,"payloadBytes":23794,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-26/cachedExpansion":{"samples":5,"failures":0,"p50":28.5,"p95":30.59999990463257,"p99":30.59999990463257,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-26/multipleOpen":{"samples":10,"failures":0,"p50":244.90000009536743,"p95":290.2000002861023,"p99":290.2000002861023,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":110,"calculationCount":0,"payloadBytes":209526,"lockWaitP95":null,"aggregateRefreshP95":578.648000190733},"driver/2026-10-26/save":{"samples":5,"failures":0,"p50":277.5,"p95":1573.9000000953674,"p99":1573.9000000953674,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":1455,"calculationCount":92,"payloadBytes":77318,"lockWaitP95":2.03,"aggregateRefreshP95":1977.4840999046573},"driver/2026-10-26/finalize":{"samples":5,"failures":0,"p50":336.90000009536743,"p95":351.09999990463257,"p99":351.09999990463257,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":365,"calculationCount":0,"payloadBytes":73745,"lockWaitP95":3.18,"aggregateRefreshP95":795.6934997139033},"driver/2026-10-26/reopenDialog":{"samples":5,"failures":0,"p50":62,"p95":62.90000009536743,"p99":62.90000009536743,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-26/reopen":{"samples":5,"failures":0,"p50":311.90000009536743,"p95":342.30000019073486,"p99":342.30000019073486,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":585,"calculationCount":10,"payloadBytes":75168,"lockWaitP95":2.14,"aggregateRefreshP95":756.6753002860933},"driver/2026-10-26/warmPage":{"samples":5,"failures":0,"p50":922,"p95":939.8000001907349,"p99":939.8000001907349,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":120,"calculationCount":0,"payloadBytes":532533,"lockWaitP95":null,"aggregateRefreshP95":1368.4061999999685},"driver/2026-10-26/reopenWeekPreview":{"samples":2,"failures":0,"p50":262.69999980926514,"p95":272.09999990463257,"p99":272.09999990463257,"targetMS":1000,"targetMet":true,"requestCount":2,"queryCount":12,"calculationCount":0,"payloadBytes":391564,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-26/reopenWeek":{"samples":2,"failures":0,"p50":2120,"p95":2300.5,"p99":2300.5,"targetMS":2000,"targetMet":false,"requestCount":6,"queryCount":916,"calculationCount":6,"payloadBytes":1818654,"lockWaitP95":3.04,"aggregateRefreshP95":2753.3258000953356},"driver/2026-10-26/externalSourceVisibility":{"samples":5,"failures":0,"p50":626.360107421875,"p95":1556.175048828125,"p99":1556.175048828125,"targetMS":2000,"targetMet":true,"requestCount":70,"queryCount":564,"calculationCount":0,"payloadBytes":354002,"lockWaitP95":null,"aggregateRefreshP95":null},"driver/2026-10-26/fiveUsersWithSync":{"samples":25,"failures":0,"p50":384.19999980926514,"p95":516.5999999046326,"p99":522.7000002861023,"targetMS":300,"targetMet":false,"requestCount":135,"queryCount":1956,"calculationCount":0,"payloadBytes":686260,"lockWaitP95":156.48,"aggregateRefreshP95":4155.536499999929},"investor/2026-10-26/coldPage":{"samples":5,"failures":0,"p50":864.5,"p95":873.1000003814697,"p99":873.1000003814697,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":105,"calculationCount":0,"payloadBytes":416478,"lockWaitP95":null,"aggregateRefreshP95":1282.9183000000194},"investor/2026-10-26/firstExpansion":{"samples":5,"failures":0,"p50":236.2999997138977,"p95":248.2000002861023,"p99":248.2000002861023,"targetMS":300,"targetMet":true,"requestCount":5,"queryCount":35,"calculationCount":0,"payloadBytes":31210,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-26/cachedExpansion":{"samples":5,"failures":0,"p50":30.100000381469727,"p95":30.700000286102295,"p99":30.700000286102295,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-26/multipleOpen":{"samples":10,"failures":0,"p50":235.60000038146973,"p95":282.59999990463257,"p99":282.59999990463257,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":110,"calculationCount":0,"payloadBytes":250335,"lockWaitP95":null,"aggregateRefreshP95":607.9633003815543},"investor/2026-10-26/save":{"samples":5,"failures":0,"p50":292.5,"p95":294.19999980926514,"p99":294.19999980926514,"targetMS":300,"targetMet":true,"requestCount":15,"queryCount":275,"calculationCount":0,"payloadBytes":100968,"lockWaitP95":1.77,"aggregateRefreshP95":718.4308999045752},"investor/2026-10-26/finalize":{"samples":5,"failures":0,"p50":317.2000002861023,"p95":335.80000019073486,"p99":335.80000019073486,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":325,"calculationCount":0,"payloadBytes":98619,"lockWaitP95":2.89,"aggregateRefreshP95":742.1109997138847},"investor/2026-10-26/reopenDialog":{"samples":5,"failures":0,"p50":77.69999980926514,"p95":79.09999990463257,"p99":79.09999990463257,"targetMS":300,"targetMet":true,"requestCount":0,"queryCount":0,"calculationCount":0,"payloadBytes":0,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-26/reopen":{"samples":5,"failures":0,"p50":344,"p95":360.19999980926514,"p99":360.19999980926514,"targetMS":300,"targetMet":false,"requestCount":15,"queryCount":590,"calculationCount":10,"payloadBytes":96771,"lockWaitP95":2.26,"aggregateRefreshP95":799.8908998091938},"investor/2026-10-26/warmPage":{"samples":5,"failures":0,"p50":930.4000000953674,"p95":963.1999998092651,"p99":963.1999998092651,"targetMS":1000,"targetMet":true,"requestCount":15,"queryCount":120,"calculationCount":0,"payloadBytes":637461,"lockWaitP95":null,"aggregateRefreshP95":1400.5638000000035},"investor/2026-10-26/reopenWeekPreview":{"samples":2,"failures":0,"p50":293.2000002861023,"p95":360.90000009536743,"p99":360.90000009536743,"targetMS":1000,"targetMet":true,"requestCount":2,"queryCount":12,"calculationCount":0,"payloadBytes":316906,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-26/reopenWeek":{"samples":2,"failures":0,"p50":2012.3000001907349,"p95":2217.7999997138977,"p99":2217.7999997138977,"targetMS":2000,"targetMet":false,"requestCount":6,"queryCount":830,"calculationCount":6,"payloadBytes":1797406,"lockWaitP95":1.91,"aggregateRefreshP95":2717.1175000953954},"investor/2026-10-26/externalSourceVisibility":{"samples":5,"failures":0,"p50":658.9228515625,"p95":699.75,"p99":699.75,"targetMS":2000,"targetMet":true,"requestCount":107,"queryCount":859,"calculationCount":0,"payloadBytes":695337,"lockWaitP95":null,"aggregateRefreshP95":null},"investor/2026-10-26/fiveUsersWithSync":{"samples":25,"failures":0,"p50":353.90000009536743,"p95":475.59999990463257,"p99":539.4000000953674,"targetMS":300,"targetMet":false,"requestCount":132,"queryCount":1860,"calculationCount":0,"payloadBytes":881488,"lockWaitP95":78.28,"aggregateRefreshP95":4503.519800000009}}}

@@ -231,7 +231,7 @@ func (r *TollRepository) LinkPrePassTruck(ctx context.Context, in PrePassTruckLi
 	if err := validatePrePassLink(in); err != nil {
 		return err
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -289,10 +289,10 @@ func (r *TollRepository) LinkPrePassTruck(ctx context.Context, in PrePassTruckLi
 	if _, err = tx.Exec(ctx, `INSERT INTO prepass_truck_mapping_events(mapping_id,actor_id,action,transaction_ids) VALUES($1,$2,'link',to_jsonb($3::text[]))`, in.ID, actor, ids); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 func (r *TollRepository) UndoPrePassTruckLink(ctx context.Context, id string, version int, actor string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -340,5 +340,5 @@ func (r *TollRepository) UndoPrePassTruckLink(ctx context.Context, id string, ve
 	if _, err = tx.Exec(ctx, `INSERT INTO prepass_truck_mapping_events(mapping_id,actor_id,action,transaction_ids) VALUES($1,$2,'undo',to_jsonb($3::text[]))`, id, actor, ids); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

@@ -15,12 +15,13 @@ export function LazyDriverCard({ onDetails, detailRevision, ...props }: DriverCa
   useEffect(() => {
     if (!open || !summary) return;
     const controller = new AbortController();
-    const request = fetchPayStatement(investor, week, id, controller.signal);
+    const shown = expected.current;
+    const request = fetchPayStatement(investor, week, id, controller.signal, shown.statementRevision);
     request.then(report => {
       if (controller.signal.aborted) return;
       const detail = report.drivers.find(row => row.id === id);
       if (!detail || detail.summary) throw new Error("Statement changed. Reload this week to see the current list.");
-      onDetails(expected.current, detail, report.revision);
+      onDetails(shown, detail, report.revision);
     }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Unable to load statement"); });
     return () => controller.abort();
   }, [id, week, investor, summary, version, detailRevision, open, onDetails, attempt]);

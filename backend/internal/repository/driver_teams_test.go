@@ -157,7 +157,7 @@ func applyDriverTeams(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	}
 }
 
-func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool, prepared ...bool) {
 	t.Helper()
 	exec := func(sql string, args ...any) {
 		t.Helper()
@@ -175,6 +175,7 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	}
 	fleet := NewFleetRepository(pool)
 	pay := NewDriverPayRepository(pool)
+	preparedSettlement := len(prepared) > 0 && prepared[0]
 	actor := id(`INSERT INTO app_users(username,password_hash) VALUES('Team reviewer',crypt('test-only',gen_salt('bf'))) RETURNING id::text`)
 	main, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Main Example", PayType: "gross_percentage", PayRate: 90, IsOwnerOperator: true, Active: true, EscrowAmount: "100", AssignmentWeek: "2026-09-21"})
 	if err != nil {
@@ -331,7 +332,7 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 			t.Fatal("termination should retain a payable shared statement", d)
 		}
 	}
-	finalized, err := pay.Settle(ctx, week, main.ID, report.Revision, actor, "", false, false)
+	finalized, err := settlePayrollFixture(t, ctx, pay, "driver", week, main.ID, report.Revision, actor, "", false, false, preparedSettlement)
 	if err != nil {
 		t.Fatal("finalization", err)
 	}
@@ -360,7 +361,7 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 			t.Fatal("frozen fuel changed")
 		}
 	}
-	if _, err = pay.Settle(ctx, week, main.ID, report.Revision, actor, "Reviewed team deduction", true, false); err != nil {
+	if _, err = settlePayrollFixture(t, ctx, pay, "driver", week, main.ID, report.Revision, actor, "Reviewed team deduction", true, false, preparedSettlement); err != nil {
 		t.Fatal("reopen", err)
 	}
 	if _, err = pay.Save(ctx, saved); err == nil {

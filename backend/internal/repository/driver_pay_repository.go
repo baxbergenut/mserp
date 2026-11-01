@@ -19,12 +19,27 @@ import (
 var ErrDriverPayConflict = errors.New("this driver's week was edited elsewhere; reload before saving again")
 
 type DriverPayRepository struct {
-	pool  *pgxpool.Pool
-	cache payrollCache
+	pool                 *pgxpool.Pool
+	cache                payrollCache
+	preparedReads        bool
+	preparedCommands     bool
+	preparedFinalization bool
+	resourceLockAudit    bool // Tests exercise ordered resources while retaining the global gate.
+	resourceConcurrency  bool // Enabled only after the resource protocol exit gates.
+}
+
+// Configure once during startup, before the router accepts requests.
+func (r *DriverPayRepository) ConfigurePreparedReads(enabled bool)    { r.preparedReads = enabled }
+func (r *DriverPayRepository) PreparedReadsEnabled() bool             { return r.preparedReads }
+func (r *DriverPayRepository) ConfigurePreparedCommands(enabled bool) { r.preparedCommands = enabled }
+func (r *DriverPayRepository) ConfigurePreparedFinalization(enabled bool) {
+	r.preparedFinalization = enabled
 }
 
 func NewDriverPayRepository(pool *pgxpool.Pool) *DriverPayRepository {
-	return &DriverPayRepository{pool: pool}
+	// Explicit repository command metadata opts into prepared validation. The
+	// HTTP composition root separately applies the rollout capability switches.
+	return &DriverPayRepository{pool: pool, preparedCommands: true}
 }
 
 type DriverPayAdjustment struct {
@@ -36,20 +51,25 @@ type DriverPayAdjustment struct {
 	Amount       string `json:"amount"`
 }
 type DriverPayEdits struct {
-	InputRevision        string                `json:"inputRevision,omitempty"`
-	SourceCharges        []PaySourceCharge     `json:"sourceCharges,omitempty"`
-	LayoverExcludedDates []string              `json:"layoverExcludedDates,omitempty"`
-	Costs                *DriverPayCosts       `json:"costs,omitempty"`
-	ExpenseDeductions    []ExpenseDeduction    `json:"expenseDeductions,omitempty"`
-	DriverID             string                `json:"driverId"`
-	WeekStart            string                `json:"weekStart"`
-	Notes                string                `json:"notes"`
-	Comments             map[string]string     `json:"comments"`
-	Adjustments          []DriverPayAdjustment `json:"adjustments"`
-	FuelOverride         *string               `json:"fuelOverride"`
-	TollOverride         *string               `json:"tollOverride"`
-	Version              int                   `json:"version"`
-	GeneratedCharges     []ChargeOccurrence    `json:"generatedCharges,omitempty"`
+	RequestID                 string                     `json:"requestId,omitempty"`
+	ExpectedStatementRevision string                     `json:"expectedStatementRevision,omitempty"`
+	StatementRevision         string                     `json:"statementRevision,omitempty"`
+	CommittedStatement        *DriverPayDriver           `json:"committedStatement,omitempty"`
+	AffectedStatements        []PayrollStatementIdentity `json:"affectedStatements,omitempty"`
+	InputRevision             string                     `json:"inputRevision,omitempty"`
+	SourceCharges             []PaySourceCharge          `json:"sourceCharges,omitempty"`
+	LayoverExcludedDates      []string                   `json:"layoverExcludedDates,omitempty"`
+	Costs                     *DriverPayCosts            `json:"costs,omitempty"`
+	ExpenseDeductions         []ExpenseDeduction         `json:"expenseDeductions,omitempty"`
+	DriverID                  string                     `json:"driverId"`
+	WeekStart                 string                     `json:"weekStart"`
+	Notes                     string                     `json:"notes"`
+	Comments                  map[string]string          `json:"comments"`
+	Adjustments               []DriverPayAdjustment      `json:"adjustments"`
+	FuelOverride              *string                    `json:"fuelOverride"`
+	TollOverride              *string                    `json:"tollOverride"`
+	Version                   int                        `json:"version"`
+	GeneratedCharges          []ChargeOccurrence         `json:"generatedCharges,omitempty"`
 }
 type DriverPayLoad struct {
 	PayrollSupplement       bool     `json:"payrollSupplement,omitempty"`
@@ -93,6 +113,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	StatementRevision      string                        `json:"statementRevision,omitempty"`
 	BrokerReimbursements   []BrokerReimbursementReminder `json:"brokerReimbursements,omitempty"`
 	costTransactions       []PayCostTransaction
 	HomeWeek               bool                 `json:"homeWeek,omitempty"`
@@ -126,16 +147,18 @@ type DriverPayDriver struct {
 	Edits                  DriverPayEdits       `json:"edits"`
 }
 type DriverPayWeek struct {
-	Receipt              bool                 `json:"receipt,omitempty"`
-	AffectedStatementIDs []string             `json:"affectedStatementIds,omitempty"`
-	ManagedInSheets      bool                 `json:"managedInSheets,omitempty"`
-	Pagination           *PayPageInfo         `json:"pagination,omitempty"`
-	SetupRequired        []InvestorTruckSetup `json:"setupRequired,omitempty"`
-	Issues               []string             `json:"issues,omitempty"`
-	Notices              []string             `json:"notices,omitempty"`
-	Revision             string               `json:"revision"`
-	WeekStart            string               `json:"weekStart"`
-	Drivers              []DriverPayDriver    `json:"drivers"`
+	AffectedStatements   []PayrollStatementIdentity `json:"affectedStatements,omitempty"`
+	Preparation          *PayrollPreparation        `json:"preparation,omitempty"`
+	Receipt              bool                       `json:"receipt,omitempty"`
+	AffectedStatementIDs []string                   `json:"affectedStatementIds,omitempty"`
+	ManagedInSheets      bool                       `json:"managedInSheets,omitempty"`
+	Pagination           *PayPageInfo               `json:"pagination,omitempty"`
+	SetupRequired        []InvestorTruckSetup       `json:"setupRequired,omitempty"`
+	Issues               []string                   `json:"issues,omitempty"`
+	Notices              []string                   `json:"notices,omitempty"`
+	Revision             string                     `json:"revision"`
+	WeekStart            string                     `json:"weekStart"`
+	Drivers              []DriverPayDriver          `json:"drivers"`
 }
 
 type InvestorTruckSetup struct {
@@ -171,6 +194,7 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 }
 func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
 	defer db.Phase(ctx, "driver_calculation")()
+	db.Event(ctx, "payroll_calculation")
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
 	var selectionErr error
 	ctx, selectionErr = selectPayrollContext(ctx, tx, "driver", driverID)
@@ -214,13 +238,46 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 	return result, nil
 }
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
-	defer db.Phase(ctx, "source")()
+	memo := payrollReadMemo(ctx, tx)
+	if memo == nil || memo.projectionSources == nil || payrollCostDetails(ctx) || payrollCostsOnly(ctx) {
+		return readDriverPaySourceWeekUncached(ctx, tx, week, driverID)
+	}
+	key := week.Format(time.DateOnly) + ":" + driverID
+	if body, ok := memo.projectionSources[key]; ok {
+		var report DriverPayWeek
+		err := json.Unmarshal(body, &report)
+		return report, err
+	}
+	report, err := readDriverPaySourceWeekUncached(ctx, tx, week, driverID)
+	if err == nil {
+		memo.projectionSources[key], err = json.Marshal(report)
+	}
+	return report, err
+}
+func readDriverPayBaseWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string, facts bool) (DriverPayWeek, error) {
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
 	entries, resolved := payrollEntriesCTE, payrollResolvedLoad
+	if prepared, _ := ctx.Value(payrollNormalizedFactsKey{}).(bool); prepared {
+		entries = payrollPreparedEntriesCTE
+	}
 	if full, _ := ctx.Value(payrollAuthoritativeKey{}).(bool); full {
 		entries, resolved = payrollLoadMatchCTE, payrollAuthoritativeResolvedLoad
 	}
-	rows, err := tx.Query(ctx, driverPayCostsSQL+payDriverFactsSQL+","+payrollEscrowCapacityCTE+payDriverEligibilitySQL+","+entries+` SELECT d.id,d.full_name,d.pay_truck_id,d.pay_truck_unit,
+	eligibility := "," + payrollEscrowCapacityCTE + payDriverEligibilitySQL
+	editsTable := "driver_pay_weeks"
+	where := ` AND (d.pay_enabled OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_release OR d.pay_scale OR d.pay_reimburse)
+ AND (d.pay_reimburse OR d.pay_scale OR d.pay_release OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_charge OR d.pay_expense OR d.pay_escrow
+ OR (d.pay_employment_type='owner_operator' AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))`
+	if facts {
+		// Include every potential driver. Mutable eligibility and saved edits are
+		// attached later, so a new allocation can introduce a previously absent row.
+		eligibility = ", eligible_pay_drivers AS (SELECT * FROM pay_drivers)"
+		editsTable = `(SELECT null::uuid driver_id,null::date week_start,null::text notes,
+ null::jsonb comments,null::jsonb adjustments,null::int version,null::numeric fuel_override,
+ null::numeric toll_override,null::text[] layover_excluded_dates WHERE false)`
+		where = ""
+	}
+	rows, err := tx.Query(ctx, driverPayCostsSQL+payDriverFactsSQL+eligibility+","+entries+` SELECT d.id,d.full_name,d.pay_truck_id,d.pay_truck_unit,
  d.pay_dispatcher_id,d.pay_dispatcher_name,d.pay_type,d.pay_rate::text,d.pay_employment_type,(d.pay_employment_type='owner_operator'),
  coalesce(e.source_date::text,''),coalesce(e.source_slot,0),coalesce(e.dispatch_date,''),coalesce(e.dispatch_slot,0),coalesce(e.transfer_version,0),coalesce(e.credited_dispatcher_id,''),coalesce(e.credited_dispatcher_name,''),coalesce(e.service_date::text,''),coalesce(e.slot,0),coalesce(e.load_number,''),l.id,
  coalesce((coalesce(l.pickup_time,l.pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),
@@ -234,14 +291,11 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
  FROM eligible_pay_drivers d LEFT JOIN pay_entries e ON d.id=e.driver_id
  AND btrim(e.load_number)<>''
  `+resolved+`
- LEFT JOIN driver_pay_weeks w ON w.driver_id=d.id AND w.week_start=$1::date
+ LEFT JOIN `+editsTable+` w ON w.driver_id=d.id AND w.week_start=$1::date
  LEFT JOIN weekly_fuel fuel ON fuel.driver_id=d.id
  LEFT JOIN weekly_tolls toll ON toll.driver_id=d.id
  WHERE (NULLIF($2,'')::uuid IS NULL OR d.id=NULLIF($2,'')::uuid)
- AND (d.pay_enabled OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_release OR d.pay_scale OR d.pay_reimburse)
- AND (d.pay_reimburse OR d.pay_scale OR d.pay_release OR e.driver_id IS NOT NULL OR w.driver_id IS NOT NULL OR d.pay_charge OR d.pay_expense OR d.pay_escrow
- OR (d.pay_employment_type='owner_operator' AND d.pay_type='gross_percentage' AND (coalesce(fuel.total,0)<>0 OR coalesce(toll.total,0)<>0)))
- ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID, payrollDriverIDs(ctx), payrollSummaryOnly(ctx))
+ `+where+` ORDER BY d.full_name,d.id,e.service_date,e.slot`, week, driverID, payrollDriverIDs(ctx), payrollSummaryOnly(ctx))
 	if err != nil {
 		return result, err
 	}
@@ -324,6 +378,15 @@ func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, dri
 		return result, err
 	}
 	rows.Close()
+	return result, nil
+}
+
+func readDriverPaySourceWeekUncached(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {
+	defer db.Phase(ctx, "source")()
+	result, err := readDriverPayLiveBaseWeek(ctx, tx, week, driverID)
+	if err != nil {
+		return result, err
+	}
 	if payrollCostsOnly(ctx) {
 		return result, nil
 	}
@@ -434,13 +497,32 @@ func driverPayFee(kind, rate, basis string) string {
 
 func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, actors ...string) (DriverPayEdits, error) {
 	edits.InputRevision = ""
-	tx, closeWrite, err := r.beginPayrollWrite(ctx)
+	actor := ""
+	if len(actors) > 0 {
+		actor = actors[0]
+	}
+	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, edits.RequestID, edits.ExpectedStatementRevision, "driver:"+edits.DriverID)
 	if err != nil {
 		return edits, err
 	}
 	defer closeWrite()
+	command, replay, err := beginPayrollCommand(ctx, tx, actor, edits.RequestID, "driver.save", edits.ExpectedStatementRevision, edits)
+	if err != nil {
+		return edits, err
+	}
+	if replay != nil {
+		var saved DriverPayEdits
+		err = json.Unmarshal(replay, &saved)
+		return saved, err
+	}
+	if err = validatePreparedPayrollCommand(ctx, tx, "driver", edits.DriverID, edits.WeekStart, edits.ExpectedStatementRevision); err != nil {
+		return edits, err
+	}
+	stripPayCommandMetadata(&edits)
 	endLock := db.Phase(ctx, "financial_lock_wait")
-	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
+	if !payrollConcurrent(tx) {
+		_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
+	}
 	endLock()
 	if err != nil {
 		return edits, err
@@ -455,16 +537,18 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	if err = assertPayrollOpen(ctx, tx, edits.DriverID, edits.WeekStart); err != nil {
 		return edits, err
 	}
-	actor := ""
-	if len(actors) > 0 {
-		actor = actors[0]
-	}
-	ctx, err = selectPayrollContext(payrollWeekContext(ctx, edits.WeekStart), tx, "driver", edits.DriverID)
-	if err != nil {
-		return edits, err
-	}
+	ctx = payrollWeekContext(ctx, edits.WeekStart)
 	endValidation := db.Phase(ctx, "save_calculation")
-	costDriver, err := currentDriverPayCosts(ctx, tx, edits)
+	var costDriver DriverPayDriver
+	if r.preparedCommands && command != nil && command.expected != "" {
+		costDriver, err = preparedSaveCard(ctx, tx, "driver", edits.DriverID, edits.WeekStart, command)
+		ctx = context.WithValue(ctx, payrollNormalizedFactsKey{}, true)
+	} else {
+		ctx, err = selectPayrollContext(ctx, tx, "driver", edits.DriverID)
+		if err == nil {
+			costDriver, err = currentDriverPayCosts(ctx, tx, edits)
+		}
+	}
 	endValidation()
 	if err != nil {
 		return edits, err
@@ -472,41 +556,56 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	// Retired exclusions are read-only compatibility data, including for old clients.
 	edits.LayoverExcludedDates = costDriver.Edits.LayoverExcludedDates
 	defer db.Phase(ctx, "writes_and_commit")()
-	if err = savePaySources(ctx, tx, costDriver, &edits, "driver", actor); err != nil {
+	unchangedEffects, err := unchangedPreparedPayEffects(ctx, tx, command, "driver", edits)
+	if err != nil {
 		return edits, err
 	}
-	if err = saveDriverPayCosts(ctx, tx, costDriver, edits, actor); err != nil {
-		return edits, err
-	}
-	if edits.GeneratedCharges != nil {
-		edits.GeneratedCharges, err = saveTeamCharges(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.GeneratedCharges)
-		if err != nil {
+	if !unchangedEffects {
+		if command != nil && command.expected != "" {
+			// The prepared card supplies validation, but canonical balance guards
+			// still need the complete related group for legacy source records.
+			ctx, err = selectPayrollContext(ctx, tx, "driver", edits.DriverID)
+			if err != nil {
+				return edits, err
+			}
+			ctx = payrollRoutingFactsContext(ctx, command.beforeSnapshot)
+		}
+		if err = savePaySources(ctx, tx, costDriver, &edits, "driver", actor); err != nil {
 			return edits, err
 		}
-	}
-	if edits.ExpenseDeductions != nil {
-		allowed := map[string]bool{}
-		for _, x := range costDriver.Edits.ExpenseDeductions {
-			allowed[x.ExpenseID] = true
-		}
-		for _, x := range edits.ExpenseDeductions {
-			if x.Apply && !allowed[x.ExpenseID] {
-				// The principal may have been collected in another week or moved to
-				// another payer since this tab loaded. Treat both as stale payroll.
-				return edits, ErrDriverPayConflict
-			}
-		}
-		edits.ExpenseDeductions, err = saveTeamExpenses(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
-		if err != nil {
+		if err = saveDriverPayCosts(ctx, tx, costDriver, edits, actor); err != nil {
 			return edits, err
 		}
-		filtered := []ExpenseDeduction{}
-		for _, item := range edits.ExpenseDeductions {
-			if allowed[item.ExpenseID] {
-				filtered = append(filtered, item)
+		if edits.GeneratedCharges != nil {
+			edits.GeneratedCharges, err = saveTeamCharges(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.GeneratedCharges)
+			if err != nil {
+				return edits, err
 			}
 		}
-		edits.ExpenseDeductions = filtered
+		if edits.ExpenseDeductions != nil {
+			allowed := map[string]bool{}
+			for _, x := range costDriver.Edits.ExpenseDeductions {
+				allowed[x.ExpenseID] = true
+			}
+			for _, x := range edits.ExpenseDeductions {
+				if x.Apply && !allowed[x.ExpenseID] {
+					// The principal may have been collected in another week or moved to
+					// another payer since this tab loaded. Treat both as stale payroll.
+					return edits, ErrDriverPayConflict
+				}
+			}
+			edits.ExpenseDeductions, err = saveTeamExpenses(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
+			if err != nil {
+				return edits, err
+			}
+			filtered := []ExpenseDeduction{}
+			for _, item := range edits.ExpenseDeductions {
+				if allowed[item.ExpenseID] {
+					filtered = append(filtered, item)
+				}
+			}
+			edits.ExpenseDeductions = filtered
+		}
 	}
 	comments, err := json.Marshal(edits.Comments)
 	if err != nil {
@@ -532,11 +631,16 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		return edits, err
 	}
 	refreshed := DriverPayWeek{WeekStart: edits.WeekStart, Drivers: []DriverPayDriver{costDriver}}
-	if err = applyDriverPayCarry(ctx, tx, &refreshed); err != nil {
-		return edits, err
+	if !unchangedEffects {
+		if err = applyDriverPayCarry(ctx, tx, &refreshed); err != nil {
+			return edits, err
+		}
 	}
 	edits.Costs = refreshed.Drivers[0].Edits.Costs
 	if err = setPaySaveRevision(ctx, tx, "driver", &edits); err != nil {
+		return edits, err
+	}
+	if err = finishPaySaveCommand(ctx, tx, command, "driver", &edits, r.preparedReads); err != nil {
 		return edits, err
 	}
 	return edits, tx.Commit(ctx)

@@ -2,8 +2,11 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -40,9 +43,30 @@ func testPayrollAssignmentLabels(t *testing.T, ctx context.Context, pool *pgxpoo
 	exec(`UPDATE drivers SET active=false,status='terminated',termination_date='2026-10-21' WHERE id=$1`, driver)
 	load := DriverPayLoad{Date: "2026-10-20", SourceDate: "2026-10-20", LoadNumber: "Final load", Fee: "75.00"}
 	report := DriverPayWeek{WeekStart: "2026-10-19", Drivers: []DriverPayDriver{{ID: driver, EmploymentType: "unassigned", Loads: []DriverPayLoad{load}, FuelTotal: "25.00", TollTotal: "10.00"}}}
+	decorate := func(kind string, report *DriverPayWeek) error {
+		body, err := json.Marshal(report)
+		if err != nil {
+			return err
+		}
+		var reference DriverPayWeek
+		if err = json.Unmarshal(body, &reference); err != nil {
+			return err
+		}
+		if err = decoratePayAssignments(ctx, tx, kind, report); err != nil {
+			return err
+		}
+		authority := context.WithValue(ctx, payrollAuthoritativeKey{}, true)
+		if err = decoratePayAssignments(authority, tx, kind, &reference); err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(*report, reference) {
+			t.Fatalf("dated assignment reference differs: got %#v want %#v", *report, reference)
+		}
+		return nil
+	}
 	check := func(kind string, report *DriverPayWeek) {
 		t.Helper()
-		if err := decoratePayAssignments(ctx, tx, kind, report); err != nil {
+		if err := decorate(kind, report); err != nil {
 			t.Fatal(err)
 		}
 		got := report.Drivers[0]
@@ -71,7 +95,7 @@ func testPayrollAssignmentLabels(t *testing.T, ctx context.Context, pool *pgxpoo
 	check("investor", &investor)
 	// A later-week carried statement does not resurrect an ended assignment.
 	report.WeekStart = "2026-10-26"
-	if err := decoratePayAssignments(ctx, tx, "driver", &report); err != nil {
+	if err := decorate("driver", &report); err != nil {
 		t.Fatal(err)
 	}
 	if report.Drivers[0].TruckID != "" || report.Drivers[0].DispatcherID != "" {
@@ -83,7 +107,7 @@ func testPayrollAssignmentLabels(t *testing.T, ctx context.Context, pool *pgxpoo
 	load.CreditedDispatcherID = dispatcher
 	load.CreditedDispatcherName = "Reviewed credit"
 	report.Drivers[0].Loads = []DriverPayLoad{load}
-	if err := decoratePayAssignments(ctx, tx, "driver", &report); err != nil {
+	if err := decorate("driver", &report); err != nil {
 		t.Fatal(err)
 	}
 	if report.Drivers[0].TruckID != truck || report.Drivers[0].DispatcherName != "Reviewed credit" {
@@ -93,7 +117,7 @@ func testPayrollAssignmentLabels(t *testing.T, ctx context.Context, pool *pgxpoo
 	load.SourceDate = "2026-10-24"
 	load.TransferVersion = 0
 	report.Drivers[0].Loads = []DriverPayLoad{load}
-	if err := decoratePayAssignments(ctx, tx, "driver", &report); err != nil {
+	if err := decorate("driver", &report); err != nil {
 		t.Fatal(err)
 	}
 	if report.Drivers[0].TruckID != "" || report.Drivers[0].DispatcherID != "" {
@@ -102,10 +126,17 @@ func testPayrollAssignmentLabels(t *testing.T, ctx context.Context, pool *pgxpoo
 	report.Drivers[0].TruckUnit = "Frozen truck"
 	report.Drivers[0].DispatcherName = "Frozen dispatcher"
 	report.Drivers[0].Settlement = &PayrollSettlement{Finalized: true}
-	if err := decoratePayAssignments(ctx, tx, "driver", &report); err != nil {
+	if err := decorate("driver", &report); err != nil {
 		t.Fatal(err)
 	}
 	if report.Drivers[0].TruckUnit != "Frozen truck" || report.Drivers[0].DispatcherName != "Frozen dispatcher" {
 		t.Fatal("frozen labels changed")
 	}
+}
+
+func TestPayrollDatedAssignmentsDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		testPayrollAssignmentLabels(t, ctx, pool)
+	})
 }

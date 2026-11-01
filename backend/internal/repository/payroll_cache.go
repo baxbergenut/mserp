@@ -33,6 +33,14 @@ func payrollCacheKey(kind string, week time.Time, snapshot string) string {
 // dependency, including newly tracked tables and financial audit inputs. Changes
 // to these operational tables cannot affect a payroll amount, name or warning.
 var payrollUnrelatedTables = []string{
+	"payroll_projection_control", "payroll_projection_sources", "payroll_projection_changes",
+	"payroll_protocol_events",
+	"payroll_projection_jobs", "payroll_projection_generations", "payroll_statement_versions", "payroll_statement_state",
+	"payroll_projection_weeks", "payroll_command_receipts", "payroll_command_versions",
+	"payroll_load_facts",
+	"payroll_routing_facts",
+	"payroll_cost_months", "payroll_source_months",
+	"payroll_resource_revisions",
 	"status_color_settings", "status_color_history",
 	"accounting_cutover_previews", "accounting_payroll_archives",
 	"driver_board_driver_order",
@@ -41,13 +49,20 @@ var payrollUnrelatedTables = []string{
 	"five_eld_locations", "five_eld_sync_state", "five_eld_truck_reviews",
 	"samsara_telemetry", "samsara_tracking", "samsara_sync_state", "maintenance_odometer_sources",
 	"driver_service_requests", "driver_service_events", "profile_notes", "driver_board_presence", "gross_board_presence", "driver_board_automation",
+	// Delivery state and its fleet-source revision are not payroll inputs. The
+	// actual fleet records changed by those operations are captured separately.
+	"fleetscope_sync_state",
+	"fleetscope_sync_links", "fleetscope_sync_snapshots", "fleetscope_sync_operations", "fleetscope_sync_audit",
+	"datatruck_enrollments", "datatruck_enrollment_events", "datatruck_driver_updates", "datatruck_driver_update_events",
+	"relay_driver_rosters", "relay_driver_operations",
+	"prepass_fleet_rosters", "prepass_fleet_operations", "prepass_fleet_links",
 }
 
 // Revision rows change atomically with their source tables. Reading them in the
 // report's repeatable-read snapshot preserves concurrent-commit safety while
 // allowing cache reuse across unrelated session activity. Writers never use this.
 func (r *DriverPayRepository) cachedWeek(ctx context.Context, tx pgx.Tx, kind string, week time.Time, read func() (DriverPayWeek, error)) (DriverPayWeek, error) {
-	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	snapshot, err := payrollFinancialSnapshot(ctx, tx)
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
@@ -150,8 +165,12 @@ func selectPayDriver(report DriverPayWeek, id string) DriverPayWeek {
 	return report
 }
 
-// Shared by cache keys and summary finalization tokens; untracked inputs fall back to MVCC.
+// Source baseline for projection headers and source-only facts. Resource commands
+// advance their exact epochs instead; this value deliberately excludes those.
 func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
+	if resource, ok := tx.(*payrollResourceTransaction); ok && resource.sourceFence != nil {
+		return *resource.sourceFence, nil
+	}
 	if memo, ok := ctx.Value(payrollSnapshotKey{}).(payrollSnapshot); ok && memo.tx == tx {
 		return memo.value, nil
 	}
@@ -166,9 +185,9 @@ func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
 		// A future table must opt into change tracking. Until then, conservatively
 		// fall back to MVCC invalidation instead of risking an untracked input.
 		query = `SELECT CASE WHEN EXISTS (
- SELECT 1 FROM pg_tables t WHERE t.schemaname=current_schema()
- AND t.tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
- AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.tablename)
+ SELECT 1 FROM pg_class t WHERE t.relnamespace=current_schema()::regnamespace AND t.relkind IN ('r','p')
+ AND t.relname NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
+ AND NOT EXISTS (SELECT 1 FROM payroll_cache_revisions r WHERE r.table_name=t.relname)
 ) THEN 'snapshot:' || pg_current_snapshot()::text
  ELSE coalesce(string_agg(table_name || ':' || revision::text, ',' ORDER BY table_name) FILTER (WHERE NOT table_name=ANY($1::text[])),'') END
  FROM payroll_cache_revisions`
@@ -183,6 +202,41 @@ func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
 		db.Event(ctx, "payroll_fallback_untracked_table")
 	}
 	return snapshot, nil
+}
+
+// Legacy calculator caches and input tokens must include committed financial
+// epochs when resource commands no longer update table counters. This is a
+// snapshot digest, never a maximum sequence or a process-local revision.
+func payrollFinancialSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
+	if memo, ok := ctx.Value(payrollFinancialSnapshotKey{}).(payrollSnapshot); ok && memo.tx == tx {
+		return memo.value, nil
+	}
+	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	if err != nil {
+		return "", err
+	}
+	var installed bool
+	if err = tx.QueryRow(ctx, `SELECT to_regclass(quote_ident(current_schema())||'.payroll_projection_control') IS NOT NULL`).Scan(&installed); err != nil || !installed {
+		return snapshot, err
+	}
+	var resources string
+	err = tx.QueryRow(ctx, `SELECT payroll_financial_snapshot($1)`, snapshot).Scan(&resources)
+	return resources, err
+}
+
+type payrollFinancialSnapshotKey struct{}
+
+func payrollReadSnapshotContext(ctx context.Context, tx pgx.Tx) (context.Context, string, error) {
+	source, err := payrollCacheSnapshot(ctx, tx)
+	if err != nil {
+		return ctx, "", err
+	}
+	ctx = context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, source})
+	financial, err := payrollFinancialSnapshot(ctx, tx)
+	if err != nil {
+		return ctx, "", err
+	}
+	return context.WithValue(ctx, payrollFinancialSnapshotKey{}, payrollSnapshot{tx, financial}), source, nil
 }
 
 // Only read-only entrypoints pin this memo. Write transactions must observe their

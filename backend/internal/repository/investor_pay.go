@@ -83,7 +83,7 @@ type truckPayLoadMatch struct {
 // Clustie's dated fleet assignment owns truck attribution. DataTruck's parent
 // and trip truck labels are source metadata, never assignment authority.
 // Explicit weekend transfers retain the truck captured from their source day.
-func truckPayLoadMap(ctx context.Context, tx pgx.Tx, week string) (map[string]truckPayLoadMatch, error) {
+func truckPayLoadMapUncached(ctx context.Context, tx pgx.Tx, week string) (map[string]truckPayLoadMatch, error) {
 	// Filter base tables before materialization so their statistics describe the
 	// load rows. Filtering the CTE again makes PostgreSQL 16 estimate a handful of
 	// rows and repeatedly scan all dated assignments for each actual load.
@@ -144,6 +144,10 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 	}
 	terms := applicableTruckTerms(config, source.WeekStart)
 	if len(terms) == 0 {
+		// Cost formatting must not depend on an unrelated truck's agreement
+		// being present in the calculation. Use the same exact-cent conversion
+		// as the routed path, with no allocations to move between payers.
+		routeTruckDriverCosts(&source, nil, nil)
 		return source, investor, nil
 	}
 	charges, _, err := payrollChargeData(ctx, tx, "")
@@ -576,6 +580,7 @@ func (r *DriverPayRepository) InvestorStatement(ctx context.Context, week time.T
 
 func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayWeek, error) {
 	defer db.Phase(ctx, "investor_calculation")()
+	db.Event(ctx, "payroll_calculation")
 	ctx = payrollWeekContext(ctx, week.Format(time.DateOnly))
 	if err := payrollQueryPlans(ctx, tx); err != nil {
 		return DriverPayWeek{}, err
@@ -620,36 +625,43 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	if err != nil {
 		return result, err
 	}
-	// Configuration gaps are informational current-fleet rows, never zero-value
-	// statements or inferred historical ownership/rates.
-	setup, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,i.id::text,coalesce(d.full_name,i.full_name),coalesce(operator.id::text,''),coalesce(operator.full_name,''),coalesce(dispatcher.id::text,''),coalesce(dispatcher.full_name,'')
+	selection, _ := ctx.Value(payrollPublicationSelectionKey{}).(*payrollSelection)
+	refreshHeader, _ := ctx.Value(payrollPublicationHeaderKey{}).(bool)
+	authoritative, _ := ctx.Value(payrollAuthoritativeKey{}).(bool)
+	// Ledger-only publication retains the already validated weekly header.
+	// Its unused setup candidates must not trigger another fleet scan.
+	if selection == nil || refreshHeader || authoritative {
+		// Configuration gaps are informational current-fleet rows, never zero-value
+		// statements or inferred historical ownership/rates.
+		setup, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,i.id::text,coalesce(d.full_name,i.full_name),coalesce(operator.id::text,''),coalesce(operator.full_name,''),coalesce(dispatcher.id::text,''),coalesce(dispatcher.full_name,'')
 	FROM trucks t JOIN investors i ON i.id=t.owner_id LEFT JOIN drivers d ON d.id=i.driver_id
     LEFT JOIN truck_driver_assignments assignment ON assignment.truck_id=t.id AND assignment.unassigned_at IS NULL
     LEFT JOIN drivers operator ON operator.id=assignment.driver_id
     LEFT JOIN dispatchers dispatcher ON dispatcher.id=operator.dispatcher_id
 	WHERE t.active AND `+investorTruckEligibility+` AND NOT coalesce(assignment.driver_id=i.driver_id,false) AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
 	ORDER BY coalesce(d.full_name,i.full_name),t.unit_number`, result.WeekStart)
-	if err != nil {
-		return result, err
-	}
-	statementTrucks := map[string]bool{}
-	for _, d := range result.Drivers {
-		statementTrucks[d.ID] = true
-	}
-	for setup.Next() {
-		var v InvestorTruckSetup
-		if err = setup.Scan(&v.TruckID, &v.TruckUnit, &v.OwnerID, &v.OwnerName, &v.DriverID, &v.DriverName, &v.DispatcherID, &v.DispatcherName); err != nil {
-			setup.Close()
+		if err != nil {
 			return result, err
 		}
-		if !statementTrucks[v.TruckID] {
-			result.SetupRequired = append(result.SetupRequired, v)
+		statementTrucks := map[string]bool{}
+		for _, d := range result.Drivers {
+			statementTrucks[d.ID] = true
 		}
-	}
-	err = setup.Err()
-	setup.Close()
-	if err != nil {
-		return result, err
+		for setup.Next() {
+			var v InvestorTruckSetup
+			if err = setup.Scan(&v.TruckID, &v.TruckUnit, &v.OwnerID, &v.OwnerName, &v.DriverID, &v.DriverName, &v.DispatcherID, &v.DispatcherName); err != nil {
+				setup.Close()
+				return result, err
+			}
+			if !statementTrucks[v.TruckID] {
+				result.SetupRequired = append(result.SetupRequired, v)
+			}
+		}
+		err = setup.Err()
+		setup.Close()
+		if err != nil {
+			return result, err
+		}
 	}
 	activeRows, err := tx.Query(ctx, `SELECT id::text FROM trucks WHERE active`)
 	if err != nil {

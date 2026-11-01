@@ -17,7 +17,7 @@ func (r *EscrowRepository) SaveOpening(ctx context.Context, id, actor string, in
 	if err != nil || amount < 0 || amount > 99999999999999 || input.Version < 1 || input.Reason == "" || len([]rune(input.Reason)) > 5000 || strings.ContainsRune(input.Reason, 0) {
 		return chargeInvalid("Enter a nonnegative previously paid amount and a correction reason")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -51,5 +51,5 @@ func (r *EscrowRepository) SaveOpening(ctx context.Context, id, actor string, in
 	if _, err = tx.Exec(ctx, `INSERT INTO driver_escrow_opening_events(escrow_id,actor_id,before_amount,after_amount,reason) VALUES($1,$2,$3::numeric,$4::numeric,$5)`, id, actor, before, input.OpeningPaid, input.Reason); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

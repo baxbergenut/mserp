@@ -1,0 +1,8 @@
+=== RUN   TestPayrollPortalCapturePrivilegesDatabase
+=== RUN   TestPayrollPortalCapturePrivilegesDatabase/fresh
+=== RUN   TestPayrollPortalCapturePrivilegesDatabase/incremental
+--- PASS: TestPayrollPortalCapturePrivilegesDatabase (13.66s)
+    --- PASS: TestPayrollPortalCapturePrivilegesDatabase/fresh (8.40s)
+    --- PASS: TestPayrollPortalCapturePrivilegesDatabase/incremental (5.08s)
+PASS
+ok  	mserp/internal/repository	13.838s

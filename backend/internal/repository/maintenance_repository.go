@@ -289,7 +289,7 @@ func (r *MaintenanceRepository) List(ctx context.Context, q MaintenanceQuery) (M
 
 func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (MaintenanceRecord, error) {
 	in.OilType = NormalizeMaintenanceOilType(in.OilType)
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return MaintenanceRecord{}, err
 	}
@@ -535,7 +535,7 @@ func (r *MaintenanceRepository) Save(ctx context.Context, in MaintenanceInput) (
 	if _, err := tx.Exec(ctx, "INSERT INTO maintenance_changes(record_id,actor_name,before_value,after_value) VALUES($1,$2,$3,$4)", in.ID, in.Actor, before, afterJSON); err != nil {
 		return old, err
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitPayrollMutation(ctx, tx); err != nil {
 		return old, err
 	}
 	return r.Get(ctx, in.ID)
@@ -560,7 +560,7 @@ func MaintenanceTrackingCode(code string) string {
 }
 
 func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int, reason, actor string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 	if _, err := tx.Exec(ctx, "INSERT INTO maintenance_changes(record_id,actor_name,before_value,after_value) VALUES($1,$2,$3,$4)", id, actor, before, afterJSON); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 func (r *MaintenanceRepository) History(ctx context.Context, id string) ([]json.RawMessage, error) {
 	rows, err := r.pool.Query(ctx, "SELECT jsonb_build_object('actorName',actor_name,'happenedAt',happened_at,'before',before_value,'after',after_value) FROM maintenance_changes WHERE record_id=$1 ORDER BY id DESC LIMIT 100", id)

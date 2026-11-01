@@ -23,7 +23,8 @@ func (w *timedWriter) WriteHeader(code int) {
 	if !w.wrote {
 		w.wrote = true
 		phases, _ := w.metrics.Details()
-		w.Header().Set("Server-Timing", fmt.Sprintf("app;dur=%.2f, db;dur=%.2f, pool;dur=%.2f, lock;dur=%.2f, queries;desc=\"%d\"", float64(time.Since(w.start).Microseconds())/1000, float64(w.metrics.QueryNanos.Load())/1e6, float64(w.metrics.AcquireNanos.Load())/1e6, phases["financial_lock_wait"], w.metrics.Queries.Load()))
+		lockWait := phases["financial_lock_wait"] + phases["receipt_lock_wait"] + phases["resource_lock_wait"]
+		w.Header().Set("Server-Timing", fmt.Sprintf("app;dur=%.2f, db;dur=%.2f, pool;dur=%.2f, lock;dur=%.2f, queries;desc=\"%d\", payroll_calculations;desc=\"%d\"", float64(time.Since(w.start).Microseconds())/1000, float64(w.metrics.QueryNanos.Load())/1e6, float64(w.metrics.AcquireNanos.Load())/1e6, lockWait, w.metrics.Queries.Load(), w.metrics.Events()["payroll_calculation"]))
 	}
 	w.ResponseWriter.WriteHeader(code)
 }

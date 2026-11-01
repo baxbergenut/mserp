@@ -38,7 +38,7 @@ func (r *EscrowRepository) SaveRelease(ctx context.Context, escrow string, input
 	if input.ID == "" || input.Version < 0 {
 		return chargeInvalid("Invalid release identity")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (r *EscrowRepository) SaveRelease(ctx context.Context, escrow string, input
 			return ErrEscrowReleaseConflict
 		}
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 func escrowReleaseCredits(ctx context.Context, tx pgx.Tx, driver, week string) ([]PayAutoCharge, error) {

@@ -16,7 +16,7 @@ type DriverStatusChange struct {
 // Status actions never replace a profile snapshot. Locks, assignment dates and
 // charge pauses follow the same managed workflow as the full profile editor.
 func (r *FleetRepository) ChangeDriverStatus(ctx context.Context, id, actor string, input DriverStatusChange) (Driver, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Driver{}, err
 	}
@@ -54,7 +54,7 @@ func (r *FleetRepository) ChangeDriverStatus(ctx context.Context, id, actor stri
 			return Driver{}, err
 		}
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Driver{}, err
 	}
 	return r.GetDriver(ctx, id)

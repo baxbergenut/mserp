@@ -152,7 +152,7 @@ func readCommissionRules(ctx context.Context, tx pgx.Tx) ([]CommissionRuleVersio
 	return out, rows.Err()
 }
 func (r *DispatcherPayRepository) Rules(ctx context.Context) ([]CommissionRuleVersion, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (r *DispatcherPayRepository) SaveRules(ctx context.Context, in CommissionRu
 	if err := in.Rules.Validate(); err != nil {
 		return err
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -531,7 +531,7 @@ func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in
 	if (!in.AutoHomeDays && (in.HomeDays < 0 || in.HomeDays > 7)) || len([]rune(in.Note)) > 1000 || in.Version < 0 {
 		return chargeInvalid("Home days must be 0–7 and comments at most 1,000 characters")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -601,7 +601,7 @@ func (r *DispatcherPayRepository) ChangeStatement(ctx context.Context, week stri
 	// Read committed lets the first reads after a contended accounting lock see
 	// the preceding writer's commit. Board/rule/input writers share this lock;
 	// effective load amounts are resolved in one SQL statement below.
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}

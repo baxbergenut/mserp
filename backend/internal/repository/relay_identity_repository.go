@@ -170,7 +170,7 @@ func (r *FuelRepository) ReviewRelayIdentity(ctx context.Context, identityID, dr
 	if action != "link" && action != "reject" {
 		return 0, errors.New("invalid review action")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return 0, err
 	}
@@ -221,5 +221,5 @@ func (r *FuelRepository) ReviewRelayIdentity(ctx context.Context, identityID, dr
 	if err != nil {
 		return 0, err
 	}
-	return affected, tx.Commit(ctx)
+	return affected, commitPayrollMutation(ctx, tx)
 }

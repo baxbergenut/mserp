@@ -83,6 +83,34 @@ func decoratePayDayStatuses(ctx context.Context, tx pgx.Tx, kind string, report 
 	if len(ids) == 0 {
 		return nil
 	}
+	byID, err := readPreparedPayDayStatuses(ctx, tx, kind, report.WeekStart, ids)
+	if err != nil {
+		return err
+	}
+	for i := range report.Drivers {
+		d := &report.Drivers[i]
+		if d.Settlement != nil && d.Settlement.Finalized && d.DayStatuses != nil {
+			continue
+		}
+		d.DayStatuses = append([]PayDayStatus{}, byID[d.ID]...)
+	}
+	return nil
+}
+
+func readPreparedPayDayStatuses(ctx context.Context, tx pgx.Tx, kind, week string, ids []string) (map[string][]PayDayStatus, error) {
+	facts, _ := ctx.Value(payrollRoutingFactsKey{}).(*payrollRoutingFactsState)
+	if facts == nil || !payrollNormalizedInputs(ctx) || (kind != "driver" && kind != "investor") {
+		return readPayDayStatuses(ctx, tx, kind, week, ids)
+	}
+	// This source-only query deliberately reads every destination. Its empty map
+	// is complete, and callers attach only their own unfrozen rows below.
+	factCtx := context.WithValue(ctx, payrollSelectionKey{}, (*payrollSelection)(nil))
+	return payrollRoutingFact(factCtx, tx, kind+"_days", week, func() (map[string][]PayDayStatus, error) {
+		return readPayDayStatuses(ctx, tx, kind, week, nil)
+	})
+}
+
+func readPayDayStatuses(ctx context.Context, tx pgx.Tx, kind, week string, ids []string) (map[string][]PayDayStatus, error) {
 	destination := `SELECT driver_id::text id,service_date,day_status FROM routed`
 	if kind == "investor" {
 		destination = `SELECT assignment.truck_id id,e.service_date,e.day_status FROM routed e
@@ -103,9 +131,9 @@ func decoratePayDayStatuses(ctx context.Context, tx pgx.Tx, kind string, report 
  FROM statuses e LEFT JOIN driver_teams team ON team.team_driver_id=e.driver_id
  AND team.start_week <= $1::date AND (team.end_week IS NULL OR $1::date < team.end_week)
  ), destinations AS (`+destination+`)
- SELECT DISTINCT id,service_date::text,day_status FROM destinations WHERE id=ANY($2::text[]) ORDER BY 1,2,3`, report.WeekStart, ids)
+ SELECT DISTINCT id,service_date::text,day_status FROM destinations WHERE id IS NOT NULL AND ($2::text[] IS NULL OR id=ANY($2::text[])) ORDER BY 1,2,3`, week, ids)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 	byID := map[string][]PayDayStatus{}
@@ -113,19 +141,12 @@ func decoratePayDayStatuses(ctx context.Context, tx pgx.Tx, kind string, report 
 		var id string
 		var status PayDayStatus
 		if err = rows.Scan(&id, &status.Date, &status.Status); err != nil {
-			return err
+			return nil, err
 		}
 		byID[id] = append(byID[id], status)
 	}
 	if err = rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	for i := range report.Drivers {
-		d := &report.Drivers[i]
-		if d.Settlement != nil && d.Settlement.Finalized && d.DayStatuses != nil {
-			continue
-		}
-		d.DayStatuses = append([]PayDayStatus{}, byID[d.ID]...)
-	}
-	return nil
+	return byID, nil
 }

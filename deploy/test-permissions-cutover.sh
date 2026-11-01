@@ -7,8 +7,10 @@ manager_verification_migration=151_retire_expense_manager_verification.sql
 accounting_cutover_migration=160_accounting_cutover.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql
 expense_balance_migration=176_expense_balance_corrections.sql
-test_root=$(mktemp -d)
-trap 'rm -rf -- "$test_root"' EXIT
+payroll_projection_migration=182_payroll_projections.sql
+temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
+test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
+trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
 mkdir -p "$test_root/old/migrations" "$test_root/new/migrations"
 touch "$test_root/new/migrations/$permissions_migration"
 touch "$test_root/new/migrations/$manager_verification_migration"
@@ -24,6 +26,8 @@ runuser() {
     if [[ $* == *"FROM public.payroll_cost_start"* ]]; then result=$mock_cost_active; fi
     if [[ $* == *"to_regclass('public.expense_balance_corrections')"* ]]; then result=$mock_balance_installed; fi
     if [[ $* == *"FROM public.expense_balance_corrections"* ]]; then result=$mock_balance_active; fi
+    if [[ $* == *"to_regclass('public.payroll_projection_control')"* ]]; then result=$mock_projection_installed; fi
+    if [[ $* == *"FROM public.payroll_projection_control"* ]]; then result=$mock_projection_active; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -33,6 +37,8 @@ mock_cost_installed=f
 mock_cost_active=f
 mock_balance_installed=f
 mock_balance_active=f
+mock_projection_installed=f
+mock_projection_active=f
 mock=f
 compatible_release "$test_root/old"
 compatible_release "$test_root/new"
@@ -87,4 +93,20 @@ mock_balance_active=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown expense balance result allowed rollback' >&2; exit 1; fi
 mock_balance_installed=error
 if compatible_release "$test_root/new"; then echo 'Expense balance schema read failure allowed rollback' >&2; exit 1; fi
-echo 'Permission, expense verification, accounting, Fuel/Toll and expense balance compatibility checks passed'
+mock_balance_installed=t
+mock_balance_active=t
+mock_projection_installed=t
+mock_projection_active=t
+if compatible_release "$test_root/new"; then echo 'Active payroll accepted a release without its migration' >&2; exit 1; fi
+touch "$test_root/new/migrations/$payroll_projection_migration"
+mkdir -p "$test_root/new/backend"
+printf '#!/usr/bin/env bash\necho old-protocol\n' > "$test_root/new/backend/mserp-api"
+chmod +x "$test_root/new/backend/mserp-api"
+if compatible_release "$test_root/new"; then echo 'Incompatible payroll binary accepted' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\necho payroll-resources-v1\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_projection_active=error
+if compatible_release "$test_root/new"; then echo 'Payroll status failure allowed rollback' >&2; exit 1; fi
+mock_projection_installed=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown payroll schema allowed rollback' >&2; exit 1; fi
+echo 'Permission, expense verification, accounting, Fuel/Toll, balance and payroll compatibility checks passed'

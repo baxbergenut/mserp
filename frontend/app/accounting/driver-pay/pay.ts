@@ -98,6 +98,15 @@ export function activeLayovers(driver: DriverPayDriver, edits: DriverPayEdits) {
 // Keep the all-filtered-rows summary current when one visible statement saves.
 // Other pages' amounts remain included, and in-flight drafts stay in changes.
 export function applyPaySave(report: DriverPayWeek, saved: DriverPayEdits): DriverPayWeek {
+	if (saved.committedStatement) {
+		const previous = report.drivers.find(row => row.id === saved.driverId);
+		if (!previous) return report;
+		const edits = { ...saved, expectedStatementRevision: saved.statementRevision };
+		delete edits.committedStatement;
+		delete edits.affectedStatements;
+		delete edits.requestId;
+		return applyPayDetails(report, previous, { ...saved.committedStatement, statementRevision: saved.statementRevision, edits });
+	}
   let delta = BigInt(0);
   const drivers = report.drivers.map(driver => {
     if (driver.id !== saved.driverId) return driver;
@@ -128,7 +137,7 @@ export function costAmount(driver: DriverPayDriver, edits: DriverPayEdits, key: 
 export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapshot: DriverPayEdits, saved: DriverPayEdits) {
   const result = { ...current };
   if (JSON.stringify(result[saved.driverId]) === JSON.stringify(snapshot)) delete result[saved.driverId];
-  else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version, ...(saved.inputRevision && { inputRevision: saved.inputRevision }),
+  else if (result[saved.driverId]) result[saved.driverId] = { ...result[saved.driverId], version: saved.version, ...(saved.inputRevision && { inputRevision: saved.inputRevision }), ...(saved.statementRevision && { expectedStatementRevision: saved.statementRevision }),
     ...(saved.costs && { costs: saved.costs }),
     sourceCharges: result[saved.driverId].sourceCharges?.map(row => {
       const committed = saved.sourceCharges?.find(r => r.source === row.source && r.ownerId === row.ownerId);
@@ -165,6 +174,9 @@ export function validAdjustments(edits: DriverPayEdits, driver?: DriverPayDriver
 export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {
   const payload = { ...edits };
   delete payload.inputRevision;
+  delete payload.statementRevision;
+  delete payload.committedStatement;
+  delete payload.affectedStatements;
   return { ...payload,
     // Include displayed expense deductions in a normal payroll save. Reading a
     // week remains read-only; saved rows only change when their amount is edited.

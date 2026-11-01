@@ -11,6 +11,7 @@ import (
 )
 
 type PaySourceAcceptance struct {
+	PayrollCommandMetadata
 	Field        string `json:"field,omitempty"`
 	DriverID     string `json:"driverId"`
 	Date         string `json:"date"`
@@ -23,14 +24,28 @@ type PaySourceAcceptance struct {
 
 // A receipt restores exact nullable inputs, and can only be used once by its
 // author while the board entry is still at the version that action produced.
-func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor string) error {
-	tx, err := r.pool.Begin(ctx)
+func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor string, options ...PayrollCommandMetadata) error {
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
+	}
+	meta := PayrollCommandMetadata{}
+	if len(options) > 0 {
+		meta = options[0]
+	}
+	receiptCommand, replay, err := beginPayrollSourceCommand(ctx, tx, actor, "source.undo", meta, struct {
+		ID       string
+		Metadata PayrollCommandMetadata
+	}{id, meta})
+	if err != nil {
+		return err
+	}
+	if replay != nil {
+		return nil
 	}
 	var input PaySourceAcceptance
 	var appliedVersion int
@@ -53,7 +68,7 @@ func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor strin
 	if input.Slot > 0 {
 		table, slot = "gross_board_extra_entries", "slot"
 	}
-	command, err := tx.Exec(ctx, `UPDATE `+table+` SET
+	changed, err := tx.Exec(ctx, `UPDATE `+table+` SET
  original_rate=CASE WHEN $5::jsonb ? 'original' THEN ($5::jsonb->>'original')::numeric ELSE original_rate END,
  entered_original_rate=CASE WHEN $5::jsonb ? 'original' THEN ($5::jsonb->>'enteredOriginal')::numeric ELSE entered_original_rate END,
  miles=CASE WHEN $5::jsonb ? 'miles' THEN ($5::jsonb->>'miles')::numeric ELSE miles END,
@@ -63,7 +78,7 @@ func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor strin
 	if err != nil {
 		return err
 	}
-	if command.RowsAffected() != 1 {
+	if changed.RowsAffected() != 1 {
 		return ErrDriverPayConflict
 	}
 	if _, err = tx.Exec(ctx, "UPDATE payroll_source_actions SET undone_at=now() WHERE id=$1", id); err != nil {
@@ -76,7 +91,7 @@ func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor strin
  AND expected_version=$5 AND undone_at IS NULL`, input.DriverID, input.Date, input.Slot, actor, appliedVersion-1, input.Version+1); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollSourceCommand(ctx, tx, receiptCommand, true)
 }
 
 // Change only the selected financial input (both for legacy callers). A concurrent board edit or
@@ -96,7 +111,7 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 	if input.Field == "totalMiles" {
 		input.OriginalRate = ""
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return "", err
 	}
@@ -104,6 +119,15 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 	// Serialize with both kinds of finalization before taking row locks.
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return "", err
+	}
+	receiptCommand, replay, err := beginPayrollSourceCommand(ctx, tx, actor, "source.accept", input.PayrollCommandMetadata, input)
+	if err != nil {
+		return "", err
+	}
+	if replay != nil {
+		var id string
+		err = json.Unmarshal(replay, &id)
+		return id, err
 	}
 	if err = lockChargeDrivers(ctx, tx, []string{input.DriverID}); err != nil {
 		return "", err
@@ -179,7 +203,7 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 	if err = tx.QueryRow(ctx, "INSERT INTO payroll_source_actions(actor_id,driver_id,service_date,slot,applied_version,expected_version,before_values) VALUES($1,$2,$3::date,$4,$5,$5,$6) RETURNING id::text", actor, input.DriverID, input.Date, input.Slot, input.Version+1, json.RawMessage(before)).Scan(&id); err != nil {
 		return "", err
 	}
-	return id, tx.Commit(ctx)
+	return id, commitPayrollSourceCommand(ctx, tx, receiptCommand, id)
 }
 
 func assertPaySourceOpen(ctx context.Context, tx pgx.Tx, input PaySourceAcceptance) error {

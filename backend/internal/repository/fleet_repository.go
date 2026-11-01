@@ -299,7 +299,7 @@ func (r *FleetRepository) GetDriver(ctx context.Context, id string) (Driver, err
 }
 
 func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (Driver, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Driver{}, err
 	}
@@ -323,7 +323,7 @@ func (r *FleetRepository) CreateDriver(ctx context.Context, input DriverInput) (
 	if err = queueDriverServices(ctx, tx, id); err != nil {
 		return Driver{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Driver{}, err
 	}
 	return r.GetDriver(ctx, id)
@@ -432,7 +432,7 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if !input.Active {
 		input.TruckID, input.DispatcherID = nil, nil
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Driver{}, err
 	}
@@ -508,14 +508,14 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if err != nil {
 		return Driver{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Driver{}, err
 	}
 	return r.GetDriver(ctx, id)
 }
 
 func (r *FleetRepository) DeleteDriver(ctx context.Context, id string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -541,7 +541,7 @@ func (r *FleetRepository) DeleteDriver(ctx context.Context, id string) error {
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 const selectDriversSQL = `
@@ -709,7 +709,7 @@ func (r *FleetRepository) GetTruck(ctx context.Context, id string) (Truck, error
 }
 
 func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Truck, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Truck{}, err
 	}
@@ -725,7 +725,7 @@ func (r *FleetRepository) CreateTruck(ctx context.Context, input TruckInput) (Tr
 	if err != nil {
 		return Truck{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Truck{}, err
 	}
 	return r.GetTruck(ctx, id)
@@ -781,7 +781,7 @@ func createTruckTx(ctx context.Context, tx pgx.Tx, input TruckInput) (string, er
 }
 
 func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input TruckInput) (Truck, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Truck{}, err
 	}
@@ -832,21 +832,26 @@ func (r *FleetRepository) UpdateTruck(ctx context.Context, id string, input Truc
 	if err = setTruckDriver(ctx, tx, id, input.DriverID); err != nil {
 		return Truck{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Truck{}, err
 	}
 	return r.GetTruck(ctx, id)
 }
 
 func (r *FleetRepository) DeleteTruck(ctx context.Context, id string) error {
-	command, err := r.pool.Exec(ctx, "DELETE FROM trucks WHERE id = $1", id)
+	tx, err := beginPayrollMutation(ctx, r.pool)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	command, err := tx.Exec(ctx, "DELETE FROM trucks WHERE id = $1", id)
 	if err != nil {
 		return err
 	}
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return commitPayrollMutation(ctx, tx)
 }
 
 const selectTrucksSQL = `
@@ -943,7 +948,7 @@ func (r *FleetRepository) GetDispatcher(ctx context.Context, id string) (Dispatc
 }
 
 func (r *FleetRepository) CreateDispatcher(ctx context.Context, input DispatcherInput) (Dispatcher, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Dispatcher{}, err
 	}
@@ -981,14 +986,14 @@ func (r *FleetRepository) CreateDispatcher(ctx context.Context, input Dispatcher
 	if err = setDispatcherDrivers(ctx, tx, id, input.DriverIDs); err != nil {
 		return Dispatcher{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Dispatcher{}, err
 	}
 	return r.GetDispatcher(ctx, id)
 }
 
 func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input DispatcherInput) (Dispatcher, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Dispatcher{}, err
 	}
@@ -1028,14 +1033,14 @@ func (r *FleetRepository) UpdateDispatcher(ctx context.Context, id string, input
 	if err = setDispatcherDrivers(ctx, tx, id, input.DriverIDs); err != nil {
 		return Dispatcher{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Dispatcher{}, err
 	}
 	return r.GetDispatcher(ctx, id)
 }
 
 func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string, actor ...string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -1073,7 +1078,7 @@ func (r *FleetRepository) DeleteDispatcher(ctx context.Context, id string, actor
 	if _, err = tx.Exec(ctx, `DELETE FROM dispatchers WHERE id=$1`, id); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 const selectDispatchersSQL = `

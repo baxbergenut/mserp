@@ -7,6 +7,9 @@ import (
 )
 
 func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]ExpenseDeduction, error) {
+	if rows, ok := payrollBatchedDeductions(ctx, tx, drivers, week, "all"); ok {
+		return rows, nil
+	}
 	// Expenses are eligible through the following Wednesday (Thursday is
 	// exclusive). Older unpaid balances still carry; other weeks reserve payments.
 	rows, err := tx.Query(ctx, `WITH relevant_expenses AS MATERIALIZED (
@@ -60,6 +63,9 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 }
 
 func escrowDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]ExpenseDeduction, error) {
+	if rows, ok := payrollBatchedDeductions(ctx, tx, drivers, week, "escrow"); ok {
+		return rows, nil
+	}
 	rows, err := tx.Query(ctx, `WITH `+strings.NewReplacer("$1", "$2", "$3", "$1").Replace(payrollEscrowCapacityCTE)+` SELECT e.driver_id::text,e.id,e.start_date::text,e.amount::text,
  capacity.available::text,coalesce(w.amount,capacity.available)::text,
  (e.amount-e.opening_paid+coalesce(p.delta,0)-coalesce(w.amount,0))::text,

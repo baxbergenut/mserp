@@ -10,7 +10,9 @@ type PayPageQuery struct {
 	Pagination
 	Search, DispatcherID, ID string
 	Summary                  bool
+	Interactive              bool // Current HTTP page reads briefly prioritize their week.
 	DetailIDs                map[string]bool
+	StatementRevision        string
 }
 
 type PayStatementSummary struct {

@@ -26,6 +26,17 @@ func readVacationState(ctx context.Context, q chargeQuery, week string, includeT
 			return v, nil
 		}
 	}
+	v, err := readPreparedVacationState(ctx, q, week, includeTrucks)
+	if err == nil && memo != nil && includeTrucks {
+		if memo.vacations == nil {
+			memo.vacations = map[string]vacationWeek{}
+		}
+		memo.vacations[week] = v
+	}
+	return v, err
+}
+
+func readVacationStateUncached(ctx context.Context, q chargeQuery, week string, includeTrucks bool) (vacationWeek, error) {
 	v := vacationWeek{drivers: map[string]bool{}, trucks: map[string]bool{}}
 	query := `WITH status_history AS MATERIALIZED (
  SELECT * FROM fleet_status_history WHERE entity_kind='driver' AND track='availability'
@@ -82,13 +93,7 @@ func readVacationState(ctx context.Context, q chargeQuery, week string, includeT
 			v.trucks[id] = true
 		}
 	}
-	if err = rows.Err(); err == nil && memo != nil && includeTrucks {
-		if memo.vacations == nil {
-			memo.vacations = map[string]vacationWeek{}
-		}
-		memo.vacations[week] = v
-	}
-	return v, err
+	return v, rows.Err()
 }
 
 // Apply after routing, carry and frozen overlays: those paths can recreate idle

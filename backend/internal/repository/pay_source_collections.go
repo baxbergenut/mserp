@@ -34,9 +34,13 @@ type paySourceRecord struct {
 func sourceKey(source, owner string) string { return source + "|" + owner }
 func readPaySources(ctx context.Context, tx pgx.Tx) ([]paySourceRecord, error) {
 	defer db.Phase(ctx, "source_ledger")()
+	ledger := "pay_source_collections"
+	if payrollNormalizedInputs(ctx) {
+		ledger = payrollSourceLedgerBucketsSQL + " ledger"
+	}
 	rows, err := tx.Query(ctx, `WITH relevant AS (
  SELECT *,CASE WHEN NOT $3::boolean AND week_start<nullif($2,'')::date THEN '' ELSE week_start::text END bucket
- FROM pay_source_collections WHERE accounting_live_date(week_start) AND (source NOT LIKE 'investor_cost:%' OR payroll_cost_in_scope(week_start,nullif($2,'')::date)) AND ($1::uuid[] IS NULL OR owner_id=ANY($1::uuid[]))
+ FROM `+ledger+` WHERE accounting_live_date(week_start) AND (source NOT LIKE 'investor_cost:%' OR payroll_cost_in_scope(week_start,nullif($2,'')::date)) AND ($1::uuid[] IS NULL OR owner_id=ANY($1::uuid[]))
  ), grouped AS (SELECT *,sum(base) OVER(PARTITION BY source,owner_id,bucket) total_base,
  sum(amount) OVER(PARTITION BY source,owner_id,bucket) total_amount,
  sum(version) OVER(PARTITION BY source,owner_id,bucket) total_version FROM relevant), latest AS (
@@ -101,6 +105,22 @@ func projectPaySource(source, owner, name, base, week string, records []paySourc
 }
 
 func routeTruckPay(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
+	memo := payrollReadMemo(ctx, tx)
+	if memo == nil || memo.projectionRoutes == nil || payrollCostDetails(ctx) || payrollCostsOnly(ctx) {
+		return routeTruckPayUncached(ctx, tx, source)
+	}
+	if body, ok := memo.projectionRoutes[source.WeekStart]; ok {
+		var reports [2]DriverPayWeek
+		err := json.Unmarshal(body, &reports)
+		return reports[0], reports[1], err
+	}
+	drivers, investors, err := routeTruckPayUncached(ctx, tx, source)
+	if err == nil {
+		memo.projectionRoutes[source.WeekStart], err = json.Marshal([2]DriverPayWeek{drivers, investors})
+	}
+	return drivers, investors, err
+}
+func routeTruckPayUncached(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
 	drivers, investors, err := routeTruckPaySources(ctx, tx, source)
 	if err != nil {
 		return drivers, investors, err

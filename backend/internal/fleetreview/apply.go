@@ -118,6 +118,9 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 		}
 	}
 	// Match the ERP's existing lock order before taking fleet row/table locks.
+	if e = repository.EnterPayrollSourceProtocol(ctx, a); e != nil {
+		return e
+	}
 	if _, e = a.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940); SELECT pg_advisory_xact_lock(734912086); LOCK TABLE drivers,trucks,investors,truck_ownership_history,truck_driver_assignments,driver_teams,fleet_review.receipts IN SHARE ROW EXCLUSIVE MODE`); e != nil {
 		return e
 	}

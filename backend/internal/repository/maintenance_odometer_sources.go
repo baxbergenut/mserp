@@ -104,7 +104,7 @@ func (r *MaintenanceRepository) SaveOdometerSource(ctx context.Context, truck st
 	if in.Source != "auto" && in.Source != "samsara" && in.Source != "five_eld" && in.Source != "manual" || in.Version < 0 {
 		return ErrMaintenanceInvalid
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}

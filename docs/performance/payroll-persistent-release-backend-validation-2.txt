@@ -1,0 +1,24 @@
+ok  	mserp/cmd/export-expense-sheet	2.049s
+?   	mserp/cmd/fleet-review	[no test files]
+?   	mserp/cmd/hash-password	[no test files]
+ok  	mserp/cmd/import-oil-changes	1.004s
+?   	mserp/cmd/perf-audit	[no test files]
+?   	mserp/cmd/server	[no test files]
+ok  	mserp/internal/boardroutes	1.914s
+ok  	mserp/internal/config	1.037s
+ok  	mserp/internal/datatruck	1.807s
+ok  	mserp/internal/db	0.922s
+ok  	mserp/internal/expensesheet	16.104s
+ok  	mserp/internal/fiveeld	1.803s
+ok  	mserp/internal/fleetreview	0.272s
+ok  	mserp/internal/fleetscope	1.938s
+ok  	mserp/internal/groq	1.685s
+ok  	mserp/internal/httpapi	52.673s
+ok  	mserp/internal/jobs	0.163s
+ok  	mserp/internal/openai	1.767s
+ok  	mserp/internal/phone	0.730s
+ok  	mserp/internal/prepass	1.674s
+ok  	mserp/internal/relay	1.725s
+ok  	mserp/internal/repository	1070.995s
+ok  	mserp/internal/samsara	1.435s
+ok  	mserp/internal/weighmytruck	1.354s

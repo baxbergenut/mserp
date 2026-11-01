@@ -147,7 +147,7 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 			return EscrowPage{}, releaseErr
 		}
 	}
-	return EscrowPage{Page: NewPage(items, total, page), Summary: summary}, tx.Commit(ctx)
+	return EscrowPage{Page: NewPage(items, total, page), Summary: summary}, commitPayrollMutation(ctx, tx)
 }
 
 var ErrDriverEscrowSettingConflict = errors.New("driver escrow default changed; reload and try again")
@@ -164,11 +164,19 @@ func (r *EscrowRepository) GetDriverEscrowSetting(ctx context.Context) (DriverEs
 }
 func (r *EscrowRepository) SaveDriverEscrowSetting(ctx context.Context, input DriverEscrowSetting) (DriverEscrowSetting, error) {
 	var value DriverEscrowSetting
-	err := r.pool.QueryRow(ctx, `UPDATE driver_escrow_settings SET default_amount=$1::numeric,version=version+1,updated_at=now() WHERE singleton AND version=$2 RETURNING default_amount::text,version`, input.DefaultAmount, input.Version).Scan(&value.DefaultAmount, &value.Version)
+	tx, err := beginPayrollMutation(ctx, r.pool)
+	if err != nil {
+		return value, err
+	}
+	defer tx.Rollback(ctx)
+	err = tx.QueryRow(ctx, `UPDATE driver_escrow_settings SET default_amount=$1::numeric,version=version+1,updated_at=now() WHERE singleton AND version=$2 RETURNING default_amount::text,version`, input.DefaultAmount, input.Version).Scan(&value.DefaultAmount, &value.Version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrDriverEscrowSettingConflict
 	}
-	return value, err
+	if err != nil {
+		return value, err
+	}
+	return value, commitPayrollMutation(ctx, tx)
 }
 
 func escrowDeductions(ctx context.Context, tx pgx.Tx, driver, week string) ([]ExpenseDeduction, error) {

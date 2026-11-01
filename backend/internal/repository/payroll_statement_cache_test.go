@@ -10,7 +10,7 @@ import (
 )
 
 func TestPayrollStatementCacheEvictionAndDeduplication(t *testing.T) {
-	ctx := context.WithValue(context.Background(), payrollSnapshotKey{}, payrollSnapshot{value: "committed"})
+	ctx := context.WithValue(context.Background(), payrollFinancialSnapshotKey{}, payrollSnapshot{value: "committed"})
 	week := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
 	repo := &DriverPayRepository{}
 	fills := 0

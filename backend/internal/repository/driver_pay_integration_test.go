@@ -56,7 +56,20 @@ func TestDriverPayDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
+			projectionMigration, err := os.ReadFile("../../sql/182_payroll_projections.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if mode == "migration" {
+				// The legacy fixture removes the ledgers on which 182's exact
+				// buckets depend. Install capture only after restoring those ledgers
+				// and the revision registry, in production migration order.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(projectionMigration), "\r\n", "\n"), "", 1)
+				loadRevisionMigration, err := os.ReadFile("../../sql/181_payroll_load_revision.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(loadRevisionMigration), "\r\n", "\n"), "", 1)
 				sql = withoutAccountingCutoverMigration(t, sql)
 			}
 			transferMigration, readErr := os.ReadFile("../../sql/159_load_week_transfers.sql")
@@ -210,6 +223,15 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
 				applyClustieLoadAssignments(t, ctx, admin)
+				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql"} {
+					migration, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err = admin.Exec(ctx, string(migration)); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			config, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
@@ -393,8 +415,8 @@ func TestDriverPayDatabase(t *testing.T) {
 			}
 			// The fuel boundary fixture belongs to next week; no tolls or manual
 			// overrides may carry forward from the previous driver's week.
-			if next.Drivers[0].FuelTotal != "999.00" || next.Drivers[0].TollTotal != "0" || next.Drivers[0].Edits.FuelOverride != nil || next.Drivers[0].Edits.TollOverride != nil {
-				t.Fatal("next week costs or overrides leaked")
+			if next.Drivers[0].FuelTotal != "999.00" || next.Drivers[0].TollTotal != "0.00" || next.Drivers[0].Edits.FuelOverride != nil || next.Drivers[0].Edits.TollOverride != nil {
+				t.Fatalf("next week costs or overrides leaked: fuel=%q toll=%q fuelOverride=%v tollOverride=%v", next.Drivers[0].FuelTotal, next.Drivers[0].TollTotal, next.Drivers[0].Edits.FuelOverride, next.Drivers[0].Edits.TollOverride)
 			}
 			// Payroll acceptance updates the shared board entry, including extra
 			// slots, without changing dispatcher-decided driver gross.

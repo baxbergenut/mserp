@@ -178,7 +178,7 @@ func (r *FleetRepository) ListDriverDirectory(ctx context.Context, pagination Pa
 // AcceptFleetScopeHire acknowledges only after both the immutable intake and
 // receipt commit. Neither new IDs nor retries ever refresh a driver's profile.
 func (r *FleetRepository) AcceptFleetScopeHire(ctx context.Context, event fleetscope.Event, hash string) (IntakeResult, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return IntakeResult{}, err
 	}
@@ -310,7 +310,7 @@ func intakeCandidates(ctx context.Context, db intakeQuerier, d fleetscope.Driver
 }
 
 func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, linkDriverID string, input *DriverInput, separateConfirmed bool, addWeighMyTruck ...bool) (Driver, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Driver{}, err
 	}
@@ -395,7 +395,7 @@ func (r *FleetRepository) CompleteDriverIntake(ctx context.Context, id, userID, 
 	if err != nil {
 		return Driver{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Driver{}, err
 	}
 	return r.GetDriver(ctx, linkDriverID)

@@ -147,6 +147,12 @@ export function subscribeTaskEvents(onChange: () => void, onUnauthorized: () => 
   events.addEventListener("unauthorized", () => { events.close(); onUnauthorized(); });
   return () => events.close();
 }
+export function subscribePayEvents(investor: boolean, onChange: () => void) {
+  const events = new EventSource(`${API_BASE}/${investor ? "investor" : "driver"}-pay/events`, { withCredentials: true });
+  events.addEventListener("changed", onChange);
+  events.addEventListener("unauthorized", () => events.close());
+  return () => events.close();
+}
 export const confirmOffboarding = (id: string, checklist: { equipment: boolean; access: boolean; settlement: boolean }) =>
   apiRequest<void>(`/tasks/offboarding/${id}/confirm`, { method: "POST", body: JSON.stringify(checklist) });
 
@@ -559,17 +565,17 @@ export const deleteExpense = (id: string) =>
   apiRequest<void>(`/expenses/${id}`, { method: "DELETE" });
 
 // detailIds hydrates remembered expanded rows in the same paginated snapshot.
-export const fetchPayStatement = (investor: boolean, weekStart: string, id: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/statements/${encodeURIComponent(id)}`, { weekStart }), { signal });
-export const fetchPaySettlementPreview = (investor: boolean, weekStart: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/settlement-preview`, { weekStart }), { signal });
-export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, ...query }), { signal });
-export const fetchPayCostTransactions = (kind: "driver" | "investor", id: string, weekStart: string, cost: "fuel" | "toll", signal?: AbortSignal) => apiRequest<import("./types").PayCostTransactions>(withQuery(`/${kind}-pay/${id}/cost-transactions`, { weekStart, cost }), { signal });
-export const acceptPaySystemValues = (investor: boolean, input: PaySourceAcceptance) => apiRequest<import("./types").PaySourceReceipt>(`/${investor ? "investor-pay" : "driver-pay"}/accept-system?undoReceipt=1`, { method: "POST", body: JSON.stringify(input) });
-export const transferPayLoadWeek = (investor: boolean, input: { driverId: string; date: string; slot: number; boardVersion: number; transferVersion: number; mode: import("./types").LoadWeekTransferMode; reason: string }) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/transfer-load`, { method: "POST", body: JSON.stringify(input) });
-export const undoPaySystemValues = (investor: boolean, id: string) => apiRequest<void>(`/${investor ? "investor-pay" : "driver-pay"}/undo-system`, { method: "POST", body: JSON.stringify({ id }) });
+export const fetchPayStatement = (investor: boolean, weekStart: string, id: string, signal?: AbortSignal, revision?: string) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/statements/${encodeURIComponent(id)}`, { weekStart, prepared: "1", revision }), { signal });
+export const fetchPaySettlementPreview = (investor: boolean, weekStart: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/settlement-preview`, { weekStart, prepared: "1" }), { signal });
+export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, prepared: "1", ...query }), { signal });
+export const fetchPayCostTransactions = (kind: "driver" | "investor", id: string, weekStart: string, cost: "fuel" | "toll", signal?: AbortSignal, revision?: string) => apiRequest<import("./types").PayCostTransactions>(withQuery(`/${kind}-pay/${id}/cost-transactions`, { weekStart, cost, revision }), { signal });
+export const acceptPaySystemValues = (investor: boolean, input: PaySourceAcceptance) => payrollMutationRequest<import("./types").PaySourceReceipt>(`/${investor ? "investor-pay" : "driver-pay"}/accept-system?undoReceipt=1`, input);
+export const transferPayLoadWeek = (investor: boolean, input: { driverId: string; date: string; slot: number; boardVersion: number; transferVersion: number; mode: import("./types").LoadWeekTransferMode; reason: string } & import("./types").PayrollCommandMetadata) => payrollMutationRequest<import("./types").PayrollSourceCommandReceipt | void>(`/${investor ? "investor-pay" : "driver-pay"}/transfer-load`, input);
+export const undoPaySystemValues = (investor: boolean, id: string, metadata: import("./types").PayrollCommandMetadata = {}) => payrollMutationRequest<import("./types").PayrollSourceCommandReceipt | void>(`/${investor ? "investor-pay" : "driver-pay"}/undo-system`, { id, ...metadata });
 export const changeDriverStatus = (id: string, input: DriverStatusChange) => apiRequest<Driver>(`/drivers/${id}/status`, { method: "PATCH", body: JSON.stringify(input) });
 export const saveDriverPay = (edits: DriverPayEdits) => apiRequest<DriverPayEdits>("/driver-pay?receipt=1", { method: "PUT", body: JSON.stringify(edits) });
 export const refreshDriverPayLoads = (weekStart: string) => apiRequest<DriverPayWeek>("/driver-pay/refresh-loads", { method: "POST", body: JSON.stringify({ weekStart }) });
-export const placeStatementLoad = (investor: boolean, input: import("./types").PayLoadPlacementInput) => apiRequest<import("./types").PayLoadPlacementResult | void>(`/${investor ? "investor-pay" : "driver-pay"}/statement-load`, { method: "POST", body: JSON.stringify(input) });
+export const placeStatementLoad = (investor: boolean, input: import("./types").PayLoadPlacementInput) => payrollMutationRequest<import("./types").PayLoadPlacementResult | import("./types").PayrollSourceCommandReceipt | void>(`/${investor ? "investor-pay" : "driver-pay"}/statement-load`, input);
 
 export const fetchInvestors = () => apiRequest<Investor[]>("/investors");
 export const fetchInvestorsPage = (query: PageQuery & { includeCompany?: boolean }, signal?: AbortSignal) =>
@@ -594,16 +600,16 @@ export const saveRecurringCharge = (input: ChargeCell) => apiRequest<void>("/dri
 
 export const fetchDriverPayHistory = (id: string, page: number, pageSize = 25, signal?: AbortSignal) => apiRequest<PaginatedResponse<DriverPayHistoryRow>>(withQuery(`/drivers/${id}/pay-history`, { page, pageSize }), { signal });
 export const fetchSettlementHistory = (id: string, weekStart: string) => apiRequest<SettlementEvent[]>(withQuery(`/drivers/${id}/settlement-history`, { weekStart }));
-export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false, receipt = false) => apiRequest<DriverPayWeek>(`/driver-pay/${reopen ? "reopen" : "finalize"}${receipt ? "?receipt=1" : ""}`, { method: "POST", body: JSON.stringify({weekStart, revision, driverId, reason, override} satisfies PayrollSettlementInput) });
+export const settleDriverPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false, receipt = false, expectedStatementRevision?: string) => payrollSettlementRequest("driver", { weekStart, revision, driverId, reason, override, expectedStatementRevision }, reopen, receipt);
 
 export const fetchExpenseSettings = () => apiRequest<ExpenseSetting[]>("/expense-settings");
 export const saveExpenseSetting = (input: Omit<ExpenseSetting, "id" | "driverOnly"> & { id?: string }) => apiRequest<ExpenseSetting>(input.id ? `/expense-settings/${input.id}` : "/expense-settings", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
 export const fetchDriverEscrowSetting = () => apiRequest<DriverEscrowSetting>("/escrows/settings");
 export const saveDriverEscrowSetting = (input: DriverEscrowSetting) => apiRequest<DriverEscrowSetting>("/escrows/settings", { method: "PUT", body: JSON.stringify(input) });
 
-export const fetchInvestorPay = (weekStart: string, truckId?: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart, truckId, ...query }), { signal });
+export const fetchInvestorPay = (weekStart: string, truckId?: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/investor-pay", { weekStart, truckId, prepared: "1", ...query }), { signal });
 export const saveInvestorPay = (input: DriverPayEdits) => apiRequest<DriverPayEdits>("/investor-pay?receipt=1", { method: "PUT", body: JSON.stringify(input) });
-export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false, receipt = false) => apiRequest<DriverPayWeek>(`/investor-pay/${reopen ? "reopen" : "finalize"}${receipt ? "?receipt=1" : ""}`, { method: "POST", body: JSON.stringify({ weekStart, revision, driverId, reason, override } satisfies PayrollSettlementInput) });
+export const settleInvestorPay = (weekStart: string, revision: string, driverId: string | undefined, reopen: boolean, reason: string, override = false, receipt = false, expectedStatementRevision?: string) => payrollSettlementRequest("investor", { weekStart, revision, driverId, reason, override, expectedStatementRevision }, reopen, receipt);
 export const fetchTruckCharges = (weekStart?: string) => apiRequest<import("./types").TruckChargeData>(`/truck-charges${weekStart ? `?weekStart=${encodeURIComponent(weekStart)}` : ""}`);
 export const saveTruckTerm = (input: import("./types").TruckTerm) => apiRequest<void>("/truck-charges/terms", { method: "PUT", body: JSON.stringify(input) });
 export const saveTruckCharge = (input: import("./types").TruckChargePhase) => apiRequest<void>("/truck-charges/recurring", { method: "PUT", body: JSON.stringify(input) });
@@ -753,3 +759,38 @@ export const fetchLoadSplit = (id: number, signal?: AbortSignal) => apiRequest<i
 
 export const fetchExpenseBalanceHistory = (id: string, signal?: AbortSignal) => apiRequest<import("./types").ExpenseBalanceCorrection[]>(`/expenses/${id}/balance-corrections`, {signal});
 export const correctExpenseBalance = (id: string, data: import("./types").ExpenseBalanceCorrection) => apiRequest<import("./types").ExpenseBalanceCorrection[]>(`/expenses/${id}/balance-corrections`, {method:"POST",body:JSON.stringify(data)});
+
+export const retryPayPreparation = (investor: boolean, weekStart: string) => apiRequest<void>(`/${investor ? "investor" : "driver"}-pay/prepare`, { method: "POST", body: JSON.stringify({ weekStart }) });
+
+// Retain request identity after an unknown network/server outcome. Repeating the
+// same reviewed command recovers its receipt; changed input gets a new identity.
+const pendingPayrollSettlements = new Map<string, string>();
+async function payrollSettlementRequest(kind: "driver" | "investor", input: PayrollSettlementInput, reopen: boolean, receipt: boolean): Promise<DriverPayWeek> {
+  const path = `/${kind}-pay/${reopen ? "reopen" : "finalize"}${receipt ? "?receipt=1" : ""}`;
+  const key = JSON.stringify([path, input]);
+  const requestId = pendingPayrollSettlements.get(key) ?? crypto.randomUUID();
+  pendingPayrollSettlements.set(key, requestId);
+  try {
+    const result = await apiRequest<DriverPayWeek>(path, { method: "POST", body: JSON.stringify({ ...input, requestId }) });
+    pendingPayrollSettlements.delete(key);
+    return result;
+  } catch (error) {
+    if (error instanceof APIError && error.status >= 400 && error.status < 500) pendingPayrollSettlements.delete(key);
+    throw error;
+  }
+}
+
+const pendingPayrollMutations = new Map<string, string>();
+async function payrollMutationRequest<T>(path: string, input: object): Promise<T> {
+  const key = JSON.stringify([path, input]);
+  const requestId = pendingPayrollMutations.get(key) ?? crypto.randomUUID();
+  pendingPayrollMutations.set(key, requestId);
+  try {
+    const value = await apiRequest<T>(path, { method: "POST", body: JSON.stringify({ ...input, requestId }) });
+    pendingPayrollMutations.delete(key);
+    return value;
+  } catch (error) {
+    if (error instanceof APIError && error.status >= 400 && error.status < 500) pendingPayrollMutations.delete(key);
+    throw error;
+  }
+}

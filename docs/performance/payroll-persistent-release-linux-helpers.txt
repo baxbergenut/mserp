@@ -1,0 +1,14 @@
+Permission, expense verification, accounting, Fuel/Toll, balance and payroll compatibility checks passed
+PASS success
+PASS incompatible_portal
+PASS stale
+PASS prepare_failure
+PASS stop_failure
+PASS lost
+PASS start_failure
+PASS readiness_failure
+PASS uncertain
+PASS rollback
+PASS configuration resources
+PASS configuration dual
+PASS configuration global

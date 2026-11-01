@@ -15,22 +15,65 @@ func payrollWeekContext(ctx context.Context, week string) context.Context {
 	return context.WithValue(ctx, payrollWeekKey{}, week)
 }
 
-type payrollSelection struct{ drivers, trucks, owners []string }
+type payrollSelection struct {
+	drivers, trucks, owners []string
+	graph                   *payrollSelectionGraph
+}
+
+// Only a completed, unchanged read phase may reuse the graph. The publication
+// context is created after canonical writes and is never passed to a writer.
+type payrollSelectionGraphKey struct{}
+type payrollSelectionGraph struct {
+	tx    pgx.Tx
+	week  string
+	links map[string][]string
+}
+type payrollSelectionGraphMemo struct {
+	graphs map[string]*payrollSelectionGraph
+}
+
+func payrollSelectionCovers(selection *payrollSelection, roots []string) bool {
+	if selection == nil {
+		return false
+	}
+	for _, root := range roots {
+		kind, id, ok := strings.Cut(root, ":")
+		if !ok || id == "" {
+			return false
+		}
+		var ids []string
+		switch kind {
+		case "driver":
+			ids = selection.drivers
+		case "truck":
+			ids = selection.trucks
+		case "owner":
+			ids = selection.owners
+		default:
+			return false
+		}
+		i := sort.SearchStrings(ids, id)
+		if i == len(ids) || ids[i] != id {
+			return false
+		}
+	}
+	return true
+}
 
 func payrollDriverIDs(ctx context.Context) []string {
-	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok {
+	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok && s != nil {
 		return s.drivers
 	}
 	return nil
 }
 func payrollTruckIDs(ctx context.Context) []string {
-	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok {
+	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok && s != nil {
 		return s.trucks
 	}
 	return nil
 }
 func payrollOwnerIDs(ctx context.Context) []string {
-	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok {
+	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok && s != nil {
 		return s.owners
 	}
 	return nil
@@ -63,8 +106,21 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 	if full, _ := ctx.Value(payrollAuthoritativeKey{}).(bool); full {
 		return ctx, nil
 	}
-	if ctx.Value(payrollSelectionKey{}) != nil {
+	if s, ok := ctx.Value(payrollSelectionKey{}).(*payrollSelection); ok && s != nil {
 		return ctx, nil
+	}
+	roots := make([]string, len(ids))
+	for i, id := range ids {
+		roots[i] = kind + ":" + id
+		if kind == "" {
+			roots[i] = id
+		}
+	}
+	memo, _ := ctx.Value(payrollSelectionGraphKey{}).(*payrollSelectionGraphMemo)
+	if memo != nil {
+		if graph := memo.graphs[payrollContextWeek(ctx)]; graph != nil && graph.tx == tx {
+			return context.WithValue(ctx, payrollSelectionKey{}, payrollGraphSelection(graph, roots)), nil
+		}
 	}
 	// Unknown schema dependencies cannot prove a complete component. Retain the
 	// full calculation until their revision/relationship contract is registered.
@@ -80,51 +136,18 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 		return ctx, err
 	}
 	week, _ := ctx.Value(payrollWeekKey{}).(string)
-	roots := make([]string, len(ids))
-	for i, id := range ids {
-		roots[i] = kind + ":" + id
+	fuelSQL := payrollRawFuelSelectionSQL
+	args := []any{week}
+	fuelFacts, _ := ctx.Value(payrollSelectionFactsKey{}).(bool)
+	if fuelFacts || payrollNormalizedInputs(ctx) || payrollConcurrent(tx) {
+		fingerprint, err := payrollFuelSelectionFingerprint(ctx, snapshot)
+		if err != nil {
+			return ctx, err
+		}
+		fuelSQL = payrollPreparedFuelSelectionSQL
+		args = append(args, fingerprint, payrollCalculatorVersion)
 	}
-	rows, err := tx.Query(ctx, `WITH cost_weeks AS MATERIALIZED (
- SELECT nullif($1,'')::date week
- UNION SELECT w.week_start FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
- AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)
- AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized)
- UNION SELECT w.week_start FROM investor_pay_weeks w WHERE accounting_live_date(w.week_start) AND NOT w.finalized AND (
- (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
- (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')))
- ), source_weeks AS MATERIALIZED (
- SELECT week FROM cost_weeks UNION SELECT week-7 FROM cost_weeks
- UNION SELECT date_trunc('week',p.source_date)::date FROM payroll_load_placements p JOIN cost_weeks w ON w.week=p.week_start
- ), relevant_sources AS MATERIALIZED (
- SELECT * FROM pay_source_collections WHERE accounting_live_date(week_start) AND (week_start>=nullif($1,'')::date OR $1='')
- UNION ALL
- SELECT * FROM (SELECT DISTINCT ON(c.source,c.owner_id) c.* FROM pay_source_collections c
- JOIN (SELECT source,owner_id FROM pay_source_collections WHERE accounting_live_date(week_start) AND week_start<nullif($1,'')::date
- GROUP BY source,owner_id HAVING sum(base-amount)<>0) debt USING(source,owner_id)
- WHERE accounting_live_date(c.week_start) AND c.week_start<nullif($1,'')::date ORDER BY c.source,c.owner_id,c.week_start DESC) older_debt
- ), edges(a,b) AS MATERIALIZED (
- SELECT 'driver:'||driver_id,'truck:'||truck_id FROM truck_driver_assignments a WHERE $1='' OR EXISTS(
- SELECT 1 FROM source_weeks w WHERE (a.assigned_at AT TIME ZONE 'America/New_York')::date<w.week+7
- AND (a.unassigned_at IS NULL OR (a.unassigned_at AT TIME ZONE 'America/New_York')::date>w.week))
- UNION SELECT 'driver:'||main_driver_id,'driver:'||team_driver_id FROM driver_teams t WHERE $1='' OR EXISTS(
- SELECT 1 FROM source_weeks w WHERE t.start_week<=w.week AND (t.end_week IS NULL OR t.end_week>=w.week))
- UNION SELECT 'owner:'||id,'driver:'||driver_id FROM investors WHERE driver_id IS NOT NULL
- UNION SELECT 'truck:'||id,'owner:'||owner_id FROM trucks WHERE owner_id IS NOT NULL
- UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM truck_ownership_history h WHERE $1='' OR EXISTS(
- SELECT 1 FROM source_weeks w WHERE (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<w.week+7)
- AND (h.unassigned_at IS NULL OR (h.unassigned_at AT TIME ZONE 'America/New_York')::date>w.week))
- UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM truck_settlement_terms t WHERE $1='' OR EXISTS(
- SELECT 1 FROM source_weeks w WHERE t.week_start=(SELECT max(prior.week_start) FROM truck_settlement_terms prior WHERE prior.truck_id=t.truck_id AND prior.week_start<=w.week))
- UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM investor_pay_weeks WHERE $1='' OR week_start IN(SELECT week FROM source_weeks)
- UNION SELECT 'driver:'||charge_driver_id,'truck:'||truck_id FROM expenses WHERE charge_driver_id IS NOT NULL AND truck_id IS NOT NULL
- UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM weighmytruck_transactions t WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
- AND ($1='' OR EXISTS(SELECT 1 FROM source_weeks w WHERE t.transaction_date>=w.week AND t.transaction_date<w.week+7))
- UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM payroll_load_placements WHERE truck_id IS NOT NULL
- UNION SELECT 'driver:'||f.driver_id,'truck:'||a.truck_id FROM (SELECT f.driver_id,f.reported_truck_units FROM source_weeks w JOIN fuel_transactions f ON f.purchased_on>=w.week AND f.purchased_on<w.week+7 WHERE f.driver_id IS NOT NULL AND $1<>''
- UNION SELECT driver_id,reported_truck_units FROM fuel_transactions WHERE driver_id IS NOT NULL AND $1='') f CROSS JOIN LATERAL unnest(f.reported_truck_units) unit(key) JOIN truck_unit_aliases a ON a.unit_key=unit.key
- UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM relevant_sources
- UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM relevant_sources
- ) SELECT a,b FROM edges WHERE a IS NOT NULL AND b IS NOT NULL`, week)
+	rows, err := tx.Query(ctx, payrollSelectionEdgesSQL(fuelSQL), args...)
 	if err != nil {
 		return ctx, err
 	}
@@ -144,6 +167,14 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 	if err = rows.Err(); err != nil {
 		return ctx, err
 	}
+	graph := &payrollSelectionGraph{tx: tx, week: week, links: links}
+	if memo != nil {
+		memo.graphs[week] = graph
+	}
+	return context.WithValue(ctx, payrollSelectionKey{}, payrollGraphSelection(graph, roots)), nil
+}
+
+func payrollGraphSelection(graph *payrollSelectionGraph, roots []string) *payrollSelection {
 	seen := map[string]bool{}
 	queue := append([]string(nil), roots...)
 	for len(queue) > 0 {
@@ -153,14 +184,14 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 			continue
 		}
 		seen[node] = true
-		queue = append(queue, links[node]...)
+		queue = append(queue, graph.links[node]...)
 	}
 	nodes := make([]string, 0, len(seen))
 	for node := range seen {
 		nodes = append(nodes, node)
 	}
 	sort.Strings(nodes)
-	s := &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}}
+	s := &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}, graph: graph}
 	for _, node := range nodes {
 		k, v, _ := strings.Cut(node, ":")
 		switch k {
@@ -172,10 +203,66 @@ func selectPayrollContexts(ctx context.Context, tx pgx.Tx, kind string, ids []st
 			s.owners = append(s.owners, v)
 		}
 	}
-	return context.WithValue(ctx, payrollSelectionKey{}, s), nil
+	return s
 }
 
 func payrollContextWeek(ctx context.Context) string {
 	w, _ := ctx.Value(payrollWeekKey{}).(string)
 	return w
+}
+
+const payrollSelectionSharedEdgesSQL = `SELECT 'owner:'||id,'driver:'||driver_id FROM investors WHERE driver_id IS NOT NULL
+ UNION SELECT 'truck:'||id,'owner:'||owner_id FROM trucks WHERE owner_id IS NOT NULL
+ UNION SELECT 'driver:'||charge_driver_id,'truck:'||truck_id FROM expenses WHERE charge_driver_id IS NOT NULL AND truck_id IS NOT NULL
+ UNION SELECT 'driver:'||driver_id,'driver:'||charge_driver_id FROM expenses WHERE driver_id IS NOT NULL AND charge_driver_id IS NOT NULL
+ UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM expenses WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
+ UNION SELECT 'owner:'||owner_id,'driver:'||driver_id FROM expenses WHERE owner_id IS NOT NULL AND driver_id IS NOT NULL
+ UNION SELECT 'owner:'||owner_id,'driver:'||charge_driver_id FROM expenses WHERE owner_id IS NOT NULL AND charge_driver_id IS NOT NULL
+ UNION SELECT 'owner:'||owner_id,'truck:'||truck_id FROM expenses WHERE owner_id IS NOT NULL AND truck_id IS NOT NULL
+ UNION SELECT 'truck:'||p.investor_truck_id,'driver:'||coalesce(e.charge_driver_id,e.driver_id) FROM expense_payments p JOIN expenses e ON e.id=p.expense_id WHERE p.investor_truck_id IS NOT NULL
+ UNION SELECT 'truck:'||p.investor_truck_id,'truck:'||e.truck_id FROM expense_payments p JOIN expenses e ON e.id=p.expense_id WHERE p.investor_truck_id IS NOT NULL AND e.truck_id IS NOT NULL
+ UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM payroll_load_placements WHERE truck_id IS NOT NULL`
+
+func payrollSelectionEdgesSQL(fuelSQL string) string {
+	return payrollSelectionEdgesWithSharedSQL(fuelSQL, payrollSelectionSharedEdgesSQL)
+}
+
+func payrollSelectionEdgesWithSharedSQL(fuelSQL, sharedSQL string) string {
+	return `WITH cost_weeks AS MATERIALIZED (
+ SELECT nullif($1,'')::date week
+ UNION SELECT w.week_start FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
+ AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)
+ AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=w.driver_id AND s.week_start=w.week_start AND s.finalized)
+ UNION SELECT w.week_start FROM investor_pay_weeks w WHERE accounting_live_date(w.week_start) AND NOT w.finalized AND (
+ (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
+ (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')))
+ ), source_weeks AS MATERIALIZED (
+ SELECT week FROM cost_weeks UNION SELECT week-7 FROM cost_weeks
+ UNION SELECT date_trunc('week',p.source_date)::date FROM payroll_load_placements p JOIN cost_weeks w ON w.week=p.week_start
+ ), relevant_sources AS MATERIALIZED (
+ SELECT * FROM pay_source_collections WHERE accounting_live_date(week_start) AND (week_start>=nullif($1,'')::date OR $1='')
+ UNION ALL
+ SELECT * FROM (SELECT DISTINCT ON(c.source,c.owner_id) c.* FROM pay_source_collections c
+ JOIN (SELECT source,owner_id FROM pay_source_collections WHERE accounting_live_date(week_start) AND week_start<nullif($1,'')::date
+ GROUP BY source,owner_id HAVING sum(base-amount)<>0) debt USING(source,owner_id)
+ WHERE accounting_live_date(c.week_start) AND c.week_start<nullif($1,'')::date ORDER BY c.source,c.owner_id,c.week_start DESC) older_debt
+ ), shared_edges(a,b) AS MATERIALIZED (` + sharedSQL + `), fuel_edges AS MATERIALIZED (` + fuelSQL + `), edges(a,b) AS MATERIALIZED (
+ SELECT 'driver:'||driver_id,'truck:'||truck_id FROM truck_driver_assignments a WHERE $1='' OR EXISTS(
+ SELECT 1 FROM source_weeks w WHERE (a.assigned_at AT TIME ZONE 'America/New_York')::date<w.week+7
+ AND (a.unassigned_at IS NULL OR (a.unassigned_at AT TIME ZONE 'America/New_York')::date>w.week))
+ UNION SELECT 'driver:'||main_driver_id,'driver:'||team_driver_id FROM driver_teams t WHERE $1='' OR EXISTS(
+ SELECT 1 FROM source_weeks w WHERE t.start_week<=w.week AND (t.end_week IS NULL OR t.end_week>=w.week))
+ UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM truck_ownership_history h WHERE $1='' OR EXISTS(
+ SELECT 1 FROM source_weeks w WHERE (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<w.week+7)
+ AND (h.unassigned_at IS NULL OR (h.unassigned_at AT TIME ZONE 'America/New_York')::date>w.week))
+ UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM truck_settlement_terms t WHERE $1='' OR EXISTS(
+ SELECT 1 FROM source_weeks w WHERE t.week_start=(SELECT max(prior.week_start) FROM truck_settlement_terms prior WHERE prior.truck_id=t.truck_id AND prior.week_start<=w.week))
+ UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM investor_pay_weeks WHERE $1='' OR week_start IN(SELECT week FROM source_weeks)
+ UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM weighmytruck_transactions t WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
+ AND ($1='' OR EXISTS(SELECT 1 FROM source_weeks w WHERE t.transaction_date>=w.week AND t.transaction_date<w.week+7))
+ UNION SELECT a,b FROM shared_edges
+ UNION SELECT a,b FROM fuel_edges
+ UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM relevant_sources
+ UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM relevant_sources
+ ) SELECT a,b FROM edges WHERE a IS NOT NULL AND b IS NOT NULL`
 }

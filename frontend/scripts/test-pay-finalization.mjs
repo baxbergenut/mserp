@@ -118,7 +118,7 @@ try {
       await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(finalize).toHaveCount(0);
-      expect(writes).toEqual([{ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: false }]);
+      expect(writes).toEqual([{ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: false, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) }]);
 
       finalized = false;
       failure = { status: 400, code: 'finalization_blocked', error: 'Resolve loads needing review' };
@@ -134,7 +134,7 @@ try {
       await dialog.getByRole('button', { name: 'Finalize anyway', exact: true }).click();
       await expect(dialog).toHaveCount(0);
       await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
-      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: true });
+      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: true, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
 
       for (const blocked of [
         { status: 409, code: 'conflict', error: 'Statement changed; reload' },
@@ -152,10 +152,8 @@ try {
       failure = null;
       total = 1;
       await page.reload();
-      await page.getByRole('button', { name: 'Finalize week', exact: true }).click();
-      await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
-      await expect(page.getByRole('dialog')).toHaveCount(0);
-      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', reason: '', override: false });
+      await expect(page.getByRole('button', { name: 'Finalize week', exact: true })).toHaveCount(0);
+      await expect(finalize).toBeEnabled();
     }
     finalized = true; total = 1; finalizer = '';
     await page.reload();

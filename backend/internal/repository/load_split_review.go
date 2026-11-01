@@ -54,7 +54,7 @@ func (r *GrossBoardRepository) SplitWorkspace(ctx context.Context, id int) (Load
 	if err != nil {
 		return result, err
 	}
-	return result, tx.Commit(ctx)
+	return result, commitPayrollMutation(ctx, tx)
 }
 
 func readSplitWorkspace(ctx context.Context, tx pgx.Tx, id int) (LoadSplitWorkspace, error) {

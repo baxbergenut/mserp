@@ -186,24 +186,24 @@ const payrollDatedAssignmentsSQL = `WITH requested AS MATERIALIZED (
  SELECT r.driver,r.date,coalesce(t.main_driver_id,r.driver) operator
  FROM jsonb_to_recordset($1::jsonb) r(driver uuid,date date)
  LEFT JOIN driver_teams t ON t.team_driver_id=r.driver AND t.start_week<=r.date AND (t.end_week IS NULL OR r.date<t.end_week)
-), days AS MATERIALIZED (SELECT DISTINCT date FROM requested), operators AS MATERIALIZED (SELECT DISTINCT operator,date FROM requested),
+), operators AS MATERIALIZED (SELECT DISTINCT operator,date FROM requested),
+ operator_assignments AS MATERIALIZED (
+ SELECT r.operator,r.date,a.truck_id,a.assigned_at,a.unassigned_at FROM operators r JOIN truck_driver_assignments a ON a.driver_id=r.operator
+ AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ ), ownership_days AS MATERIALIZED (SELECT DISTINCT date,truck_id FROM operator_assignments),
  ownership AS MATERIALIZED (
- SELECT DISTINCT ON(d.date,h.truck_id) d.date,h.truck_id,h.owner_id FROM days d JOIN truck_ownership_history h
- ON (NOT h.start_known OR h.assigned_at<((d.date+1)::timestamp AT TIME ZONE 'America/New_York'))
+ SELECT DISTINCT ON(d.date,h.truck_id) d.date,h.truck_id,h.owner_id FROM ownership_days d JOIN truck_ownership_history h
+ ON h.truck_id=d.truck_id AND (NOT h.start_known OR h.assigned_at<((d.date+1)::timestamp AT TIME ZONE 'America/New_York'))
  AND (h.unassigned_at IS NULL OR h.unassigned_at>=((d.date+1)::timestamp AT TIME ZONE 'America/New_York')) ORDER BY d.date,h.truck_id,h.assigned_at DESC
 ), employment AS MATERIALIZED (
- SELECT DISTINCT ON(r.operator,r.date) r.operator,r.date,i.is_company,i.driver_id owner_driver
- FROM operators r JOIN truck_driver_assignments a ON a.driver_id=r.operator
- AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
- AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
- JOIN ownership h ON h.truck_id=a.truck_id AND h.date=r.date JOIN investors i ON i.id=h.owner_id
- ORDER BY r.operator,r.date,a.assigned_at DESC
+ SELECT DISTINCT ON(a.operator,a.date) a.operator,a.date,i.is_company,i.driver_id owner_driver
+ FROM operator_assignments a JOIN ownership h ON h.truck_id=a.truck_id AND h.date=a.date JOIN investors i ON i.id=h.owner_id
+ ORDER BY a.operator,a.date,a.assigned_at DESC
 ), assigned AS MATERIALIZED (
- SELECT r.operator,r.date,min(a.truck_id::text)::uuid truck_id FROM operators r JOIN truck_driver_assignments a ON a.driver_id=r.operator
- AND a.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York')
- AND (a.unassigned_at IS NULL OR a.unassigned_at>=((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))
- AND (a.unassigned_at IS NULL OR a.assigned_at<a.unassigned_at)
- GROUP BY r.operator,r.date HAVING count(DISTINCT a.truck_id)=1
+ SELECT a.operator,a.date,min(a.truck_id::text)::uuid truck_id FROM operator_assignments a
+ WHERE a.unassigned_at IS NULL OR a.assigned_at<a.unassigned_at
+ GROUP BY a.operator,a.date HAVING count(DISTINCT a.truck_id)=1
 ), dispatch AS MATERIALIZED (
  SELECT DISTINCT ON(r.operator,r.date) r.operator,r.date,h.dispatcher_id,h.dispatcher_name FROM operators r JOIN driver_dispatcher_assignments h ON h.driver_id=r.operator
  AND (NOT h.start_known OR h.assigned_at<((r.date+1)::timestamp AT TIME ZONE 'America/New_York'))

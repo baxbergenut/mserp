@@ -1,7 +1,7 @@
 "use client";
 
 import { employmentTypeLabel } from "@/app/lib/driverType";
-import { Fragment, memo, useCallback, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useState } from "react";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { AlertTriangle, ChevronDown, RotateCcw, MoreHorizontal, ArrowRight, X } from "lucide-react";
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayLoad, LoadWeekTransferMode, PayLoadPlacementInput, PayLoadPlacementResult } from "@/app/lib/types";
@@ -37,6 +37,7 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 export type DriverCardProps = {
+  onDraftEditorChange?: (id: string, active: boolean) => void;
   onPlacement?: (input: PayLoadPlacementInput) => Promise<PayLoadPlacementResult | void>;
   placementDisabled?: boolean;
  onTransfer?: (load: DriverPayLoad, mode: LoadWeekTransferMode, reason: string) => Promise<void>;
@@ -60,7 +61,7 @@ export type DriverCardProps = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
   const [extraNumber, setExtraNumber] = useState("");
   const [extraChoices, setExtraChoices] = useState<PayLoadPlacementResult["choices"]>([]);
   const [extraChoice, setExtraChoice] = useState("");
@@ -79,7 +80,12 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
   };
   const [transfer, setTransfer] = useState<DriverPayLoad | null>(null);
   const [costDetails, setCostDetails] = useState<"fuel" | "toll" | null>(null);
-  const [comment, setComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
+  const [comment, updateComment] = useState<{ key: string | null; label: string; value: string } | null>(null);
+  const setComment = (value: typeof comment) => {
+    onDraftEditorChange?.(driver.id, value !== null);
+    updateComment(value);
+  };
+  useEffect(() => () => onDraftEditorChange?.(driver.id, false), [driver.id, onDraftEditorChange]);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const totals = driverTotals(driver, edits);
@@ -233,7 +239,7 @@ export const DriverCard = memo(function DriverCard({ onPlacement, placementDisab
     </td></tr>}
 
     {menu && onSettlement && <StatementMenu x={menu.x} y={menu.y} label={`${driver.settlement?.finalized ? "Reopen" : "Finalize"} ${investor ? "truck" : "driver"}`} disabled={settlementDisabled} onClose={closeMenu} onSelect={() => onSettlement(!!driver.settlement?.finalized)} />}
-    {costDetails && <CostTransactionsDialog kind={investor ? "investor" : "driver"} id={driver.id} name={driver.fullName} weekStart={edits.weekStart} cost={costDetails} onClose={() => setCostDetails(null)} />}
+    {costDetails && <CostTransactionsDialog kind={investor ? "investor" : "driver"} id={driver.id} name={driver.fullName} weekStart={edits.weekStart} cost={costDetails} revision={driver.statementRevision} onClose={() => setCostDetails(null)} />}
     {transfer && onTransfer && <LoadTransferDialog load={transfer} finalized={!!driver.settlement?.finalized} onClose={() => setTransfer(null)} onTransfer={(mode,reason) => onTransfer(transfer,mode,reason)} />}
     {comment && <Modal title={comment.value.trim() ? "Edit comment" : "Add comment"} description={`${driver.fullName} · ${comment.label}`} isSaving={false} submitLabel="Save comment" onClose={() => setComment(null)} onSubmit={event => {
       event.preventDefault();

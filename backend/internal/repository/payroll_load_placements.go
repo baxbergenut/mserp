@@ -40,6 +40,7 @@ func payLoadReady(status string) bool {
 }
 
 type PayLoadPlacementInput struct {
+	PayrollCommandMetadata
 	DriverID         string `json:"driverId"` // statement ID (truck ID for Investor Pay)
 	WeekStart        string `json:"weekStart"`
 	Action           string `json:"action"`
@@ -80,13 +81,20 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 	if in.LoadTripID != nil && *in.LoadTripID < 1 {
 		return chargeInvalid("Invalid load trip")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
+	}
+	command, replay, err := beginPayrollSourceCommand(ctx, tx, actor, "load.place."+kind, in.PayrollCommandMetadata, in)
+	if err != nil {
+		return err
+	}
+	if replay != nil {
+		return nil
 	}
 	var report DriverPayWeek
 	if kind == "investor" {
@@ -394,7 +402,7 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 	if _, err = tx.Exec(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start) VALUES(payroll_driver_at($1::uuid,$2::date),$2::date) ON CONFLICT DO NOTHING`, driver, in.WeekStart); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollSourceCommand(ctx, tx, command, true)
 }
 
 var payGrossPattern = regexp.MustCompile(`^[0-9]{1,10}(\.[0-9]{1,2})?$`)

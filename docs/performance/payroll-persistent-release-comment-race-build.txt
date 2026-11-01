@@ -1,0 +1,65 @@
+
+> frontend@0.1.0 build
+> next build
+
+▲ Next.js 16.2.10 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 9.4s
+  Running TypeScript ...
+  Finished TypeScript in 17.0s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/45) ...
+  Generating static pages using 7 workers (11/45)
+  Generating static pages using 7 workers (22/45)
+  Generating static pages using 7 workers (33/45)
+✓ Generating static pages using 7 workers (45/45) in 876ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /access-denied
+├ ○ /account
+├ ○ /accounting
+├ ○ /accounting/dispatcher-pay
+├ ○ /accounting/driver-charges
+├ ○ /accounting/driver-pay
+├ ○ /accounting/escrow
+├ ○ /accounting/investor-pay
+├ ○ /apple-icon.png
+├ ○ /dashboard
+├ ○ /dispatchers
+├ ○ /dispatchers/detail
+├ ○ /driver-board
+├ ○ /drivers
+├ ○ /drivers/detail
+├ ○ /expenses
+├ ○ /expenses/settings
+├ ○ /feedback
+├ ○ /fleet/inventory
+├ ○ /fleet/preventative-maintenance
+├ ○ /fleet/service-programs
+├ ○ /fleet/trailers
+├ ○ /fleet/trailers/detail
+├ ○ /fleet/weekly-pti
+├ ○ /fuel
+├ ○ /gross-board
+├ ○ /icon.png
+├ ○ /investors
+├ ○ /investors/detail
+├ ○ /loads
+├ ○ /login
+├ ○ /maintenance
+├ ○ /maintenance/detail
+├ ○ /manifest.webmanifest
+├ ○ /settings
+├ ○ /tasks
+├ ○ /tolls
+├ ○ /trucks
+├ ○ /trucks/detail
+├ ○ /updaters
+└ ○ /weighmytruck
+
+
+○  (Static)  prerendered as static content

@@ -21,9 +21,20 @@ import (
 type shutdownRouter struct {
 	*chi.Mux
 	shutdown func()
+	payroll  *repository.DriverPayRepository
 }
 
 func (r *shutdownRouter) Shutdown() { r.shutdown() }
+
+func (r *shutdownRouter) ConfigurePreparedPayroll(enabled bool) {
+	r.payroll.ConfigurePreparedReads(enabled)
+}
+
+func (r *shutdownRouter) ConfigurePreparedFinancial(ctx context.Context, commands, finalization, resources bool) error {
+	r.payroll.ConfigurePreparedCommands(commands)
+	r.payroll.ConfigurePreparedFinalization(finalization)
+	return r.payroll.ConfigurePayrollProtocol(ctx, resources)
+}
 
 func NewRouter(
 	logger *slog.Logger,
@@ -75,9 +86,18 @@ func NewRouter(
 	r.Post("/integrations/fleetscope/driver-terminated", fleetScopeWebhook(logger, fleetRepo, fleetScopeOption, "driver.terminated"))
 
 	protected := chi.NewRouter()
+	payRepo := repository.NewDriverPayRepository(pool)
 	protected.Use(auth.requireSession)
 	protected.Use(auth.requireCSRF)
 	protected.Use(requirePermission)
+	protected.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if payRepo.PreparedReadsEnabled() && r.Method != "GET" && r.Method != "HEAD" {
+				r = r.WithContext(repository.WithPayrollPublication(r.Context()))
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 	registerAccessRoutes(protected, auth, authRepo)
 	protected.Get("/auth/session", auth.session)
 	protected.Post("/auth/logout", auth.logout)
@@ -208,8 +228,8 @@ func NewRouter(
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo)
 	registerDriverBoardRoutes(protected, logger, boardRepo)
-	payRepo := repository.NewDriverPayRepository(pool)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
+	closePayrollLive := registerPayrollLive(protected, pool, logger, auth, payRepo)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))
 	registerInvestorPayRoutes(protected, logger, payRepo, repository.NewDriverChargeRepository(pool))
 	registerTollRoutes(protected, logger, tollJob, tollRepo)
@@ -225,5 +245,11 @@ func NewRouter(
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)
 
-	return &shutdownRouter{Mux: r, shutdown: func() { events.shutdown(); boardEvents.shutdown(); boardPresence.shutdown(); closeGrossLive() }}
+	return &shutdownRouter{Mux: r, payroll: payRepo, shutdown: func() {
+		events.shutdown()
+		boardEvents.shutdown()
+		boardPresence.shutdown()
+		closeGrossLive()
+		closePayrollLive()
+	}}
 }

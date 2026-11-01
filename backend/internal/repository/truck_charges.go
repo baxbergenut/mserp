@@ -208,21 +208,8 @@ func truckChargesForEmploymentWeek(ctx context.Context, q chargeQuery, data Truc
 	if err != nil {
 		return data, err
 	}
-	rows, err := q.Query(ctx, `SELECT t.id::text FROM trucks t `+truckOwnershipForWeekSQL+`
- WHERE `+terminatedOwnerTruckChargesSQL, week)
+	stopped, err := readPreparedStoppedTruckCharges(ctx, q, week)
 	if err != nil {
-		return data, err
-	}
-	defer rows.Close()
-	stopped := map[string]bool{}
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			return data, err
-		}
-		stopped[id] = true
-	}
-	if err = rows.Err(); err != nil {
 		return data, err
 	}
 	phases := make([]TruckChargePhase, 0, len(data.Phases))
@@ -233,6 +220,24 @@ func truckChargesForEmploymentWeek(ctx context.Context, q chargeQuery, data Truc
 	}
 	data.Phases = phases
 	return data, nil
+}
+
+func readStoppedTruckChargesUncached(ctx context.Context, q chargeQuery, week string) (map[string]bool, error) {
+	rows, err := q.Query(ctx, `SELECT t.id::text FROM trucks t `+truckOwnershipForWeekSQL+`
+ WHERE `+terminatedOwnerTruckChargesSQL, week)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	stopped := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		stopped[id] = true
+	}
+	return stopped, rows.Err()
 }
 
 // Both the directory and writes use ownership at the selected week's end.
@@ -268,6 +273,9 @@ func truckAudit(ctx context.Context, tx pgx.Tx, truck, week, action, actor strin
 // Serialize against both payroll finalization and driver charge edits. Financial
 // changes never silently invalidate an already finalized settlement.
 func lockTruckAccounting(ctx context.Context, tx pgx.Tx) error {
+	if payrollConcurrent(tx) {
+		return nil
+	}
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
 	return err
 }
@@ -299,7 +307,7 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	if !regexp.MustCompile(`^[0-9]{1,3}(\.[0-9]{1,4})?$`).MatchString(v.SharePercent) || !ok || rate.Sign() <= 0 || rate.Cmp(big.NewRat(100, 1)) > 0 || !new(big.Rat).Mul(rate, big.NewRat(10000, 1)).IsInt() {
 		return chargeInvalid("Investor share must be greater than zero and at most 100%%, with at most four decimals")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -342,10 +350,10 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	if err = truckAudit(ctx, tx, v.TruckID, v.WeekStart, "terms", actor, v); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckChargePhase, actor string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -356,7 +364,7 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 	if err = saveTruckCharge(ctx, tx, v, actor); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 // One request, financial lock and commit for the whole selection. Savepoints
@@ -375,7 +383,7 @@ func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates [
 		}
 		seen[key] = true
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +419,7 @@ func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates [
 		}
 		results = append(results, result)
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return nil, err
 	}
 	return results, nil

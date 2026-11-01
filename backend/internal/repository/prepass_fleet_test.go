@@ -16,11 +16,12 @@ import (
 )
 
 type prepassFleetFake struct {
-	snapshot    prepass.FleetSnapshot
-	calls       int
-	failure     error
-	readFailure bool
-	ignoreWrite bool
+	snapshot     prepass.FleetSnapshot
+	calls        int
+	failure      error
+	readFailure  bool
+	ignoreWrite  bool
+	beforeChange func(context.Context) error
 }
 
 func (f *prepassFleetFake) Fleet(context.Context) (prepass.FleetSnapshot, error) {
@@ -32,8 +33,13 @@ func (f *prepassFleetFake) Fleet(context.Context) (prepass.FleetSnapshot, error)
 	_ = json.Unmarshal(b, &s)
 	return s, nil
 }
-func (f *prepassFleetFake) ChangeVehicle(_ context.Context, action, account, vin string, in prepass.VehicleInput, device string) error {
+func (f *prepassFleetFake) ChangeVehicle(ctx context.Context, action, account, vin string, in prepass.VehicleInput, device string) error {
 	f.calls++
+	if f.beforeChange != nil {
+		if err := f.beforeChange(ctx); err != nil {
+			return err
+		}
+	}
 	if f.failure != nil {
 		return f.failure
 	}

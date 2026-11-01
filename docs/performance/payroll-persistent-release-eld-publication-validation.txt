@@ -1,0 +1,8 @@
+=== RUN   TestPayrollELDCreationPublicationDatabase
+=== RUN   TestPayrollELDCreationPublicationDatabase/fresh
+=== RUN   TestPayrollELDCreationPublicationDatabase/incremental
+--- PASS: TestPayrollELDCreationPublicationDatabase (12.50s)
+    --- PASS: TestPayrollELDCreationPublicationDatabase/fresh (5.63s)
+    --- PASS: TestPayrollELDCreationPublicationDatabase/incremental (6.72s)
+PASS
+ok  	mserp/internal/repository	12.623s

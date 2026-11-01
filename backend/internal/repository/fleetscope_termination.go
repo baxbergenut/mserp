@@ -11,7 +11,7 @@ import (
 )
 
 func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event fleetscope.Event, hash string) (IntakeResult, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return IntakeResult{}, err
 	}

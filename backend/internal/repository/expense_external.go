@@ -54,7 +54,7 @@ func (r *ExpenseRepository) RecordExternalSettlement(ctx context.Context, id, ac
 	}
 	x.Amount = chargeMoney(n)
 	x.Reference = strings.TrimSpace(x.Reference)
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (r *ExpenseRepository) RecordExternalSettlement(ctx context.Context, id, ac
 		if !same {
 			return ErrDriverPayConflict
 		}
-		return tx.Commit(ctx)
+		return commitPayrollMutation(ctx, tx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -84,7 +84,7 @@ func (r *ExpenseRepository) RecordExternalSettlement(ctx context.Context, id, ac
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 func externalSettlementUUID(s string) (pgtype.UUID, error) {

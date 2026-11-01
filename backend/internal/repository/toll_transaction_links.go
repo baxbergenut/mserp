@@ -197,7 +197,7 @@ func (r *TollRepository) linkSelectedTolls(ctx context.Context, in PrePassTruckL
 	if err := validateTollSelection(in.TransactionIDs); err != nil {
 		return err
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -243,5 +243,5 @@ func (r *TollRepository) linkSelectedTolls(ctx context.Context, in PrePassTruckL
 	if _, err = tx.Exec(ctx, `UPDATE tolls SET truck_id=$2,truck_mapping_id=NULL,transaction_link_id=$3 WHERE id=ANY($1::uuid[])`, in.TransactionIDs, in.TruckID, in.ID); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

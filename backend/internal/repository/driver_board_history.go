@@ -76,7 +76,7 @@ func (r *DriverBoardRepository) History(ctx context.Context, ids []string, befor
 // reversing the older event, even if that field has since returned to its value.
 func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version int, actor string, personal ...bool) (DriverBoardEntry, error) {
 	var entry DriverBoardEntry
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return entry, err
 	}
@@ -191,5 +191,5 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 			}
 		}
 	}
-	return saved[0], tx.Commit(ctx)
+	return saved[0], commitPayrollMutation(ctx, tx)
 }

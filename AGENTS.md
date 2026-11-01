@@ -48,6 +48,87 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
+- Persistent payroll is implemented with ordered rollout capabilities in
+  migration 182 and repository `payroll_projection*.go`. See
+  `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,
+  capture inventory and validation. Driver and Investor Pay expose individual
+  finalization only; the Finalize week button was removed by request. Reopen week
+  and the compatible atomic bulk API remain.
+  Prepared bulk reopening batches confirmation/metadata writes and retains every
+  individual audit; collection allocations remain unchanged. Publication shares
+  inputs only after canonical writes. Resource transactions may retain validated
+  source revisions under their shared gate. Intervening source changes require
+  complete captured-revision and old/new routing proof outside the locked component;
+  missing evidence still conflicts. Prepared pages receive commit-only invalidation
+  hints, with authorized snapshot reads and polling recovery. Current HTTP reads
+  lease interactive preparation priority for ten seconds without advancing jobs;
+  priority expires after navigation. Investor inputs retain separate dated scopes
+  in post-write batches. Financial epochs must be reread
+  after writes. Schema/protocol changes require quiesced writers.
+  `PAYROLL_PROJECTION_MODE` defaults to `off`;
+  `shadow` runs durable derived preparation. `PAYROLL_PREPARED_READS=true` opts
+  into persistent HTTP reads and atomic publication on native mutations; it
+  requires the shadow worker. Prepared command, finalization and resource-lock
+  flags have ordered prerequisites and default off. Resource mode requires the
+  matching database protocol before startup; production activation remains gated
+  on complete correctness/browser/performance verification. Projection writes must
+  never recursively invalidate sources; new source tables require explicit
+  classification plus all capture/revision trigger events. Install the updated
+  deploy helper before migration 182. Current statement pointers and headers are
+  read in one repeatable snapshot; retained details use immutable version IDs.
+  Dated load/truck, driver source cards and original cost evidence exclude editable
+  allocations and frozen report overlays, and require exact source revisions.
+  Projection schema 7 also retains source-only dated day labels with exact board,
+  team, termination and truck-assignment revisions; frozen labels remain frozen.
+  Fuel selection edges retain exact weekly/all-history source relationships with
+  a completeness marker and fuel/alias revision fences; stale/missing facts use
+  the original query, including newly matching sources and empty scopes.
+  Cross-period publication batches period graph reads and expense/reimbursement/
+  escrow balance inputs after canonical writes. Reuse graph edges only inside
+  that transaction's read phase, traversing each statement's period component
+  separately; never copy a multi-root union into freshness dependencies.
+  FleetScope identity review, supersession and acknowledged delivery enter the
+  source gate before integration locks; provider HTTP remains outside the gate.
+  Metadata-only settlement changes may preserve other periods only after actual
+  event and legacy-override checks; posting/confirmation changes remain cross-period.
+  Metadata-only finalization preserves the other page's versions. Resource-mode
+  freezing can publish canonical frozen cards with retained cost evidence only
+  after the captured-event proof and exact amount/cost-field equality checks.
+  Prepared team/owner scenarios reuse the existing business-rule assertions, and
+  bulk tests require second-statement failure to roll back the entire command.
+  Registered expense/escrow/schedule changes include old and new principals and
+  deleted-parent routing. Load corrections and broker reminders resolve old/new
+  numbers through native board, placed and frozen destinations without merging
+  source identity. Placement and transfer audits capture only old/new routes;
+  native source accept/undo, transfer and placement tests retain unrelated
+  versions across three weeks.
+  Dual/resource protocols enforce ordered cross-week claims, SQL guards
+  and per-statement resource revisions. Resource commands use a shared source gate
+  and avoid shared counter/week/job writes; source mutations keep the exclusive
+  gate. Statement metadata uses period keys; balances and legacy overrides keep
+  cross-period dependencies. Forced independent saves and shared-invoice races
+  pass. Repository protocol transition/rollback fences old snapshots and queues
+  rebuilding. `deploy/mserp-payroll-protocol` quiesces API/export/portal writers
+  for switches in either direction. Recovery mocks cover stale epochs, failed
+  shutdown/startup/readiness, lost and unknown outcomes, and rollback; Linux
+  serialization checks pass. Activation requires completed shadow reconciliation and live verification. Never switch
+  protocols by an online env toggle.
+  Missing guards reject publication. Provider delivery/roster state is unrelated;
+  resulting canonical profile, assignment, fuel and toll changes stay captured.
+  Dated assignments, teams, ownership, truck terms and fees retain both old/new
+  relationship endpoints; FleetScope delivery state is unrelated to payroll.
+  Background jobs union captured principals, but undispatched commits force full
+  preparation. Shadow publication reconciles against the full reference; after
+  the read/command gates, proven incremental jobs omit that second full-fleet
+  calculation. Unknown impact and backfill retain full reconciliation. Tests
+  compare published values independently in both modes.
+  Vacation/employment source facts include dated crews and status corrections;
+  legacy vacation facts also depend on the current payroll calendar week.
+  PrePass completion releases its network-phase identity lock before acquiring
+  payroll locks, then revalidates the reviewed truck version. A handoff conflict
+  or publication failure retains its pending receipt without provider replay.
+  The original 300 ms routine latency is diagnostic by user instruction. See the release evidence and remaining measured limits in the persistence runbook.
+
 - Fuel/Toll carry has an explicitly activated first-live-week receipt in
   `payroll_cost_start` (migration 173). Earlier costs are excluded from later
   carry only; historical reports, expenses and recurring deductions stay intact.

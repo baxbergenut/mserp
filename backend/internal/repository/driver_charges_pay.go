@@ -187,7 +187,7 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 	if reopen && (strings.TrimSpace(c.Reason) == "" || len([]rune(c.Reason)) > 2000) {
 		return chargeInvalid("Provide a reason for reopening (up to 2,000 characters)")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func (r *DriverChargeRepository) Confirm(ctx context.Context, c ChargeConfirm, a
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 func pauseDriverCharges(ctx context.Context, tx pgx.Tx, driver, week, actor string) error {

@@ -18,11 +18,10 @@ func (r *DriverPayRepository) PayrollPage(ctx context.Context, kind string, week
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	ctx, snapshot, err := payrollReadSnapshotContext(ctx, tx)
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
-	ctx = context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	// Old/test schemas and future untracked dependencies retain the original
 	// rendered-report revision contract until all inputs have durable revisions.
 	compact := !strings.HasPrefix(snapshot, "snapshot:")
@@ -105,7 +104,7 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 }
 
 func setPayrollRevision(ctx context.Context, tx pgx.Tx, kind string, report *DriverPayWeek) error {
-	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	snapshot, err := payrollFinancialSnapshot(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -113,7 +112,11 @@ func setPayrollRevision(ctx context.Context, tx pgx.Tx, kind string, report *Dri
 		report.Revision = payrollRevision(*report)
 		return nil
 	}
-	sum := sha256.Sum256([]byte(kind + ":" + report.WeekStart + ":" + ChargeCurrentWeek() + ":" + snapshot))
-	report.Revision = "inputs:" + hex.EncodeToString(sum[:])
+	report.Revision = payrollInputRevision(kind, report.WeekStart, ChargeCurrentWeek(), snapshot)
 	return nil
+}
+
+func payrollInputRevision(kind, week, calendar, snapshot string) string {
+	sum := sha256.Sum256([]byte(kind + ":" + week + ":" + calendar + ":" + snapshot))
+	return "inputs:" + hex.EncodeToString(sum[:])
 }

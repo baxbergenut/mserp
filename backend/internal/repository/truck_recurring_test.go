@@ -49,6 +49,10 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 	if e != nil {
 		t.Fatal(e)
 	}
+	projectionMigration, e := os.ReadFile("../../sql/182_payroll_projections.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("truck_recurring_%d", time.Now().UnixNano())
@@ -69,6 +73,10 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 					t.Fatal(sourceErr)
 				}
 				prior := strings.ReplaceAll(string(source), "\r\n", "\n")
+				// This fixture reinstalls 160 after the older 081/093 upgrade.
+				// Capture classification must be installed AFTER that registry exists,
+				// matching the actual numbered migration order.
+				prior = strings.Replace(prior, strings.ReplaceAll(string(projectionMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(sourceMigration), "\r\n", "\n"), "", 1)
 				exec(withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, prior)))
 				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,active,status) VALUES('81000000-0000-0000-0000-000000000001','Old recurring','old recurring','cpm',0,false,'terminated');
@@ -101,6 +109,14 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				}
 			}
 			applyAccountingCutoverMigration(t, ctx, admin)
+			if mode == "migration" {
+				revisionEvents, readErr := os.ReadFile("../../sql/180_payroll_revision_triggers.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(revisionEvents))
+				exec(string(projectionMigration))
+			}
 			exec("GRANT USAGE ON SCHEMA " + q + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + q + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + q + " TO mserp_app")
 			app := cfg.Copy()
 			app.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
@@ -110,6 +126,11 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				t.Fatal(e)
 			}
 			defer pool.Close()
+			if os.Getenv("MSERP_PAYROLL_CAPTURE_TEST") == "1" {
+				if e = NewDriverPayRepository(pool).EnablePayrollShadow(ctx); e != nil {
+					t.Fatal(e)
+				}
+			}
 			var actor string
 			if e = pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Truck charges test',crypt('test-only',gen_salt('bf')) ) RETURNING id::text`).Scan(&actor); e != nil {
 				t.Fatal(e)
@@ -121,265 +142,269 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 
 func TestTruckRecurringDatabase(t *testing.T) {
 	withTruckChargeDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, actor string) {
-		fleet := NewFleetRepository(pool)
-		charges := NewDriverChargeRepository(pool)
-		pay := NewDriverPayRepository(pool)
-		week := ChargeCurrentWeek()
-		date, _ := chargeWeek(week)
-		driver, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Automatic owner", PayType: "gross_percentage", PayRate: 88, Active: true, AssignmentWeek: week, IsOwnerOperator: true})
-		if err != nil || driver.EmploymentType != "unassigned" || driver.IsOwnerOperator {
-			t.Fatalf("unassigned/manual flag: %+v %v", driver, err)
-		}
-		truck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "AUTO-01", OwnerDriverID: &driver.ID, DriverID: &driver.ID, Active: true, Status: "assigned", AssignmentWeek: week})
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := fleet.GetDriver(ctx, driver.ID)
-		if err != nil || got.EmploymentType != "owner_operator" || !got.IsOwnerOperator {
-			t.Fatalf("automatic owner: %+v %v", got, err)
-		}
-		second, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "AUTO-02", OwnerDriverID: &driver.ID, Active: true, Status: "available"})
-		if err != nil || second.OwnerID != truck.OwnerID {
-			t.Fatal("owner identity not reused", err)
-		}
-		typ, err := charges.SaveType(ctx, ChargeType{Name: "Insurance", Direction: "charge", Amounts: []string{"50", "75"}}, actor)
-		if err != nil {
-			t.Fatal(err)
-		}
-		phase := TruckChargePhase{TruckID: truck.ID, TypeID: typ.ID, WeekStart: week, Included: true, Amount: "50", TypeVersion: typ.Version}
-		if err = charges.SaveTruckCharge(ctx, phase, actor); err != nil {
-			t.Fatal("owner truck fee without investor terms", err)
-		}
-		if err = charges.SaveTruckCharge(ctx, phase, actor); err != ErrChargeConflict {
-			t.Fatal("stale fee accepted", err)
-		}
-		report, err := pay.Get(ctx, date)
-		if err != nil {
-			t.Fatal(err)
-		}
-		found := false
-		for _, d := range report.Drivers {
-			if d.ID == driver.ID {
-				found = true
-				if len(d.AutoCharges) != 1 || d.AutoCharges[0].Amount != "-50.00" {
-					t.Fatalf("owner fee: %+v", d)
-				}
-			}
-		}
-		if !found {
-			t.Fatal("owner fee-only statement missing")
-		}
-		// Reproduce a terminated owner whose active truck still retains an open
-		// historical assignment. Truck calendar fees alone must not add a driver.
-		if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false,status='terminated' WHERE id=$1`, driver.ID); err != nil {
-			t.Fatal(err)
-		}
-		inactive, err := pay.Get(ctx, date)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range inactive.Drivers {
-			if d.ID == driver.ID {
-				t.Fatal("truck fees reintroduced a terminated driver without weekly work")
-			}
-		}
-		// With explicit investor terms, the same non-driving owner remains in
-		// Investor Pay rather than being treated as an active owner-driver.
-		if err = charges.SaveTruckTerm(ctx, TruckTerm{TruckID: truck.ID, OwnerID: truck.OwnerID, WeekStart: week, SharePercent: "88"}, actor); err != nil {
-			t.Fatal(err)
-		}
-		inactive, err = pay.Get(ctx, date)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range inactive.Drivers {
-			if d.ID == driver.ID {
-				t.Fatal("truck terms reintroduced a terminated driver")
-			}
-		}
-		ownerReport, err := pay.InvestorPay(ctx, date)
-		if err != nil || len(ownerReport.Drivers) != 1 || ownerReport.Drivers[0].ID != truck.ID || len(ownerReport.Drivers[0].AutoCharges) != 1 {
-			t.Fatal("terminated driver's investor truck fees were lost", ownerReport, err)
-		}
-		if _, err = pool.Exec(ctx, `UPDATE drivers SET active=true,status='active' WHERE id=$1`, driver.ID); err != nil {
-			t.Fatal(err)
-		}
-		report, err = pay.Get(ctx, date)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = pay.Settle(ctx, date, driver.ID, report.Revision, actor, "", false, false); err != nil {
-			t.Fatal("finalize owner fee", err)
-		}
-		if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false,status='terminated' WHERE id=$1`, driver.ID); err != nil {
-			t.Fatal(err)
-		}
-		inactive, err = pay.Get(ctx, date)
-		if err != nil {
-			t.Fatal(err)
-		}
-		found = false
-		for _, d := range inactive.Drivers {
-			if d.ID == driver.ID {
-				found = true
-				if d.Settlement == nil || !d.Settlement.Finalized || len(d.AutoCharges) != 1 || d.AutoCharges[0].Amount != "-50.00" {
-					t.Fatal("terminated driver's frozen statement changed", d)
-				}
-			}
-		}
-		if !found {
-			t.Fatal("terminated driver's saved statement disappeared")
-		}
-		if _, err = pool.Exec(ctx, `UPDATE drivers SET active=true,status='active' WHERE id=$1`, driver.ID); err != nil {
-			t.Fatal(err)
-		}
-		closedChange := phase
-		closedChange.Version, closedChange.Amount = 1, "75"
-		if err = charges.SaveTruckCharge(ctx, closedChange, actor); err == nil {
-			t.Fatal("truck fee changed a finalized owner statement")
-		}
-		var independentBulkOwner string
-		if err = pool.QueryRow(ctx, `INSERT INTO investors(full_name) VALUES('Bulk fee owner') RETURNING id::text`).Scan(&independentBulkOwner); err != nil {
-			t.Fatal(err)
-		}
-		bulkTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "BULK-OK", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		good := TruckChargePhase{TruckID: bulkTruck.ID, TypeID: typ.ID, WeekStart: week, Included: true, Amount: "50", TypeVersion: typ.Version}
-		badAmount := good
-		badAmount.TruckID, badAmount.Amount = second.ID, "-1"
-		results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{closedChange, badAmount, good}, actor)
-		if err != nil || len(results) != 3 || results[0].Error == "" || results[1].Error == "" || results[2].Error != "" {
-			t.Fatalf("bulk did not continue after finalized/invalid rows: %+v %v", results, err)
-		}
-		var savedAmount string
-		var auditCount int
-		if err = pool.QueryRow(ctx, `SELECT amount::text FROM truck_charge_phases WHERE truck_id=$1`, bulkTruck.ID).Scan(&savedAmount); err != nil || savedAmount != "50.00" {
-			t.Fatal("later truck fee was not saved", savedAmount, err)
-		}
-		if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 1 {
-			t.Fatal("bulk audit missing", auditCount, err)
-		}
-		// A stale INSERT triggers a database-level no-rows conflict. Its
-		// savepoint must recover so a later valid update can still commit.
-		nextTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "BULK-NEXT", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		valid := badAmount
-		valid.TruckID, valid.Amount = nextTruck.ID, "75"
-		results, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, valid}, actor)
-		if err != nil || len(results) != 2 || results[0].Error != ErrChargeConflict.Error() || results[1].Error != "" {
-			t.Fatalf("bulk stale row stopped later save: %+v %v", results, err)
-		}
-		if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, good}, actor); err == nil {
-			t.Fatal("duplicate bulk cell accepted")
-		}
-		if _, err = charges.SaveTruckCharges(ctx, nil, actor); err == nil {
-			t.Fatal("empty bulk accepted")
-		}
-		// An unexpected database error rolls back successes and their audit.
-		changed := good
-		changed.Version, changed.Amount = 1, "75"
-		broken := valid
-		broken.TruckID = "invalid-uuid"
-		if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{changed, broken}, actor); err == nil {
-			t.Fatal("unexpected database error hidden")
-		}
-		if err = pool.QueryRow(ctx, `SELECT amount::text FROM truck_charge_phases WHERE truck_id=$1`, bulkTruck.ID).Scan(&savedAmount); err != nil || savedAmount != "50.00" {
-			t.Fatal("failed bulk committed earlier update", savedAmount, err)
-		}
-		if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 1 {
-			t.Fatal("failed bulk committed audit", auditCount, err)
-		}
-		report, err = pay.Get(ctx, date)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = pay.Settle(ctx, date, driver.ID, report.Revision, actor, "Verify ownership changes", true, false); err != nil {
-			t.Fatal(err)
-		}
-		if err = charges.SaveCell(ctx, ChargeCell{DriverID: driver.ID}, actor); err == nil {
-			t.Fatal("driver recurring write accepted")
-		}
-		if _, err = charges.Create(ctx, ChargeCreate{Kind: "recurring"}, actor); err == nil {
-			t.Fatal("driver recurring creation accepted")
-		}
-		company := "00000000-0000-0000-0000-000000000001"
-		input := TruckInput{UnitNumber: truck.UnitNumber, OwnerID: &company, DriverID: &driver.ID, Status: "assigned", Active: true, AssignmentWeek: week}
-		if _, err = fleet.UpdateTruck(ctx, truck.ID, input); err != nil {
-			t.Fatal(err)
-		}
-		got, err = fleet.GetDriver(ctx, driver.ID)
-		if err != nil || got.EmploymentType != "company" || got.IsOwnerOperator {
-			t.Fatal("company ownership did not change type", got, err)
-		}
-		phase.Version = 1
-		if err = charges.SaveTruckCharge(ctx, phase, actor); err == nil {
-			t.Fatal("company fee accepted")
-		}
-		var independent string
-		if err = pool.QueryRow(ctx, `INSERT INTO investors(full_name) VALUES('Independent owner') RETURNING id::text`).Scan(&independent); err != nil {
-			t.Fatal(err)
-		}
-		input.OwnerID = &independent
-		if _, err = fleet.UpdateTruck(ctx, truck.ID, input); err != nil {
-			t.Fatal(err)
-		}
-		got, err = fleet.GetDriver(ctx, driver.ID)
-		if err != nil || got.EmploymentType != "investor_driver" || got.IsOwnerOperator {
-			t.Fatal("investor driver type", got, err)
-		}
-		management, err := charges.TruckCharges(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(management.EligibleTruckIDs) != 4 {
-			t.Fatal("all non-company trucks not included", management)
-		}
-		// Exercise a fleet-sized selection through the same financial guards and
-		// audit writes, rather than only verifying a handful of checkbox saves.
-		rows, err := pool.Query(ctx, `INSERT INTO trucks(unit_number,owner_id) SELECT 'BULK-FLEET-'||n,$1::uuid FROM generate_series(1,250) n RETURNING id::text`, independentBulkOwner)
-		if err != nil {
-			t.Fatal(err)
-		}
-		updates := make([]TruckChargePhase, 0, 250)
-		for rows.Next() {
-			v := good
-			if err = rows.Scan(&v.TruckID); err != nil {
-				t.Fatal(err)
-			}
-			updates = append(updates, v)
-		}
-		rows.Close()
-		if err = rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		started := time.Now()
-		results, err = charges.SaveTruckCharges(ctx, updates, actor)
-		if err != nil || len(results) != 250 {
-			t.Fatal("fleet-sized save failed", len(results), err)
-		}
-		for i, result := range results {
-			if result.Error != "" || result.TruckID != updates[i].TruckID {
-				t.Fatalf("fleet-sized save result %d: %+v", i, result)
-			}
-		}
-		t.Logf("250 truck charges saved in one batch in %s", time.Since(started))
-		// Owner creation rolls back together with a rejected duplicate truck.
-		other, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Rollback owner", PayType: "cpm", Active: true})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = fleet.CreateTruck(ctx, TruckInput{UnitNumber: truck.UnitNumber, OwnerDriverID: &other.ID, Active: true, Status: "available"}); err == nil {
-			t.Fatal("duplicate truck accepted")
-		}
-		var count int
-		if err = pool.QueryRow(ctx, `SELECT count(*) FROM investors WHERE driver_id=$1`, other.ID).Scan(&count); err != nil || count != 0 {
-			t.Fatal("failed truck leaked investor", count, err)
-		}
+		verifyTruckRecurring(t, ctx, pool, actor, false)
 	})
+}
+
+func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool, actor string, prepared bool) {
+	fleet := NewFleetRepository(pool)
+	charges := NewDriverChargeRepository(pool)
+	pay := NewDriverPayRepository(pool)
+	week := ChargeCurrentWeek()
+	date, _ := chargeWeek(week)
+	driver, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Automatic owner", PayType: "gross_percentage", PayRate: 88, Active: true, AssignmentWeek: week, IsOwnerOperator: true})
+	if err != nil || driver.EmploymentType != "unassigned" || driver.IsOwnerOperator {
+		t.Fatalf("unassigned/manual flag: %+v %v", driver, err)
+	}
+	truck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "AUTO-01", OwnerDriverID: &driver.ID, DriverID: &driver.ID, Active: true, Status: "assigned", AssignmentWeek: week})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := fleet.GetDriver(ctx, driver.ID)
+	if err != nil || got.EmploymentType != "owner_operator" || !got.IsOwnerOperator {
+		t.Fatalf("automatic owner: %+v %v", got, err)
+	}
+	second, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "AUTO-02", OwnerDriverID: &driver.ID, Active: true, Status: "available"})
+	if err != nil || second.OwnerID != truck.OwnerID {
+		t.Fatal("owner identity not reused", err)
+	}
+	typ, err := charges.SaveType(ctx, ChargeType{Name: "Insurance", Direction: "charge", Amounts: []string{"50", "75"}}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phase := TruckChargePhase{TruckID: truck.ID, TypeID: typ.ID, WeekStart: week, Included: true, Amount: "50", TypeVersion: typ.Version}
+	if err = charges.SaveTruckCharge(ctx, phase, actor); err != nil {
+		t.Fatal("owner truck fee without investor terms", err)
+	}
+	if err = charges.SaveTruckCharge(ctx, phase, actor); err != ErrChargeConflict {
+		t.Fatal("stale fee accepted", err)
+	}
+	report, err := pay.Get(ctx, date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, d := range report.Drivers {
+		if d.ID == driver.ID {
+			found = true
+			if len(d.AutoCharges) != 1 || d.AutoCharges[0].Amount != "-50.00" {
+				t.Fatalf("owner fee: %+v", d)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("owner fee-only statement missing")
+	}
+	// Reproduce a terminated owner whose active truck still retains an open
+	// historical assignment. Truck calendar fees alone must not add a driver.
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false,status='terminated' WHERE id=$1`, driver.ID); err != nil {
+		t.Fatal(err)
+	}
+	inactive, err := pay.Get(ctx, date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range inactive.Drivers {
+		if d.ID == driver.ID {
+			t.Fatal("truck fees reintroduced a terminated driver without weekly work")
+		}
+	}
+	// With explicit investor terms, the same non-driving owner remains in
+	// Investor Pay rather than being treated as an active owner-driver.
+	if err = charges.SaveTruckTerm(ctx, TruckTerm{TruckID: truck.ID, OwnerID: truck.OwnerID, WeekStart: week, SharePercent: "88"}, actor); err != nil {
+		t.Fatal(err)
+	}
+	inactive, err = pay.Get(ctx, date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range inactive.Drivers {
+		if d.ID == driver.ID {
+			t.Fatal("truck terms reintroduced a terminated driver")
+		}
+	}
+	ownerReport, err := pay.InvestorPay(ctx, date)
+	if err != nil || len(ownerReport.Drivers) != 1 || ownerReport.Drivers[0].ID != truck.ID || len(ownerReport.Drivers[0].AutoCharges) != 1 {
+		t.Fatal("terminated driver's investor truck fees were lost", ownerReport, err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET active=true,status='active' WHERE id=$1`, driver.ID); err != nil {
+		t.Fatal(err)
+	}
+	report, err = pay.Get(ctx, date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = settlePayrollFixture(t, ctx, pay, "driver", date, driver.ID, report.Revision, actor, "", false, false, prepared); err != nil {
+		t.Fatal("finalize owner fee", err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false,status='terminated' WHERE id=$1`, driver.ID); err != nil {
+		t.Fatal(err)
+	}
+	inactive, err = pay.Get(ctx, date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found = false
+	for _, d := range inactive.Drivers {
+		if d.ID == driver.ID {
+			found = true
+			if d.Settlement == nil || !d.Settlement.Finalized || len(d.AutoCharges) != 1 || d.AutoCharges[0].Amount != "-50.00" {
+				t.Fatal("terminated driver's frozen statement changed", d)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("terminated driver's saved statement disappeared")
+	}
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET active=true,status='active' WHERE id=$1`, driver.ID); err != nil {
+		t.Fatal(err)
+	}
+	closedChange := phase
+	closedChange.Version, closedChange.Amount = 1, "75"
+	if err = charges.SaveTruckCharge(ctx, closedChange, actor); err == nil {
+		t.Fatal("truck fee changed a finalized owner statement")
+	}
+	var independentBulkOwner string
+	if err = pool.QueryRow(ctx, `INSERT INTO investors(full_name) VALUES('Bulk fee owner') RETURNING id::text`).Scan(&independentBulkOwner); err != nil {
+		t.Fatal(err)
+	}
+	bulkTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "BULK-OK", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := TruckChargePhase{TruckID: bulkTruck.ID, TypeID: typ.ID, WeekStart: week, Included: true, Amount: "50", TypeVersion: typ.Version}
+	badAmount := good
+	badAmount.TruckID, badAmount.Amount = second.ID, "-1"
+	results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{closedChange, badAmount, good}, actor)
+	if err != nil || len(results) != 3 || results[0].Error == "" || results[1].Error == "" || results[2].Error != "" {
+		t.Fatalf("bulk did not continue after finalized/invalid rows: %+v %v", results, err)
+	}
+	var savedAmount string
+	var auditCount int
+	if err = pool.QueryRow(ctx, `SELECT amount::text FROM truck_charge_phases WHERE truck_id=$1`, bulkTruck.ID).Scan(&savedAmount); err != nil || savedAmount != "50.00" {
+		t.Fatal("later truck fee was not saved", savedAmount, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 1 {
+		t.Fatal("bulk audit missing", auditCount, err)
+	}
+	// A stale INSERT triggers a database-level no-rows conflict. Its
+	// savepoint must recover so a later valid update can still commit.
+	nextTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "BULK-NEXT", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := badAmount
+	valid.TruckID, valid.Amount = nextTruck.ID, "75"
+	results, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, valid}, actor)
+	if err != nil || len(results) != 2 || results[0].Error != ErrChargeConflict.Error() || results[1].Error != "" {
+		t.Fatalf("bulk stale row stopped later save: %+v %v", results, err)
+	}
+	if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, good}, actor); err == nil {
+		t.Fatal("duplicate bulk cell accepted")
+	}
+	if _, err = charges.SaveTruckCharges(ctx, nil, actor); err == nil {
+		t.Fatal("empty bulk accepted")
+	}
+	// An unexpected database error rolls back successes and their audit.
+	changed := good
+	changed.Version, changed.Amount = 1, "75"
+	broken := valid
+	broken.TruckID = "invalid-uuid"
+	if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{changed, broken}, actor); err == nil {
+		t.Fatal("unexpected database error hidden")
+	}
+	if err = pool.QueryRow(ctx, `SELECT amount::text FROM truck_charge_phases WHERE truck_id=$1`, bulkTruck.ID).Scan(&savedAmount); err != nil || savedAmount != "50.00" {
+		t.Fatal("failed bulk committed earlier update", savedAmount, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 1 {
+		t.Fatal("failed bulk committed audit", auditCount, err)
+	}
+	report, err = pay.Get(ctx, date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = settlePayrollFixture(t, ctx, pay, "driver", date, driver.ID, report.Revision, actor, "Verify ownership changes", true, false, prepared); err != nil {
+		t.Fatal(err)
+	}
+	if err = charges.SaveCell(ctx, ChargeCell{DriverID: driver.ID}, actor); err == nil {
+		t.Fatal("driver recurring write accepted")
+	}
+	if _, err = charges.Create(ctx, ChargeCreate{Kind: "recurring"}, actor); err == nil {
+		t.Fatal("driver recurring creation accepted")
+	}
+	company := "00000000-0000-0000-0000-000000000001"
+	input := TruckInput{UnitNumber: truck.UnitNumber, OwnerID: &company, DriverID: &driver.ID, Status: "assigned", Active: true, AssignmentWeek: week}
+	if _, err = fleet.UpdateTruck(ctx, truck.ID, input); err != nil {
+		t.Fatal(err)
+	}
+	got, err = fleet.GetDriver(ctx, driver.ID)
+	if err != nil || got.EmploymentType != "company" || got.IsOwnerOperator {
+		t.Fatal("company ownership did not change type", got, err)
+	}
+	phase.Version = 1
+	if err = charges.SaveTruckCharge(ctx, phase, actor); err == nil {
+		t.Fatal("company fee accepted")
+	}
+	var independent string
+	if err = pool.QueryRow(ctx, `INSERT INTO investors(full_name) VALUES('Independent owner') RETURNING id::text`).Scan(&independent); err != nil {
+		t.Fatal(err)
+	}
+	input.OwnerID = &independent
+	if _, err = fleet.UpdateTruck(ctx, truck.ID, input); err != nil {
+		t.Fatal(err)
+	}
+	got, err = fleet.GetDriver(ctx, driver.ID)
+	if err != nil || got.EmploymentType != "investor_driver" || got.IsOwnerOperator {
+		t.Fatal("investor driver type", got, err)
+	}
+	management, err := charges.TruckCharges(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(management.EligibleTruckIDs) != 4 {
+		t.Fatal("all non-company trucks not included", management)
+	}
+	// Exercise a fleet-sized selection through the same financial guards and
+	// audit writes, rather than only verifying a handful of checkbox saves.
+	rows, err := pool.Query(ctx, `INSERT INTO trucks(unit_number,owner_id) SELECT 'BULK-FLEET-'||n,$1::uuid FROM generate_series(1,250) n RETURNING id::text`, independentBulkOwner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updates := make([]TruckChargePhase, 0, 250)
+	for rows.Next() {
+		v := good
+		if err = rows.Scan(&v.TruckID); err != nil {
+			t.Fatal(err)
+		}
+		updates = append(updates, v)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	results, err = charges.SaveTruckCharges(ctx, updates, actor)
+	if err != nil || len(results) != 250 {
+		t.Fatal("fleet-sized save failed", len(results), err)
+	}
+	for i, result := range results {
+		if result.Error != "" || result.TruckID != updates[i].TruckID {
+			t.Fatalf("fleet-sized save result %d: %+v", i, result)
+		}
+	}
+	t.Logf("250 truck charges saved in one batch in %s", time.Since(started))
+	// Owner creation rolls back together with a rejected duplicate truck.
+	other, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Rollback owner", PayType: "cpm", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fleet.CreateTruck(ctx, TruckInput{UnitNumber: truck.UnitNumber, OwnerDriverID: &other.ID, Active: true, Status: "available"}); err == nil {
+		t.Fatal("duplicate truck accepted")
+	}
+	var count int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM investors WHERE driver_id=$1`, other.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatal("failed truck leaked investor", count, err)
+	}
 }
 
 func TestTruckRecurringFinalizedSelectionDatabase(t *testing.T) {

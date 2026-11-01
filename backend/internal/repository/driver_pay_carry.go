@@ -65,9 +65,13 @@ func readPayCostRecords(ctx context.Context, tx pgx.Tx) ([]payCostRecord, error)
 	if memo != nil && memo.costsLoaded {
 		return memo.costs, nil
 	}
+	ledger := "driver_pay_cost_collections"
+	if payrollNormalizedInputs(ctx) {
+		ledger = payrollCostLedgerBucketsSQL + " ledger"
+	}
 	rows, err := tx.Query(ctx, `SELECT driver_id::text,CASE WHEN NOT $3::boolean AND week_start<nullif($2,'')::date THEN '' ELSE week_start::text END bucket,
  sum(fuel_base)::text,sum(toll_base)::text,sum(fuel_amount)::text,sum(toll_amount)::text
- FROM driver_pay_cost_collections WHERE accounting_live_date(week_start) AND payroll_cost_in_scope(week_start,nullif($2,'')::date) AND ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[]))
+ FROM `+ledger+` WHERE accounting_live_date(week_start) AND payroll_cost_in_scope(week_start,nullif($2,'')::date) AND ($1::uuid[] IS NULL OR driver_id=ANY($1::uuid[]))
  GROUP BY driver_id,bucket ORDER BY bucket,driver_id`, payrollDriverIDs(ctx), payrollContextWeek(ctx), payrollCostDetails(ctx))
 	if err != nil {
 		return nil, err

@@ -1,0 +1,14 @@
+=== RUN   TestPayrollLoadCohortDatabase
+=== RUN   TestPayrollLoadCohortDatabase/fresh
+=== RUN   TestPayrollLoadCohortDatabase/incremental
+--- PASS: TestPayrollLoadCohortDatabase (7.76s)
+    --- PASS: TestPayrollLoadCohortDatabase/fresh (4.04s)
+    --- PASS: TestPayrollLoadCohortDatabase/incremental (3.68s)
+=== RUN   TestPayrollNormalizedInputsDatabase
+=== RUN   TestPayrollNormalizedInputsDatabase/fresh
+=== RUN   TestPayrollNormalizedInputsDatabase/incremental
+--- PASS: TestPayrollNormalizedInputsDatabase (8.28s)
+    --- PASS: TestPayrollNormalizedInputsDatabase/fresh (4.04s)
+    --- PASS: TestPayrollNormalizedInputsDatabase/incremental (4.10s)
+PASS
+ok  	mserp/internal/repository	16.175s

@@ -14,11 +14,10 @@ func (r *DriverPayRepository) PayrollStatement(ctx context.Context, kind string,
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	ctx, _, err = payrollReadSnapshotContext(ctx, tx)
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
-	ctx = context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	result, err := r.payrollDetails(ctx, tx, kind, week, []string{id})
 	if err != nil {
 		return result, err
@@ -31,7 +30,7 @@ func (r *DriverPayRepository) PayrollStatement(ctx context.Context, kind string,
 
 // Missing rows share one calculation and snapshot; cache entries remain per ID.
 func (r *DriverPayRepository) payrollDetails(ctx context.Context, tx pgx.Tx, kind string, week time.Time, ids []string) (DriverPayWeek, error) {
-	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	snapshot, err := payrollFinancialSnapshot(ctx, tx)
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
@@ -106,11 +105,10 @@ func (r *DriverPayRepository) PayrollPreview(ctx context.Context, kind string, w
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	snapshot, err := payrollCacheSnapshot(ctx, tx)
+	ctx, snapshot, err := payrollReadSnapshotContext(ctx, tx)
 	if err != nil {
 		return DriverPayWeek{}, err
 	}
-	ctx = context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	result, err := r.payrollSummary(ctx, tx, kind, week, !strings.HasPrefix(snapshot, "snapshot:"))
 	if err != nil {
 		return result, err

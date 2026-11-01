@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 	"time"
 
 	"github.com/go-chi/cors"
-	"github.com/joho/godotenv"
 
 	"mserp/internal/boardroutes"
 	"mserp/internal/config"
@@ -41,8 +41,16 @@ func main() {
 	syncWMTOnly := flag.Bool("sync-weighmytruck-once", false, "sync scale transactions and exit")
 	syncLoadsOnly := flag.Bool("sync-loads-once", false, "run one load sync and exit without starting the HTTP server or scheduled jobs")
 	backfillTollLocations := flag.Bool("backfill-toll-locations", false, "refresh current-year PrePass location metadata and exit")
+	payrollCapability := flag.Bool("payroll-protocol-capability", false, "print the supported payroll lock protocol and exit without opening a database")
+	payrollStatus := flag.Bool("payroll-protocol-status", false, "print the database payroll protocol and reviewed epoch, then exit")
+	payrollSwitch := flag.String("payroll-protocol-switch", "", "switch payroll protocol after all writers are stopped (global, dual, resources)")
+	payrollEpoch := flag.Int64("payroll-protocol-epoch", 0, "reviewed database protocol epoch required for a quiesced switch")
 	flag.Parse()
-	_ = godotenv.Load(".env.relay.local", ".env.local", ".env", "/etc/mserp/mserp.env")
+	if *payrollCapability {
+		fmt.Println(repository.PayrollProtocolCapability)
+		return
+	}
+	loadEnvironmentFiles(".env.relay.local", ".env.local", ".env", "/etc/mserp/mserp.env")
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	cfg, err := config.Load()
@@ -60,6 +68,27 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	protocol := repository.NewDriverPayRepository(pool)
+	if *payrollStatus || *payrollSwitch != "" {
+		var status repository.PayrollProtocolStatus
+		if *payrollSwitch != "" {
+			status, err = protocol.SwitchPayrollProtocol(ctx, *payrollSwitch, *payrollEpoch)
+		} else {
+			status, err = protocol.PayrollProtocolStatus(ctx)
+		}
+		if err != nil {
+			logger.Error("payroll protocol operation", "error", err)
+			os.Exit(1)
+		}
+		if err = json.NewEncoder(os.Stdout).Encode(status); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	if err = protocol.ConfigurePayrollProtocol(ctx, cfg.PayrollResourceLocks); err != nil {
+		logger.Error("payroll protocol configuration", "error", err)
+		os.Exit(1)
+	}
 	if *terminationPreview || *terminationApply != "" {
 		repo := repository.NewFleetRepository(pool)
 		var result repository.TerminationCleanup
@@ -256,6 +285,13 @@ func main() {
 		},
 		cfg.FleetScope,
 	)
+	router.(interface{ ConfigurePreparedPayroll(bool) }).ConfigurePreparedPayroll(cfg.PayrollPreparedReads)
+	if err = router.(interface {
+		ConfigurePreparedFinancial(context.Context, bool, bool, bool) error
+	}).ConfigurePreparedFinancial(ctx, cfg.PayrollPreparedCommands, cfg.PayrollPreparedFinalization, cfg.PayrollResourceLocks); err != nil {
+		logger.Error("configure prepared financial commands", "error", err)
+		os.Exit(1)
+	}
 	handler := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.FrontendOrigin},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -280,6 +316,22 @@ func main() {
 	}
 
 	serviceAutomationDone := make(chan struct{})
+	payrollShadowDone := make(chan struct{})
+	if cfg.PayrollProjectionMode == "shadow" {
+		payroll := repository.NewDriverPayRepository(pool)
+		payroll.ConfigurePreparedReads(cfg.PayrollPreparedReads)
+		payroll.ConfigurePreparedCommands(cfg.PayrollPreparedCommands)
+		if err := payroll.EnablePayrollShadow(ctx); err != nil {
+			logger.Error("enable payroll shadow", "error", err)
+			os.Exit(1)
+		}
+		go func() {
+			defer close(payrollShadowDone)
+			payroll.RunPayrollShadow(ctx, logger)
+		}()
+	} else {
+		close(payrollShadowDone)
+	}
 	dataTruckAutomationDone := make(chan struct{})
 	prepassAssignmentsDone := make(chan struct{})
 	go func() {
@@ -465,6 +517,10 @@ func main() {
 
 	select {
 	case <-relayAutomationDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-payrollShadowDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

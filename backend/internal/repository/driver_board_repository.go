@@ -227,7 +227,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
-	return result, tx.Commit(ctx)
+	return result, commitPayrollMutation(ctx, tx)
 }
 
 type BoardPendingDriver struct {
@@ -261,7 +261,7 @@ func readBoardPendingDrivers(ctx context.Context, tx pgx.Tx) ([]BoardPendingDriv
 }
 
 func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 			return nil, err
 		}
 	}
-	return entries, tx.Commit(ctx)
+	return entries, commitPayrollMutation(ctx, tx)
 }
 
 func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry, matchDate ...string) ([]DriverBoardEntry, error) {

@@ -12,11 +12,24 @@ import (
 
 func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverPayEdits, actor string) (DriverPayEdits, error) {
 	edits.InputRevision = ""
-	tx, closeWrite, err := r.beginPayrollWrite(ctx)
+	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, edits.RequestID, edits.ExpectedStatementRevision, "truck:"+edits.DriverID)
 	if err != nil {
 		return edits, err
 	}
 	defer closeWrite()
+	command, replay, err := beginPayrollCommand(ctx, tx, actor, edits.RequestID, "investor.save", edits.ExpectedStatementRevision, edits)
+	if err != nil {
+		return edits, err
+	}
+	if replay != nil {
+		var saved DriverPayEdits
+		err = json.Unmarshal(replay, &saved)
+		return saved, err
+	}
+	if err = validatePreparedPayrollCommand(ctx, tx, "investor", edits.DriverID, edits.WeekStart, edits.ExpectedStatementRevision); err != nil {
+		return edits, err
+	}
+	stripPayCommandMetadata(&edits)
 	endLock := db.Phase(ctx, "financial_lock_wait")
 	err = lockTruckAccounting(ctx, tx)
 	endLock()
@@ -27,12 +40,22 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if err != nil {
 		return edits, err
 	}
-	ctx, err = selectPayrollContext(payrollWeekContext(ctx, edits.WeekStart), tx, "truck", edits.DriverID)
-	if err != nil {
-		return edits, err
-	}
+	ctx = payrollWeekContext(ctx, edits.WeekStart)
 	endValidation := db.Phase(ctx, "save_calculation")
-	report, err := readInvestorPay(ctx, tx, week)
+	var report DriverPayWeek
+	if r.preparedCommands && command != nil && command.expected != "" {
+		var d DriverPayDriver
+		d, err = preparedSaveCard(ctx, tx, "investor", edits.DriverID, edits.WeekStart, command)
+		if err == nil {
+			report = DriverPayWeek{WeekStart: edits.WeekStart, Drivers: []DriverPayDriver{d}}
+		}
+		ctx = context.WithValue(ctx, payrollNormalizedFactsKey{}, true)
+	} else {
+		ctx, err = selectPayrollContext(ctx, tx, "truck", edits.DriverID)
+		if err == nil {
+			report, err = readInvestorPay(ctx, tx, week)
+		}
+	}
 	endValidation()
 	if err != nil {
 		return edits, err
@@ -56,14 +79,27 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 		return edits, chargeInvalid("Manage recurring truck fees on Charges")
 	}
 	defer db.Phase(ctx, "writes_and_commit")()
-	if err = savePaySources(ctx, tx, *card, &edits, "investor", actor); err != nil {
+	unchangedEffects, err := unchangedPreparedPayEffects(ctx, tx, command, "investor", edits)
+	if err != nil {
 		return edits, err
 	}
-	if err = validateInvestorCostEdits(*card, edits); err != nil {
-		return edits, err
-	}
-	if err = saveInvestorExpenses(ctx, tx, *card, actor, edits.ExpenseDeductions); err != nil {
-		return edits, err
+	if !unchangedEffects {
+		if command != nil && command.expected != "" {
+			ctx, err = selectPayrollContext(ctx, tx, "truck", edits.DriverID)
+			if err != nil {
+				return edits, err
+			}
+			ctx = payrollRoutingFactsContext(ctx, command.beforeSnapshot)
+		}
+		if err = savePaySources(ctx, tx, *card, &edits, "investor", actor); err != nil {
+			return edits, err
+		}
+		if err = validateInvestorCostEdits(*card, edits); err != nil {
+			return edits, err
+		}
+		if err = saveInvestorExpenses(ctx, tx, *card, actor, edits.ExpenseDeductions); err != nil {
+			return edits, err
+		}
 	}
 	edits.ExpenseDeductions = nil
 	body, err := json.Marshal(edits)
@@ -83,9 +119,13 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 		return edits, err
 	}
 	edits.Version = version
-	edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, card.ID, card.InvestorID, edits.WeekStart, false)
-	if err != nil {
-		return edits, err
+	if unchangedEffects {
+		edits.ExpenseDeductions = card.Edits.ExpenseDeductions
+	} else {
+		edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, card.ID, card.InvestorID, edits.WeekStart, false)
+		if err != nil {
+			return edits, err
+		}
 	}
 	if err = truckAudit(ctx, tx, card.ID, edits.WeekStart, "pay_edits", actor, edits); err != nil {
 		return edits, err
@@ -93,9 +133,12 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if err = setPaySaveRevision(ctx, tx, "investor", &edits); err != nil {
 		return edits, err
 	}
+	if err = finishPaySaveCommand(ctx, tx, command, "investor", &edits, r.preparedReads); err != nil {
+		return edits, err
+	}
 	return edits, tx.Commit(ctx)
 }
-func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time, truck, revision, actor, reason string, reopen, override bool) (DriverPayWeek, error) {
+func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time, truck, revision, actor, reason string, reopen, override bool, commands ...PayrollSettlementCommand) (DriverPayWeek, error) {
 	empty := DriverPayWeek{}
 	override = override && !reopen
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
@@ -107,33 +150,33 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if override {
 		reason = "Finalized with override"
 	}
-	conn, err := r.pool.Acquire(ctx)
+	root := ""
+	if truck != "" {
+		root = "truck:" + truck
+	}
+	var request, expected string
+	if len(commands) > 0 {
+		request, expected = commands[0].RequestID, commands[0].ExpectedStatementRevision
+	}
+	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, request, expected, root)
 	if err != nil {
 		return empty, err
 	}
-	defer conn.Release()
-	endLock := db.Phase(ctx, "financial_lock_wait")
-	_, err = conn.Exec(ctx, `SELECT pg_advisory_lock(736281940)`)
-	endLock()
+	defer closeWrite()
+	command, replay, err := beginPayrollSettlement(ctx, tx, "investor", week, truck, revision, actor, reason, reopen, override, commands)
 	if err != nil {
 		return empty, err
 	}
-	defer func() {
-		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, e := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock(736281940)`); e != nil {
-			_ = conn.Conn().Close(context.Background())
-		}
-	}()
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-	if err != nil {
-		return empty, err
+	if replay != nil {
+		var result DriverPayWeek
+		err = json.Unmarshal(replay, &result)
+		return result, err
 	}
-	defer tx.Rollback(ctx)
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return empty, err
 	}
-	if truck != "" && strings.HasPrefix(revision, "inputs:") {
+	prepared := r.preparedFinalization && command != nil && command.expected != ""
+	if truck != "" && strings.HasPrefix(revision, "inputs:") && !prepared {
 		current := DriverPayWeek{WeekStart: week.Format(time.DateOnly)}
 		if err = setPayrollRevision(ctx, tx, "investor", &current); err != nil {
 			return empty, err
@@ -147,7 +190,17 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		}
 	}
 	var report DriverPayWeek
-	if reopen && truck != "" && strings.HasPrefix(revision, "inputs:") {
+	if prepared {
+		if truck != "" {
+			ctx, err = selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "truck", truck)
+		}
+		if err != nil {
+			return empty, err
+		}
+		report, err = preparedSettlementReport(ctx, tx, command, "investor", week, truck)
+		ctx = payrollRoutingFactsContext(ctx, command.beforeSnapshot)
+		ctx = context.WithValue(ctx, payrollNormalizedFactsKey{}, true)
+	} else if reopen && truck != "" && strings.HasPrefix(revision, "inputs:") {
 		report, err = readPayrollReopenTarget(ctx, tx, "investor", week, truck, revision)
 	} else {
 		report, err = readInvestorPay(ctx, tx, week)
@@ -155,7 +208,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if err != nil {
 		return empty, err
 	}
-	if revision == "" || revision != report.Revision {
+	if !prepared && (revision == "" || revision != report.Revision) {
 		return empty, ErrDriverPayConflict
 	}
 	if !reopen && !override && len(report.Issues) > 0 {
@@ -181,6 +234,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	writeBatch := &pgx.Batch{}
 	count := 0
 	selectedIDs := map[string]bool{}
+	bulkReopen := []DriverPayDriver{}
 	committed := DriverPayWeek{WeekStart: report.WeekStart, Issues: report.Issues, Notices: report.Notices, Drivers: []DriverPayDriver{}}
 	var username string
 	var finalizedAt time.Time
@@ -219,6 +273,10 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		}
 		count++
 		selectedIDs[d.ID] = true
+		if prepared && reopen && truck == "" {
+			bulkReopen = append(bulkReopen, d)
+			continue
+		}
 		if reopen {
 			writeBatch.Queue(`UPDATE investor_pay_weeks SET finalized=false,version=version+1 WHERE truck_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart)
 		} else {
@@ -284,6 +342,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if count == 0 {
 		return empty, chargeInvalid("No eligible investor settlements selected")
 	}
+	if len(bulkReopen) > 0 {
+		if err = reopenPreparedInvestorWeek(ctx, tx, report, actor, reason, bulkReopen); err != nil {
+			return empty, err
+		}
+	}
 	if inputs != nil && !reopen {
 		records, e := readPaySources(ctx, tx)
 		if e != nil {
@@ -308,7 +371,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		if err = setPayrollRevision(ctx, tx, "investor", &committed); err != nil {
 			return empty, err
 		}
-		return payrollReceipt(committed, selectedIDs), tx.Commit(ctx)
+		return r.commitPayrollSettlement(ctx, tx, command, "investor", payrollReceipt(committed, selectedIDs), selectedIDs)
 	}
 	if payrollReceiptRequested(ctx) && truck != "" && strings.HasPrefix(report.Revision, "inputs:") {
 		ctx, err = selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "truck", truck)
@@ -316,14 +379,23 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			return empty, err
 		}
 	}
+	if prepared {
+		ctx = beginPayrollPostWriteRead(ctx, tx)
+	}
 	result, err := readInvestorPay(ctx, tx, week)
 	if err != nil {
 		return empty, err
 	}
-	if payrollReceiptRequested(ctx) {
-		return payrollReceipt(result, selectedIDs), tx.Commit(ctx)
+	if r.preparedFinalization && command != nil && command.expected != "" {
+		ctx, err = retainPayrollPostWriteResult(ctx, tx, "investor", result)
+		if err != nil {
+			return empty, err
+		}
 	}
-	return investorPayView(result, truck), tx.Commit(ctx)
+	if payrollReceiptRequested(ctx) {
+		return r.commitPayrollSettlement(ctx, tx, command, "investor", payrollReceipt(result, selectedIDs), selectedIDs)
+	}
+	return r.commitPayrollSettlement(ctx, tx, command, "investor", investorPayView(result, truck), selectedIDs)
 }
 
 func validateInvestorCostEdits(card DriverPayDriver, edits DriverPayEdits) error {

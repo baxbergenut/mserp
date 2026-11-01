@@ -557,7 +557,7 @@ func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (Boa
 	if err != nil {
 		return BoardLoads{}, err
 	}
-	return views[id], tx.Commit(ctx)
+	return views[id], commitPayrollMutation(ctx, tx)
 }
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
 	var e DriverBoardEntry
@@ -567,7 +567,7 @@ func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, er
 }
 func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadAction, actor string) (BoardLoadResult, error) {
 	var result BoardLoadResult
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return result, err
 	}
@@ -878,5 +878,5 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if err = attachBoardUndoID(ctx, tx, &result.Entry); err != nil {
 		return result, err
 	}
-	return result, tx.Commit(ctx)
+	return result, commitPayrollMutation(ctx, tx)
 }

@@ -77,7 +77,7 @@ func (r *FleetRepository) GetInvestor(ctx context.Context, id string) (Investor,
 	return v, mapNotFound(e)
 }
 func (r *FleetRepository) SaveInvestor(ctx context.Context, id string, input InvestorInput) (Investor, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Investor{}, err
 	}
@@ -109,7 +109,7 @@ func (r *FleetRepository) SaveInvestor(ctx context.Context, id string, input Inv
 	if err != nil {
 		return Investor{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Investor{}, err
 	}
 	return r.GetInvestor(ctx, id)

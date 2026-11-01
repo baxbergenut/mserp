@@ -36,7 +36,7 @@ func (r *FleetRepository) FiveELDTruckReview(ctx context.Context, id string) (Fi
 // Truck creation and review completion share one transaction. The original ELD
 // VIN remains the source identity even when the reviewer corrects the saved VIN.
 func (r *FleetRepository) CompleteFiveELDTruckReview(ctx context.Context, id, actor string, version int, input TruckInput) (string, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return "", err
 	}
@@ -81,5 +81,5 @@ func (r *FleetRepository) CompleteFiveELDTruckReview(ctx context.Context, id, ac
 	if err != nil {
 		return "", err
 	}
-	return truckID, tx.Commit(ctx)
+	return truckID, commitPayrollMutation(ctx, tx)
 }

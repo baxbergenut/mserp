@@ -14,6 +14,14 @@ import (
 )
 
 func validateDriverPayEdits(e *repository.DriverPayEdits) error {
+	if e.RequestID != "" && !isUUID(e.RequestID) {
+		return errors.New("invalid request identity")
+	}
+	if e.ExpectedStatementRevision != "" && (!isUUID(e.ExpectedStatementRevision) || e.RequestID == "") {
+		return errors.New("prepared saves require a request identity and statement revision")
+	}
+	// These are server-owned receipt fields, never editable input.
+	e.StatementRevision, e.CommittedStatement, e.AffectedStatements = "", nil, nil
 	week, err := grossBoardWeek(e.WeekStart)
 	if err != nil {
 		return err
@@ -110,6 +118,9 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 
 func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverPayRepository, job *jobs.SyncLoadsJob) {
 	fail := func(w http.ResponseWriter, err error) {
+		if payrollPreparationError(w, err) {
+			return
+		}
 		var blocked *repository.PayrollFinalizationBlockedError
 		if errors.As(err, &blocked) {
 			writeJSON(w, 400, map[string]any{"error": err.Error(), "code": "finalization_blocked", "review": blocked.Review})
@@ -125,6 +136,10 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			return
 		}
 		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01") {
+			writeAPIError(w, 409, "Payroll inputs changed; your edits were not saved. Reload and review before trying again.")
+			return
+		}
 		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
 			writeAPIError(w, http.StatusConflict, pgErr.Message)
 			return
@@ -194,7 +209,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			if r.URL.Query().Get("receipt") == "1" {
 				ctx = repository.WithPayrollReceipt(ctx)
 			}
-			result, err := repo.Settle(ctx, week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override)
+			result, err := repo.Settle(ctx, week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override, repository.PayrollSettlementCommand{RequestID: input.RequestID, ExpectedStatementRevision: input.ExpectedStatementRevision})
 			if err != nil {
 				fail(w, err)
 				return
@@ -215,7 +230,12 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			return
 		}
 		var result repository.DriverPayWeek
-		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+		if repo.PreparedReadsEnabled() {
+			if !r.URL.Query().Has("page") && !r.URL.Query().Has("pageSize") {
+				query.PageSize = 2147483647
+			}
+			result, err = repo.PreparedPayroll(r.Context(), "driver", week, query, r.URL.Query().Get("prepared") == "1")
+		} else if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
 			result, err = repo.PayrollPage(r.Context(), "driver", week, query)
 		} else {
 			result, err = repo.Get(r.Context(), week)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
 	"mserp/internal/datatruck"
+	"strings"
 )
 
 // Calculation inputs are reusable only inside one uninterrupted read phase of
@@ -38,20 +39,60 @@ func payrollCostsOnly(ctx context.Context) bool {
 }
 
 type payrollReadState struct {
-	tx          pgx.Tx
-	vacations   map[string]vacationWeek
-	charges     map[string][]byte
-	trucks      []byte
-	costs       []payCostRecord
-	costsLoaded bool
-	loads       map[string]datatruck.Load
+	tx                pgx.Tx
+	vacations         map[string]vacationWeek
+	configuration     *payrollConfigurationState
+	costs             []payCostRecord
+	costsLoaded       bool
+	loads             map[string]datatruck.Load
+	projectionSources map[string][]byte
+	projectionRoutes  map[string][]byte
+	scale             map[string]payrollScaleWeek
+}
+
+type payrollConfigurationState struct {
+	charges map[string][]byte
+	trucks  []byte
+}
+
+type payrollPublicationReadKey struct{}
+type payrollPublicationReadState struct {
+	tx                pgx.Tx
+	configurations    map[string]*payrollConfigurationState
+	resourceLinks     map[string]map[string][]string
+	scale             map[string]payrollScaleWeek
+	truckInputs       map[string]truckPayInputs
+	driverEligibility map[string]map[string]payrollDriverEligibility
+}
+
+// Start only after all canonical writes. Configuration queries read every phase
+// and occurrence for their exact component, independently of the report week.
+// Period-specific balances, routing and reports remain separate read memos.
+func payrollPublicationReadContext(ctx context.Context, tx pgx.Tx) context.Context {
+	return context.WithValue(ctx, payrollPublicationReadKey{}, &payrollPublicationReadState{tx: tx, configurations: map[string]*payrollConfigurationState{}, resourceLinks: map[string]map[string][]string{}, scale: map[string]payrollScaleWeek{}, truckInputs: map[string]truckPayInputs{}})
 }
 
 func payrollReadContext(ctx context.Context, tx pgx.Tx) context.Context {
 	if s, ok := ctx.Value(payrollReadKey{}).(*payrollReadState); ok && s != nil && s.tx == tx {
 		return ctx
 	}
-	return context.WithValue(ctx, payrollReadKey{}, &payrollReadState{tx: tx, charges: map[string][]byte{}})
+	configuration := &payrollConfigurationState{charges: map[string][]byte{}}
+	scale := map[string]payrollScaleWeek{}
+	publication, _ := ctx.Value(payrollPublicationReadKey{}).(*payrollPublicationReadState)
+	authoritative, _ := ctx.Value(payrollAuthoritativeKey{}).(bool)
+	if publication != nil && publication.tx == tx && !authoritative {
+		scale = publication.scale
+		key := "all"
+		if selected, _ := ctx.Value(payrollSelectionKey{}).(*payrollSelection); selected != nil {
+			key = strings.Join(selected.drivers, ",") + ":" + strings.Join(selected.trucks, ",") + ":" + strings.Join(selected.owners, ",")
+		}
+		if previous := publication.configurations[key]; previous != nil {
+			configuration = previous
+		} else {
+			publication.configurations[key] = configuration
+		}
+	}
+	return context.WithValue(ctx, payrollReadKey{}, &payrollReadState{tx: tx, configuration: configuration, scale: scale})
 }
 func payrollReadMemo(ctx context.Context, q chargeQuery) *payrollReadState {
 	s, _ := ctx.Value(payrollReadKey{}).(*payrollReadState)
@@ -69,7 +110,7 @@ type payrollChargeInputs struct {
 func payrollChargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, map[string]map[string]bool, error) {
 	s := payrollReadMemo(ctx, q)
 	if s != nil {
-		if b := s.charges[driver]; b != nil {
+		if b := s.configuration.charges[driver]; b != nil {
 			var v payrollChargeInputs
 			err := json.Unmarshal(b, &v)
 			return v.Data, v.Loads, err
@@ -77,20 +118,20 @@ func payrollChargeData(ctx context.Context, q chargeQuery, driver string) (Charg
 	}
 	d, l, e := chargeData(ctx, q, driver)
 	if e == nil && s != nil {
-		s.charges[driver], _ = json.Marshal(payrollChargeInputs{d, l})
+		s.configuration.charges[driver], _ = json.Marshal(payrollChargeInputs{d, l})
 	}
 	return d, l, e
 }
 func payrollTruckData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
 	s := payrollReadMemo(ctx, q)
-	if s != nil && s.trucks != nil {
+	if s != nil && s.configuration.trucks != nil {
 		var d TruckChargeData
-		e := json.Unmarshal(s.trucks, &d)
+		e := json.Unmarshal(s.configuration.trucks, &d)
 		return d, e
 	}
 	d, e := truckChargeData(ctx, q)
 	if e == nil && s != nil {
-		s.trucks, _ = json.Marshal(d)
+		s.configuration.trucks, _ = json.Marshal(d)
 	}
 	return d, e
 }

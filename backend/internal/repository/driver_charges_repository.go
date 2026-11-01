@@ -175,7 +175,7 @@ func (r *DriverChargeRepository) List(ctx context.Context, driver string) (Charg
 			return data, err
 		}
 	}
-	return data, tx.Commit(ctx)
+	return data, commitPayrollMutation(ctx, tx)
 }
 func chargeAudit(ctx context.Context, tx pgx.Tx, schedule, typeID, actor, action string, detail any) error {
 	b, err := json.Marshal(detail)
@@ -266,7 +266,7 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 	if err := validateChargeCreate(&c); err != nil {
 		return nil, err
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 			return nil, err
 		}
 	}
-	return ids, tx.Commit(ctx)
+	return ids, commitPayrollMutation(ctx, tx)
 }
 func storeOccurrence(ctx context.Context, tx pgx.Tx, o ChargeOccurrence) error {
 	_, err := tx.Exec(ctx, `INSERT INTO driver_charge_occurrences(schedule_id,week_start,name,scheduled_amount,amount,overridden,confirmed_at,confirmed_by,base_amount,waive_remainder) VALUES($1,$2::date,$3,$4::numeric,$5::numeric,$6,$7,$8::uuid,nullif($9,'')::numeric,$10) ON CONFLICT(schedule_id,week_start) DO UPDATE SET name=EXCLUDED.name,scheduled_amount=EXCLUDED.scheduled_amount,amount=EXCLUDED.amount,overridden=EXCLUDED.overridden,confirmed_at=EXCLUDED.confirmed_at,confirmed_by=EXCLUDED.confirmed_by,base_amount=EXCLUDED.base_amount,waive_remainder=EXCLUDED.waive_remainder,version=driver_charge_occurrences.version+1`, o.ScheduleID, o.WeekStart, o.Name, o.ScheduledAmount, o.Amount, o.Overridden, o.ConfirmedAt, o.ConfirmedBy, o.BaseAmount, o.WaiveRemainder)
@@ -380,7 +380,7 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 			return chargeInvalid("Provide a positive amount")
 		}
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -503,7 +503,7 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 func (r *DriverChargeRepository) History(ctx context.Context, id string) ([]ChargeEvent, error) {
 	rows, err := r.pool.Query(ctx, `SELECT e.id,e.action,coalesce(u.username,'System'),e.details,e.created_at FROM driver_charge_events e LEFT JOIN app_users u ON u.id=e.actor_id WHERE e.schedule_id=$1 OR (e.schedule_id IS NULL AND e.type_id=(SELECT type_id FROM driver_charge_schedules WHERE id=$1)) ORDER BY e.id DESC`, id)
@@ -541,7 +541,7 @@ func (r *DriverChargeRepository) Preview(ctx context.Context, id string) ([]Char
 			if err != nil {
 				return nil, err
 			}
-			return rows, tx.Commit(ctx)
+			return rows, commitPayrollMutation(ctx, tx)
 		}
 	}
 	return nil, ErrNotFound

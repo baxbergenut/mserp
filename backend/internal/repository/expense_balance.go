@@ -46,7 +46,7 @@ func (r *ExpenseRepository) CorrectExpenseBalance(ctx context.Context, id, actor
 	}
 	c.Remaining = chargeMoney(n)
 	c.Reason = strings.TrimSpace(c.Reason)
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (r *ExpenseRepository) CorrectExpenseBalance(ctx context.Context, id, actor
 		if !same {
 			return ErrDriverPayConflict
 		}
-		return tx.Commit(ctx)
+		return commitPayrollMutation(ctx, tx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -76,5 +76,5 @@ func (r *ExpenseRepository) CorrectExpenseBalance(ctx context.Context, id, actor
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

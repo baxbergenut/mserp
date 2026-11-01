@@ -21,7 +21,7 @@ func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, r
 	if role != "accountant" || (!actor.Administrator && !HasPermission(actor, "expenses.accounting.verify")) {
 		return Expense{}, ErrExpenseVerificationForbidden
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -43,14 +43,14 @@ func (r *ExpenseRepository) VerifyExpense(ctx context.Context, id, categoryID, r
 	if err != nil {
 		return Expense{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
 }
 
 func (r *ExpenseRepository) UnverifyExpense(ctx context.Context, id, categoryID, verificationID string, actor AuthUser) (Expense, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -82,7 +82,7 @@ func (r *ExpenseRepository) UnverifyExpense(ctx context.Context, id, categoryID,
 	if err != nil {
 		return Expense{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)

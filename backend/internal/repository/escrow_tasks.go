@@ -93,7 +93,7 @@ func (r *EscrowRepository) CompleteTask(ctx context.Context, id, actor string, i
 	if len([]rune(input.Reason)) > 5000 || strings.ContainsRune(input.Reason, 0) {
 		return chargeInvalid("Reason must contain at most 5,000 characters without null characters")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -181,5 +181,5 @@ func (r *EscrowRepository) CompleteTask(ctx context.Context, id, actor string, i
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

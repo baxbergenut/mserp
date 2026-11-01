@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,13 +27,32 @@ type payrollPlanQuery struct {
 }
 type payrollPlanTracer struct {
 	db.Tracer
-	mu   sync.Mutex
-	slow payrollPlanQuery
+	mu      sync.Mutex
+	slow    payrollPlanQuery
+	queries map[string]string
 }
 
 func (p *payrollPlanTracer) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
 	ctx = p.Tracer.TraceQueryStart(ctx, c, d)
+	p.recordQuery(d.SQL)
 	return context.WithValue(ctx, payrollPlanKey{}, payrollPlanQuery{sql: d.SQL, args: d.Args, start: time.Now()})
+}
+
+func (p *payrollPlanTracer) TraceBatchQuery(ctx context.Context, c *pgx.Conn, d pgx.TraceBatchQueryData) {
+	p.Tracer.TraceBatchQuery(ctx, c, d)
+	p.recordQuery(d.SQL)
+}
+
+func (p *payrollPlanTracer) recordQuery(query string) {
+	if p.queries != nil {
+		fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(query)))[:16]
+		p.mu.Lock()
+		if _, known := p.queries[fingerprint]; !known && len(p.queries) < 512 {
+			// Local synthetic diagnostic only. Never retain SQL argument values.
+			p.queries[fingerprint] = strings.Join(strings.Fields(query), " ")
+		}
+		p.mu.Unlock()
+	}
 }
 func (p *payrollPlanTracer) TraceQueryEnd(ctx context.Context, c *pgx.Conn, d pgx.TraceQueryEndData) {
 	p.Tracer.TraceQueryEnd(ctx, c, d)
@@ -126,6 +146,15 @@ func TestPayrollPerformance(t *testing.T) {
 	cfg.ConnConfig.RuntimeParams["role"] = "mserp_app"
 	cfg.ConnConfig.RuntimeParams["jit"] = "off"
 	tracer := &payrollPlanTracer{}
+	if os.Getenv("MSERP_PAYROLL_SQL_FINGERPRINTS") == "1" {
+		tracer.queries = map[string]string{}
+		defer func() {
+			tracer.mu.Lock()
+			defer tracer.mu.Unlock()
+			body, _ := json.Marshal(tracer.queries)
+			t.Logf("synthetic SQL fingerprints %s", body)
+		}()
+	}
 	cfg.ConnConfig.Tracer = tracer
 	cfg.MaxConns = 5
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -232,6 +261,13 @@ func TestPayrollPerformance(t *testing.T) {
 			}
 			_ = tx.Rollback(ctx)
 		}
+	}
+	if os.Getenv("MSERP_PAYROLL_PROJECTION_PARITY") == "1" {
+		verifyPayrollProjectionFixture(t, ctx, pool)
+		if os.Getenv("MSERP_PAYROLL_PREPARED_COMMAND_PROFILE") == "1" {
+			profilePreparedPayrollCommands(t, ctx, pool)
+		}
+		return
 	}
 	for _, kind := range []string{"driver", "investor"} {
 		read := func(c context.Context, r *DriverPayRepository) (DriverPayWeek, error) {

@@ -169,7 +169,7 @@ func (r *WeighMyTruckRepository) SyncSettlements(ctx context.Context) (int, erro
 }
 
 func (r *WeighMyTruckRepository) StoreSettlements(ctx context.Context, day string, tickets []weighmytruck.Ticket) error {
-	tx, e := r.pool.Begin(ctx)
+	tx, e := beginPayrollSourceMutation(ctx, r.pool)
 	if e != nil {
 		return e
 	}
@@ -227,6 +227,19 @@ func reconcileWMT(ctx context.Context, tx pgx.Tx) error {
 }
 
 func wmtPayrollCharges(ctx context.Context, tx pgx.Tx, week string) (map[string][]PayAutoCharge, map[string][]PayAutoCharge, error) {
+	cache := payrollScaleCache(ctx, tx)
+	if value, ok := cache[week]; ok {
+		copy := copyPayrollScaleWeek(value)
+		return copy[0], copy[1], nil
+	}
+	drivers, trucks, err := wmtPayrollChargesUncached(ctx, tx, week)
+	if err == nil && cache != nil {
+		cache[week] = copyPayrollScaleWeek(payrollScaleWeek{drivers, trucks})
+	}
+	return drivers, trucks, err
+}
+
+func wmtPayrollChargesUncached(ctx context.Context, tx pgx.Tx, week string) (map[string][]PayAutoCharge, map[string][]PayAutoCharge, error) {
 	drivers, trucks := map[string][]PayAutoCharge{}, map[string][]PayAutoCharge{}
 	rows, e := tx.Query(ctx, `SELECT t.id::text,t.ticket_number,t.transaction_date::text,t.amount::text,coalesce(pd.driver_id::text,''),coalesce(t.truck_id::text,''),b.payer`+wmtChargeFrom+` WHERE t.transaction_date>=$1::date AND t.transaction_date<$1::date+7 AND t.driver_id IS NOT NULL AND t.match_warning NOT LIKE '%conflicts%' AND NOT frozen.misplaced AND (b.payer='driver' OR (b.payer='investor' AND s.owner_id=i.id)) ORDER BY t.transaction_date,t.ticket_number`, week)
 	if e != nil {
@@ -256,7 +269,7 @@ func (r *WeighMyTruckRepository) LinkTransaction(ctx context.Context, id, driver
 	if strings.TrimSpace(driver) == "" || strings.TrimSpace(truck) == "" {
 		return &WMTValidationError{"Select both a driver and truck."}
 	}
-	tx, e := r.pool.Begin(ctx)
+	tx, e := beginPayrollMutation(ctx, r.pool)
 	if e != nil {
 		return e
 	}
@@ -284,5 +297,5 @@ func (r *WeighMyTruckRepository) LinkTransaction(ctx context.Context, id, driver
 	if e != nil {
 		return e
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }

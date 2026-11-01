@@ -326,7 +326,7 @@ func (r *FuelRepository) refreshRelayDrivers(ctx context.Context, conn *pgxpool.
 			return snapshot, e
 		}
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, conn)
 	if err != nil {
 		return snapshot, err
 	}
@@ -586,7 +586,7 @@ func (r *FuelRepository) changeRelayDriverLocked(ctx context.Context, conn *pgxp
 // A newly created account has an explicit user-selected Clustie identity. Existing
 // accounts still require the assigned reviewer's normal Tasks authorization.
 func (r *FuelRepository) linkCreatedRelayDriver(ctx context.Context, conn *pgxpool.Conn, d relay.Driver, driverID, actor string) error {
-	tx, err := conn.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, conn)
 	if err != nil {
 		return err
 	}

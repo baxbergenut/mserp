@@ -17,7 +17,7 @@ type ExpenseApplicant struct {
 // Applicant delivery shares the hire receipt lock and global event-ID namespace.
 // Older source snapshots are acknowledged without overwriting newer ones.
 func (r *FleetRepository) AcceptFleetScopeApplicant(ctx context.Context, event fleetscope.Event, hash string) (IntakeResult, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return IntakeResult{}, err
 	}

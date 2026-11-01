@@ -14,7 +14,7 @@ type truckCostAllocation struct {
 	unlinkedFuel bool
 }
 
-func readTruckCostAllocations(ctx context.Context, tx pgx.Tx, week string) (map[string]*truckCostAllocation, error) {
+func readTruckCostAllocationsUncached(ctx context.Context, tx pgx.Tx, week string) (map[string]*truckCostAllocation, error) {
 	result := map[string]*truckCostAllocation{}
 	ensure := func(id string) *truckCostAllocation {
 		if result[id] == nil {

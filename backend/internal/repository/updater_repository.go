@@ -53,7 +53,7 @@ func (r *FleetRepository) ListUpdaters(ctx context.Context) ([]Updater, error) {
 	return result, rows.Err()
 }
 func (r *FleetRepository) SaveUpdater(ctx context.Context, id string, in UpdaterInput) (Updater, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return Updater{}, err
 	}

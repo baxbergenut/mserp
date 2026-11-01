@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+# Explicit operator transition, never an online feature-toggle endpoint.
+target=${1:-}
+epoch=${2:-}
+[[ $EUID == 0 ]] || { echo "run as root" >&2; exit 2; }
+[[ $target == global || $target == dual || $target == resources ]] || { echo "expected global, dual, or resources" >&2; exit 2; }
+[[ $epoch =~ ^[1-9][0-9]*$ ]] || { echo "a reviewed protocol epoch is required" >&2; exit 2; }
+exec 9>/run/lock/mserp-deploy.lock
+flock -n 9 || { echo "another deployment or payroll transition is running" >&2; exit 1; }
+
+binary=/opt/mserp/current/backend/mserp-api
+config=/etc/mserp/mserp.env
+[[ $($binary -payroll-protocol-capability) == payroll-resources-v1 ]] || { echo "release lacks the required payroll protocol" >&2; exit 1; }
+# The portal is independently installed. Its old binary must not rejoin writers
+# after the protocol transition, even when it was temporarily stopped beforehand.
+portal=/opt/fleet-review/fleet-review
+if [[ -f $portal ]]; then
+    [[ $($portal -payroll-protocol-capability) == payroll-resources-v1 ]] || { echo "install the matching fleet-review binary before switching payroll" >&2; exit 1; }
+fi
+operator() {
+    # The CLI switch is separate from the runtime flag. This also permits a
+    # rollback while the database and environment temporarily disagree.
+    runuser -u mserp -- env PAYROLL_RESOURCE_LOCKS=false "$binary" "$@"
+}
+status=$(operator -payroll-protocol-status)
+read -r previous actual_epoch < <(printf '%s' "$status" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["mode"],s["epoch"])')
+[[ $actual_epoch == "$epoch" ]] || { echo "protocol epoch changed; review status again" >&2; exit 1; }
+[[ $previous != "$target" ]] || { echo "protocol already $target at epoch $epoch"; exit 0; }
+
+backup=''
+staged=''
+active=()
+for service in mserp-api.service mserp-expense-sheet.service fleet-review.service; do
+    if systemctl is-active --quiet "$service"; then active+=("$service"); fi
+done
+stopped=false
+complete=false
+writers_stopped() {
+    local service
+    for service in mserp-api.service mserp-expense-sheet.service fleet-review.service; do
+        if systemctl is-active --quiet "$service"; then return 1; fi
+    done
+}
+cleanup() {
+    rc=$?
+    trap - EXIT
+    if [[ $stopped == true && $complete != true ]]; then
+        # Stop any partially restarted writer before inspecting/rolling back.
+        for service in "${active[@]}"; do systemctl stop "$service" || true; done
+        recovered=false
+        if writers_stopped && status=$(operator -payroll-protocol-status); then
+            read -r current current_epoch < <(printf '%s' "$status" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["mode"],s["epoch"])')
+            if [[ $current == "$previous" && $current_epoch == "$epoch" ]]; then
+                recovered=true
+            elif [[ $current == "$target" && $current_epoch == "$((epoch+1))" ]]; then
+                if operator -payroll-protocol-switch "$previous" -payroll-protocol-epoch "$current_epoch"; then recovered=true; fi
+            fi
+        fi
+        if [[ $recovered == true ]] && cp --preserve=all -- "$backup" "$config"; then
+            for service in "${active[@]}"; do systemctl start "$service" || true; done
+            echo "transition failed; previous protocol and configuration restored" >&2
+        else
+            echo "transition outcome needs review; writers remain stopped, configuration backup: $backup" >&2
+            rm -f -- "$staged"
+            exit "$rc"
+        fi
+    fi
+    rm -f -- "$backup" "$staged"
+    exit "$rc"
+}
+trap cleanup EXIT
+backup=$(mktemp /etc/mserp/.payroll-protocol-backup.XXXXXX)
+staged=$(mktemp /etc/mserp/.payroll-protocol-staged.XXXXXX)
+cp --preserve=all -- "$config" "$backup"
+cp --preserve=all -- "$config" "$staged"
+python3 - "$staged" "$target" <<'PY'
+from pathlib import Path
+import re, sys
+p=Path(sys.argv[1])
+changes={"PAYROLL_PROJECTION_MODE":"shadow", "PAYROLL_PREPARED_READS":"true",
+         "PAYROLL_PREPARED_COMMANDS":"true", "PAYROLL_PREPARED_FINALIZATION":"true",
+         "PAYROLL_RESOURCE_LOCKS":"true" if sys.argv[2]=="resources" else "false"}
+lines=p.read_text().splitlines()
+result=[]
+for line in lines:
+    match=re.match(r"\s*(?:export\s+)?([A-Z_]+)\s*=",line)
+    if match and match[1] in changes:
+        continue
+    result.append(line)
+result.extend(f"{key}={value}" for key,value in changes.items())
+p.write_text("\n".join(result)+"\n")
+PY
+stopped=true
+for service in "${active[@]}"; do systemctl stop "$service"; done
+for service in mserp-api.service mserp-expense-sheet.service fleet-review.service; do
+    if systemctl is-active --quiet "$service"; then echo "writer did not stop: $service" >&2; exit 1; fi
+done
+operator -payroll-protocol-switch "$target" -payroll-protocol-epoch "$epoch"
+mv -f -- "$staged" "$config"
+for service in "${active[@]}"; do systemctl start "$service"; done
+if [[ " ${active[*]} " == *" mserp-api.service "* ]]; then
+    ready=false
+    for attempt in {1..60}; do
+        if curl --fail --silent --show-error http://127.0.0.1:18080/readyz >/dev/null 2>&1; then ready=true; break; fi
+        sleep 1
+    done
+    [[ $ready == true ]] || { echo "API did not become ready" >&2; exit 1; }
+fi
+complete=true
+operator -payroll-protocol-status
+echo "protocol switched; verify preparation completion and authenticated payroll before declaring rollout complete"

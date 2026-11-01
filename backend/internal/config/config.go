@@ -16,6 +16,11 @@ import (
 )
 
 type Config struct {
+	PayrollProjectionMode        string
+	PayrollPreparedReads         bool
+	PayrollPreparedCommands      bool
+	PayrollPreparedFinalization  bool
+	PayrollResourceLocks         bool
 	Samsara                      samsara.Options
 	BoardRoutes                  boardroutes.Options
 	WeighMyTruck                 weighmytruck.Options
@@ -63,6 +68,14 @@ type DailySyncTime struct {
 }
 
 func Load() (Config, error) {
+	payrollMode, err := loadPayrollProjectionMode()
+	if err != nil {
+		return Config{}, err
+	}
+	payrollPreparedReads, _ := strconv.ParseBool(envOrDefault("PAYROLL_PREPARED_READS", "false"))
+	payrollPreparedCommands, _ := strconv.ParseBool(envOrDefault("PAYROLL_PREPARED_COMMANDS", "false"))
+	payrollPreparedFinalization, _ := strconv.ParseBool(envOrDefault("PAYROLL_PREPARED_FINALIZATION", "false"))
+	payrollResourceLocks, _ := strconv.ParseBool(envOrDefault("PAYROLL_RESOURCE_LOCKS", "false"))
 	samsaraOptions, err := samsara.LoadOptions()
 	if err != nil {
 		return Config{}, err
@@ -233,6 +246,11 @@ func Load() (Config, error) {
 		OpenAIAPIKey:                 strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 		OpenAIExpenseModel:           envOrDefault("OPENAI_EXPENSE_MODEL", "gpt-6-luna"),
 		RelayEnvironment:             relayEnvironment,
+		PayrollProjectionMode:        payrollMode,
+		PayrollPreparedReads:         payrollPreparedReads,
+		PayrollPreparedCommands:      payrollPreparedCommands,
+		PayrollPreparedFinalization:  payrollPreparedFinalization,
+		PayrollResourceLocks:         payrollResourceLocks,
 		RelayAPIURL:                  relayAPIURL,
 		RelayAPIKey:                  relayAPIKey,
 		RelayFuelSyncStart:           relaySyncStart,

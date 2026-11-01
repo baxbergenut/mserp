@@ -172,7 +172,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	if err != nil {
 		return board, err
 	}
-	return board, tx.Commit(ctx)
+	return board, commitPayrollMutation(ctx, tx)
 }
 
 // Payroll projections share the exact board resolution and transaction snapshot.
@@ -351,7 +351,7 @@ func (r *GrossBoardRepository) Save(ctx context.Context, entries []GrossBoardEnt
 }
 
 func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossBoardEntry, actors ...string) ([]GrossBoardEntry, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return nil, err
 	}
@@ -576,7 +576,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			return nil, err
 		}
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitPayrollMutation(ctx, tx); err != nil {
 		return nil, err
 	}
 	return entries, nil

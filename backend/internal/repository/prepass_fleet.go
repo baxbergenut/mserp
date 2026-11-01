@@ -441,7 +441,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 			}
 		}
 	}
-	tx, err := conn.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -484,7 +484,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		if err = r.writePrePassPlateResult(ctx, tx, in, snap, before.Input().LicensePlate); err != nil {
 			return err
 		}
-		return tx.Commit(ctx)
+		return commitPayrollMutation(ctx, tx)
 	}
 	if in.Action == "link" {
 		if err = r.writeFleetTollLink(ctx, tx, in, before, actor); err != nil {
@@ -496,7 +496,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		if _, err = tx.Exec(ctx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID); err != nil {
 			return err
 		}
-		return tx.Commit(ctx)
+		return commitPayrollMutation(ctx, tx)
 	}
 	// A committed receipt precedes every network mutation. Neither a timeout nor
 	// a browser retry can send the mutation twice, including across server restarts.
@@ -583,17 +583,44 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		}
 		return prepassInvalid("PrePass has not yet shown the expected change. Review the unresolved request before retrying.")
 	}
+	if resolvePlate || in.Action == "add" {
+		// The identity lock spans the provider call and read-back, but a payroll
+		// lock must never span that network operation or be acquired after a truck
+		// row lock. Start the local publication phase in the ordinary lock order,
+		// then recheck the original reviewed version. A change in this handoff
+		// leaves the durable request pending for review; it never resends HTTP.
+		if err = tx.Rollback(opCtx); err != nil {
+			return err
+		}
+		tx, err = beginPayrollMutation(opCtx, conn)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback(context.WithoutCancel(ctx))
+		if resolvePlate {
+			var reviewed prepass.Plate
+			reviewed, err = r.checkPrePassPlate(opCtx, tx, in, before)
+			if err == nil && reviewed != plate {
+				err = ErrPrePassFleetConflict
+			}
+		} else {
+			err = r.checkPrePassTruck(opCtx, tx, in)
+		}
+		if err != nil {
+			return err
+		}
+	}
 	if resolvePlate {
 		if err = r.writePrePassPlateResult(opCtx, tx, in, after, plate); err != nil {
 			return err
 		}
-		return tx.Commit(opCtx)
+		return commitPayrollMutation(opCtx, tx)
 	}
 	if in.Action == "add" {
 		if err = r.writePrePassLink(opCtx, tx, in, actor); err != nil {
 			return err
 		}
-		if err = tx.Commit(opCtx); err != nil {
+		if err = commitPayrollMutation(opCtx, tx); err != nil {
 			return err
 		}
 	}

@@ -98,5 +98,5 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	result.DriverIDs = groups[destination]
 	result.Revision = boardOrderRevision(destination, versions[destination], result.DriverIDs)
 	result.SourceRevision = boardOrderRevision(a.DispatcherID, versions[a.DispatcherID], groups[a.DispatcherID])
-	return result, tx.Commit(ctx)
+	return result, commitPayrollMutation(ctx, tx)
 }

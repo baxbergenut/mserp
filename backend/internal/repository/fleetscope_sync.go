@@ -344,7 +344,7 @@ func (r *FleetSyncRepository) Review(ctx context.Context, in FleetSyncReviewInpu
 	if !fleetscope.ValidID(in.SnapshotID) || !fleetscope.ValidID(in.LocalID) || (in.Kind != "truck" && in.Kind != "driver") || strings.TrimSpace(in.Reason) == "" || len(in.Reason) > 1000 {
 		return errors.New("select a record and enter a review reason")
 	}
-	tx, e := r.pool.Begin(ctx)
+	tx, e := beginPayrollSourceMutation(ctx, r.pool)
 	if e != nil {
 		return e
 	}
@@ -609,7 +609,7 @@ func (r *FleetSyncRepository) Supersede(ctx context.Context, id, actor string) e
 	if !fleetscope.ValidID(id) {
 		return ErrNotFound
 	}
-	tx, e := r.pool.Begin(ctx)
+	tx, e := beginPayrollSourceMutation(ctx, r.pool)
 	if e != nil {
 		return e
 	}

@@ -13,6 +13,9 @@ import (
 
 func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repository.DriverPayRepository, charges *repository.DriverChargeRepository) {
 	fail := func(w http.ResponseWriter, err error) {
+		if payrollPreparationError(w, err) {
+			return
+		}
 		var blocked *repository.PayrollFinalizationBlockedError
 		var invalid *repository.ChargeValidationError
 		var pg *pgconn.PgError
@@ -25,7 +28,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeAPIError(w, 409, err.Error())
 		case errors.Is(err, pgx.ErrNoRows):
 			writeAPIError(w, 404, "Record not found")
-		case errors.As(err, &pg) && (pg.Code == "23514" || pg.Code == "23503" || pg.Code == "23505"):
+		case errors.As(err, &pg) && (pg.Code == "23514" || pg.Code == "23503" || pg.Code == "23505" || pg.Code == "40001" || pg.Code == "40P01"):
 			writeAPIError(w, 409, "A related settlement or charge changed; reload and review")
 		default:
 			logger.Error("investor accounting failed", "error", err)
@@ -118,7 +121,15 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			return
 		}
 		var v repository.DriverPayWeek
-		if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+		if pay.PreparedReadsEnabled() {
+			if target != "" {
+				query.ID = target
+			}
+			if !r.URL.Query().Has("page") && !r.URL.Query().Has("pageSize") {
+				query.PageSize = 2147483647
+			}
+			v, err = pay.PreparedPayroll(r.Context(), "investor", week, query, r.URL.Query().Get("prepared") == "1")
+		} else if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
 			if target != "" {
 				query.ID = target
 			}
@@ -200,7 +211,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			if r.URL.Query().Get("receipt") == "1" {
 				ctx = repository.WithPayrollReceipt(ctx)
 			}
-			result, err := pay.SettleInvestor(ctx, week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override)
+			result, err := pay.SettleInvestor(ctx, week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override, repository.PayrollSettlementCommand{RequestID: v.RequestID, ExpectedStatementRevision: v.ExpectedStatementRevision})
 			if err != nil {
 				fail(w, err)
 				return

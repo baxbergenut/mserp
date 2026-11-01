@@ -91,7 +91,7 @@ func (r *FuelRepository) UpsertDay(
 	syncedAt time.Time,
 	markComplete bool,
 ) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}

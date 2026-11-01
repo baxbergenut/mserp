@@ -75,10 +75,15 @@ func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, i
 	if (input.Kind == "name") != (input.CategoryID != nil) {
 		return ExpenseSetting{}, ErrExpenseSettingInvalid
 	}
+	tx, err := beginPayrollMutation(ctx, r.pool)
+	if err != nil {
+		return ExpenseSetting{}, err
+	}
+	defer tx.Rollback(ctx)
 	var row pgx.Row
 	if id != "" {
 		var permanent bool
-		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_settings WHERE id=$1 AND kind='payment_method' AND lower(btrim(name))='reimburse')`, id).Scan(&permanent); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_settings WHERE id=$1 AND kind='payment_method' AND lower(btrim(name))='reimburse')`, id).Scan(&permanent); err != nil {
 			return ExpenseSetting{}, err
 		}
 		if permanent {
@@ -86,14 +91,17 @@ func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, i
 		}
 	}
 	if id == "" {
-		row = r.pool.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version,driver_only`, input.Kind, input.CategoryID, input.Name, input.Active)
+		row = tx.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version,driver_only`, input.Kind, input.CategoryID, input.Name, input.Active)
 	} else {
-		row = r.pool.QueryRow(ctx, `UPDATE expense_settings SET category_id=$3,name=$4,active=$5,version=version+1 WHERE id=$1 AND kind=$2 AND version=$6 RETURNING id,kind,category_id,name,active,version,driver_only`, id, input.Kind, input.CategoryID, input.Name, input.Active, input.Version)
+		row = tx.QueryRow(ctx, `UPDATE expense_settings SET category_id=$3,name=$4,active=$5,version=version+1 WHERE id=$1 AND kind=$2 AND version=$6 RETURNING id,kind,category_id,name,active,version,driver_only`, id, input.Kind, input.CategoryID, input.Name, input.Active, input.Version)
 	}
 	var result ExpenseSetting
-	err := row.Scan(&result.ID, &result.Kind, &result.CategoryID, &result.Name, &result.Active, &result.Version, &result.DriverOnly)
+	err = row.Scan(&result.ID, &result.Kind, &result.CategoryID, &result.Name, &result.Active, &result.Version, &result.DriverOnly)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrExpenseSettingConflict
 	}
-	return result, err
+	if err != nil {
+		return result, err
+	}
+	return result, commitPayrollMutation(ctx, tx)
 }

@@ -202,3 +202,60 @@ expense-sheet writers while restoring Status Board rules and removing the 171
 normalization triggers. Original page colors and choices are restored. Retain
 migration 171, its unused settings/audit tables and extended day-status checks;
 no financial or historical records are rewritten or removed.
+
+## Persistent payroll protocol (182)
+
+The implementation and outstanding release gates are tracked in
+`docs/PAYROLL_PERSISTENCE.md`. Migration 182 is additive and defaults to capture
+off/global locking. Installing it alone does not activate prepared payroll.
+Install the matching `mserp-deploy` helper before this migration. Once capture is
+active, rollback binaries must include migration 182 and answer
+`-payroll-protocol-capability` with `payroll-resources-v1`.
+
+After correctness checks, measured performance review and shadow cohort reconciliation,
+install `deploy/mserp-payroll-protocol` as `/usr/local/bin/mserp-payroll-protocol`
+owned by root with mode 0755. Migration 182 pauses the fleet-review service as well
+as the API/exporter. Before protocol activation, install the packaged
+`backend/fleet-review` binary at its existing `/opt/fleet-review/fleet-review`
+path while that service is stopped; preserve the preceding binary for recovery.
+The protocol helper checks its capability before stopping or switching any writer.
+Migration 182 grants the existing `fleet_review_portal` role only the new capture
+and protocol-read privileges its canonical source writes require; it cannot change
+protocol settings. A differently named portal role needs equivalent explicit grants.
+
+First enable shadow mode with prepared capabilities off, restart the API, and wait
+for its full-reference backfill to reconcile every queued period. Inspect job errors,
+source backlog, pending generations and the saved/finalized week cohort. Then use
+the quiesced transitions below to enable prepared capabilities and resource locking.
+Read the current mode and epoch as `mserp` using the
+active binary's `-payroll-protocol-status`. Pass the reviewed epoch explicitly:
+
+```sh
+sudo mserp-payroll-protocol dual REVIEWED_EPOCH
+sudo mserp-payroll-protocol resources REVIEWED_EPOCH
+# Rollback uses the same quiesced transition with the latest reviewed epoch:
+sudo mserp-payroll-protocol global REVIEWED_EPOCH
+```
+
+Each command holds the deployment lock, stages the payroll environment flags,
+stops all active API/export/review writers and confirms they stopped. The CLI
+takes the source gate and all classified source-table locks before advancing the
+protocol epoch, recording a transition receipt and invalidating prepared jobs.
+Only previously active services restart. Prepare and verify the affected cohort
+before declaring the transition complete; readiness alone does not establish
+payroll freshness. Pause any separately operated import/administrative writers
+for this transition too.
+
+A failed restart or lost switch response is recovered only from the observed
+mode/epoch. The helper stops writers again, switches back when the outcome is
+known, and restores the original environment. If writer shutdown or the database
+outcome cannot be verified, it retains the private configuration backup and
+requires operator recovery. Do not delete the backup or retry a financial command
+to repair derived preparation. Inspect status and transition receipts, restore a
+compatible configuration, then use the same helper with the current epoch.
+
+`bash deploy/test-payroll-protocol.sh` exercises success, stale epochs, preparation
+failure, stop/start failures, failed readiness, lost responses, uncertain outcomes
+and rollback with isolated mocks. It does not contact production or replace live
+release verification. The release checks also run its real Python serializer on Linux with synthetic
+configuration, including preservation of unrelated settings.

@@ -24,7 +24,12 @@ func registerPayCostTransactions(r chi.Router, kind string, repo *repository.Dri
 			writeAPIError(w, 400, "Choose fuel or toll")
 			return
 		}
-		result, err := repo.CostTransactions(r.Context(), kind, id, week, cost)
+		revision := r.URL.Query().Get("revision")
+		if revision != "" && !isUUID(revision) {
+			writeAPIError(w, 400, "Invalid statement revision")
+			return
+		}
+		result, err := repo.CostTransactions(r.Context(), kind, id, week, cost, revision)
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeAPIError(w, 404, "Statement not found")
 			return

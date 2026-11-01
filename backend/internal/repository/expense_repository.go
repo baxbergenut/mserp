@@ -382,7 +382,7 @@ func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, value
 }
 
 func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInput) (Expense, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -397,14 +397,14 @@ func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInpu
 	if err = syncExpenseMaintenance(ctx, tx, id, input, nil); err != nil {
 		return Expense{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
 }
 
 func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []ExpenseInput) ([]Expense, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []Expense
 		}
 		values = append(values, value)
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := commitPayrollMutation(ctx, tx); err != nil {
 		return nil, err
 	}
 	if err = r.loadWorkOrderDescriptions(ctx, values); err != nil {
@@ -559,7 +559,7 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 }
 
 func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input ExpenseInput) (Expense, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -580,7 +580,7 @@ func (r *ExpenseRepository) UpdateExpense(ctx context.Context, id string, input 
 	if err = syncExpenseMaintenance(ctx, tx, id, input, &previous); err != nil {
 		return Expense{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
@@ -643,7 +643,7 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors
 			return err
 		}
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -690,7 +690,7 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 const selectExpensesSQL = `

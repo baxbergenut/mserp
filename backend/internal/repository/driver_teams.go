@@ -63,7 +63,7 @@ func (r *FleetRepository) GetDriverTeam(ctx context.Context, driver string) (Dri
 }
 
 func (r *FleetRepository) SetDriverTeam(ctx context.Context, main string, input DriverTeamInput, actor string) (DriverTeam, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return DriverTeam{}, err
 	}
@@ -72,7 +72,7 @@ func (r *FleetRepository) SetDriverTeam(ctx context.Context, main string, input 
 	if err != nil {
 		return value, err
 	}
-	return value, tx.Commit(ctx)
+	return value, commitPayrollMutation(ctx, tx)
 }
 
 func setDriverTeamTx(ctx context.Context, tx pgx.Tx, main string, input DriverTeamInput, actor string) (DriverTeam, error) {

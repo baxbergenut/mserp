@@ -1,0 +1,22 @@
+Running test-payroll-prepared.mjs
+Prepared payroll: preparation, stale/failed values, retry, pinned details, lost response replay, typing during recovery and committed placement receipts passed on both pages.
+Running test-payroll-grid.mjs
+Payroll grid browser checks passed for driver and investor: row geometry, borders, conditional scrolling, replacement typing, arrow keys, saved undo, source preview/undo, narrow layout.
+Running test-driver-pay.mjs
+Driver pay checks passed: exact adjustment totals, missing fees, and autosave reconciliation.
+Driver pay cost checks passed: eligibility, signed credits, zero weeks, manual overrides, reset, validation and save reconciliation.
+Generated charge checks passed: charge-only totals, skips, validation, and typing during save.
+Expense deduction checks passed: exact totals, bounds, zero deferrals and edits during save.
+Investor pay checks passed: earnings charged once, truck costs and expenses, owner-only fees, review indicators.
+Remainder checks passed: automatic carry, zero deferral, tariff changes and cross-week revision reconciliation.
+Escrow releases add the exact fixed credit to payroll totals.
+Payroll undo preserves current concurrency and payment metadata.
+Legacy finalized layover amounts and exclusions remain readable.
+Source-backed charges keep their direction and cannot exceed the source due.
+Lazy payroll hydration preserves aggregate totals and rejects obsolete responses.
+Truck source deductions: live totals, carry limits, saved undo and in-flight revision reconciliation.
+Expense reimbursements add exact positive payouts with ordinary balance limits and autosave.
+Running test-payroll-lazy.mjs
+Both payroll pages: compact initial summaries, expansion-only details, cached reopen, and refresh invalidation passed.
+Running test-pay-finalization.mjs
+Payroll finalization passed: all pages, week-wide counts, filters, finalized/reopened/unknown/empty states, card order and responsive overflow. Screenshots: D:\MovedFromC\Temp\mserp-pay-finalization

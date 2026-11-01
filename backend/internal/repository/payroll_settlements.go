@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"mserp/internal/db"
 	"sort"
 	"strings"
 	"time"
@@ -24,11 +23,13 @@ type PayrollSettlement struct {
 }
 
 type PayrollSettlementInput struct {
-	WeekStart string `json:"weekStart"`
-	DriverID  string `json:"driverId"`
-	Revision  string `json:"revision"`
-	Reason    string `json:"reason"`
-	Override  bool   `json:"override"`
+	RequestID                 string `json:"requestId,omitempty"`
+	ExpectedStatementRevision string `json:"expectedStatementRevision,omitempty"`
+	WeekStart                 string `json:"weekStart"`
+	DriverID                  string `json:"driverId"`
+	Revision                  string `json:"revision"`
+	Reason                    string `json:"reason"`
+	Override                  bool   `json:"override"`
 }
 
 // Only these review checks can be bypassed by an explicit finalization override.
@@ -140,7 +141,7 @@ func assertPayrollOpen(ctx context.Context, tx pgx.Tx, driver, week string) erro
 
 // The exclusive session lock is acquired before opening the snapshot transaction.
 // Ordinary charge writes take its shared counterpart, retaining per-driver concurrency.
-func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver, revision, actor, reason string, reopen, override bool) (DriverPayWeek, error) {
+func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver, revision, actor, reason string, reopen, override bool, commands ...PayrollSettlementCommand) (DriverPayWeek, error) {
 	empty := DriverPayWeek{}
 	override = override && !reopen
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
@@ -152,31 +153,30 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	if override {
 		reason = "Finalized with override"
 	}
-	conn, err := r.pool.Acquire(ctx)
+	root := ""
+	if driver != "" {
+		root = "driver:" + driver
+	}
+	var request, expected string
+	if len(commands) > 0 {
+		request, expected = commands[0].RequestID, commands[0].ExpectedStatementRevision
+	}
+	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, request, expected, root)
 	if err != nil {
 		return empty, err
 	}
-	defer conn.Release()
-	endLock := db.Phase(ctx, "financial_lock_wait")
-	_, err = conn.Exec(ctx, `SELECT pg_advisory_lock(736281940)`)
-	endLock()
+	defer closeWrite()
+	command, replay, err := beginPayrollSettlement(ctx, tx, "driver", week, driver, revision, actor, reason, reopen, override, commands)
 	if err != nil {
 		return empty, err
 	}
-	defer func() {
-		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, unlockErr := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock(736281940)`); unlockErr != nil {
-			// Never return a connection holding a session lock to the pool.
-			_ = conn.Conn().Close(context.Background())
-		}
-	}()
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-	if err != nil {
-		return empty, err
+	if replay != nil {
+		var result DriverPayWeek
+		err = json.Unmarshal(replay, &result)
+		return result, err
 	}
-	defer tx.Rollback(ctx)
-	if driver != "" && strings.HasPrefix(revision, "inputs:") {
+	prepared := r.preparedFinalization && command != nil && command.expected != ""
+	if driver != "" && strings.HasPrefix(revision, "inputs:") && !prepared {
 		current := DriverPayWeek{WeekStart: week.Format(time.DateOnly)}
 		if err = setPayrollRevision(ctx, tx, "driver", &current); err != nil {
 			return empty, err
@@ -190,7 +190,19 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		}
 	}
 	var report DriverPayWeek
-	if reopen && driver != "" && strings.HasPrefix(revision, "inputs:") {
+	if prepared {
+		if driver != "" {
+			ctx, err = selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "driver", driver)
+		}
+		if err != nil {
+			return empty, err
+		}
+		report, err = preparedSettlementReport(ctx, tx, command, "driver", week, driver)
+		// Settlement writes change canonical ledgers, never the source-only facts.
+		// Do not pin the financial snapshot: subsequent reads must observe postings.
+		ctx = payrollRoutingFactsContext(ctx, command.beforeSnapshot)
+		ctx = context.WithValue(ctx, payrollNormalizedFactsKey{}, true)
+	} else if reopen && driver != "" && strings.HasPrefix(revision, "inputs:") {
 		report, err = readPayrollReopenTarget(ctx, tx, "driver", week, driver, revision)
 	} else {
 		report, err = readDriverPayWeek(ctx, tx, week, "")
@@ -198,7 +210,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	if err != nil {
 		return empty, err
 	}
-	if revision == "" || revision != report.Revision {
+	if !prepared && (revision == "" || revision != report.Revision) {
 		return empty, ErrDriverPayConflict
 	}
 	bulkExpenses := driver == "" && !reopen
@@ -213,6 +225,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	}
 	selected := 0
 	selectedIDs := map[string]bool{}
+	bulkReopen := []string{}
 	var frozenResult *DriverPayWeek
 	pending := map[string][]string{}
 	var chargeInputs *ChargeData
@@ -227,6 +240,10 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		}
 		selected++
 		selectedIDs[d.ID] = true
+		if prepared && reopen && driver == "" {
+			bulkReopen = append(bulkReopen, d.ID)
+			continue
+		}
 		if reopen {
 			var ids []string
 			if err = tx.QueryRow(ctx, `UPDATE payroll_settlements SET finalized=false,version=version+1,reopened_at=now(),reopened_by=nullif($3,'')::uuid,reason=$4 WHERE driver_id=$1 AND week_start=$2::date RETURNING confirmed_schedules`, d.ID, report.WeekStart, actor, strings.TrimSpace(reason)).Scan(&ids); err != nil {
@@ -324,10 +341,22 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	if selected == 0 {
 		return empty, chargeInvalid("No eligible driver settlements selected")
 	}
+	if len(bulkReopen) > 0 {
+		if err = reopenPreparedDriverWeek(ctx, tx, report.WeekStart, actor, reason, bulkReopen); err != nil {
+			return empty, err
+		}
+	}
 	// All selected financial writes are complete under the exclusive payroll
 	// lock. Calculate the resulting fleet once, then freeze those exact rows.
 	if len(pending) > 0 {
-		updated, e := readDriverPayWeek(ctx, tx, week, "")
+		unchanged, e := preparedPostingUnchanged(ctx, tx, prepared)
+		if e != nil {
+			return empty, e
+		}
+		updated := report
+		if !unchanged {
+			updated, e = readDriverPayWeek(ctx, tx, week, "")
+		}
 		if e != nil {
 			return empty, e
 		}
@@ -361,17 +390,22 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		frozenResult = &updated
 	}
 	if payrollReceiptRequested(ctx) && frozenResult != nil && strings.HasPrefix(report.Revision, "inputs:") {
-		result := payrollReceipt(*frozenResult, selectedIDs)
-		result, err = overlayPayrollSettlements(ctx, tx, result, driver)
+		result, err := overlaySelectedPayrollSettlements(ctx, tx, *frozenResult, selectedIDs)
 		if err != nil {
 			return empty, err
 		}
-		result = payrollReceipt(result, selectedIDs)
 		// Freezing only adds settlement metadata to these already recalculated rows.
 		if err = setPayrollRevision(ctx, tx, "driver", &result); err != nil {
 			return empty, err
 		}
-		return result, tx.Commit(ctx)
+		if r.preparedFinalization && command != nil && command.expected != "" {
+			ctx, err = retainPayrollPostWriteResult(ctx, tx, "driver", result)
+			if err != nil {
+				return empty, err
+			}
+		}
+		result = payrollReceipt(result, selectedIDs)
+		return r.commitPayrollSettlement(ctx, tx, command, "driver", result, selectedIDs)
 	}
 	if payrollReceiptRequested(ctx) && driver != "" && strings.HasPrefix(report.Revision, "inputs:") {
 		ctx, err = selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "driver", driver)
@@ -379,14 +413,47 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			return empty, err
 		}
 	}
+	if prepared {
+		ctx = beginPayrollPostWriteRead(ctx, tx)
+	}
 	result, err := readDriverPayWeek(ctx, tx, week, "")
 	if err != nil {
 		return empty, err
 	}
+	if r.preparedFinalization && command != nil && command.expected != "" {
+		ctx, err = retainPayrollPostWriteResult(ctx, tx, "driver", result)
+		if err != nil {
+			return empty, err
+		}
+	}
 	if payrollReceiptRequested(ctx) {
 		result = payrollReceipt(result, selectedIDs)
 	}
-	return result, tx.Commit(ctx)
+	return r.commitPayrollSettlement(ctx, tx, command, "driver", result, selectedIDs)
+}
+
+// Rows outside this command have already received their current display
+// decorations. Replacing those rows with older frozen JSON would discard live
+// broker reminders and other display-only updates on an existing settlement.
+func overlaySelectedPayrollSettlements(ctx context.Context, tx pgx.Tx, report DriverPayWeek, selected map[string]bool) (DriverPayWeek, error) {
+	overlaid, err := overlayPayrollSettlements(ctx, tx, payrollReceipt(report, selected), "")
+	if err != nil {
+		return report, err
+	}
+	byID := make(map[string]DriverPayDriver, len(overlaid.Drivers))
+	for _, row := range overlaid.Drivers {
+		byID[row.ID] = row
+	}
+	for i, row := range report.Drivers {
+		if selected[row.ID] {
+			committed, ok := byID[row.ID]
+			if !ok || committed.Settlement == nil || !committed.Settlement.Finalized {
+				return report, ErrDriverPayConflict
+			}
+			report.Drivers[i] = committed
+		}
+	}
+	return report, nil
 }
 
 func (r *DriverPayRepository) SettlementHistory(ctx context.Context, driver, week string) ([]SettlementEvent, error) {

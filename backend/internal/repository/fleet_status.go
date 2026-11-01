@@ -66,7 +66,7 @@ func setFleetStatusContext(ctx context.Context, tx pgx.Tx, actor, source string,
 	return err
 }
 func (r *FleetRepository) ChangeAvailability(ctx context.Context, id, actor string, in FleetStatusChange) (Driver, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Driver{}, err
 	}
@@ -110,7 +110,7 @@ func (r *FleetRepository) ChangeAvailability(ctx context.Context, id, actor stri
 			return Driver{}, err
 		}
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Driver{}, err
 	}
 	return r.GetDriver(ctx, id)
@@ -125,7 +125,7 @@ func (r *FleetRepository) ChangeTruckCondition(ctx context.Context, id, actor st
 	default:
 		return Truck{}, chargeInvalid("Invalid truck status")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Truck{}, err
 	}
@@ -160,7 +160,7 @@ func (r *FleetRepository) ChangeTruckCondition(ctx context.Context, id, actor st
 	if err != nil {
 		return Truck{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = commitPayrollMutation(ctx, tx); err != nil {
 		return Truck{}, err
 	}
 	return r.GetTruck(ctx, id)
@@ -253,7 +253,7 @@ func (r *FleetRepository) PreviewStatuses(ctx context.Context) (FleetStatusPrevi
 	return statusPreview(ctx, tx)
 }
 func (r *FleetRepository) ActivateStatuses(ctx context.Context, revision string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -297,7 +297,7 @@ func (r *FleetRepository) ActivateStatuses(ctx context.Context, revision string)
  SELECT fleet_status_project_driver(id) FROM drivers WHERE active`); err != nil {
 		return fmt.Errorf("activation: %w", err)
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
 
 func syncFleetStatusProgress(ctx context.Context, tx pgx.Tx, ids []string) error {
@@ -329,7 +329,7 @@ func syncFleetStatusProgress(ctx context.Context, tx pgx.Tx, ids []string) error
 	return nil
 }
 func (r *FleetRepository) ReconcileStatusProgress(ctx context.Context) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
@@ -363,5 +363,5 @@ func (r *FleetRepository) ReconcileStatusProgress(ctx context.Context) error {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return commitPayrollMutation(ctx, tx)
 }
