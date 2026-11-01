@@ -11,6 +11,7 @@ import { TierMedal } from "./TierMedal";
 import { PageHeader } from "@/app/components/PageHeader";
 import { FinalizationCard } from "./FinalizationCard";
 import { MetricCard } from "@/app/components/MetricCard";
+import { DispatcherPaySkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { usePermissions } from "@/app/lib/access";
 import { changeDispatcherPayStatement, fetchDispatcherCommissionRules, fetchDispatcherPay, saveDispatcherCommissionRules, saveDispatcherPayInput } from "@/app/lib/api";
@@ -105,7 +106,7 @@ export function WeeklyPayReport() {
     </div>
     {notice && <p role="status" className="text-emerald-400">{notice}</p>}
     {error && !editing && !ruleDraft && !statementAction && <div className="flex items-center gap-3">{modalError}<button className={button} onClick={() => { setLoading(true); void fetchDispatcherPay({ weekStart: week || undefined }).then(value => { setReport(value); setError(""); }).catch(e => setError(message(e))).finally(() => setLoading(false)); }}>Retry</button></div>}
-    {loading && <div aria-label="Loading dispatcher pay" className="h-40 animate-pulse rounded-lg bg-zinc-800/40" />}
+    {loading && tab === "pay" && <DispatcherPaySkeleton />}
     {!loading && report && tab === "pay" && <>
       {statements.some(s => s.rows.some(row => row.issues.length > 0)) && <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-400">Review flagged rows before finalizing.</p>}
       {visible.length === 0 && <div className="ui-card py-10 text-center text-zinc-400">No Gross Board loads in this week.</div>}
