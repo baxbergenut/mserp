@@ -112,6 +112,23 @@ Earlier diagnostic artifacts record intermediate changes and may contain superse
 failures; they are not release evidence. No timed financial benchmark runs against
 production. The unrelated local `backend/.env` modification is preserved.
 
+## Production rollout safeguards
+
+Initial shadow reconciliation exposed a retained expense dated year 0205. The
+source date, amount, allocations and carried balance remain unchanged. Automatic
+backfill now seeds actual source weeks, every saved/ledger period and recent weeks;
+it does not expand distant dates into every intervening calendar week. Other weeks
+prepare explicitly on demand. Startup removes only unmaterialized automatic jobs
+without active leases when they no longer belong to that seed set. Explicit requests,
+completed work and immutable versions remain. Fresh/incremental tests verify bounded
+work, historical/future coverage, leases and unchanged complete financial reports.
+
+Operator CLI calls must have the API service's environment precedence and working
+directory. The protocol helper uses transient systemd units with `/etc/mserp` and
+its `EnvironmentFile`; a bare login-shell invocation does not reproduce integration
+files or database configuration. The Linux recovery harness verifies this launch
+contract alongside failure recovery and configuration preservation.
+
 ## Capability boundaries
 
 `PAYROLL_PROJECTION_MODE=off` is the default. `shadow` enables capture and runs

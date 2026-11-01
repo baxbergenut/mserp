@@ -21,9 +21,13 @@ if [[ -f $portal ]]; then
     [[ $($portal -payroll-protocol-capability) == payroll-resources-v1 ]] || { echo "install the matching fleet-review binary before switching payroll" >&2; exit 1; }
 fi
 operator() {
-    # The CLI switch is separate from the runtime flag. This also permits a
-    # rollback while the database and environment temporarily disagree.
-    runuser -u mserp -- env PAYROLL_RESOURCE_LOCKS=false "$binary" "$@"
+    # Match the service's environment precedence and optional integration files.
+    # A login shell does not inherit EnvironmentFile, and loading local dotenv
+    # files alone can select obsolete database defaults. CLI operations bypass
+    # runtime protocol checks, permitting a quiesced rollback during a mismatch.
+    systemd-run --quiet --wait --pipe --collect --uid=mserp \
+        --property=WorkingDirectory=/etc/mserp \
+        --property=EnvironmentFile="$config" "$binary" "$@"
 }
 status=$(operator -payroll-protocol-status)
 read -r previous actual_epoch < <(printf '%s' "$status" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["mode"],s["epoch"])')

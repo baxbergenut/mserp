@@ -227,8 +227,19 @@ First enable shadow mode with prepared capabilities off, restart the API, and wa
 for its full-reference backfill to reconcile every queued period. Inspect job errors,
 source backlog, pending generations and the saved/finalized week cohort. Then use
 the quiesced transitions below to enable prepared capabilities and resource locking.
-Read the current mode and epoch as `mserp` using the
-active binary's `-payroll-protocol-status`. Pass the reviewed epoch explicitly:
+Read the current mode and epoch using the same environment and working directory
+as the service. Optional integration dotenv files in `/etc/mserp` supplement the
+systemd environment; launching the binary from a login shell is not equivalent:
+
+```sh
+sudo systemd-run --quiet --wait --pipe --collect --uid=mserp \
+  --property=WorkingDirectory=/etc/mserp \
+  --property=EnvironmentFile=/etc/mserp/mserp.env \
+  /opt/mserp/current/backend/mserp-api -payroll-protocol-status
+```
+
+The transition helper uses this exact operator environment for every CLI call.
+Pass the reviewed epoch explicitly:
 
 ```sh
 sudo mserp-payroll-protocol dual REVIEWED_EPOCH

@@ -51,7 +51,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 - Persistent payroll is implemented with ordered rollout capabilities in
   migration 182 and repository `payroll_projection*.go`. See
   `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,
-  capture inventory and validation. Driver and Investor Pay expose individual
+  capture inventory and validation. Backfill seeds actual source, saved/ledger and
+  recent periods; calendar gaps prepare on demand. Never expand a remote source
+  date into every intervening week or change its date/balance to reduce work.
+  Seeding retires only unmaterialized automatic jobs without active leases;
+  explicit requests and retained versions survive. Operator commands must use
+  the service environment and working directory; the protocol helper launches
+  transient systemd units with both. Driver and Investor Pay expose individual
   finalization only; the Finalize week button was removed by request. Reopen week
   and the compatible atomic bulk API remain.
   Prepared bulk reopening batches confirmation/metadata writes and retains every

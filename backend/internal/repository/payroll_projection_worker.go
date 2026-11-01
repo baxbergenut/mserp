@@ -8,34 +8,43 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Seed derived work, never collection records. Saved/finalized future weeks are
-// unbounded; ordinary history is bounded only by the earliest actual input.
+// Seed actual source, saved and recent periods, never collection records. A remote
+// historical date must not expand into centuries of empty weekly jobs. Other
+// weeks remain available through explicit on-demand preparation.
 func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error {
 	current := ChargeCurrentWeek()
 	_, err := r.pool.Exec(ctx, `WITH saved AS (
  SELECT week_start FROM driver_pay_weeks UNION SELECT week_start FROM investor_pay_weeks
  UNION SELECT week_start FROM payroll_settlements
- ), first_source AS (
- SELECT min(source_day) AS first_day FROM (
- SELECT min(service_date) AS source_day FROM gross_board_entries
- UNION ALL SELECT min(week_start) FROM saved
- UNION ALL SELECT min(expense_date) FROM expenses WHERE charge_driver_id IS NOT NULL OR owner_id IS NOT NULL OR driver_id IS NOT NULL
- UNION ALL SELECT min(start_week) FROM driver_charge_schedules
- UNION ALL SELECT min(week_start) FROM truck_charge_phases
- UNION ALL SELECT min(week_start) FROM truck_settlement_terms
- UNION ALL SELECT min(week_start) FROM payroll_load_placements
- UNION ALL SELECT min(start_date) FROM driver_escrows
- UNION ALL SELECT min(purchased_on) FROM fuel_transactions
- UNION ALL SELECT min(posting_date) FROM tolls
- UNION ALL SELECT min(transaction_date) FROM weighmytruck_transactions
- ) sources
+ UNION SELECT week_start FROM expense_payments
+ UNION SELECT week_start FROM expense_reimbursement_payments
+ UNION SELECT week_start FROM driver_escrow_payments
+ UNION SELECT week_start FROM driver_pay_cost_collections
+ UNION SELECT week_start FROM pay_source_collections
+ ), source_days AS (
+ SELECT service_date AS source_day FROM gross_board_entries
+ UNION SELECT expense_date FROM expenses WHERE charge_driver_id IS NOT NULL OR owner_id IS NOT NULL OR driver_id IS NOT NULL
+ UNION SELECT start_week FROM driver_charge_schedules
+ UNION SELECT week_start FROM truck_charge_phases
+ UNION SELECT week_start FROM truck_settlement_terms
+ UNION SELECT week_start FROM payroll_load_placements
+ UNION SELECT start_date FROM driver_escrows
+ UNION SELECT purchased_on FROM fuel_transactions
+ UNION SELECT posting_date FROM tolls
+ UNION SELECT transaction_date FROM weighmytruck_transactions
  ), weeks AS (
  SELECT ($1::date+7*n)::date week_start,CASE WHEN n=0 THEN 90 ELSE 80-abs(n) END priority FROM generate_series(-8,2)n
  UNION ALL SELECT week_start,60 FROM saved
- UNION ALL SELECT prepared_week::date,10 FROM first_source,
- generate_series(date_trunc('week',coalesce(first_source.first_day,$1::date))::date,$1::date,interval '7 days') AS history(prepared_week)
+ UNION ALL SELECT date_trunc('week',source_day)::date,10 FROM source_days WHERE source_day IS NOT NULL
+ ), wanted AS MATERIALIZED (
+ SELECT week_start,max(priority) priority FROM weeks GROUP BY week_start
+ ), pruned AS (
+ DELETE FROM payroll_projection_jobs j WHERE j.priority<=10 AND j.completed_generation=0
+ AND (j.lease_until IS NULL OR j.lease_until<clock_timestamp())
+ AND NOT EXISTS(SELECT 1 FROM wanted w WHERE w.week_start=j.week_start)
+ AND NOT EXISTS(SELECT 1 FROM payroll_projection_weeks w WHERE w.week_start=j.week_start)
  ) INSERT INTO payroll_projection_jobs(week_start,priority)
- SELECT week_start,max(priority) FROM weeks GROUP BY week_start ON CONFLICT(week_start) DO NOTHING`, current)
+ SELECT week_start,priority FROM wanted ON CONFLICT(week_start) DO NOTHING`, current)
 	if err != nil {
 		return err
 	}

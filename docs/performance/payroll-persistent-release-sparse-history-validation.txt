@@ -1,0 +1,46 @@
+=== RUN   TestPayrollProjectionDatabase
+=== RUN   TestPayrollProjectionDatabase/fresh
+=== RUN   TestPayrollProjectionDatabase/fresh/capture_commit_rollback_and_privacy
+=== RUN   TestPayrollProjectionDatabase/fresh/publish_both_pages_and_restart
+=== RUN   TestPayrollProjectionDatabase/fresh/freshness_is_not_queue_state
+=== RUN   TestPayrollProjectionDatabase/fresh/late_commit_lower_outbox_id
+=== RUN   TestPayrollProjectionDatabase/fresh/coverage_rejects_unknown_or_disabled_inputs
+=== RUN   TestPayrollProjectionDatabase/fresh/source_commit_during_publication
+=== RUN   TestPayrollProjectionDatabase/fresh/backfill_has_no_financial_side_effects
+=== RUN   TestPayrollProjectionDatabase/fresh/frozen_snapshots_survive_source_changes
+=== RUN   TestPayrollProjectionDatabase/incremental
+=== RUN   TestPayrollProjectionDatabase/incremental/capture_commit_rollback_and_privacy
+=== RUN   TestPayrollProjectionDatabase/incremental/publish_both_pages_and_restart
+=== RUN   TestPayrollProjectionDatabase/incremental/freshness_is_not_queue_state
+=== RUN   TestPayrollProjectionDatabase/incremental/late_commit_lower_outbox_id
+=== RUN   TestPayrollProjectionDatabase/incremental/coverage_rejects_unknown_or_disabled_inputs
+=== RUN   TestPayrollProjectionDatabase/incremental/source_commit_during_publication
+=== RUN   TestPayrollProjectionDatabase/incremental/backfill_has_no_financial_side_effects
+=== RUN   TestPayrollProjectionDatabase/incremental/frozen_snapshots_survive_source_changes
+--- PASS: TestPayrollProjectionDatabase (7.38s)
+    --- PASS: TestPayrollProjectionDatabase/fresh (4.23s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/capture_commit_rollback_and_privacy (0.10s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/publish_both_pages_and_restart (0.39s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/freshness_is_not_queue_state (0.22s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/late_commit_lower_outbox_id (0.02s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/coverage_rejects_unknown_or_disabled_inputs (0.03s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/source_commit_during_publication (0.19s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/backfill_has_no_financial_side_effects (0.00s)
+        --- PASS: TestPayrollProjectionDatabase/fresh/frozen_snapshots_survive_source_changes (0.55s)
+    --- PASS: TestPayrollProjectionDatabase/incremental (3.11s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/capture_commit_rollback_and_privacy (0.02s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/publish_both_pages_and_restart (0.33s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/freshness_is_not_queue_state (0.22s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/late_commit_lower_outbox_id (0.02s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/coverage_rejects_unknown_or_disabled_inputs (0.02s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/source_commit_during_publication (0.19s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/backfill_has_no_financial_side_effects (0.00s)
+        --- PASS: TestPayrollProjectionDatabase/incremental/frozen_snapshots_survive_source_changes (0.35s)
+=== RUN   TestPayrollSparseHistoricalPreparationDatabase
+=== RUN   TestPayrollSparseHistoricalPreparationDatabase/fresh
+=== RUN   TestPayrollSparseHistoricalPreparationDatabase/incremental
+--- PASS: TestPayrollSparseHistoricalPreparationDatabase (4.09s)
+    --- PASS: TestPayrollSparseHistoricalPreparationDatabase/fresh (1.95s)
+    --- PASS: TestPayrollSparseHistoricalPreparationDatabase/incremental (1.99s)
+PASS
+ok  	mserp/internal/repository	11.601s
