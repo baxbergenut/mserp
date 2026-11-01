@@ -1,6 +1,5 @@
 // Real browser actions against a disposable, production-sized local fixture only.
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { execFileSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -20,9 +19,8 @@ if (weeks.some(w => !/^\d{4}-\d{2}-\d{2}$/.test(w))) throw Error('Invalid weeks'
 const kinds = (process.env.MSERP_PERF_KINDS || 'driver,investor').split(',');
 if (kinds.some(k => !['driver', 'investor'].includes(k))) throw Error('Invalid payroll kinds');
 const runs = Number(process.env.MSERP_PERF_RUNS || 200), latency = Number(process.env.MSERP_PERF_BROWSER_LATENCY_MS ?? 175);
-const bulkRuns = Number(process.env.MSERP_PERF_BULK_RUNS || 50);
 const prepared = process.env.MSERP_PERF_PREPARED === '1';
-if (![runs, bulkRuns].every(n => Number.isInteger(n) && n > 0) || !Number.isFinite(latency) || latency < 0) throw Error('Invalid timing sample settings');
+if (![runs].every(n => Number.isInteger(n) && n > 0) || !Number.isFinite(latency) || latency < 0) throw Error('Invalid timing sample settings');
 const concurrencyOnly = process.env.MSERP_PERF_CONCURRENCY_ONLY === '1';
 const savesOnly = process.env.MSERP_PERF_SAVES_ONLY === '1';
 const sourcesOnly = process.env.MSERP_PERF_SOURCES_ONLY === '1';
@@ -160,13 +158,12 @@ async function finalize(p, kind, week, d) {
   });
 }
 async function reopen(p, kind, week, d) {
-  await measure(p, kind, week, d ? 'reopenDialog' : 'reopenWeekPreview', async () => {
-    if (d) { await row(p, d).click({ button: 'right' }); await p.getByRole('menuitem', { name: kind === 'driver' ? 'Reopen driver' : 'Reopen truck', exact: true }).click(); }
-    else await p.getByRole('button', { name: 'Reopen week', exact: true }).click();
+  await measure(p, kind, week, 'reopenDialog', async () => {
+    await row(p, d).click({ button: 'right' }); await p.getByRole('menuitem', { name: kind === 'driver' ? 'Reopen driver' : 'Reopen truck', exact: true }).click();
     await expect(p.getByLabel('Reason for reopening')).toBeVisible();
-  }, d ? 300 : 1000);
+  }, 300);
   await p.getByLabel('Reason for reopening').fill('Synthetic performance verification');
-  await measure(p, kind, week, d ? 'reopen' : 'reopenWeek', async () => {
+  await measure(p, kind, week, 'reopen', async () => {
     const [result] = await Promise.all([
       p.waitForResponse(r => new URL(r.url()).pathname === `/api/${kind}-pay/reopen`),
       p.getByRole('button', { name: 'Reopen settlement', exact: true }).click(),
@@ -290,20 +287,6 @@ try {
       await finalize(p, kind, week, drivers[0]); await reopen(p, kind, week, drivers[0]);
       await measure(p, kind, week, 'warmPage', async () => { await p.goto(pageURL(kind, week)); await expect(row(p, drivers[0])).toBeVisible(); }, 1000);
     }
-    for (let n = 0; n < (concurrencyOnly || savesOnly || sourcesOnly ? 0 : bulkRuns); n++) {
-      // Whole-week finalization was removed from the product UI by request.
-      // Prepare finalized fixtures through the compatible API, outside timing,
-      // then measure the remaining whole-week reopening workflow normally.
-      const ready = await preparedReport(p, kind, week);
-      const setup = await p.request.post(`${access.base}/api/${kind}-pay/finalize?receipt=1`, {
-        timeout: 120000, headers: { 'x-csrf-token': session.csrfToken },
-        data: { weekStart: week, revision: ready.revision, requestId: randomUUID(), expectedStatementRevision: ready.preparation?.generation, reason: '', override: false },
-      });
-      assert.equal(setup.status(), 200, 'Synthetic finalization setup failed');
-      await p.goto(pageURL(kind, week)); await expect(row(p, drivers[0])).toBeVisible();
-      await expect(p.getByRole('button', { name: 'Finalize week', exact: true })).toHaveCount(0);
-      await reopen(p, kind, week);
-    }
     if (prepared && !concurrencyOnly && !savesOnly) {
       await p.goto(pageURL(kind, week, drivers[0].id)); await expand(p, drivers[0]);
       for (let n = 0; n < runs; n++) await sourceVisibility(p, kind, week, drivers[0]);
@@ -340,7 +323,7 @@ try {
     payloadBytes: rows.flatMap(r=>r.requests).reduce((s,r)=>s+r.bytes,0), lockWaitP95: percentile(rows.flatMap(r=>r.requests).filter(r=>r.method !== 'GET').map(r=>r.lockMS), .95),
     aggregateRefreshP95: percentile(rows.map(r=>r.aggregateRefreshMS).filter(v=>v!==null),.95),
   }]));
-  await writeFile(output, JSON.stringify({ synthetic: true, timing: 'actual input dispatch to committed visible state plus two animation frames; automation overhead recorded separately', addedRoundTripMS: latency, runs, bulkRuns, prepared, preparationSetupMS, kinds, weeks, concurrencyOnly, savesOnly, sourcesOnly, runFailure, results, samples }, null, 2));
+  await writeFile(output, JSON.stringify({ synthetic: true, timing: 'actual input dispatch to committed visible state plus two animation frames; automation overhead recorded separately', addedRoundTripMS: latency, runs, prepared, preparationSetupMS, kinds, weeks, concurrencyOnly, savesOnly, sourcesOnly, runFailure, results, samples }, null, 2));
   console.log(JSON.stringify({ output, runFailure, results }));
   await Promise.all(contexts.map(c => c.close())); await browser.close();
 }

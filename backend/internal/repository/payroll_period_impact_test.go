@@ -20,6 +20,11 @@ func TestPayrollSettlementPeriodDatabase(t *testing.T) {
 func testPayrollSettlementPeriod(t *testing.T, mode string) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
 		seedPayrollProjectionTest(t, ctx, pool)
+		if _, err := pool.Exec(ctx, `INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,covered_by)
+ SELECT id,name,'Shared dependency fixture','2026-10-05',1,'18200000-0000-0000-0000-000000000001','Company'
+ FROM expense_settings CROSS JOIN generate_series(1,180) WHERE kind='category' AND name='Other'`); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := pool.Exec(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start)
  SELECT '18200000-0000-0000-0000-000000000001',week::date FROM (VALUES('2026-09-28'),('2026-10-12')) w(week);
  INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits)

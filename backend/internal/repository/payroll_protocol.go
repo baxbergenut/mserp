@@ -106,6 +106,9 @@ func (r *DriverPayRepository) SwitchPayrollProtocol(ctx context.Context, target 
 // Check before any startup worker or HTTP listener. An environment toggle is
 // never itself permission to switch a live database's lock protocol.
 func (r *DriverPayRepository) ConfigurePayrollProtocol(ctx context.Context, resources bool) error {
+	if err := r.loadPayrollFirstWeek(ctx); err != nil {
+		return err
+	}
 	status, err := r.PayrollProtocolStatus(ctx)
 	if err != nil {
 		return err

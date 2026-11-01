@@ -13,7 +13,7 @@ import (
 	"mserp/internal/repository"
 )
 
-func validateDriverPayEdits(e *repository.DriverPayEdits) error {
+func validateDriverPayEdits(e *repository.DriverPayEdits, first ...string) error {
 	if e.RequestID != "" && !isUUID(e.RequestID) {
 		return errors.New("invalid request identity")
 	}
@@ -22,7 +22,7 @@ func validateDriverPayEdits(e *repository.DriverPayEdits) error {
 	}
 	// These are server-owned receipt fields, never editable input.
 	e.StatementRevision, e.CommittedStatement, e.AffectedStatements = "", nil, nil
-	week, err := availablePayrollWeek(e.WeekStart)
+	week, err := availablePayrollWeek(e.WeekStart, first...)
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 		if !ok {
 			return
 		}
-		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), repo.FirstPayrollWeek())
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -195,7 +195,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 				writeAPIError(w, 400, err.Error())
 				return
 			}
-			week, err := availablePayrollWeek(input.WeekStart)
+			week, err := availablePayrollWeek(input.WeekStart, repo.FirstPayrollWeek())
 			if err != nil {
 				writeAPIError(w, 400, err.Error())
 				return
@@ -219,7 +219,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	}
 	registerPaySourceAcceptance(r, "/driver-pay", repo, fail)
 	r.Get("/driver-pay", func(w http.ResponseWriter, r *http.Request) {
-		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), repo.FirstPayrollWeek())
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
@@ -252,7 +252,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		if err := validateDriverPayEdits(&e); err != nil {
+		if err := validateDriverPayEdits(&e, repo.FirstPayrollWeek()); err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
 		}
@@ -276,7 +276,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		week, err := availablePayrollWeek(input.WeekStart)
+		week, err := availablePayrollWeek(input.WeekStart, repo.FirstPayrollWeek())
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return

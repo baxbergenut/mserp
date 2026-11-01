@@ -41,6 +41,8 @@ var payrollUnrelatedTables = []string{
 	"payroll_routing_facts",
 	"payroll_cost_months", "payroll_source_months",
 	"payroll_resource_revisions",
+	"payroll_resource_dependency_sets",
+	"payroll_retirement_receipts",
 	"status_color_settings", "status_color_history",
 	"accounting_cutover_previews", "accounting_payroll_archives",
 	"driver_board_driver_order",

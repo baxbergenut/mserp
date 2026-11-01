@@ -60,10 +60,12 @@ export async function runPayrollOverrideE2E({ page, base, sql, schema, temp }) {
     await dialog.getByRole('button', { name: 'Reopen settlement', exact: true }).click();
     await expect(dialog).toHaveCount(0);
 
-    // Exercise a missing fee and unmatched source as part of a whole-week action.
+    // Exercise a missing fee and unmatched source on an individual statement.
     if (!isInvestor) sql(`SET search_path TO ${schema},public; INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES('${driver}','${week}',1,'UNMATCHED-OVERRIDE');`);
     await page.getByRole('button', { name: 'Reload', exact: true }).click();
-    await page.getByRole('button', { name: 'Finalize week', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Finalize week', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name, exact: true }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: isInvestor ? 'Finalize truck' : 'Finalize driver', exact: true }).click();
     dialog = page.getByRole('dialog');
     await expect(dialog.getByText(/Pay amount is missing/)).toBeVisible();
     await dialog.getByRole('checkbox', { name: overrideName }).check();
@@ -71,10 +73,12 @@ export async function runPayrollOverrideE2E({ page, base, sql, schema, temp }) {
     await expect(dialog).toHaveCount(0);
     expect(card(await read()).settlement.override).toBe(true);
     await page.screenshot({ path: join(temp, `${resource}-override.png`), fullPage: true });
-    await page.getByRole('button', { name: 'Reopen week', exact: true }).click();
-    await page.getByLabel('Reason for reopening').fill('Review whole-week override');
+    await expect(page.getByRole('button', { name: 'Reopen week', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name, exact: true }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: isInvestor ? 'Reopen truck' : 'Reopen driver', exact: true }).click();
+    await page.getByLabel('Reason for reopening').fill('Review individual override');
     await page.getByRole('button', { name: 'Reopen settlement', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   }
-  console.log('Payroll override E2E passed for Driver Pay and Investor Pay: ordinary rejection, stale revision protection, individual and whole-week override, missing fees, audit metadata, and reopening.');
+  console.log('Payroll override E2E passed for Driver Pay and Investor Pay: ordinary rejection, stale revision protection, individual overrides, missing fees, audit metadata, and reopening.');
 }

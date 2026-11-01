@@ -13,6 +13,9 @@ import (
 
 func TestPayrollWeekAvailability(t *testing.T) {
 	current, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
+	if _, err := availablePayrollWeek("2026-10-12", "2026-10-19"); err == nil {
+		t.Fatal("retired week accepted")
+	}
 	for _, offset := range []int{-7, 0, 7, 14} {
 		_, err := availablePayrollWeek(current.AddDate(0, 0, offset).Format(time.DateOnly))
 		if (err != nil) != (offset > 0) {

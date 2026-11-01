@@ -18,6 +18,13 @@ import (
 func TestPayrollResourceConcurrencyDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
 		seedPayrollProjectionTest(t, ctx, pool)
+		// Exercise normal saves, text saves and finalization with shared, packed
+		// dependency maps, while preserving independent-command concurrency.
+		if _, err := pool.Exec(ctx, `INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,covered_by)
+ SELECT id,name,'Shared dependency fixture','2026-10-05',1,'18200000-0000-0000-0000-000000000001','Company'
+ FROM expense_settings CROSS JOIN generate_series(1,180) WHERE kind='category' AND name='Other'`); err != nil {
+			t.Fatal(err)
+		}
 		const independent = "18200000-0000-0000-0000-000000001501"
 		const actor = "18200000-0000-0000-0000-000000001500"
 		if _, err := pool.Exec(ctx, `INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date)

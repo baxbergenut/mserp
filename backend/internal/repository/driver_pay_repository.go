@@ -26,6 +26,18 @@ type DriverPayRepository struct {
 	preparedFinalization bool
 	resourceLockAudit    bool // Tests exercise ordered resources while retaining the global gate.
 	resourceConcurrency  bool // Enabled only after the resource protocol exit gates.
+	firstWeek            string
+}
+
+func (r *DriverPayRepository) FirstPayrollWeek() string {
+	if r != nil && r.firstWeek != "" {
+		return r.firstWeek
+	}
+	return "2000-01-03"
+}
+
+func (r *DriverPayRepository) loadPayrollFirstWeek(ctx context.Context) error {
+	return r.pool.QueryRow(ctx, `SELECT coalesce(first_week::text,'') FROM payroll_projection_control WHERE singleton`).Scan(&r.firstWeek)
 }
 
 // Configure once during startup, before the router accepts requests.

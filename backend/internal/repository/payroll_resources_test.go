@@ -208,7 +208,7 @@ func TestPayrollResourceDependenciesDatabase(t *testing.T) {
 		for _, changed := range []string{"statement:driver:" + projectionDriver + ":2026-10-05", "statement:driver:" + projectionDriver + ":2026-09-28"} {
 			page := prepare()
 			var tracked bool
-			if err := pool.QueryRow(ctx, `SELECT resource_dependencies ? $2 FROM payroll_statement_versions WHERE id=$1::uuid`, page.Statements[projectionDriver].Revision, changed).Scan(&tracked); err != nil || !tracked {
+			if err := pool.QueryRow(ctx, `SELECT payroll_expand_resource_dependencies(resource_dependencies) ? $2 FROM payroll_statement_versions WHERE id=$1::uuid`, page.Statements[projectionDriver].Revision, changed).Scan(&tracked); err != nil || !tracked {
 				t.Fatal("statement dependency missing", changed, tracked, err)
 			}
 			// Deliberately change only a resource epoch: matching global counters

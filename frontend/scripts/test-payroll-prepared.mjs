@@ -18,6 +18,7 @@ const id='18200000-0000-4000-8000-000000000001';
 const revision=n=>`18200000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 try {
   for(const kind of ['driver','investor']){
+    let firstWeek='2000-01-03';
     const page=await browser.newPage({viewport:{width:1800,height:1000}}),errors=[];
     await page.addInitScript(() => {
       const NativeEventSource = window.EventSource;
@@ -42,6 +43,7 @@ try {
       edits:{driverId:id,weekStart:week,version:0,notes:'',comments:{},adjustments:[],fuelOverride:null,tollOverride:null,expectedStatementRevision:revision(1)}};
     await page.route('**/api/**',async route=>{
       const request=route.request(),url=new URL(request.url()),path=url.pathname.slice(4).replace('/lookups/','/');
+      if(path===`/${kind}-pay/availability`)return route.fulfill({json:{firstWeek,currentWeek:'2026-10-26'}});
       if(path==='/auth/session')return route.fulfill({json:{user:{id:'user',username:'Test',permissions:['driver_pay.read','driver_pay.edit','driver_pay.finalize','driver_pay.reopen','investor_pay.read','investor_pay.edit','investor_pay.finalize','investor_pay.reopen','drivers.read','trucks.read','investors.read','dispatchers.read','updaters.read'],theme:'solarized-dark'},csrfToken:'fixture'}});
       if(path===`/${kind}-pay/prepare`){retries++;state='ready';generation++;return route.fulfill({status:202,json:{state:'preparing'}});}
       if(path===`/${kind}-pay/statement-load`){
@@ -123,6 +125,14 @@ try {
     await expect(page.getByLabel('Prepared Test, extra load number',{exact:true})).toHaveValue('');
     await comment.click();await expect(page.getByLabel('Comment',{exact:true})).toHaveValue('Typed while recovering');
     // Future URLs and restored selections cannot request an unopened pay week.
+    await expect(page.getByRole('button',{name:'Reopen week',exact:true})).toHaveCount(0);
+    await expect(page.getByText(/settlements finalized/)).toHaveCount(0);
+    firstWeek='2026-10-19';
+    readWeeks.length=0;
+    await page.goto(base+'/accounting/'+kind+'-pay?weekStart=2026-10-05');
+    await expect(page.getByRole('button',{name:'Previous week',exact:true})).toBeDisabled();
+    await expect.poll(()=>readWeeks.length).toBeGreaterThan(0);
+    expect(readWeeks.every(w=>w>='2026-10-19')).toBe(true);
     await page.clock.setFixedTime(new Date('2026-11-01T12:00:00Z'));
     readWeeks.length=0;
     await page.goto(base+'/accounting/'+kind+'-pay?weekStart=2026-11-09');

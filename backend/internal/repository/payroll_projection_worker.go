@@ -44,14 +44,14 @@ func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error 
  UNION ALL SELECT week_start,60 FROM saved
  UNION ALL SELECT date_trunc('week',source_day)::date,10 FROM source_days WHERE source_day IS NOT NULL
  ), wanted AS MATERIALIZED (
- SELECT week_start,max(priority) priority FROM weeks WHERE week_start<=$1::date GROUP BY week_start
+ SELECT week_start,max(priority) priority FROM weeks WHERE week_start BETWEEN coalesce(nullif($2,'')::date,'-infinity'::date) AND $1::date GROUP BY week_start
  ), retired AS MATERIALIZED (
- SELECT j.week_start FROM payroll_projection_jobs j WHERE j.week_start>$1::date OR (j.priority<=10
+ SELECT j.week_start FROM payroll_projection_jobs j WHERE j.week_start>$1::date OR j.week_start<coalesce(nullif($2,'')::date,'-infinity'::date) OR (j.priority<=10
  AND (j.lease_until IS NULL OR j.lease_until<clock_timestamp())
  AND (j.interactive_until IS NULL OR j.interactive_until<clock_timestamp())
  AND NOT EXISTS(SELECT 1 FROM wanted w WHERE w.week_start=j.week_start)
  AND NOT EXISTS(SELECT 1 FROM payroll_statement_state s WHERE s.week_start=j.week_start))
- UNION SELECT week_start FROM payroll_projection_weeks WHERE week_start>$1::date
+ UNION SELECT week_start FROM payroll_projection_weeks WHERE week_start>$1::date OR week_start<coalesce(nullif($2,'')::date,'-infinity'::date)
  ), retired_statements AS (
  DELETE FROM payroll_statement_state WHERE week_start IN (SELECT week_start FROM retired)
  ), retired_headers AS (
@@ -59,7 +59,7 @@ func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error 
  ), pruned AS (
  DELETE FROM payroll_projection_jobs WHERE week_start IN (SELECT week_start FROM retired)
  ) INSERT INTO payroll_projection_jobs(week_start,priority)
- SELECT week_start,priority FROM wanted ON CONFLICT(week_start) DO NOTHING`, current)
+ SELECT week_start,priority FROM wanted ON CONFLICT(week_start) DO NOTHING`, current, r.firstWeek)
 	if err != nil {
 		return err
 	}

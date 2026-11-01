@@ -58,7 +58,7 @@ func publishPayrollFrozen(ctx context.Context, tx pgx.Tx, c *payrollCommand, imp
  ), versions AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
  SELECT g.id,$6,s.statement_id,s.week_start,r.detail,r.summary,r.fee,r.payable,true,r.edit_version,r.settlement_version,v.cost_evidence,
- payroll_resource_snapshot(ARRAY(SELECT jsonb_object_keys(v.resource_dependencies)))
+ payroll_pack_resource_snapshot(ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(v.resource_dependencies))), 'statement:'||v.kind||':'||v.statement_id::text||':'||v.week_start::text)
  FROM jsonb_to_recordset($7::jsonb) r(id uuid,detail jsonb,summary jsonb,fee bigint,payable bigint,edit_version int,settlement_version int)
  JOIN payroll_statement_state s ON s.kind=$6 AND s.statement_id=r.id AND s.week_start=$1::date
  JOIN payroll_statement_versions v ON v.id=s.version_id CROSS JOIN generation g

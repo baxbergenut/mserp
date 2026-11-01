@@ -1,3 +1,8 @@
+export interface PayrollAvailability {
+  firstWeek: string;
+  currentWeek: string;
+}
+
 export interface DispatcherCommissionRules {
   homeDayCredit: number;
   maxTierPromotion: number;

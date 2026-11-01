@@ -188,7 +188,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
  ), version AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
  SELECT g.id,v.kind,v.statement_id,v.week_start,$9,$10,v.fee_cents,v.payable_cents,v.finalized,$11,v.settlement_version,v.cost_evidence,
- payroll_resource_snapshot(ARRAY(SELECT jsonb_object_keys(v.resource_dependencies)))
+ payroll_pack_resource_snapshot(ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(v.resource_dependencies))), 'statement:'||v.kind||':'||v.statement_id::text||':'||v.week_start::text)
  FROM payroll_statement_versions v CROSS JOIN generation g
  WHERE v.id=$8::uuid AND v.kind=$5 AND v.statement_id=$6::uuid AND v.week_start=$7::date RETURNING id
  ), pointer AS (
@@ -212,7 +212,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
  ), version AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
  SELECT g.id,v.kind,v.statement_id,v.week_start,$10,$11,v.fee_cents,v.payable_cents,v.finalized,$12,v.settlement_version,v.cost_evidence,
- payroll_resource_snapshot(ARRAY(SELECT jsonb_object_keys(v.resource_dependencies)))
+ payroll_pack_resource_snapshot(ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(v.resource_dependencies))), 'statement:'||v.kind||':'||v.statement_id::text||':'||v.week_start::text)
  FROM payroll_statement_versions v JOIN generations g ON g.week_start=v.week_start
  WHERE v.id=$7::uuid AND v.kind=$8 AND v.statement_id=$9::uuid
  RETURNING id,kind,statement_id,week_start

@@ -13,8 +13,8 @@ import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound } from "lucide-react";
-import { APIError, fetchDriverPay, fetchInvestorPay, fetchPaySettlementPreview, fetchPayStatement, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
-import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek } from "@/app/lib/types";
+import { APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
+import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, PayrollAvailability } from "@/app/lib/types";
 import { currentChargeWeek } from "../driver-charges/charges";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { FinalizationCard } from "../components/FinalizationCard";
@@ -40,6 +40,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const [currentWeek, setCurrentWeek] = useState(() => currentChargeWeek());
+  const [firstWeek, setFirstWeek] = useState("2000-01-03");
+  const availability = useRef<Partial<Record<"driver" | "investor", Promise<PayrollAvailability>>>>({});
   useEffect(() => {
     const update = () => setCurrentWeek(currentChargeWeek());
     const timer = setInterval(update, 60_000);
@@ -51,7 +53,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const targetKey = investor && params.has("truckId") ? "truckId" : "driverId";
   const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? (requested > currentWeek ? currentWeek : requested) : undefined;
   const [storedWeek, setWeek] = useViewState("page:week", () => currentChargeWeek(), initialWeek);
-  const week = storedWeek > currentWeek ? currentWeek : storedWeek;
+  const week = storedWeek > currentWeek ? currentWeek : storedWeek < firstWeek ? firstWeek : storedWeek;
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
   const [expenseId, setExpenseId] = useState<string | null>(null);
   const [expenseStatement, setExpenseStatement] = useState("");
@@ -89,7 +91,12 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId && !restoringView ? new Set([targetId]) : undefined);
   const openedRef = useRef(opened);
   useLayoutEffect(() => { openedRef.current = opened; }, [opened]);
-  const fetchPay = useCallback((selectedWeek: string, signal?: AbortSignal) => {
+  const fetchPay = useCallback(async (selectedWeek: string, signal?: AbortSignal) => {
+    const kind = investor ? "investor" : "driver";
+    const bounds = await (availability.current[kind] ??= fetchPayrollAvailability(investor).catch(reason => { delete availability.current[kind]; throw reason; }));
+    const earliest = bounds.firstWeek || "2000-01-03";
+    setFirstWeek(earliest);
+    selectedWeek = selectedWeek < earliest ? earliest : selectedWeek;
     const query = { summary: "1", detailIds: [...openedRef.current].slice(0, 100).join(","), page, pageSize, search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter };
     return investor ? fetchInvestorPay(selectedWeek, driverFilter || undefined, signal, query) : fetchDriverPay(selectedWeek, signal, query);
   }, [investor, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
@@ -401,20 +408,20 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     ...drivers.map(driver => ({ kind: "statement" as const, id: driver.id, name: driver.fullName, unit: driver.truckUnit, driver })),
     ...setupRequired.map(truck => ({ kind: "setup" as const, id: truck.truckId, name: truck.ownerName, unit: truck.truckUnit, truck })),
   ].sort((a, b) => Number(a.kind === "statement" && !!a.driver.settlement?.finalized) - Number(b.kind === "statement" && !!b.driver.settlement?.finalized) || (rowOrder.size ? (rowOrder.get(a.id) ?? 0) - (rowOrder.get(b.id) ?? 0) : a.name.localeCompare(b.name) || a.unit.localeCompare(b.unit, undefined, { numeric: true })));
-  const switchWeek = (next: string) => { if (next <= currentChargeWeek() && next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
+  const switchWeek = (next: string) => { if (next >= firstWeek && next <= currentChargeWeek() && next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
   return <div className="space-y-5 animate-fade-in">
     <PageHeader><div><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">{investor ? "Investor pay" : "Driver pay"}</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : report?.pagination?.total ?? rows.length}</span></div></div></PageHeader>
     <PinnablePageHeader pinned={headerPinned}>
     <div className="grid gap-3 md:grid-cols-3"><MetricCard loading={loading} compact label={investor ? "Investor share" : "Earned pay"} value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Total payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /><FinalizationCard loading={loading} finalized={report?.pagination?.finalized ?? drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length} total={report?.pagination?.statements ?? drivers.filter(d => !d.truckInactive).length} /></div>
     <div className="flex flex-wrap items-center gap-3">
       <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= currentWeek} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
+      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={busy || week <= firstWeek} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={busy || week >= currentWeek} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
       <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={payButtonClass} disabled={busy} onClick={() => switchWeek(currentChargeWeek())}>This week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
           <select aria-label="Dispatcher" className={`${controlClass} !w-44`} value={dispatcher} disabled={busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select>
         </TableFilters><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>
     <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!preparedReady ? (report?.preparation?.state === "failed" ? "Preparation failed" : report?.preparation?.state === "preparing" ? "Preparing…" : "Updating…") : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "Updating…" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span><button className={payButtonClass} disabled={saving || loading || refreshing} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button hidden={!canEdit || investor} className={payButtonClass} disabled={saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>
-    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">{loading ? <SkeletonBar className="h-3 w-48" /> : <span>{report?.pagination?.finalized ?? report?.drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length ?? 0} of {report?.pagination?.statements ?? report?.drivers.filter(d => !d.truckInactive).length ?? 0} settlements finalized</span>}<button hidden={!canReopen} className={payButtonClass} disabled={busy || dirty || saving || !(report?.pagination ? report.pagination.finalized > 0 : report?.drivers.some(d => !d.truckInactive && d.settlement?.finalized))} onClick={() => void prepareSettlement(true)}>Reopen week</button>{driverFilter && <button className="text-blue-400" onClick={() => { setDriverFilter(""); setPage(1); }} disabled={busy || dirty || saving}>{investor ? "Show all trucks" : "Show all drivers"}</button>}</div>
+    {driverFilter && <div><button className="text-xs text-blue-400" onClick={() => { setDriverFilter(""); setPage(1); }} disabled={busy || dirty || saving}>{investor ? "Show all trucks" : "Show all drivers"}</button></div>}
     </PinnablePageHeader>
 
     {report?.issues?.map((issue, i) => <p key={i} role="alert" className="rounded border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300">{issue}</p>)}

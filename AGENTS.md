@@ -68,8 +68,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   financial records, explicit past requests and active historical leases survive. Operator commands must use
   the service environment and working directory; the protocol helper launches
   transient systemd units with both. Driver and Investor Pay expose individual
-  finalization only; the Finalize week button was removed by request. Reopen week
-  and the compatible atomic bulk API remain.
+  finalization/reopening only; both whole-week buttons and the small finalized-count
+  row were removed by request. The compatible atomic bulk API remains.
+  Migration 185 shares immutable resource revision maps by SHA-256 while preserving
+  exact expanded revision checks and existing versions. Install its deploy helper
+  before migration; older binaries cannot resume afterward. The optional first_week
+  boundary is set only by the quiesced operator command -retire-payroll-before.
+  Retirement deletes older saved statement rows and current projections, preserves
+  source invoices/payment allocations/audits/immutable versions, and verifies every
+  retained report before committing a receipt. API, UI and seeding honor the boundary.
   Prepared bulk reopening batches confirmation/metadata writes and retains every
   individual audit; collection allocations remain unchanged. Publication shares
   inputs only after canonical writes. Resource transactions may retain validated

@@ -45,6 +45,7 @@ func main() {
 	payrollStatus := flag.Bool("payroll-protocol-status", false, "print the database payroll protocol and reviewed epoch, then exit")
 	payrollSwitch := flag.String("payroll-protocol-switch", "", "switch payroll protocol after all writers are stopped (global, dual, resources)")
 	payrollEpoch := flag.Int64("payroll-protocol-epoch", 0, "reviewed database protocol epoch required for a quiesced switch")
+	payrollRetire := flag.String("retire-payroll-before", "", "retire explicitly reviewed old draft payroll weeks with writers stopped; retain allocations and verify remaining reports")
 	flag.Parse()
 	if *payrollCapability {
 		fmt.Println(repository.PayrollProtocolCapability)
@@ -69,6 +70,17 @@ func main() {
 	}
 	defer pool.Close()
 	protocol := repository.NewDriverPayRepository(pool)
+	if *payrollRetire != "" {
+		result, retirementErr := protocol.RetirePayrollBefore(ctx, *payrollRetire)
+		if retirementErr != nil {
+			logger.Error("retire payroll", "error", retirementErr)
+			os.Exit(1)
+		}
+		if json.NewEncoder(os.Stdout).Encode(result) != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if *payrollStatus || *payrollSwitch != "" {
 		var status repository.PayrollProtocolStatus
 		if *payrollSwitch != "" {

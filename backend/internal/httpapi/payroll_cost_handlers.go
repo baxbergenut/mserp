@@ -14,7 +14,7 @@ func registerPayCostTransactions(r chi.Router, kind string, repo *repository.Dri
 		if !ok {
 			return
 		}
-		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"))
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), repo.FirstPayrollWeek())
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return

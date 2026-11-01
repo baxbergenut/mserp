@@ -102,6 +102,9 @@ const payrollProjectionFenceSQL = `WITH tables AS MATERIALIZED (
 // Enable only capture/shadow preparation. This performs no canonical financial
 // writes and does not switch any production read, command, or lock protocol.
 func (r *DriverPayRepository) EnablePayrollShadow(ctx context.Context) error {
+	if err := r.loadPayrollFirstWeek(ctx); err != nil {
+		return err
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -142,6 +145,9 @@ func (r *DriverPayRepository) RequestPayrollPreparation(ctx context.Context, wee
 	}
 	if week.Format(time.DateOnly) > ChargeCurrentWeek() {
 		return chargeInvalid("Payroll weeks are available when the week starts")
+	}
+	if week.Format(time.DateOnly) < r.FirstPayrollWeek() {
+		return chargeInvalid("This payroll week has been retired")
 	}
 	_, err := r.pool.Exec(ctx, `INSERT INTO payroll_projection_jobs(week_start,priority) VALUES($1,100)
  ON CONFLICT(week_start) DO UPDATE SET priority=greatest(payroll_projection_jobs.priority,100),
@@ -220,7 +226,8 @@ func (r *DriverPayRepository) claimPayrollProjection(ctx context.Context) (payro
 	var job payrollProjectionJob
 	err := r.pool.QueryRow(ctx, `WITH candidate AS (
  SELECT week_start FROM payroll_projection_jobs WHERE requested_generation>completed_generation
- AND week_start<=$1::date AND available_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
+ AND week_start<=$1::date AND week_start>=(SELECT coalesce(first_week,'-infinity'::date) FROM payroll_projection_control WHERE singleton)
+ AND available_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
  ORDER BY greatest(priority,CASE WHEN interactive_until>clock_timestamp() THEN 110 ELSE 0 END) DESC,available_at,week_start DESC LIMIT 1 FOR UPDATE SKIP LOCKED
  ) UPDATE payroll_projection_jobs j SET lease_token=gen_random_uuid(),lease_until=clock_timestamp()+interval '2 minutes',attempts=attempts+1
  FROM candidate c WHERE j.week_start=c.week_start RETURNING j.week_start,j.requested_generation,j.lease_token::text,j.impact_roots`, ChargeCurrentWeek()).Scan(&job.Week, &job.Generation, &job.Token, &job.Roots)
@@ -637,7 +644,7 @@ func writePayrollProjection(ctx context.Context, tx pgx.Tx, week time.Time, requ
 			}
 			batch.Queue(`WITH inserted AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
- VALUES($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,payroll_resource_snapshot($13::text[])) RETURNING id,kind,statement_id,week_start)
+ VALUES($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,payroll_pack_resource_snapshot($13::text[],'statement:'||$2||':'||$3::text||':'||$4::date::text)) RETURNING id,kind,statement_id,week_start)
  INSERT INTO payroll_statement_state(kind,statement_id,week_start,version_id) SELECT kind,statement_id,week_start,id FROM inserted`,
 				generation, kind, d.ID, week, body, short, fee, payable, finalized, d.Edits.Version, settlementVersion, evidenceBody, resources)
 		}

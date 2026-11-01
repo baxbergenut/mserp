@@ -13,11 +13,28 @@ remain useful comparisons, not claims that this implementation meets them. Finan
 correctness, complete atomic publication, stale-input rejection and recovery remain
 mandatory. No automatic financial retry against a newer revision is allowed.
 
-The user also removed the whole-week finalization button from both pages.
-Individual finalization and whole-week reopening remain. The compatible bulk API
-retains combined validation, ordering, individual audits and all-or-nothing rollback.
-Benchmarks prepare finalized fixtures through that API outside timing, then measure
-the actual Reopen week workflow.
+The user removed both whole-week buttons and the small finalized-count row from
+both pages. Individual finalization/reopening and the top Finalization metric remain.
+The compatible bulk API retains combined validation, ordering, individual audits
+and all-or-nothing rollback. Current browser measurements use individual actions.
+
+Migration 185 shares large immutable resource revision maps by content hash. Each
+statement retains its own revision locally; freshness checks expand the shared map
+and compare every exact dependency. Missing maps fail closed. Existing immutable
+versions are unchanged and remain readable. The shared table is excluded from
+source capture and rejects updates, deletes and truncation.
+
+The nullable `payroll_projection_control.first_week` changes no history on deployment.
+With API/export/portal writers stopped, the operator command
+`-retire-payroll-before 2026-10-19` deletes earlier saved driver/investor statements
+and current projection pointers/jobs. It preserves invoices, payment allocations,
+audit history and immutable versions; it pins any effective pre-ledger cost evidence
+before removal. It refuses finalized old statements and compares complete retained
+reports before/after, rolling everything back on a difference. A retirement receipt
+records counts. APIs, navigation, publication and seeding honor
+the configured lower bound; database guards prevent recreating retired saved rows.
+Install the matching deploy helper before migration 185; incompatible older binaries
+are rejected. Run the operator with the service environment and working directory.
 
 
 Migration 183 classifies `maintenance_telemetry` as unrelated to payroll and removes
@@ -487,8 +504,8 @@ before acquiring the gate. A forced shared-gate test verifies that a blocked
 supersession leaves the integration state row available, then removes only its
 unconfirmed identity and commits the operation atomically after the gate opens.
 
-`measure-payroll.mjs` defaults to 200 routine observations and 50 whole-week
-observations per group. Prepared runs also measure direct captured source commits
+`measure-payroll.mjs` defaults to 200 routine observations per group, with explicit
+smaller sample counts for bounded diagnostics. Prepared runs also measure direct captured source commits
 to visible updated mileage, using a database timestamp immediately after COMMIT
 and the browser's second animation frame. Recorded reports disclose sample counts
 and failures; sparse diagnostics are not high-sample tail estimates.
@@ -523,7 +540,7 @@ These are not 200-observation browser percentiles or proof of the full release g
 Release validation uses the complete backend suite with every disposable-database
 setting configured in CI, followed by `go vet ./...`. Frontend validation includes
 lint, a production `/api` build, calculation/autosave checks, prepared/lazy/grid
-flows, individual finalization and whole-week reopening, expense/balance controls,
+flows, individual finalization and reopening, expense/balance controls,
 charge views, and load-split/daily-load regressions. Isolated Linux helper tests
 cover compatibility, transition failures, recovery and configuration preservation.
 External provider lifecycle tests remain explicitly opt-in; no provider mutation

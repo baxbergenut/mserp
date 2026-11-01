@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -14,6 +16,15 @@ import (
 // Keep ordinary database tests stopped while collecting these diagnostic timings.
 func profilePayrollNativeSaves(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
+	periods := 69
+	if raw := os.Getenv("MSERP_PAYROLL_NATIVE_PROFILE_WEEKS"); raw != "" {
+		var e error
+		periods, e = strconv.Atoi(raw)
+		if e != nil || periods < 2 || periods > 69 {
+			t.Fatal("choose 2 through 69 profile weeks")
+		}
+	}
+	current, _ := chargeWeek(ChargeCurrentWeek())
 	var actor, category, driver string
 	if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Native save profile',crypt('test-only',gen_salt('bf'))) RETURNING id::text`).Scan(&actor); err != nil {
 		t.Fatal(err)
@@ -24,11 +35,18 @@ func profilePayrollNativeSaves(t *testing.T, ctx context.Context, pool *pgxpool.
 	if err := pool.QueryRow(ctx, `SELECT md5('driver1')::uuid::text`).Scan(&driver); err != nil {
 		t.Fatal(err)
 	}
-	date, _ := chargeWeek("2026-09-21")
+	date := current.AddDate(0, 0, -7)
 	input := ExpenseInput{CategoryID: category, ExpenseDate: date, DriverID: &driver, Amount: "20", ExpenseType: payTestString("Native save profile"), CoveredBy: payTestString("Driver")}
 	expenses := NewExpenseRepository(pool)
 	entry, err := expenses.CreateExpense(ctx, input)
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Keep a dense source component inside the retained window so the small
+	// two-week diagnostic also exercises shared dependency storage.
+	if _, err = pool.Exec(ctx, `INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,covered_by)
+ SELECT id,name,'Shared native profile',$1::date,1,$2::uuid,'Company'
+ FROM expense_settings CROSS JOIN generate_series(1,180) WHERE kind='category' AND name='Other'`, date, driver); err != nil {
 		t.Fatal(err)
 	}
 	pay := NewDriverPayRepository(pool)
@@ -40,8 +58,7 @@ func profilePayrollNativeSaves(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 	pay.ConfigurePreparedReads(true)
 	pay.ConfigurePreparedCommands(true)
-	current, _ := chargeWeek(ChargeCurrentWeek())
-	for n := 0; n < 69; n++ {
+	for n := 0; n < periods; n++ {
 		if err = pay.RequestPayrollPreparation(ctx, current.AddDate(0, 0, -7*n), false); err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +75,18 @@ func profilePayrollNativeSaves(t *testing.T, ctx context.Context, pool *pgxpool.
 			break
 		}
 	}
-	t.Log("69 current/past periods prepared; starting native expense commands")
+	t.Logf("%d current/past periods prepared; starting native expense commands", periods)
+	var packed, inlineBytes, expandedBytes, sharedBytes int64
+	if err = pool.QueryRow(ctx, `SELECT count(*),
+ coalesce(sum(pg_column_size(resource_dependencies)),0),coalesce(sum(octet_length(payroll_expand_resource_dependencies(resource_dependencies)::text)),0),
+ (SELECT coalesce(sum(pg_column_size(dependencies)),0) FROM payroll_resource_dependency_sets)
+ FROM payroll_statement_versions WHERE resource_dependencies ? '$shared'`).Scan(&packed, &inlineBytes, &expandedBytes, &sharedBytes); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("shared dependencies: packed=%d stored=%d expanded=%d shared=%d bytes", packed, inlineBytes, expandedBytes, sharedBytes)
+	if packed == 0 || inlineBytes+sharedBytes >= expandedBytes/2 {
+		t.Fatal("large fixture did not substantially share revision metadata")
+	}
 	for _, action := range []string{"edit", "verify"} {
 		measured, metrics := db.WithMetrics(WithPayrollPublication(ctx))
 		bounded, cancel := context.WithTimeout(measured, 25*time.Second)

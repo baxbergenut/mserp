@@ -9,7 +9,7 @@ checksum-verified archive through the unprivileged `mserp-deploy` account. The
 root-owned `mserp-deploy` helper then:
 
 1. rejects unsafe or malformed archives;
-2. creates a PostgreSQL custom-format backup under `/var/backups/mserp`;
+2. creates a PostgreSQL custom-format backup with zstd level 1 under `/var/backups/mserp`;
 3. applies only SQL files absent from `schema_migrations`;
 4. switches `/opt/mserp/current` atomically;
 5. restarts the API, reloads Nginx, and restores a permission-compatible release
@@ -18,6 +18,17 @@ root-owned `mserp-deploy` helper then:
 Pushes to `main` deploy production. Pull requests run the complete test/build
 job without receiving deployment secrets. `workflow_dispatch` can redeploy the
 current `main` commit.
+
+The backup helper requires a PostgreSQL client with zstd support (verified on the
+production PostgreSQL 16 client). The deploy job allows 45 minutes for a complete
+backup, migration and activation. Never remove the last valid backup merely to
+make space: verify any relocated copy by SHA-256 and `pg_restore --list` first.
+
+Migration 185 requires the matching helper before release. It pauses all payroll
+writers while installing shared dependency maps and the optional retired-week
+boundary, and rejects rollback to binaries lacking migration 185. Installation
+alone deletes no saved statements; see the quiesced retirement command in
+[Persistent payroll](../docs/PAYROLL_PERSISTENCE.md).
 
 Production is served at `https://clustie.io`. The apex A record points to
 `137.184.102.22`; `www` is a CNAME for `clustie.io`, managed with Namecheap DNS.
