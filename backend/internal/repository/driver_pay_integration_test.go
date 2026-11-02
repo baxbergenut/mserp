@@ -90,6 +90,11 @@ func TestDriverPayDatabase(t *testing.T) {
 					t.Fatal(availabilityErr)
 				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(availabilityMigration), "\r\n", "\n"), "", 1)
+				boardMigration, boardErr := os.ReadFile("../../sql/188_status_board_operational.sql")
+				if boardErr != nil {
+					t.Fatal(boardErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
 				loadRevisionMigration, err := os.ReadFile("../../sql/181_payroll_load_revision.sql")
 				if err != nil {
 					t.Fatal(err)
@@ -248,7 +253,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
 				applyClustieLoadAssignments(t, ctx, admin)
-				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql", "../../sql/187_load_source_availability.sql"} {
+				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql", "../../sql/187_load_source_availability.sql", "../../sql/188_status_board_operational.sql"} {
 					migration, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)

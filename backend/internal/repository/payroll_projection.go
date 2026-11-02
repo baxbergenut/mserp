@@ -81,6 +81,9 @@ const payrollProjectionFenceSQL = `WITH tables AS MATERIALIZED (
  OR NOT EXISTS(SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid=g.tgfoid
  WHERE g.tgrelid=t.oid
  AND (p.proname IN ('invalidate_payroll_cache','invalidate_payroll_load_cache') OR
+ (t.tablename='fleet_status_history' AND p.proname='invalidate_payroll_status_history_cache'
+ AND p.pronamespace=t.namespace AND (required.op NOT IN (8,16) OR g.tgoldtable='previous_rows')
+ AND (required.op NOT IN (4,16) OR g.tgnewtable='changed_rows')) OR
  (t.tablename='expenses' AND required.op=16 AND p.proname='invalidate_payroll_expense_cache'
  AND p.pronamespace=t.namespace AND g.tgoldtable='previous_rows' AND g.tgnewtable='changed_rows'))
  AND g.tgenabled IN ('O','A') AND g.tgtype=required.op)))))
@@ -92,6 +95,10 @@ const payrollProjectionFenceSQL = `WITH tables AS MATERIALIZED (
  OR (payroll_resource_table(t.tablename) AND NOT EXISTS(SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid=g.tgfoid
  WHERE g.tgrelid=t.oid AND g.tgname='payroll_protocol_row' AND g.tgtype=31 AND g.tgenabled IN ('O','A')
  AND p.proname='guard_payroll_protocol_row' AND p.pronamespace=t.namespace)))
+ UNION SELECT 'operational board history guard' WHERE NOT EXISTS(
+ SELECT 1 FROM tables t JOIN pg_trigger g ON g.tgrelid=t.oid JOIN pg_proc p ON p.oid=g.tgfoid
+ WHERE t.tablename='fleet_status_history' AND g.tgname='board_operational_history' AND g.tgtype=31
+ AND g.tgenabled IN ('O','A') AND p.proname='guard_board_operational_history' AND p.pronamespace=t.namespace)
  UNION SELECT 'balance bucket maintenance' WHERE EXISTS(SELECT 1 FROM (VALUES('driver_pay_cost_collections'),('pay_source_collections')) t(name)
  CROSS JOIN (VALUES('payroll_balance_rows',29),('payroll_balance_truncate',32)) required(name,events)
  WHERE NOT EXISTS(SELECT 1 FROM pg_trigger g JOIN pg_proc p ON p.oid=g.tgfoid

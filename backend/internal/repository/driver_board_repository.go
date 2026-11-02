@@ -14,11 +14,12 @@ import (
 var ErrDriverBoardConflict = errors.New("status board changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
-	StatusReason string           `json:"statusReason,omitempty"`
-	LeavePlan    *DriverLeavePlan `json:"leavePlan,omitempty"`
-	EffectiveAt  *time.Time       `json:"effectiveAt,omitempty"`
-	UndoID       int64            `json:"undoId,omitempty"`
-	StatusEdited bool             `json:"statusEdited,omitempty"`
+	FleetStatus  *BoardFleetStatus `json:"fleetStatus,omitempty"`
+	StatusReason string            `json:"statusReason,omitempty"`
+	LeavePlan    *DriverLeavePlan  `json:"leavePlan,omitempty"`
+	EffectiveAt  *time.Time        `json:"effectiveAt,omitempty"`
+	UndoID       int64             `json:"undoId,omitempty"`
+	StatusEdited bool              `json:"statusEdited,omitempty"`
 	// Write-only intent: selecting the same number should still resolve its stops.
 	ResolveCurrentLoad bool   `json:"resolveCurrentLoad,omitempty"`
 	DriverID           string `json:"driverId"`
@@ -129,13 +130,19 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
 		return result, err
 	}
+	// Every joined truck already has this active direct operator. Preserve the
+	// canonical restriction precedence without re-scanning every driver per row.
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,coalesce(i.driver_id=d.id,false),
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
  dp.extension,coalesce(mu.full_name,''),mu.extension,coalesce(au.full_name,''),au.extension,
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb),
-	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,coalesce(fleet_truck_operating_status(t.id),''),d.availability_status,d.status_version
+	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,
+ CASE WHEN t.id IS NULL THEN '' WHEN t.status='terminated' THEN 'terminated'
+ WHEN t.status='out_of_service' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='out_of_service') THEN 'out_of_service'
+ WHEN t.status='maintenance' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='shop') THEN 'shop'
+ ELSE 'in_use' END,d.availability_status,d.status_version
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -232,7 +239,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
-	return result, commitPayrollMutation(ctx, tx)
+	return result, tx.Commit(ctx)
 }
 
 type BoardPendingDriver struct {
@@ -266,7 +273,11 @@ func readBoardPendingDrivers(ctx context.Context, tx pgx.Tx) ([]BoardPendingDriv
 }
 
 func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {
-	tx, err := beginPayrollMutation(ctx, r.pool)
+	return runBoardCommand(func(source bool) ([]DriverBoardEntry, error) { return r.save(ctx, entries, source, actor...) })
+}
+
+func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardEntry, source bool, actor ...string) ([]DriverBoardEntry, error) {
+	tx, err := beginBoardMutation(ctx, r.pool, source)
 	if err != nil {
 		return nil, err
 	}
@@ -283,11 +294,14 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 		return nil, err
 	}
 	for i := range entries {
+		if err = attachBoardFleetStatus(ctx, tx, &entries[i]); err != nil {
+			return nil, err
+		}
 		if err = attachBoardUndoID(ctx, tx, &entries[i]); err != nil {
 			return nil, err
 		}
 	}
-	return entries, commitPayrollMutation(ctx, tx)
+	return entries, tx.Commit(ctx)
 }
 
 func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry, matchDate ...string) ([]DriverBoardEntry, error) {

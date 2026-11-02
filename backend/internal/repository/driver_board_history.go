@@ -75,8 +75,14 @@ func (r *DriverBoardRepository) History(ctx context.Context, ids []string, befor
 // Undo is a new audited correction. A later edit of any affected field prevents
 // reversing the older event, even if that field has since returned to its value.
 func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version int, actor string, personal ...bool) (DriverBoardEntry, error) {
+	return runBoardCommand(func(source bool) (DriverBoardEntry, error) {
+		return r.undo(ctx, id, driver, version, actor, source, personal...)
+	})
+}
+
+func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver string, version int, actor string, source bool, personal ...bool) (DriverBoardEntry, error) {
 	var entry DriverBoardEntry
-	tx, err := beginPayrollMutation(ctx, r.pool)
+	tx, err := beginBoardMutation(ctx, r.pool, source)
 	if err != nil {
 		return entry, err
 	}
@@ -191,5 +197,8 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 			}
 		}
 	}
-	return saved[0], commitPayrollMutation(ctx, tx)
+	if err = attachBoardFleetStatus(ctx, tx, &saved[0]); err != nil {
+		return entry, err
+	}
+	return saved[0], tx.Commit(ctx)
 }

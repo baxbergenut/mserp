@@ -1324,7 +1324,7 @@ assignment lookup lists.
   percentage drivers. No ownership or pay settings change from this view.
   Driver addresses use the profile's street/city/state/postal fields. The former
   home field is absent from the UI and API; migration 080 consolidates its data.
-  Five-second Status Board autosave writes changed rows atomically with optimistic versions;
+  Immediate Status Board autosave writes changed rows atomically with optimistic versions;
   clearing retains versions, navigation flushes, conflicts retain local drafts,
   and visible idle boards refresh every 30 seconds/on focus. Drafts are never
   persisted in view memory. Tests use disposable local
@@ -2609,6 +2609,34 @@ requests stay on `https://clustie.io/api/...`; any request to the IP
 endpoint indicates a stale or incorrectly built frontend. Never expose session
 cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 
+
+## Status Board operational saves (188)
+
+- Status Board save/load-action/undo commits never calculate payroll. Migration 188
+  classifies board rows, load state and operational audits as unrelated, and excludes
+  driver dispatch history from financial capture/revisions. Actual profile and
+  availability changes still commit durable payroll capture; prepared pages update
+  through the worker. Gross Board and pay-page atomic publication remain unchanged.
+- Operational commands take the fleet lock before driver rows, without the payroll
+  gate. A database-checked marker rejects canonical source mutations before any
+  payroll lock; the entire transaction rolls back and retries the original versions
+  once under source -> fleet -> driver locks. Dispatch-history row guards and catalog
+  coverage prevent marker misuse. Team dispatch checks use the fleet lock on board
+  writes; team configuration takes the same lock. Never retry stale user versions.
+- Save responses include read-only fleetStatus evidence from the committing
+  transaction. The UI updates profile status badges immediately and refreshes load
+  details separately, fencing late responses by entry version and pending edits.
+  Blank board statuses retain canonical Home/Vacation and truck restrictions.
+  The migration repairs derived labels only, preserving canonical profiles.
+- Routing waits for five seconds without load/status/destination/selected-stop
+  changes before the next worker pass. Notes do not restart this pause. Page reads
+  reuse active assignment evidence for truck status and group normalized VIN
+  counts once; canonical restriction precedence and ambiguous-VIN guards remain.
+- Install the matching deploy helper before 188: it quiesces writers and rejects
+  older binaries after classification changes. Validate TestStatusBoardOperationalDatabase
+  with MSERP_DRIVER_PAY_TEST_DATABASE_URL; TestDriverBoardDatabase uses
+  MSERP_DRIVER_BOARD_TEST_DATABASE_URL. Browser: scripts/test-status-board-saves.mjs.
+  See docs/performance/status-board-2026-11-02.md for measured limits.
 
 ## October 2026 reporting performance
 

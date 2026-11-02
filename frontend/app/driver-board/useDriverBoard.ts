@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, reorderBoardDispatchers, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
-import { progressStatus, reconcileDriverBoard } from "./board";
+import { applyCommittedFleetStatus, progressStatus, reconcileDriverBoard } from "./board";
 import { usePermissions } from "@/app/lib/access";
 import { useBoardLive } from "./useBoardLive";
 import { selectedBoardCell } from "./boardCells";
@@ -79,7 +79,9 @@ export function useDriverBoard(lockedDriverId?: string) {
         const entries = value.entries.map(e => retained.has(e.driverId) ? previous[e.driverId] ?? e : e);
         const loads = { ...value.loads };
         for (const id of retained) if (current.loads[id]) loads[id] = current.loads[id];
-        return { ...value, entries, loads };
+        const incomingVersions = new Map(value.entries.map(e => [e.driverId, e.version]));
+        const newerCommits = current.entries.filter(e => e.version > (incomingVersions.get(e.driverId) ?? 0));
+        return { ...value, entries, loads, drivers: applyCommittedFleetStatus(value.drivers, newerCommits) };
       });
       setRefreshError("");
     };
@@ -177,8 +179,11 @@ export function useDriverBoard(lockedDriverId?: string) {
 
   const refreshLoads = useCallback(async (ids: string[]) => {
     try {
+      const versions = new Map(ids.map(id => [id, savedRef.current[id]?.version]));
       const rows = await Promise.all(ids.map(async id => [id, await fetchBoardLoads(id)] as const));
-      setBoard(current => current ? { ...current, loads: { ...current.loads, ...Object.fromEntries(rows) } } : current);
+      setBoard(current => current ? { ...current, loads: { ...current.loads, ...Object.fromEntries(rows.filter(([id]) =>
+        savedRef.current[id]?.version === versions.get(id) && !changesRef.current[id]
+      )) } } : current);
     } catch { setRefreshError("Load details could not be refreshed. Retry to review the saved plans."); }
   }, []);
 
@@ -205,9 +210,9 @@ export function useDriverBoard(lockedDriverId?: string) {
         if (!current) return current;
         const entries = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
         committed.forEach(e => { entries[e.driverId] = e; });
-        return { ...current, entries: Object.values(entries) };
+        return { ...current, entries: Object.values(entries), drivers: applyCommittedFleetStatus(current.drivers, committed) };
       });
-      if (loadIds.length) await refreshLoads(loadIds);
+      if (loadIds.length) void refreshLoads(loadIds);
     } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); }
   }, [canEdit, loading, refreshLoads]);
@@ -275,7 +280,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       const committed = await undoDriverBoardEvent(eventId, entry, personal);
       savedRef.current[driverId] = committed;
       undoStack.current = undoStack.current.filter(e => e.id !== eventId);
-      setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e) } : current);
+      setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e), drivers: applyCommittedFleetStatus(current.drivers, [committed]) } : current);
       await refreshLoads([driverId]);
     } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }
@@ -292,7 +297,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       editSession.current = null;
       if (result.entry.undoId) undoStack.current.push({ id: result.entry.undoId, driverId, group: ++editSequence.current });
       savedRef.current[driverId] = result.entry;
-      setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), loads: { ...current.loads, [driverId]: result.loads } } : current);
+      setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), drivers: applyCommittedFleetStatus(current.drivers, [result.entry]), loads: { ...current.loads, [driverId]: result.loads } } : current);
       return result.loads;
     } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }

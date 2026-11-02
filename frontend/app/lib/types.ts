@@ -455,6 +455,7 @@ export interface DriverSetupDefaults {
 }
 
 export interface DriverBoardEntry {
+  fleetStatus?: Pick<DriverBoardDriver, "availabilityStatus" | "statusVersion" | "truckId" | "truckOperatingStatus">;
  statusReason?: string;
  leavePlan?: DriverLeavePlan;
 	effectiveAt?: string;
