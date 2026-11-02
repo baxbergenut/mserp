@@ -1,0 +1,30 @@
+2026-11-02 repeated Updating incident
+
+Production baseline: a633fb1303434bcbe6d4a497070eabf0670f1275
+Between 20:07:00 and 20:07:59 UTC, 28 weekly_pti_rows changes and 28
+weekly_pti_events were captured as payroll source changes. These operational
+inspection writes forced conservative payroll preparation for every retained week.
+At 20:07:41 the worker reported a pending week older than 40 seconds. The jobs
+completed around 20:08:01. The reported driver's resource dependencies were then
+current. No production financial mutations were performed during investigation.
+
+Inspection rows, weekly checklist headers, manual table layout and immutable
+inspection audit events are read only by the PTI feature, not by either payroll
+calculator. Their canonical fleet/assignment inputs remain captured independently.
+
+Migration 191 changes all six weekly_pti_* tables to unrelated payroll sources,
+removes only payroll protocol/capture triggers, and enqueues one reconciliation
+against the new source fingerprint. Ordinary cache revisions and immutable PTI
+audits are preserved. Native PTI writers no longer acquire the payroll source gate.
+Deployment pauses API/export/portal writers and prevents older binary rollback.
+
+Local verification:
+  Fresh and incremental schema parity: PTI mutations leave authoritative driver
+  and investor reports, input tokens, statement pointers and job rows unchanged.
+  Prepared Driver and Investor Pay both remain ready after inspection edits.
+  PTI layout and checklist saves finish while a payroll command holds its shared
+  source gate. Ordinary PTI cache revisions still advance; no payroll work queues.
+  A real financial truck-term edit still changes payroll input revisions.
+  Weekly PTI workflows, driver/team/investor/recurring/maintenance/updater database
+  compatibility checks pass; corrected late-migration ordering for legacy fixtures.
+  Backend unit tests/vet and deployment compatibility/rollback guards pass.

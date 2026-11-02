@@ -26,7 +26,7 @@ func (r *FleetRepository) SavePTILayout(ctx context.Context, actor string, in PT
 		}
 		seen[p.TruckID] = true
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}

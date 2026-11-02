@@ -33,6 +33,8 @@ func payrollCacheKey(kind string, week time.Time, snapshot string) string {
 // dependency, including newly tracked tables and financial audit inputs. Changes
 // to these operational tables cannot affect a payroll amount, name or warning.
 var payrollUnrelatedTables = []string{
+	"weekly_pti_weeks", "weekly_pti_rows", "weekly_pti_events",
+	"weekly_pti_layout_state", "weekly_pti_layout", "weekly_pti_layout_events",
 	"load_source_availability",
 	"driver_board", "driver_board_history", "driver_board_load_state",
 	"payroll_projection_control", "payroll_projection_sources", "payroll_projection_changes",

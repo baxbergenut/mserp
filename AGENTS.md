@@ -63,7 +63,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   rollback to pre-189 releases. See `docs/PAYROLL_PERSISTENCE.md` for proof and recovery.
 
 - Persistent payroll is implemented with ordered rollout capabilities in
-  migrations 182–186 and repository `payroll_projection*.go`. See
+  migrations 182–186 and repository `payroll_projection*.go`. Migration 191
+  classifies all weekly PTI checklist/layout/audit tables as unrelated to payroll.
+  PTI writes use their own transactions and never enter the payroll source gate;
+  actual fleet assignments, terms and financial records remain captured. Install
+  the matching deploy helper before 191: it quiesces writers and prevents rollback
+  to binaries using the previous source fingerprint. See
   `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,
   capture inventory and validation. Backfill seeds actual source, saved/ledger and
   recent periods; calendar gaps prepare on demand. Never expand a remote source
