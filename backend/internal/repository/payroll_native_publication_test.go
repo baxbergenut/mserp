@@ -38,7 +38,7 @@ func TestPayrollNativeIntakePublicationDatabase(t *testing.T) {
 		}
 		input := DriverInput{FullName: "Intake Publication", FirstName: payTestString("Intake"), LastName: payTestString("Publication"), HireDate: &week, PayType: "cpm", PayRate: 0.65, Active: true, AssignmentWeek: "2026-10-05"}
 		if _, err = admin.Exec(ctx, `CREATE FUNCTION fail_intake_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test intake publication failure'; END $$;
- CREATE TRIGGER fail_intake_publication BEFORE INSERT ON payroll_statement_versions FOR EACH ROW EXECUTE FUNCTION fail_intake_publication()`); err != nil {
+ CREATE TRIGGER fail_intake_publication BEFORE INSERT ON payroll_projection_generations FOR EACH ROW EXECUTE FUNCTION fail_intake_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = fleet.CompleteDriverIntake(WithPayrollPublication(ctx), intake.IntakeID, actor, "", &input, false); err == nil {
@@ -48,7 +48,7 @@ func TestPayrollNativeIntakePublicationDatabase(t *testing.T) {
 		if err = pool.QueryRow(ctx, `SELECT completed_at IS NULL AND driver_id IS NULL AND NOT EXISTS(SELECT 1 FROM drivers WHERE full_name='Intake Publication') FROM fleetscope_driver_intake WHERE id=$1`, intake.IntakeID).Scan(&unchanged); err != nil || !unchanged {
 			t.Fatal("failed publication created a driver or completed intake", unchanged, err)
 		}
-		if _, err = admin.Exec(ctx, `DROP TRIGGER fail_intake_publication ON payroll_statement_versions; DROP FUNCTION fail_intake_publication()`); err != nil {
+		if _, err = admin.Exec(ctx, `DROP TRIGGER fail_intake_publication ON payroll_projection_generations; DROP FUNCTION fail_intake_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = fleet.CompleteDriverIntake(WithPayrollPublication(ctx), intake.IntakeID, actor, "", &input, false); err != nil {
@@ -102,7 +102,7 @@ func TestPayrollNativeRelayPublicationDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := admin.Exec(ctx, `CREATE FUNCTION fail_relay_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test Relay publication failure'; END $$;
- CREATE TRIGGER fail_relay_publication BEFORE INSERT ON payroll_statement_versions FOR EACH ROW EXECUTE FUNCTION fail_relay_publication()`); err != nil {
+ CREATE TRIGGER fail_relay_publication BEFORE INSERT ON payroll_projection_generations FOR EACH ROW EXECUTE FUNCTION fail_relay_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := fuel.ReviewRelayIdentity(WithPayrollPublication(ctx), identity, projectionDriver, "link", actor); err == nil {
@@ -113,7 +113,7 @@ func TestPayrollNativeRelayPublicationDatabase(t *testing.T) {
  AND NOT EXISTS(SELECT 1 FROM fuel_transactions WHERE driver_id IS NOT NULL) FROM relay_driver_links WHERE id=$1`, identity).Scan(&unchanged); err != nil || !unchanged {
 			t.Fatal("failed publication left a fuel link, backfill or audit", unchanged, err)
 		}
-		if _, err := admin.Exec(ctx, `DROP TRIGGER fail_relay_publication ON payroll_statement_versions; DROP FUNCTION fail_relay_publication()`); err != nil {
+		if _, err := admin.Exec(ctx, `DROP TRIGGER fail_relay_publication ON payroll_projection_generations; DROP FUNCTION fail_relay_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if n, err := fuel.ReviewRelayIdentity(WithPayrollPublication(ctx), identity, projectionDriver, "link", actor); err != nil || n != 1 {
@@ -162,7 +162,7 @@ func TestPayrollNativeAvailabilityPublicationDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := admin.Exec(ctx, `CREATE FUNCTION fail_availability_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test availability publication failure'; END $$;
- CREATE TRIGGER fail_availability_publication BEFORE INSERT ON payroll_statement_versions FOR EACH ROW EXECUTE FUNCTION fail_availability_publication()`); err != nil {
+ CREATE TRIGGER fail_availability_publication BEFORE INSERT ON payroll_projection_generations FOR EACH ROW EXECUTE FUNCTION fail_availability_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		fleet := NewFleetRepository(pool)
@@ -174,7 +174,7 @@ func TestPayrollNativeAvailabilityPublicationDatabase(t *testing.T) {
 		if err := pool.QueryRow(ctx, `SELECT status_version=$2 AND availability_status=$3 FROM drivers WHERE id=$1`, projectionDriver, version, status).Scan(&unchanged); err != nil || !unchanged {
 			t.Fatal("failed publication left an availability change", unchanged, err)
 		}
-		if _, err := admin.Exec(ctx, `DROP TRIGGER fail_availability_publication ON payroll_statement_versions; DROP FUNCTION fail_availability_publication()`); err != nil {
+		if _, err := admin.Exec(ctx, `DROP TRIGGER fail_availability_publication ON payroll_projection_generations; DROP FUNCTION fail_availability_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := fleet.ChangeAvailability(WithPayrollPublication(ctx), projectionDriver, "", input); err != nil {
@@ -230,7 +230,7 @@ func TestPayrollNativeTollPublicationDatabase(t *testing.T) {
 		}
 		input.Revision = preview.Revision
 		if _, err = admin.Exec(ctx, `CREATE FUNCTION fail_native_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test publication failure'; END $$;
- CREATE TRIGGER fail_native_publication BEFORE INSERT ON payroll_statement_versions FOR EACH ROW EXECUTE FUNCTION fail_native_publication()`); err != nil {
+ CREATE TRIGGER fail_native_publication BEFORE INSERT ON payroll_projection_generations FOR EACH ROW EXECUTE FUNCTION fail_native_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if err = repo.LinkPrePassTruck(WithPayrollPublication(ctx), input, actor); err == nil {
@@ -240,7 +240,7 @@ func TestPayrollNativeTollPublicationDatabase(t *testing.T) {
 		if err = pool.QueryRow(ctx, `SELECT truck_id IS NULL AND NOT EXISTS(SELECT 1 FROM toll_transaction_links WHERE id=$2) FROM tolls WHERE id=$1`, toll, input.ID).Scan(&untouched); err != nil || !untouched {
 			t.Fatal("failed publication left a source edit or audit receipt", untouched, err)
 		}
-		if _, err = admin.Exec(ctx, `DROP TRIGGER fail_native_publication ON payroll_statement_versions; DROP FUNCTION fail_native_publication()`); err != nil {
+		if _, err = admin.Exec(ctx, `DROP TRIGGER fail_native_publication ON payroll_projection_generations; DROP FUNCTION fail_native_publication()`); err != nil {
 			t.Fatal(err)
 		}
 		if err = repo.LinkPrePassTruck(WithPayrollPublication(ctx), input, actor); err != nil {
