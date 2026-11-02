@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""Root-owned, local PostgreSQL backups with atomic verification receipts."""
+import argparse
+import datetime as dt
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+
+ROOT = Path('/var/backups/mserp')
+LOCK = Path('/run/lock/mserp-backup.lock')
+DAY = 24 * 60 * 60
+RESERVE = 256 * 1024 * 1024
+NAME = re.compile(r'mserp-(\d{8}T\d{6}Z)-[a-z0-9-]{1,64}\.dump')
+
+
+class BackupError(Exception):
+    pass
+
+
+class Store:
+    def __init__(self, root=ROOT, owner=0, clock=time.time):
+        self.root, self.owner, self.clock = Path(root), owner, clock
+
+    def secure(self, path, directory=False):
+        info = path.lstat()
+        correct_type = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
+        if not correct_type or info.st_uid != self.owner or info.st_mode & 0o077:
+            raise BackupError(f'Unsafe backup ownership/type/permissions: {path.name}')
+        return info
+
+    def identity(self, path):
+        s = self.secure(path)
+        return dict(size=s.st_size, mtime_ns=s.st_mtime_ns, inode=s.st_ino, device=s.st_dev)
+
+    def read(self, path):
+        self.secure(self.root, directory=True)
+        self.secure(path)
+        return json.loads(path.read_text())
+
+    def checked(self, record):
+        if record.get('version') != 1 or not NAME.fullmatch(record.get('file', '')):
+            raise BackupError('Invalid backup receipt')
+        if not re.fullmatch('[0-9a-f]{64}', record.get('sha256', '')):
+            raise BackupError('Invalid backup checksum receipt')
+        if self.identity(self.root / record['file']) != record.get('identity'):
+            raise BackupError('Verified backup has changed or is missing')
+        snapshot = dt.datetime.strptime(NAME.fullmatch(record['file'])[1], '%Y%m%dT%H%M%SZ').replace(tzinfo=dt.timezone.utc).timestamp()
+        if snapshot != record.get('snapshot_at') or snapshot > self.clock():
+            raise BackupError('Invalid backup snapshot time')
+        return record
+
+    def recent(self, max_age=DAY):
+        # No backup lock: a long scheduled dump must not delay code-only deploys.
+        # The latest receipt is replaced atomically before older backups are pruned.
+        for attempt in range(2):
+            try:
+                record = self.checked(self.read(self.root / 'latest-verified.json'))
+                if self.clock() - record['snapshot_at'] > max_age:
+                    raise BackupError('Latest verified database backup is too old')
+                return record
+            except FileNotFoundError:
+                if attempt:
+                    raise BackupError('Verified database backup is missing') from None
+
+    def atomic_json(self, path, value):
+        fd, temporary = tempfile.mkstemp(prefix='.receipt-', dir=self.root)
+        try:
+            with os.fdopen(fd, 'w') as output:
+                json.dump(value, output, sort_keys=True)
+                output.write('\n')
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, path)
+            self.sync_directory()
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+
+    def sync_directory(self):
+        fd = os.open(self.root, os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def verify(self, path):
+        if path.parent != self.root or not NAME.fullmatch(path.name):
+            raise BackupError('Only a completed, named backup in the backup directory can be adopted')
+        before = self.identity(path)
+        if before['size'] == 0:
+            raise BackupError('Backup is empty')
+        subprocess.run(['pg_restore', '--list', str(path)], check=True, stdout=subprocess.DEVNULL)
+        digest = hashlib.sha256()
+        with path.open('rb') as source:
+            for block in iter(lambda: source.read(8 * 1024 * 1024), b''):
+                digest.update(block)
+            os.fsync(source.fileno())
+        if self.identity(path) != before:
+            raise BackupError('Backup changed during verification')
+        snapshot = dt.datetime.strptime(NAME.fullmatch(path.name)[1], '%Y%m%dT%H%M%SZ').replace(tzinfo=dt.timezone.utc).timestamp()
+        record = dict(version=1, file=path.name, identity=before, sha256=digest.hexdigest(), snapshot_at=snapshot, verified_at=self.clock())
+        self.checked(record)
+        try:
+            previous = self.checked(self.read(self.root / 'latest-verified.json'))
+            if previous['snapshot_at'] > snapshot:
+                raise BackupError('An older backup cannot replace the latest verified backup')
+        except FileNotFoundError:
+            pass
+        self.atomic_json(path.with_suffix('.verified.json'), record)
+        self.atomic_json(self.root / 'latest-verified.json', record)
+        return record
+
+    def prune(self, current):
+        self.checked(current)
+        for receipt in self.root.glob('mserp-*.verified.json'):
+            record = self.read(receipt)
+            if record.get('file') == current['file']:
+                continue
+            try:
+                self.checked(record)
+            except (BackupError, FileNotFoundError):
+                continue  # Unrecognized/changed files are retained for review.
+            if record['snapshot_at'] >= current['snapshot_at']:
+                continue
+            (self.root / record['file']).unlink()
+            receipt.unlink()
+        self.sync_directory()
+
+    def create(self, label):
+        if not re.fullmatch('[a-z0-9-]{1,64}', label):
+            raise BackupError('Invalid backup label')
+        self.secure(self.root, directory=True)
+        try:
+            prior_size = self.checked(self.read(self.root / 'latest-verified.json'))['identity']['size']
+        except FileNotFoundError:
+            prior_size = 0
+        required = max(1024 * 1024 * 1024, int(prior_size * 1.10) + 512 * 1024 * 1024)
+        if shutil.disk_usage(self.root).free < required:
+            raise BackupError(f'Insufficient backup disk space: require {required} bytes; existing backups retained')
+        stamp = dt.datetime.fromtimestamp(self.clock(), dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        final = self.root / f'mserp-{stamp}-{label}.dump'
+        partial = final.with_suffix('.dump.partial')
+        if final.exists():
+            raise BackupError('Backup name already exists')
+        process = None
+        try:
+            with partial.open('xb') as output, tempfile.TemporaryFile() as errors:
+                os.fchmod(output.fileno(), 0o600)
+                process = subprocess.Popen(['runuser', '-u', 'postgres', '--', 'pg_dump', '--format=custom', '--compress=zstd:level=1', '--no-owner', '--no-acl', '--dbname=mserp'], stdout=output, stderr=errors, start_new_session=True)
+                while process.poll() is None:
+                    if shutil.disk_usage(self.root).free < RESERVE:
+                        raise BackupError('Backup stopped before exhausting disk space; existing backup retained')
+                    time.sleep(2)
+                if process.returncode:
+                    raise BackupError(f'pg_dump failed with exit status {process.returncode}; existing backup retained')
+                output.flush()
+                os.fsync(output.fileno())
+            os.rename(partial, final)
+            record = self.verify(final)
+            self.prune(record)
+            return record
+        finally:
+            if process is not None and process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+            partial.unlink(missing_ok=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--check', action='store_true')
+    mode.add_argument('--create', action='store_true')
+    mode.add_argument('--scheduled', action='store_true')
+    mode.add_argument('--adopt', type=Path)
+    parser.add_argument('--label', default='scheduled')
+    args = parser.parse_args()
+    if os.geteuid() != 0:
+        raise BackupError('Run as root')
+    def interrupted(signum, frame):
+        raise BackupError('Backup interrupted; existing verified backup retained')
+    signal.signal(signal.SIGTERM, interrupted)
+    os.umask(0o077)
+    ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    store = Store()
+    if args.check:
+        record = store.recent()
+    else:
+        descriptor = os.open(LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, 'a') as lock:
+            store.secure(LOCK)
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise BackupError('Another database backup is running; retry after it finishes') from None
+            if args.adopt:
+                record = store.verify(args.adopt)
+            elif args.scheduled:
+                try:
+                    record = store.recent(max_age=12 * 60 * 60)
+                    print('Recent verified backup already exists; scheduled backup deferred')
+                except (BackupError, FileNotFoundError):
+                    record = store.create('scheduled')
+            else:
+                record = store.create(args.label)
+    print(f"Verified database backup: {record['file']} ({record['identity']['size']} bytes)")
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (BackupError, OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f'Backup check failed: {error}', file=sys.stderr)
+        sys.exit(1)

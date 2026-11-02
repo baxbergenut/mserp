@@ -2515,9 +2515,15 @@ Prefer these targeted searches over recursively reading the repository.
   newly created runtime table must transfer ownership to `mserp_app` when that
   role exists, following migration 025. Verify queries as the application role;
   an administrator-only database test cannot detect missing runtime permissions.
-- Each deployment creates a custom-format PostgreSQL backup in
-  `/var/backups/mserp` before migrations or release activation. Do not delete
-  backups casually.
+- `deploy/mserp-backup` and its systemd timer maintain a daily verified local
+  PostgreSQL snapshot at 03:00 America/New_York. Retain the last good snapshot
+  until a successful replacement passes catalog/hash/fsync checks. Code-only
+  deploys reuse a verified snapshot at most 24 hours old only with a healthy,
+  enabled schedule; pending numbered migrations still force a fresh backup.
+  Missing/stale/changed backups or ledger errors stop activation. Install the
+  backup script, units and verified baseline before the matching deploy helper.
+  Server-local backups do not provide off-server or point-in-time recovery.
+  See deploy/README.md; validate with test-backup-policy.sh and test-backup.py.
 
 ### Local synthetic review
 
@@ -2555,8 +2561,8 @@ local review is already running.
 - The deploy user owns only `/var/lib/mserp-deploy/incoming`, uses a restricted
   SSH key, and may sudo only `/usr/local/sbin/mserp-deploy`. Do not broaden its
   filesystem ownership or sudo permissions.
-- `deploy/mserp-deploy` validates the SHA/checksum and archive paths, takes the
-  database backup, applies migrations, switches `/opt/mserp/current`, restarts
+- `deploy/mserp-deploy` validates the SHA/checksum and archive paths, enforces the
+  migration-aware backup policy, applies migrations, switches `/opt/mserp/current`, restarts
   only `mserp-api`, reloads Nginx, runs health checks, and rolls the application
   symlink back if activation fails.
 - Operator SSH access from this workstation is already configured with a key.

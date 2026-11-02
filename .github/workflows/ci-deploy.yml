@@ -66,6 +66,8 @@ jobs:
           bash deploy/test-permissions-cutover.sh
           MSERP_PROTOCOL_REAL_PYTHON=1 bash deploy/test-payroll-protocol.sh
           python3 deploy/test-payroll-protocol-config.py
+          bash deploy/test-backup-policy.sh
+          python3 deploy/test-backup.py
 
       - name: Test backend
         working-directory: backend

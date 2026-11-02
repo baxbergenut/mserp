@@ -9,7 +9,8 @@ checksum-verified archive through the unprivileged `mserp-deploy` account. The
 root-owned `mserp-deploy` helper then:
 
 1. rejects unsafe or malformed archives;
-2. creates a PostgreSQL custom-format backup with zstd level 1 under `/var/backups/mserp`;
+2. reads the migration ledger and requires either a fresh verified backup for
+   pending migrations or a recent verified scheduled backup for code-only changes;
 3. applies only SQL files absent from `schema_migrations`;
 4. switches `/opt/mserp/current` atomically;
 5. restarts the API, reloads Nginx, and restores a permission-compatible release
@@ -24,6 +25,71 @@ production PostgreSQL 16 client). The deploy job allows 45 minutes for a complet
 backup, migration and activation. Never remove the last valid backup merely to
 make space: verify any relocated copy by SHA-256 and `pg_restore --list` first.
 Deployment SSH sends keepalives during the otherwise quiet database backup.
+
+## Database backup policy
+
+`deploy/mserp-backup` creates PostgreSQL custom-format zstd level 1 snapshots in
+`/var/backups/mserp`. Install it as root-owned `/usr/local/sbin/mserp-backup`
+(0755), and install `mserp-backup.service` and `mserp-backup.timer` under
+`/etc/systemd/system` (0644). The directory and backup/receipt files are root-only.
+Enable the timer with `systemctl enable --now mserp-backup.timer`.
+
+The timer runs daily at **03:00 America/New_York**, with up to five minutes of
+jitter and catch-up after downtime. A manually started scheduled run can reuse a
+verified snapshot under 12 hours old. Snapshots are written to `.dump.partial`;
+only successful `pg_dump`, catalog validation, SHA-256 and fsync publish the
+atomic `latest-verified.json` receipt. Freshness uses the snapshot's start time,
+not its verification time. Receipts also fence the file's size, timestamp and
+identity, so normal deployment checks do not reread a multi-gigabyte checksum.
+
+Retention keeps **one completed verified snapshot**, retaining the previous one
+until the replacement is verified and published. Unknown legacy dumps and changed
+files are retained for explicit review. A shared lock prevents simultaneous backup
+writers. Preflight checks budget 110% of the previous size plus 512 MiB; a runtime
+256 MiB free-space floor stops the process group and removes its partial output
+before filling the disk. Existing verified backups survive every failure.
+
+Code-only deployments skip full `pg_dump` only when the timer is enabled/active,
+the service is loaded and has not failed, and a verified snapshot is **at most
+24 hours old**. Missing/stale/changed receipts, database lookup errors and unknown
+ledger state stop deployment before activation. Every pending numbered migration,
+including data migrations, still forces a fresh verified snapshot. Concurrent
+backups cause a safe failure; retry after the running backup finishes. Out-of-band
+data repairs must explicitly take a fresh backup with `--create --label <label>`.
+
+Useful operator commands:
+
+```sh
+systemctl list-timers mserp-backup.timer
+systemctl status mserp-backup.service
+journalctl -u mserp-backup.service
+/usr/local/sbin/mserp-backup --check
+systemctl start mserp-backup.service
+/usr/local/sbin/mserp-backup --create --label operator
+```
+
+Bootstrap only from a **known completed successful** `pg_dump`, for example a
+completed deployment backup: `/usr/local/sbin/mserp-backup --adopt <absolute-path>`.
+This validates the catalog/hash before publishing receipts. A catalog listing
+alone cannot establish that an interrupted dump is complete. Never adopt a dump
+from a failed deployment or while another process is writing it.
+
+For a restore drill, create an isolated database owned by `mserp_app`, then restore
+using `pg_restore --exit-on-error --no-owner --no-acl --role=mserp_app --dbname=<test-db> <backup>`.
+Use a privileged connection that can assume `mserp_app`; validate application-role
+reads, source rows, statement versions and migration records before declaring the
+drill successful. Restoring production also requires the matching compatible
+release and its numbered migrations; an application rollback does not undo data.
+
+This is **server-local daily recovery**, not point-in-time or off-server recovery.
+WAL archiving remains disabled. A server/storage loss can affect both the live
+database and local backups; off-server storage is a separate future setup.
+
+Validate policy changes with `bash deploy/test-backup-policy.sh`,
+`python3 deploy/test-backup.py` and `bash deploy/test-permissions-cutover.sh`.
+Install the script, units, verified baseline and enabled timer **before** installing
+the matching deploy helper. Install helpers under the deployment lock so an active
+release cannot observe a partially changed deployment script.
 
 Migration 185 requires the matching helper before release. It pauses all payroll
 writers while installing shared dependency maps and the optional retired-week
