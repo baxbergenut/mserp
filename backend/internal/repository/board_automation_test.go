@@ -596,6 +596,16 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	defer routeServer.Close()
 	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, SpeedUnit: "mph", RequestsPerMinute: 120})
 	routes.URL = routeServer.URL
+	// A just-edited destination must settle before any paid provider request.
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET route_not_before=$2 WHERE driver_id=$1`, d.ID, now.Add(5*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil || routeCalls.Load() != 0 {
+		t.Fatal("routed during dispatch editing pause", err, routeCalls.Load())
+	}
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET route_not_before=$2 WHERE driver_id=$1`, d.ID, now.Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	// No existing route: first enable while the truck is off must still show miles.
 	_, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel='{}' WHERE driver_id=$1`, d.ID)
 	if err != nil {

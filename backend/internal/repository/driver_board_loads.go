@@ -588,11 +588,14 @@ func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (Boa
 		return BoardLoads{}, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
+		return BoardLoads{}, err
+	}
 	views, err := readBoardLoads(ctx, tx, []string{id}, from)
 	if err != nil {
 		return BoardLoads{}, err
 	}
-	return views[id], commitPayrollMutation(ctx, tx)
+	return views[id], tx.Commit(ctx)
 }
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
 	var e DriverBoardEntry
@@ -601,8 +604,12 @@ func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, er
 	return e, err
 }
 func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadAction, actor string) (BoardLoadResult, error) {
+	return runBoardCommand(func(source bool) (BoardLoadResult, error) { return r.changeLoads(ctx, a, actor, source) })
+}
+
+func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadAction, actor string, source bool) (BoardLoadResult, error) {
 	var result BoardLoadResult
-	tx, err := beginPayrollMutation(ctx, r.pool)
+	tx, err := beginBoardMutation(ctx, r.pool, source)
 	if err != nil {
 		return result, err
 	}
@@ -913,5 +920,8 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 	if err = attachBoardUndoID(ctx, tx, &result.Entry); err != nil {
 		return result, err
 	}
-	return result, commitPayrollMutation(ctx, tx)
+	if err = attachBoardFleetStatus(ctx, tx, &result.Entry); err != nil {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
 }

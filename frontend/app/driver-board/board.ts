@@ -1,4 +1,14 @@
-import type { BoardLoads, DriverBoardEntry } from "@/app/lib/types";
+import type { BoardLoads, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
+
+export function applyCommittedFleetStatus(drivers: DriverBoardDriver[], entries: DriverBoardEntry[]) {
+  const states = new Map(entries.filter(e => e.fleetStatus).map(e => [e.driverId, e.fleetStatus!]));
+  return drivers.map(driver => {
+    const state = states.get(driver.id);
+    if (!state || (driver.statusVersion ?? 0) > (state.statusVersion ?? 0)) return driver;
+    return { ...driver, availabilityStatus: state.availabilityStatus, statusVersion: state.statusVersion,
+      truckOperatingStatus: driver.truckId === state.truckId ? state.truckOperatingStatus : driver.truckOperatingStatus };
+  });
+}
 
 export function progressStatus(status: string, loads?: BoardLoads) {
   return loads && (status === "ENROUTE" || status === "RESERVED") ? (loads.next.length ? "RESERVED" : "ENROUTE") : status;

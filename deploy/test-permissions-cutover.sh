@@ -13,6 +13,7 @@ payroll_operational_migration=184_payroll_operational_sources.sql
 payroll_shared_migration=185_payroll_shared_dependencies.sql
 expense_verification_migration=186_expense_verification_metadata.sql
 load_availability_migration=187_load_source_availability.sql
+board_operational_migration=188_status_board_operational.sql
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
 trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
@@ -35,6 +36,7 @@ runuser() {
     if [[ $* == *"FROM public.payroll_projection_control"* ]]; then result=$mock_projection_active; fi
     if [[ $* == *"FROM public.payroll_projection_sources"* ]]; then result=$mock_telemetry_excluded; fi
     if [[ $* == *"table_name='relay_driver_links'"* ]]; then result=$mock_operational_excluded; fi
+    if [[ $* == *"table_name='driver_board'"* ]]; then result=$mock_board_operational; fi
     if [[ $* == *"to_regclass('public.payroll_resource_dependency_sets')"* ]]; then result=$mock_shared_dependencies; fi
     if [[ $* == *"public.payroll_expense_verification_change"* ]]; then result=$mock_verification_metadata; fi
     if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
@@ -54,6 +56,7 @@ mock_operational_excluded=f
 mock_shared_dependencies=f
 mock_verification_metadata=f
 mock_load_availability=f
+mock_board_operational=f
 mock=f
 compatible_release "$test_root/old"
 compatible_release "$test_root/new"
@@ -172,3 +175,14 @@ mock_load_availability=error
 if compatible_release "$test_root/new"; then echo 'Load availability schema failure allowed rollback' >&2; exit 1; fi
 mock_load_availability=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown load availability schema allowed rollback' >&2; exit 1; fi
+
+mock_load_availability=t
+mock_board_operational=t
+if compatible_release "$test_root/new"; then echo 'Operational board allowed an old payroll binary' >&2; exit 1; fi
+touch "$test_root/new/migrations/$board_operational_migration"
+compatible_release "$test_root/new"
+mock_board_operational=error
+if compatible_release "$test_root/new"; then echo 'Board classification query failure allowed rollback' >&2; exit 1; fi
+mock_board_operational=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown board classification allowed rollback' >&2; exit 1; fi
+echo 'Status Board compatibility checks passed'

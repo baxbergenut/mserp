@@ -38,6 +38,14 @@ func TestDriverTeamsDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var lateMigrations []string
+	for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql"} {
+		body, readErr := os.ReadFile("../../sql/" + name)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		lateMigrations = append(lateMigrations, strings.ReplaceAll(string(body), "\r\n", "\n"))
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("driver_teams_test_%d", time.Now().UnixNano())
@@ -50,6 +58,11 @@ func TestDriverTeamsDatabase(t *testing.T) {
 			}()
 			source := strings.ReplaceAll(string(init), "\r\n", "\n")
 			if mode == "migration" {
+				// Capture registration and board guards must follow the restored
+				// team and fleet-status tables, as in the numbered upgrade path.
+				for _, body := range lateMigrations {
+					source = strings.Replace(source, body, "", 1)
+				}
 				body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 				if !strings.Contains(source, body) {
 					t.Fatal("init must contain the exact team migration")
@@ -72,6 +85,20 @@ func TestDriverTeamsDatabase(t *testing.T) {
 				applyFleetScopeSyncMigration(t, ctx, admin)
 				applyBoardLiveMigration(t, ctx, admin)
 				applyClustieLoadAssignments(t, ctx, admin)
+				// Migration 160 originally enrolled these tables before this
+				// fixture deferred their creation. Restore that registry first;
+				// migration 180 below installs their complete event coverage.
+				if _, err = admin.Exec(ctx, `INSERT INTO payroll_cache_revisions(table_name)
+ SELECT tablename FROM pg_tables WHERE schemaname=current_schema()
+ AND tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
+ ON CONFLICT(table_name) DO NOTHING`); err != nil {
+					t.Fatal(err)
+				}
+				for _, body := range lateMigrations {
+					if _, err = admin.Exec(ctx, body); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			for _, table := range []string{"driver_teams", "driver_team_events"} {
 				var owner string

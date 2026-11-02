@@ -11,6 +11,17 @@ without a Samsara fallback. Fleet profile maps and maintenance odometers keep
 their separate source rules. Old Samsara dispatch evidence is hidden immediately
 and recomputed by the worker from Five ELD.
 
+## Editing pause (188)
+
+Load, status, destination and selected-stop edits defer automatic route requests
+until five seconds have passed without another routing edit. Switching Dispatched
+to Enroute during this interval restarts the pause for the delivery destination.
+Notes and ordinary detail reads do not extend it. The deadline is durable in
+`driver_board_automation.route_not_before` and is checked before choosing work
+and again before processing each queued target. The existing minute worker cadence
+still applies; this is not a five-second polling interval. Version/context fences
+continue to discard results from an obsolete selection.
+
 ## Appointments and destinations
 
 Current load resolves a unique exact imported DataTruck number, including loads

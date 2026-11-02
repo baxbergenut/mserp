@@ -232,8 +232,12 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		}
 		var t BoardTravel
 		var vin string
-		if err = conn.QueryRow(ctx, `SELECT travel,coalesce(t.vin,'') FROM driver_board_automation c LEFT JOIN trucks t ON t.id::text=$2 WHERE c.driver_id=$1`, d.ID, d.TruckID).Scan(&t, &vin); err != nil {
+		var routeNotBefore *time.Time
+		if err = conn.QueryRow(ctx, `SELECT travel,coalesce(t.vin,''),c.route_not_before FROM driver_board_automation c LEFT JOIN trucks t ON t.id::text=$2 WHERE c.driver_id=$1`, d.ID, d.TruckID).Scan(&t, &vin, &routeNotBefore); err != nil {
 			return err
+		}
+		if routeNotBefore != nil && now.Before(*routeNotBefore) {
+			continue
 		}
 		unavailable := ""
 		switch {
@@ -282,6 +286,14 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 	for _, job := range targets {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		// A queued target may have changed while earlier drivers were routed.
+		var settled bool
+		if err = conn.QueryRow(ctx, `SELECT route_not_before IS NULL OR route_not_before<=$2 FROM driver_board_automation WHERE driver_id=$1`, job.driver.ID, now).Scan(&settled); err != nil {
+			return err
+		}
+		if !settled {
+			continue
 		}
 		a := job.view.Automation
 		t := job.travel

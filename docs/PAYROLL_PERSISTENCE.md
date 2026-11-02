@@ -47,6 +47,24 @@ deploy helper first: it pauses all writers and refuses rollback to a release lac
 migration 183 once the classification changes, even if migration-ledger recording
 fails. Fresh/incremental tests check both report parity and financial invalidation.
 
+## Status Board operational boundary (188)
+
+Status Board commands now acknowledge their operational transaction without invoking
+payroll publication, even with prepared reads enabled. Board rows, selection state,
+and board audit events are unrelated sources. Dispatch-only fleet status history
+also leaves financial revisions unchanged. Canonical driver/truck availability or
+restriction changes still enqueue durable captured work atomically; the prepared
+pages retain their existing Updating/freshness and finalization guards.
+
+Ordinary operational saves use a checked transaction marker and the fleet lock,
+so they do not queue behind payroll calculations. A source mutation raises a specific
+retry signal before taking the financial gate. The entire attempted transaction
+rolls back; the same original versions are retried once with source -> fleet ->
+driver lock ordering. This never retries a stale-edit conflict. The history row
+guard prevents financial-track changes through the operational marker, and missing
+guards fail catalog coverage. Gross Board, expenses and payroll commands retain
+synchronous atomic publication. Install the matching deploy helper before 188.
+
 ## November 1 save regression and calendar correction
 
 An open updating page could repeatedly abort preparation with SQLSTATE 40001:

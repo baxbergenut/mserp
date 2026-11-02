@@ -34,6 +34,7 @@ func payrollCacheKey(kind string, week time.Time, snapshot string) string {
 // to these operational tables cannot affect a payroll amount, name or warning.
 var payrollUnrelatedTables = []string{
 	"load_source_availability",
+	"driver_board", "driver_board_history", "driver_board_load_state",
 	"payroll_projection_control", "payroll_projection_sources", "payroll_projection_changes",
 	"payroll_protocol_events",
 	"payroll_projection_jobs", "payroll_projection_generations", "payroll_statement_versions", "payroll_statement_state",

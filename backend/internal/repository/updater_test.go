@@ -34,6 +34,14 @@ func TestUpdaterDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var lateMigrations []string
+	for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql"} {
+		body, readErr := os.ReadFile("../../sql/" + name)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		lateMigrations = append(lateMigrations, strings.ReplaceAll(string(body), "\r\n", "\n"))
+	}
 	for _, mode := range []string{"fresh", "migrated"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("updater_test_%d", time.Now().UnixNano())
@@ -53,9 +61,22 @@ func TestUpdaterDatabase(t *testing.T) {
 				if !ok {
 					t.Fatal("migration differs from init")
 				}
-				exec(withoutBoardLiveMigration(t, before+after))
+				prior := strings.ReplaceAll(before+after, "\r\n", "\n")
+				for _, body := range lateMigrations {
+					prior = strings.Replace(prior, body, "", 1)
+				}
+				exec(withoutBoardLiveMigration(t, prior))
 				exec(string(migration))
 				applyBoardLiveMigration(t, ctx, admin)
+				// Reproduce migration 160 enrollment after restoring its tables,
+				// then install revision/protocol/board guards in numbered order.
+				exec(`INSERT INTO payroll_cache_revisions(table_name)
+ SELECT tablename FROM pg_tables WHERE schemaname=current_schema()
+ AND tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
+ ON CONFLICT(table_name) DO NOTHING`)
+				for _, body := range lateMigrations {
+					exec(body)
+				}
 			}
 			exec(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			appcfg := cfg.Copy()

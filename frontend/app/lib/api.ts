@@ -195,7 +195,7 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
 export const fetchDriverBoard = (weekStart: string) =>
   apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1" })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
-  apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }) });
+  apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }, (key, value) => key === "fleetStatus" ? undefined : value) });
 export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAction) =>
   apiRequest<import("./types").DriverBoardOrder>("/driver-board/order", { method: "POST", body: JSON.stringify(action) });
 export const reorderBoardDispatchers = (action: import("./types").DispatcherBoardOrderAction) =>
