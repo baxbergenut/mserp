@@ -167,6 +167,15 @@ class BackupTests(unittest.TestCase):
                 with self.assertRaises(backup.BackupError): backup.main()
                 create.assert_not_called()
 
+    def test_daily_timer_does_not_skip_an_overnight_migration_backup(self):
+        self.now = dt.datetime(2026, 11, 3, 8, 2, tzinfo=dt.timezone.utc).timestamp()
+        record = self.store.verify(self.file('20261103T010000Z'))
+        self.assertEqual(self.store.scheduled_reuse_age(), 0)
+        lock = self.root / 'backup.lock'
+        with patch.object(backup, 'ROOT', self.root), patch.object(backup, 'LOCK', lock), patch.object(backup, 'Store', return_value=self.store), patch.object(backup.os, 'geteuid', return_value=0), patch.object(sys, 'argv', ['backup', '--scheduled']), patch.object(self.store, 'create', return_value=record) as create, contextlib.redirect_stdout(io.StringIO()):
+            backup.main()
+            create.assert_called_once_with('scheduled')
+
 
 if __name__ == '__main__':
     unittest.main()

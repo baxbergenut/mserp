@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from zoneinfo import ZoneInfo
 
 ROOT = Path('/var/backups/mserp')
 LOCK = Path('/run/lock/mserp-backup.lock')
@@ -71,6 +72,18 @@ class Store:
             except FileNotFoundError:
                 if attempt:
                     raise BackupError('Verified database backup is missing') from None
+
+    def scheduled_reuse_age(self):
+        # A manual/bootstrap check may reuse a fresh snapshot only if it stays
+        # within the deploy freshness window until the next scheduled start.
+        # In particular, the daily timer must not skip a 7-12h-old migration
+        # backup and accidentally leave a 31-36h gap between snapshots.
+        now = dt.datetime.fromtimestamp(self.clock(), ZoneInfo('America/New_York'))
+        next_start = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if next_start <= now:
+            next_start += dt.timedelta(days=1)
+        remaining = DAY - (next_start.timestamp() - self.clock()) - 5 * 60
+        return max(0, min(12 * 60 * 60, remaining))
 
     def atomic_json(self, path, value):
         fd, temporary = tempfile.mkstemp(prefix='.receipt-', dir=self.root)
@@ -210,7 +223,10 @@ def main():
                 record = store.verify(args.adopt)
             elif args.scheduled:
                 try:
-                    record = store.recent(max_age=12 * 60 * 60)
+                    reuse_age = store.scheduled_reuse_age()
+                    if reuse_age == 0:
+                        raise BackupError('Daily database backup is due')
+                    record = store.recent(max_age=reuse_age)
                     print('Recent verified backup already exists; scheduled backup deferred')
                 except (BackupError, FileNotFoundError):
                     record = store.create('scheduled')

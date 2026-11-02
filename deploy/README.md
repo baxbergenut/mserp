@@ -35,8 +35,10 @@ Deployment SSH sends keepalives during the otherwise quiet database backup.
 Enable the timer with `systemctl enable --now mserp-backup.timer`.
 
 The timer runs daily at **03:00 America/New_York**, with up to five minutes of
-jitter and catch-up after downtime. A manually started scheduled run can reuse a
-verified snapshot under 12 hours old. Snapshots are written to `.dump.partial`;
+jitter and catch-up after downtime. A manual/bootstrap run can reuse a snapshot
+under 12 hours old only if it stays within the 24-hour freshness window until the
+next scheduled start. The daily timer does not skip an overnight migration backup
+and create a multi-day gap. Snapshots are written to `.dump.partial`;
 only successful `pg_dump`, catalog validation, SHA-256 and fsync publish the
 atomic `latest-verified.json` receipt. Freshness uses the snapshot's start time,
 not its verification time. Receipts also fence the file's size, timestamp and
