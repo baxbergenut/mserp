@@ -41,7 +41,7 @@ func (r *MaintenanceRepository) SavePMBaseline(ctx context.Context, in Maintenan
 	if err != nil || in.LastDate > time.Now().In(zone).Format(time.DateOnly) || in.LastMiles != nil && (*in.LastMiles < 0 || *in.LastMiles > 2000000000) {
 		return fmt.Errorf("%w: enter a PM date through today and a nonnegative service odometer", ErrMaintenanceInvalid)
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}

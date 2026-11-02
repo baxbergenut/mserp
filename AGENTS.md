@@ -48,6 +48,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
+- Migration 192 excludes reviewed operational feedback, inventory, maintenance,
+  export/access and provider bookkeeping from payroll capture and source locks.
+  See `docs/PAYROLL_SOURCE_CLASSIFICATION.md` for boundaries and regression checks.
+  Real work-order expenses/status changes and provider transaction attribution stay
+  captured through canonical tables. Account metadata bypass validates every row;
+  identity/dispatcher edits remain guarded. Repeated identical provider imports do
+  not rebuild statements. Install its deploy helper before the quiesced migration;
+  older binaries cannot resume afterward.
+
 - Migration 189 replaces routine payroll history with `payroll_statement_current`
   (exactly one row per kind/identity/week). There is no statement archive/history.
   `payroll_statement_versions` is a compatibility view over current rows; unchanged

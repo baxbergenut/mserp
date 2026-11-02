@@ -153,15 +153,23 @@ func (r *AuthRepository) DeleteSessionByTokenHash(ctx context.Context, hash stri
 
 // Appearance changes do not change security versions or revoke sessions.
 func (r *AuthRepository) SetTheme(ctx context.Context, userID, theme string) error {
-	result, err := r.pool.Exec(ctx, `UPDATE app_users SET theme=$2 WHERE id=$1 AND active`, userID, theme)
-	if err == nil && result.RowsAffected() != 1 {
+	tx, err := beginPayrollUserMetadata(ctx, r.pool)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	result, err := tx.Exec(ctx, `UPDATE app_users SET theme=$2 WHERE id=$1 AND active`, userID, theme)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() != 1 {
 		return ErrAuthRecordNotFound
 	}
-	return err
+	return tx.Commit(ctx)
 }
 
 func (r *AuthRepository) ChangePassword(ctx context.Context, id, oldHash, newHash string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollUserMetadata(ctx, r.pool)
 	if err != nil {
 		return err
 	}

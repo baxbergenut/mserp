@@ -15,6 +15,7 @@ expense_verification_migration=186_expense_verification_metadata.sql
 load_availability_migration=187_load_source_availability.sql
 board_operational_migration=188_status_board_operational.sql
 pti_operational_migration=191_payroll_pti_classification.sql
+unrelated_payroll_migration=192_payroll_unrelated_sources.sql
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
 trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
@@ -41,6 +42,7 @@ runuser() {
     if [[ $* == *"table_name='relay_driver_links'"* ]]; then result=$mock_operational_excluded; fi
     if [[ $* == *"table_name='driver_board'"* ]]; then result=$mock_board_operational; fi
     if [[ $* == *"table_name='weekly_pti_rows'"* ]]; then result=$mock_pti_operational; fi
+    if [[ $* == *"table_name='feedback_posts'"* ]]; then result=$mock_unrelated_payroll; fi
     if [[ $* == *"to_regclass('public.payroll_resource_dependency_sets')"* ]]; then result=$mock_shared_dependencies; fi
     if [[ $* == *"public.payroll_expense_verification_change"* ]]; then result=$mock_verification_metadata; fi
     if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
@@ -63,6 +65,7 @@ mock_verification_metadata=f
 mock_load_availability=f
 mock_board_operational=f
 mock_pti_operational=f
+mock_unrelated_payroll=f
 mock=f
 compatible_release "$test_root/old"
 compatible_release "$test_root/new"
@@ -214,3 +217,14 @@ if compatible_release "$test_root/new"; then echo "PTI classification query fail
 mock_pti_operational=unexpected
 if compatible_release "$test_root/new"; then echo "Unknown PTI classification allowed rollback" >&2; exit 1; fi
 echo "PTI payroll compatibility checks passed"
+
+mock_pti_operational=t
+mock_unrelated_payroll=t
+if compatible_release "$test_root/new"; then echo 'Operational classification allowed an old payroll binary' >&2; exit 1; fi
+touch "$test_root/new/migrations/$unrelated_payroll_migration"
+compatible_release "$test_root/new"
+mock_unrelated_payroll=error
+if compatible_release "$test_root/new"; then echo 'Operational classification query failure allowed rollback' >&2; exit 1; fi
+mock_unrelated_payroll=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown operational classification allowed rollback' >&2; exit 1; fi
+echo 'Operational payroll compatibility checks passed'

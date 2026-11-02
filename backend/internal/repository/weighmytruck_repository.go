@@ -167,7 +167,7 @@ func (r *WeighMyTruckRepository) List(ctx context.Context) (WMTList, error) {
 // leaves a visible pending/review record instead of silently replaying a POST.
 func (r *WeighMyTruckRepository) reserve(ctx context.Context, in WMTChange, actor string) (string, int, weighmytruck.Driver, error) {
 	var d weighmytruck.Driver
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return "", 0, d, err
 	}
@@ -267,7 +267,7 @@ func (r *WeighMyTruckRepository) Change(ctx context.Context, in WMTChange, actor
 	cancel()
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer finishCancel()
-	tx, err := beginPayrollSourceMutation(finishCtx, r.pool)
+	tx, err := r.pool.Begin(finishCtx)
 	if err != nil {
 		return err
 	}
@@ -313,7 +313,7 @@ func (r *WeighMyTruckRepository) Verify(ctx context.Context, id string, in WMTVe
 	if strings.TrimSpace(in.Reason) == "" || len(in.Reason) > 1000 {
 		return &WMTValidationError{"Describe what you verified on the WeighMyTruck website."}
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ func (r *WeighMyTruckRepository) ImportWeighMyTruck(ctx context.Context, source 
 			return result, fmt.Errorf("expected roster column %s", h)
 		}
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return result, err
 	}
@@ -138,7 +138,7 @@ func (r *WeighMyTruckRepository) ImportWeighMyTruck(ctx context.Context, source 
 }
 
 func (r *WeighMyTruckRepository) Link(ctx context.Context, id, driverID string, version int, actor string) error {
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}

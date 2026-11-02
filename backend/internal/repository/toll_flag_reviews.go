@@ -49,7 +49,7 @@ func (r *TollRepository) ReviewTollFlagsBulk(ctx context.Context, changes []Toll
 		seenRequests[change.ID] = true
 	}
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].TollID < ordered[j].TollID })
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func populateTollReviews(ctx context.Context, tx pgx.Tx, values []Toll) (map[str
 }
 
 func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in TollFlagReviewInput, actor string) error {
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return err
 	}

@@ -151,6 +151,18 @@ func upsertFuelTransaction(
 	if err != nil {
 		return err
 	}
+	// Items/fees are derived exclusively from these exact provider bytes. A
+	// repeated fetch must not delete/recreate them or enqueue payroll rebuilding.
+	// Recheck attribution too: a newly confirmed identity still updates payroll.
+	var unchanged bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM fuel_transactions
+ WHERE relay_environment=$1 AND relay_transaction_id=$2 AND raw_payload=$3::jsonb
+ AND driver_id IS NOT DISTINCT FROM $4::uuid)`, environment, transactionID, rawPayload, driverID).Scan(&unchanged); err != nil {
+		return err
+	}
+	if unchanged {
+		return nil
+	}
 
 	var fuelPolicyID, fuelPolicyName any
 	if transaction.FuelPolicy != nil {

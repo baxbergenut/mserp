@@ -37,7 +37,7 @@ func (r *MaintenanceRepository) MaintenanceTelemetryCandidates(ctx context.Conte
 }
 func (r *MaintenanceRepository) StoreMaintenanceTelemetry(ctx context.Context, truck MaintenanceTelemetryTruck, reading *MaintenanceTelemetry) error {
 	observed := reading
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
