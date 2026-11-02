@@ -69,7 +69,7 @@ func (r *DriverPayRepository) PreparedPayroll(ctx context.Context, kind string, 
 // ReadPreparedPayrollPage executes NO calculator, even after process restart.
 // Summary pagination and expanded detail share one repeatable-read snapshot.
 // Current pointers and headers are read in the same snapshot. A pinned detail
-// reads its immutable version directly, even after that statement is removed.
+// must still match current membership; superseded/removed revisions expire.
 func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind string, week time.Time, query PayPageQuery) (PreparedPayrollPage, error) {
 	result := PreparedPayrollPage{State: "preparing", Report: DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}, Statements: map[string]PreparedPayrollVersion{}}
 	if kind != "driver" && kind != "investor" {
@@ -94,7 +94,8 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
  WHERE g.week_start=$1 AND g.id=CASE WHEN $3='' THEN (SELECT generation_id FROM payroll_projection_weeks WHERE week_start=$1)
  ELSE coalesce((SELECT w.generation_id FROM payroll_projection_weeks w JOIN payroll_statement_state s ON s.week_start=w.week_start
  WHERE s.version_id=nullif($3,'')::uuid AND s.kind=$2 AND s.statement_id=nullif($4,'')::uuid AND s.week_start=$1),
- (SELECT generation_id FROM payroll_statement_versions WHERE id=nullif($3,'')::uuid AND kind=$2 AND statement_id=nullif($4,'')::uuid AND week_start=$1)) END
+ (SELECT c.generation_id FROM payroll_statement_current c JOIN payroll_statement_state s ON s.version_id=c.id
+ WHERE c.id=nullif($3,'')::uuid AND c.kind=$2 AND c.statement_id=nullif($4,'')::uuid AND c.week_start=$1)) END
  ) SELECT f.missing,f.snapshot,coalesce(payroll_week_revision($1,$2,g.id),''),coalesce(g.input_snapshot,''),coalesce(g.calendar_week::text,''),coalesce(g.calculator_version,''),coalesce(g.schema_version,0),g.prepared_at,
  CASE WHEN $2='driver' THEN g.driver_header ELSE g.investor_header END,coalesce(j.last_error,''),payroll_financial_snapshot(f.snapshot)
  FROM fence f LEFT JOIN chosen g ON true LEFT JOIN payroll_projection_jobs j ON j.week_start=$1`, week, kind, query.StatementRevision, query.ID, excluded).
@@ -139,8 +140,8 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	rows, err := tx.Query(ctx, `SELECT v.id::text,v.summary,payroll_resources_current(v.resource_dependencies) FROM (
  SELECT v.id,v.summary,v.statement_id,v.resource_dependencies FROM payroll_statement_state s JOIN payroll_statement_versions v ON v.id=s.version_id
  WHERE $3='' AND s.week_start=$1 AND s.kind=$2
- UNION ALL SELECT id,summary,statement_id,resource_dependencies FROM payroll_statement_versions
- WHERE id=nullif($3,'')::uuid AND week_start=$1 AND kind=$2
+ UNION ALL SELECT v.id,v.summary,v.statement_id,v.resource_dependencies FROM payroll_statement_current v JOIN payroll_statement_state s ON s.version_id=v.id
+ WHERE v.id=nullif($3,'')::uuid AND v.week_start=$1 AND v.kind=$2
  ) v ORDER BY v.summary->>'fullName',v.statement_id`, week, kind, query.StatementRevision)
 	if err != nil {
 		return result, err

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { fetchPayStatement } from "@/app/lib/api";
+import { APIError, fetchPayStatement } from "@/app/lib/api";
 import type { DriverPayDriver } from "@/app/lib/types";
 import { DriverCard, type DriverCardProps } from "./DriverCard";
 
@@ -16,7 +16,14 @@ export function LazyDriverCard({ onDetails, detailRevision, ...props }: DriverCa
     if (!open || !summary) return;
     const controller = new AbortController();
     const shown = expected.current;
-    const request = fetchPayStatement(investor, week, id, controller.signal, shown.statementRevision);
+    // Only current statements are retained. Refresh an expired read token once;
+    // this never submits or retries a financial command or replaces a draft.
+    const request = fetchPayStatement(investor, week, id, controller.signal, shown.statementRevision).catch(reason => {
+      if (reason instanceof APIError && reason.code === "statement_version_expired" && !controller.signal.aborted) {
+        return fetchPayStatement(investor, week, id, controller.signal);
+      }
+      throw reason;
+    });
     request.then(report => {
       if (controller.signal.aborted) return;
       const detail = report.drivers.find(row => row.id === id);

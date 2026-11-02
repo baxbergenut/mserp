@@ -38,9 +38,9 @@ func TestPayrollRetirementDatabase(t *testing.T) {
 		if err != nil || result.DriverWeeks != 1 || result.InvestorWeeks != 1 || result.VerifiedWeeks < 1 {
 			t.Fatal(result, err)
 		}
-		var versions, statements, payments, receipts int
-		if err = pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM payroll_statement_versions),(SELECT count(*) FROM payroll_statement_state WHERE week_start<'2026-10-19'),(SELECT count(*) FROM expense_payments WHERE amount=30),(SELECT count(*) FROM payroll_retirement_receipts)`).Scan(&versions, &statements, &payments, &receipts); err != nil || versions != retained || statements != 0 || payments != 1 || receipts != 1 {
-			t.Fatal("retirement lost history or collections", versions, statements, payments, receipts, err)
+		var versions, references, statements, payments, receipts int
+		if err = pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM payroll_statement_versions),(SELECT count(*) FROM payroll_statement_references),(SELECT count(*) FROM payroll_statement_state WHERE week_start<'2026-10-19'),(SELECT count(*) FROM expense_payments WHERE amount=30),(SELECT count(*) FROM payroll_retirement_receipts)`).Scan(&versions, &references, &statements, &payments, &receipts); err != nil || versions != 0 || references != retained || statements != 0 || payments != 1 || receipts != 1 {
+			t.Fatal("retirement retained statement copies or lost audit identities/collections", versions, references, statements, payments, receipts, err)
 		}
 		if err = repo.SeedPayrollPreparation(ctx); err != nil {
 			t.Fatal(err)

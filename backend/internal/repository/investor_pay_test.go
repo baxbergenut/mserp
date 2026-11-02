@@ -69,10 +69,6 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			boardMigration, e := os.ReadFile("../../sql/188_status_board_operational.sql")
-			if e != nil {
-				t.Fatal(e)
-			}
 			identityMigration, e := os.ReadFile("../../sql/064_load_truck_identity.sql")
 			if e != nil {
 				t.Fatal(e)
@@ -91,8 +87,12 @@ func TestInvestorPayDatabase(t *testing.T) {
 					t.Fatal(availabilityErr)
 				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(availabilityMigration), "\r\n", "\n"), "", 1)
+				storageMigration, storageErr := os.ReadFile("../../sql/189_payroll_current_storage.sql")
+				if storageErr != nil {
+					t.Fatal(storageErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
 				sql = withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, sql))
-				sql = strings.Replace(sql, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
 			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
@@ -146,7 +146,11 @@ func TestInvestorPayDatabase(t *testing.T) {
 				if _, err = admin.Exec(ctx, string(availabilityMigration)); err != nil {
 					t.Fatal(err)
 				}
-				if _, err = admin.Exec(ctx, string(boardMigration)); err != nil {
+				storageUpgrade, e := os.ReadFile("../../sql/189_payroll_current_storage.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, err = admin.Exec(ctx, string(storageUpgrade)); err != nil {
 					t.Fatal(err)
 				}
 			}

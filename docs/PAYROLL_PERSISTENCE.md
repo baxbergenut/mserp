@@ -409,8 +409,134 @@ shared weekly total counter. Removed eligibility drops the current pointer and
 retains prior versions. Command receipts include removed identities and retain
 their last visible versions. Current reads join indexed statement pointers in
 one repeatable snapshot; each save avoids copying a whole week's membership.
-History has no pruning job yet, so finalized and
-receipt-referenced versions cannot be lost through retention cleanup.
+Before migration 189, history had no pruning job and retained every superseded
+copy. Migration 189 replaces this with current rows and compact audit references,
+as described below. Deployment status and measured release results are separate.
+
+## Single current payroll statements (migration 189)
+
+Implemented; production deployment pending verification. Each driver/truck/week has
+exactly one stored, current statement. There is no separate statement-version archive.
+
+### Measured production evidence
+
+Read-only queries on November 2, approximately 17:46–17:50 UTC, against release
+`70da391d3438173e7fe03e25973a8ef516358fae` found:
+
+| Measurement | Result |
+| --- | --- |
+| Entire database / statement-version relation including TOAST and indexes | 18 GB / 16 GB |
+| Stored statement copies / distinct statement-week identities ever stored | 298,419 / 1,137 |
+| Current statement pointers | 331 |
+| Stored dependency maps / details / cost evidence / summaries | 14 GB / 443 MB / 244 MB / 232 MB |
+| Current statements' combined four payload columns | 1,228 kB |
+| Current dependency payload / current rows using shared maps | 119 kB / 217 of 331 |
+| Copies marked finalized / canonical finalization-and-reopening events | 26,503 / 86 |
+| Copies with neither a current pointer nor an output-receipt link | 297,882 |
+| Of those, copies not marked finalized | 271,459 |
+| Command receipts / distinct output versions referenced by receipts | 14 / 271 |
+| Routing-fact relation / projection-generation relation | 1,266 MB / 276 MB |
+
+Counts are separate live observations and can change while users work. Payload
+sizes use `pg_column_size`; they are not relation sizes, archive sizes, or a
+promise of filesystem space recoverable by deleting rows. The four payload
+columns omit shared dependency-set storage and row/index overhead. The candidate
+counts above are not a deletion manifest: input revisions, embedded receipt
+references, frozen evidence and recovery roots also require enumeration.
+
+For Rodney Fulton, Driver Pay, week October 19, a bounded query returned 707
+stored copies, five distinct exact `detail` JSON bodies, one distinct exact
+`cost_evidence` body, and five distinct combinations of money/edit/settlement
+state. Those copies alone retained 22 MB of dependency maps. This demonstrates
+redundancy for this statement; it is not an estimated deduplication ratio for
+every statement. The sampled relation contained 167,149 copies published on
+November 1 and 131,550 on November 2; rollout/backfill activity makes this
+unsuitable as a steady-state daily growth forecast.
+
+### Storage and publication
+
+`payroll_statement_current` enforces one row per kind/identity/week. The former
+`payroll_statement_versions` name is a compatibility view over that table only.
+Its INSERT trigger replaces the current row, or reuses its token for an exact
+no-op. Deferred membership and foreign-key checks preserve atomic publication and
+remove ineligible current rows at transaction end. Normal preparation never saves
+superseded statements. A small revision token still rejects stale financial saves.
+
+The former general publisher always inserted a complete copy for every selected
+statement. Text/frozen publication did the same. Migration 185 shared new dependency
+maps but left older immutable copies untouched, explaining most of the 14 GB.
+The new storage applies to every publication path without changing the calculator,
+source/resource locks, finalized guards or exact amount validation. Command receipts
+enumerate only pointers actually changed; no-op publication is not a financial edit.
+
+`payroll_statement_references` holds only UUID, identity/week and content hashes
+for tokens referenced by actual commands or explicit retirement. It contains no
+statement JSON, cost evidence, dependency map, summary, or historical generation.
+It exists to preserve audit identity and foreign keys, not to provide statement
+history. Expected inputs and committed outputs are recorded transactionally; receipt
+UUIDs embedded in JSON are included during upgrade. References reject modification.
+
+Canonical finalization/reopening events, frozen settlement reports, invoices,
+allocations, collection records, source/undo audits and retirement receipts remain
+unchanged. Exact actor/request receipts remain self-contained for response-loss
+recovery, including their existing result bodies. They cannot be expired to permit
+a financial request to execute again. There is no additional archived statement
+copy per action or recalculation. Obsolete projection copies marked finalized are
+removed too; canonical business events and current frozen reports remain authoritative.
+
+Pinned detail/cost reads accept only current membership and revision. An old token
+returns `statement_version_expired`; the lazy detail reader refreshes once without
+a financial command. Existing drafts are not replaced by background refresh, and
+stale financial commands still require reconciliation. Cost evidence from a different
+revision is never silently presented as the evidence for the old displayed statement.
+
+### Cutover, bounded caches and recovery
+
+Migration 189 rebuilds generation/current tables containing only current roots.
+Before removing old tables it verifies every current statement body and audits every
+retained token/hash against its old source. `payroll_storage_cutovers` records the
+old copy count, new current count, retained reference count, current digest and
+unchanged receipt digest. Historical dependency maps are not retained; current
+maps are interned with exact expanded-value verification. The original canonical
+financial tables and request receipts are not rewritten. Dropping the old relations
+in the same transaction releases heap/TOAST/index allocation rather than leaving
+16 GB of dead space requiring VACUUM FULL.
+
+Whole routing/load-fact caches are emptied at cutover. They are rebuildable inputs,
+not payroll history. `maintainPayrollStorage` runs during minute seeding under the
+existing exclusive source gate and removes obsolete complete fingerprint cohorts,
+old/deleted load facts, unreferenced generations and orphan shared maps. Completeness
+markers and their cohort members expire atomically. A miss invokes authoritative
+fallback; missing facts never mean that work/costs are absent. Canonical source events,
+resource revisions, financial records and retry receipts are not garbage-collected.
+Current-row update churn is handled by ordinary MVCC/autovacuum, not permanent copies.
+
+Install the matching deploy helper first. It stops API/export/portal writers before
+the fresh verified cutover backup and keeps them stopped through migration/activation.
+Its schema-based compatibility fence refuses pre-189 releases even if migration-ledger
+recording fails. A failed migration rolls back its table rebuild. Before accepting
+new writes, restore the quiesced backup with its old binary/schema if necessary.
+After accepting writes, recovery must preserve those subsequent commits: use a
+compatible forward fix or recovery that includes them, never an older snapshot alone.
+Backups remain recovery artifacts, not an application-level statement history.
+
+### Required validation
+
+- Fresh and populated upgrades preserve current bodies, receipt inputs/outputs and
+  JSON-only references, exact current dependencies and all canonical financial rows.
+- Repeating identical preparation creates neither extra statements nor audit references.
+  Real edits leave exactly one current row and retain exact replay/stale-save behavior.
+- Finalize/reopen, shared invoices, cross-week source edits, deleted eligibility,
+  second-statement bulk failure, source races and crash/restart retain atomicity.
+- Old pinned detail/cost reads expire; both pages recover read tokens without sending
+  financial commands or discarding drafts. Authorization remains unchanged.
+- Whole-cohort eviction and generation/shared-map cleanup leave no orphan current rows
+  and do not affect receipt replay. Restore verification covers the pre-cutover backup.
+- Record live relation/TOAST/index bytes and current statement count before/after cutover.
+  Repeated source syncs must not increase logical statement count beyond actual new
+  statement-weeks. Audit references grow only with actual commands, not preparation.
+
+## Existing prepared reads and source facts
 
 `ReadPreparedPayrollPage` reads only these stored records. It uses the existing
 pagination/search/dispatcher/finalization-progress rules and restores requested

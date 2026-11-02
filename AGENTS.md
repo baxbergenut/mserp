@@ -48,6 +48,20 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
+- Migration 189 replaces routine payroll history with `payroll_statement_current`
+  (exactly one row per kind/identity/week). There is no statement archive/history.
+  `payroll_statement_versions` is a compatibility view over current rows; unchanged
+  publications reuse their revision. Prior command/retirement tokens retain only
+  compact identity/hash references. Canonical financial events and exact retry
+  receipts survive without a second statement-version store.
+  Normal prepared detail/cost reads accept current revisions only; expired detail
+  reads refresh once without submitting a financial command or discarding drafts.
+  Minute seeding evicts obsolete whole source-cache cohorts, unreferenced generations
+  and orphan shared dependency sets under the exclusive source gate. Canonical
+  financial records and request receipts are never pruned. Install the matching
+  deploy helper first: it stops writers before the cutover backup and rejects
+  rollback to pre-189 releases. See `docs/PAYROLL_PERSISTENCE.md` for proof and recovery.
+
 - Persistent payroll is implemented with ordered rollout capabilities in
   migrations 182–186 and repository `payroll_projection*.go`. See
   `docs/PAYROLL_PERSISTENCE.md` for implemented capabilities, rollout sequence,

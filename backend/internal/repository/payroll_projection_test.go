@@ -96,6 +96,11 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				prior = strings.Replace(prior, strings.ReplaceAll(string(verificationMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(availabilityMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
+				storageMigration, storageErr := os.ReadFile("../../sql/189_payroll_current_storage.sql")
+				if storageErr != nil {
+					t.Fatal(storageErr)
+				}
+				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
 				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
 				exec(string(telemetryMigration))
@@ -104,6 +109,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(verificationMigration))
 				exec(string(availabilityMigration))
 				exec(string(boardMigration))
+				exec(string(storageMigration))
 			} else {
 				exec(body)
 			}
