@@ -101,6 +101,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 					t.Fatal(storageErr)
 				}
 				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
+				prior = withoutPTIPayrollMigration(t, prior)
 				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
 				exec(string(telemetryMigration))
@@ -110,6 +111,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(availabilityMigration))
 				exec(string(boardMigration))
 				exec(string(storageMigration))
+				applyPTIPayrollMigration(t, ctx, admin)
 			} else {
 				exec(body)
 			}

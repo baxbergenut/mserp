@@ -111,7 +111,7 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 	if week != PTICurrentWeek(now) {
 		return chargeInvalid("Only the current week's checklist can be created")
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	body, _ := json.Marshal([]any{week, truck, actor, in})
 	sum := sha256.Sum256(body)
 	hash := hex.EncodeToString(sum[:])
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return row, err
 	}

@@ -159,6 +159,18 @@ Prepared pages receive commit-only invalidation hints without periodic freshness
 polling. Stream reconnects, returning to the page and explicit reloads recover
 missed hints; failed reads retry with bounded backoff. Preparation failure transitions
 also notify clients so they can expose Retry instead of remaining Updating.
+
+Migration 191 excludes all six weekly PTI checklist/layout/history tables from
+payroll source capture. Reviewing inspection marks or updating checklist context
+must not invalidate pay statements, enqueue preparation or acquire the payroll
+source gate. Ordinary PTI cache revisions, immutable PTI history and PTI concurrency
+checks remain. Canonical driver/truck/assignment/expense changes stay captured.
+Install the updated deploy helper before this quiesced migration; releases without
+191 cannot resume afterward. Retained weeks rebuild once against the new source
+fingerprint. `TestPayrollPTIClassificationDatabase` verifies unchanged financial
+reports, ready pages, jobs and statement pointers across inspection writes, and
+forces PTI saves to complete while an unrelated payroll command holds its source
+gate. Financial truck-term edits must still invalidate payroll.
 Notifications carry no financial payload and never recursively enqueue
 source work. Authorized reads always validate the current snapshot. Refreshes are
 coalesced and paused while drafts, commands or settlement reviews are active.

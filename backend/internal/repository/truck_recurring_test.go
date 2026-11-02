@@ -112,6 +112,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 					t.Fatal(storageErr)
 				}
 				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
+				prior = withoutPTIPayrollMigration(t, prior)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(sourceMigration), "\r\n", "\n"), "", 1)
 				exec(withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, prior)))
 				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,active,status) VALUES('81000000-0000-0000-0000-000000000001','Old recurring','old recurring','cpm',0,false,'terminated');
@@ -170,6 +171,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 					t.Fatal(e)
 				}
 				exec(string(storageUpgrade))
+				applyPTIPayrollMigration(t, ctx, admin)
 			}
 			exec("GRANT USAGE ON SCHEMA " + q + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + q + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + q + " TO mserp_app")
 			app := cfg.Copy()
