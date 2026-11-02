@@ -48,10 +48,15 @@ def main():
     if not args.backup.is_file() or not args.migration.is_file():
         raise ValueError('backup and migration must exist')
     command('createdb', args.database)
+    def restore(*options, **kwargs):
+        # Backups remain root-only. Pass an already opened descriptor rather
+        # than changing their permissions or copying private backup files.
+        with args.backup.open('rb') as stream:
+            return command('pg_restore', *options, stdin=stream, **kwargs)
     # Kept on failure for diagnosis; never overwrite/drop an existing database.
-    command('pg_restore', '--no-owner', '--no-acl', '--section=pre-data',
-            '--exit-on-error', '--dbname', args.database, str(args.backup))
-    toc = command('pg_restore', '--list', str(args.backup), capture_output=True, text=True).stdout
+    restore('--no-owner', '--no-acl', '--section=pre-data',
+            '--exit-on-error', '--dbname', args.database)
+    toc = restore('--list', capture_output=True, text=True).stdout
     excluded = ('payroll_statement_versions', 'payroll_projection_generations',
                 'payroll_routing_facts', 'payroll_load_facts')
     filtered = '\n'.join(';' + line if any(f'TABLE DATA public {name} ' in line for name in excluded)
@@ -60,8 +65,8 @@ def main():
         listing.write(filtered)
         listing.flush()
         os.chmod(listing.name, 0o644)  # Table-of-contents metadata only.
-        command('pg_restore', '--no-owner', '--no-acl', '--section=data', '--exit-on-error',
-                '--use-list', listing.name, '--dbname', args.database, str(args.backup))
+        restore('--no-owner', '--no-acl', '--section=data', '--exit-on-error',
+                '--use-list', listing.name, '--dbname', args.database)
     values = json.loads(query(args.database, """SELECT json_build_object(
       'current',(SELECT coalesce(json_agg(version_id::text),'[]') FROM payroll_statement_state),
       'outputs',(SELECT coalesce(json_agg(version_id::text),'[]') FROM payroll_command_versions),
@@ -89,8 +94,8 @@ def main():
     literals = ','.join("'" + str(uuid.UUID(value)) + "'::uuid" for value in generations) or 'NULL::uuid'
     copy_rows(args.database, 'payroll_projection_generations',
               f'SELECT * FROM payroll_projection_generations WHERE id IN ({literals})')
-    command('pg_restore', '--no-owner', '--no-acl', '--section=post-data',
-            '--exit-on-error', '--dbname', args.database, str(args.backup))
+    restore('--no-owner', '--no-acl', '--section=post-data',
+            '--exit-on-error', '--dbname', args.database)
     # Hash all canonical financial/display rows and exact receipts, never print data.
     proof = """CREATE TEMP TABLE storage_business_proof(name text PRIMARY KEY,digest text);
     DO $$ DECLARE t text; digest text; BEGIN
@@ -115,10 +120,10 @@ def main():
       'database_bytes',pg_database_size(current_database()));
     """
     output = query(args.database, proof + args.migration.read_text() + verification)
-    print(output)
+    print(output, flush=True)
     # Decode all compressed backup data to validate the stream without allocating
     # another 16 GB of redundant derived tables on this host.
-    command('pg_restore', '--data-only', '--file=/dev/null', str(args.backup))
+    restore('--data-only', '--file=/dev/null')
     print('Complete backup data stream decoded; business-data restore and cutover parity passed.')
 
 

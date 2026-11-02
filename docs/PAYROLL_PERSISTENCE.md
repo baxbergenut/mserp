@@ -401,7 +401,7 @@ the dependency revision rows in a deterministic order and checks the current job
 lease/generation. A concurrent source commit aborts publication. A failed or old
 worker cannot publish partial statements or acknowledge newer requested work.
 
-Immutable statement versions hold complete display JSON and compact summaries;
+Before migration 189, immutable statement versions held complete display JSON and compact summaries;
 monetary summaries additionally retain exact integer cents. Stable original load,
 trip, slot and allocation identities remain in the detail. Generation headers,
 all statement pointers, summaries and job completion commit together. There is no
@@ -415,7 +415,7 @@ as described below. Deployment status and measured release results are separate.
 
 ## Single current payroll statements (migration 189)
 
-Implemented; production deployment pending verification. Each driver/truck/week has
+Implemented in migration 189. Each driver/truck/week has
 exactly one stored, current statement. There is no separate statement-version archive.
 
 ### Measured production evidence
@@ -535,6 +535,23 @@ Backups remain recovery artifacts, not an application-level statement history.
 - Record live relation/TOAST/index bytes and current statement count before/after cutover.
   Repeated source syncs must not increase logical statement count beyond actual new
   statement-weeks. Audit references grow only with actual commands, not preparation.
+
+### Restored-backup rehearsal
+
+The November 2 rehearsal used verified backup
+`mserp-20261102T165241Z-70da391d3438173e7fe03e25973a8ef516358fae.dump` in an isolated
+`_test` database, with no application workers or provider delivery. It restored all
+canonical business data from that consistent backup and filled only its referenced
+immutable projection inputs from the still-retained source rows; redundant projection
+history and rebuildable caches were omitted. The populated-upgrade synthetic fixture
+separately exercises removal of duplicate draft/finalized projection copies.
+
+After migration, all 137 checked financial/display/receipt tables had identical
+content digests. The restored database contained 324 current statements, zero duplicate
+identities and 16 compact audit references, occupying 214,572,055 bytes (205 MB).
+The complete 8,649,928,772-byte backup data stream was also decoded successfully.
+This proves business-data restore and cutover parity for the backup cohort; production
+before/after counts, size and service checks must be recorded separately at activation.
 
 ## Existing prepared reads and source facts
 

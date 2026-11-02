@@ -85,7 +85,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Payroll pages/API/preparation stop at the current New York calendar week. Future
   source schedules and existing reservations stay authoritative but do not create
   future statements. Seeding retires future derived pointers/jobs and unused empty
-  automatic historical pointers under the source gate; immutable versions, receipts,
+  automatic historical pointers under the source gate; financial records and receipts,
   financial records, explicit past requests and active historical leases survive. Operator commands must use
   the service environment and working directory; the protocol helper launches
   transient systemd units with both. Driver and Investor Pay expose individual
@@ -96,7 +96,7 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   before migration; older binaries cannot resume afterward. The optional first_week
   boundary is set only by the quiesced operator command -retire-payroll-before.
   Retirement deletes older saved statement rows and current projections, preserves
-  source invoices/payment allocations/audits/immutable versions, and verifies every
+  source invoices/payment allocations/audits and compact statement references, and verifies every
   retained report before committing a receipt. API, UI and seeding honor the boundary.
   Prepared bulk reopening batches confirmation/metadata writes and retains every
   individual audit; collection allocations remain unchanged. Publication shares
@@ -122,7 +122,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   never recursively invalidate sources; new source tables require explicit
   classification plus all capture/revision trigger events. Install the updated
   deploy helper before migration 182. Current statement pointers and headers are
-  read in one repeatable snapshot; retained details use immutable version IDs.
+  read in one repeatable snapshot; current details require the current revision.
+  Superseded detail tokens expire after migration 189; no old statement bodies remain.
   Dated load/truck, driver source cards and original cost evidence exclude editable
   allocations and frozen report overlays, and require exact source revisions.
   Projection schema 7 also retains source-only dated day labels with exact board,
