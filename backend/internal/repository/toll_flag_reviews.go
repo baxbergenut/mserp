@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -31,7 +32,8 @@ type TollFlagReviewChange struct {
 
 // The entire selection commits together. Each transaction retains its own
 // reviewed evidence, actor and idempotent request receipt.
-func (r *TollRepository) ReviewTollFlagsBulk(ctx context.Context, changes []TollFlagReviewChange, actor string) error {
+func (r *TollRepository) ReviewTollFlagsBulk(ctx context.Context, changes []TollFlagReviewChange, actor string) (err error) {
+	defer func() { err = tollReviewConflict(err) }()
 	if len(changes) == 0 || len(changes) > 100 {
 		return &TollLinkError{"Select between 1 and 100 flagged transactions."}
 	}
@@ -111,7 +113,8 @@ func populateTollReviews(ctx context.Context, tx pgx.Tx, values []Toll) (map[str
 	return evidence, rows.Err()
 }
 
-func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in TollFlagReviewInput, actor string) error {
+func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in TollFlagReviewInput, actor string) (err error) {
+	defer func() { err = tollReviewConflict(err) }()
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return err
@@ -121,6 +124,17 @@ func (r *TollRepository) ReviewTollFlag(ctx context.Context, tollID string, in T
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// Independent repeatable-read reviews can race a source update or another
+// review's cache revision. PostgreSQL aborts the entire transaction; expose the
+// same refresh conflict as an outdated review version, including commit errors.
+func tollReviewConflict(err error) error {
+	var database *pgconn.PgError
+	if errors.As(err, &database) && (database.Code == "40001" || database.Code == "40P01") {
+		return &TollLinkError{"The transaction or its review changed. Refresh and review it again."}
+	}
+	return err
 }
 
 func reviewTollFlagTx(ctx context.Context, tx pgx.Tx, tollID string, in TollFlagReviewInput, actor string, requireLinked bool) error {
