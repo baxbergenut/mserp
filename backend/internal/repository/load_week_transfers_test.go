@@ -53,6 +53,10 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			}
 			initial, _ := os.ReadFile("../../sql/init.sql")
 			migration, _ := os.ReadFile("../../sql/159_load_week_transfers.sql")
+			boardMigration, err := os.ReadFile("../../sql/188_status_board_operational.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			body := strings.ReplaceAll(string(initial), "\r\n", "\n")
 			mig := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if migrated {
@@ -60,6 +64,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					t.Fatal("migration missing from init")
 				}
 				body = withoutAccountingCutoverMigration(t, strings.Replace(body, mig, "", 1))
+				body = strings.Replace(body, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
 			}
 			exec(body)
 			const driver = "91000000-0000-0000-0000-000000000001"
@@ -90,6 +95,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(balance))
+				exec(string(boardMigration))
 			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;SET ROLE mserp_app`)
 			pay := NewDriverPayRepository(pool)

@@ -37,6 +37,10 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	boardMigration, err := os.ReadFile("../../sql/188_status_board_operational.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("reimburse_%d", time.Now().UnixNano())
@@ -64,6 +68,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 					t.Fatal("missing reimbursement migration")
 				}
 				initial = withoutAccountingCutoverMigration(t, strings.Replace(initial, body, "", 1))
+				initial = strings.Replace(initial, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
 			}
 			exec(initial)
 			var legacyExpense, legacyDriver string
@@ -79,6 +84,9 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 				}
 			}
 			applyAccountingCutoverMigration(t, ctx, admin)
+			if mode == "migration" {
+				exec(string(boardMigration))
+			}
 			exec("GRANT USAGE ON SCHEMA " + quoted + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + quoted + " TO mserp_app")
 			cfg, e := pgxpool.ParseConfig(dsn)
 			if e != nil {

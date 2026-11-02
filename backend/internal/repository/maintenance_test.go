@@ -187,6 +187,14 @@ func TestMaintenanceDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var lateMigrations []string
+	for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql"} {
+		body, readErr := os.ReadFile("../../sql/" + name)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		lateMigrations = append(lateMigrations, strings.ReplaceAll(string(body), "\r\n", "\n"))
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("maintenance_test_%d", time.Now().UnixNano())
@@ -201,6 +209,9 @@ func TestMaintenanceDatabase(t *testing.T) {
 			defer func() { admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
 			sql := strings.ReplaceAll(string(source), "\r\n", "\n")
 			if mode == "migration" {
+				for _, body := range lateMigrations {
+					sql = strings.Replace(sql, body, "", 1)
+				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(retirement), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(readMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(statusPaletteRollback), "\r\n", "\n"), "", 1)
@@ -285,6 +296,15 @@ func TestMaintenanceDatabase(t *testing.T) {
 				exec(string(retirement))
 				exec(string(statusColorsMigration))
 				exec(string(statusPaletteRollback))
+				// Restore migration 160's registration after rebuilding fleet
+				// status, then apply the later guards in production order.
+				exec(`INSERT INTO payroll_cache_revisions(table_name)
+ SELECT tablename FROM pg_tables WHERE schemaname=current_schema()
+ AND tablename NOT IN ('payroll_cache_revisions','auth_sessions','user_login_activity','schema_migrations')
+ ON CONFLICT(table_name) DO NOTHING`)
+				for _, body := range lateMigrations {
+					exec(body)
+				}
 			}
 			exec(`INSERT INTO maintenance_records(work_order,notes,services) VALUES('fleet-board:oil-change:row-999',E'Type of oil: 10w 30\nSource information: synthetic import','[{"typeCode":"oil","name":"Oil change","amount":null,"trackingCode":"oil"}]')`)
 			exec(string(preventativeMigration))
