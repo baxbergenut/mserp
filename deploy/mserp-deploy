@@ -50,6 +50,7 @@ expense_verification_migration=186_expense_verification_metadata.sql
 load_availability_migration=187_load_source_availability.sql
 board_operational_migration=188_status_board_operational.sql
 payroll_storage_migration=189_payroll_current_storage.sql
+expense_archive_migration=190_expense_receipt_archives.sql
 
 # BEGIN BACKUP POLICY
 collect_pending_migrations() {
@@ -270,16 +271,16 @@ for migration_name in "${pending_migrations[@]}"; do
     if [[ $applied == 1 ]]; then
         continue
     fi
-    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" ]]; then
+    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" || $migration_name == "$expense_archive_migration" ]]; then
         # No old application may write between a contract cutover and activation.
         cutover_started=true
         systemctl stop mserp-api.service
-        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
+        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" || $migration_name == "$expense_archive_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi
     fi
-    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" ]] && systemctl is-active --quiet fleet-review.service; then
+    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" || $migration_name == "$expense_archive_migration" ]] && systemctl is-active --quiet fleet-review.service; then
         fleet_review_stopped=true
         systemctl stop fleet-review.service
     fi

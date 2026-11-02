@@ -362,3 +362,7 @@ failure, stop/start failures, failed readiness, lost responses, uncertain outcom
 and rollback with isolated mocks. It does not contact production or replace live
 release verification. The release checks also run its real Python serializer on Linux with synthetic
 configuration, including preservation of unrelated settings.
+Migration 190 permits deletion of paid or verified expenses outside finalized payroll.
+External settlement and balance-correction receipts retain their original UUIDs and
+financial fields plus an exact deleted invoice snapshot. Install the matching
+helper first; it quiesces all writers while replacing receipt references.

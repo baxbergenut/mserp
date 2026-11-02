@@ -14,6 +14,11 @@ import (
 
 func withoutAccountingCutoverMigration(t *testing.T, source string) string {
 	t.Helper()
+	archive, err := os.ReadFile("../../sql/190_expense_receipt_archives.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = strings.Replace(source, strings.ReplaceAll(string(archive), "\r\n", "\n"), "", 1)
 	balance, err := os.ReadFile("../../sql/176_expense_balance_corrections.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -82,6 +87,13 @@ func applyAccountingCutoverMigration(t *testing.T, ctx context.Context, conn *pg
 		t.Fatal(e)
 	}
 	if _, e = conn.Exec(ctx, string(balance)); e != nil {
+		t.Fatal(e)
+	}
+	archive, e := os.ReadFile("../../sql/190_expense_receipt_archives.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = conn.Exec(ctx, string(archive)); e != nil {
 		t.Fatal(e)
 	}
 }

@@ -97,6 +97,10 @@ func (h maintenanceHandler) allowedRecordEdit(w http.ResponseWriter, r *http.Req
 	return record.CategoryID, true
 }
 func (h maintenanceHandler) fail(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrExpenseFinalized) {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrExpensePayerCorrection) {
 		writeAPIError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), repository.ErrExpensePayerCorrection.Error()+": "))
 		return

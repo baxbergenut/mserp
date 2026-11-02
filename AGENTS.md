@@ -288,7 +288,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Ordinary expense deletion removes saved draft deductions/reimbursement payouts
   atomically under the payroll financial lock. Finalized Driver/Investor Pay
   snapshots (including dated teams and legacy credits) still require reopening;
-  retained external settlement receipts and maintenance void rules stay enforced.
+  paid and accountant-verified expenses may also be deleted or voided. Migration 190
+  retains external settlement and balance-correction receipts with exact deleted
+  invoice snapshots; financial receipt fields remain immutable. Maintenance voids
+  share the same finalized-statement checks and draft-allocation cleanup, preserving
+  service/payment snapshots and audit history. Install the matching deploy helper
+  before 190 so writers are quiesced while receipt references change.
   TestExpenseDraftDeletionDatabase covers deletion, frozen guards and rollback
   with local MSERP_DRIVER_CHARGES_TEST_DATABASE_URL as mserp_app.
   Expense Driver is a searchable selection dropdown for hired drivers and synced

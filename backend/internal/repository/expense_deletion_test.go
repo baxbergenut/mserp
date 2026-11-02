@@ -135,16 +135,30 @@ func TestExpenseDraftDeletionDatabase(t *testing.T) {
 				t.Fatal("legacy frozen snapshot allowed deletion", legacy, err)
 			}
 		}
-		// A retained external receipt must roll back removal of draft allocations.
+		// Paid receipts and balance corrections survive source deletion with the
+		// invoice snapshot; only unfinalized payroll allocations are removed.
 		driver := id(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Receipt deletion','receipt deletion','cpm',0.75) RETURNING id::text`)
 		expense := id(`INSERT INTO expenses(category_id,category,expense_date,amount,driver_id,covered_by) SELECT id,name,'2026-10-11',20,$1,'Driver' FROM expense_settings WHERE id=$2 RETURNING id::text`, driver, category)
 		exec(`INSERT INTO expense_external_settlements(id,expense_id,amount,settled_on,reference,actor_id) VALUES(gen_random_uuid(),$1,5,'2026-10-19','Receipt test',$2)`, expense, actor)
 		exec(`INSERT INTO expense_payments(expense_id,week_start,amount) VALUES($1,'2026-10-19',10)`, expense)
-		if err := repo.DeleteExpense(ctx, expense); err == nil {
-			t.Fatal("external receipt allowed deletion")
+		exec(`INSERT INTO expense_balance_corrections(id,expense_id,remaining,previous,reason,version,actor_id)
+ SELECT gen_random_uuid(),id,0,0,'Reviewed correction',balance_version,$2 FROM expenses WHERE id=$1`, expense, actor)
+		exec(`UPDATE expenses SET accounting_verified=true WHERE id=$1`, expense)
+		if err := repo.DeleteExpense(ctx, expense); err != nil {
+			t.Fatal("paid, verified expense could not be deleted", err)
 		}
-		if got := id(`SELECT amount::text FROM expense_payments WHERE expense_id=$1`, expense); got != "10.00" {
-			t.Fatal("failed deletion lost its draft allocation", got)
+		if got := id(`SELECT count(*)::text FROM expense_payments WHERE expense_id=$1`, expense); got != "0" {
+			t.Fatal("deleted expense retained draft allocations", got)
+		}
+		for _, table := range []string{"expense_external_settlements", "expense_balance_corrections"} {
+			if got := id(`SELECT expense_snapshot->>'id' FROM `+table+` WHERE expense_id=$1`, expense); got != expense {
+				t.Fatal("receipt lost deleted invoice snapshot", table, got)
+			}
+			for _, mutation := range []string{`UPDATE ` + table + ` SET expense_snapshot='{}' WHERE expense_id=$1`, `DELETE FROM ` + table + ` WHERE expense_id=$1`} {
+				if _, err := pool.Exec(ctx, mutation, expense); err == nil {
+					t.Fatal("archived receipt was mutable", table)
+				}
+			}
 		}
 	})
 }

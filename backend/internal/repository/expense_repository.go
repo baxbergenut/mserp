@@ -651,14 +651,23 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
 	}
+	if err = deleteExpenseTx(ctx, tx, id); err != nil {
+		return err
+	}
+	return commitPayrollMutation(ctx, tx)
+}
+
+// deleteExpenseTx shares finalized-statement and draft-allocation handling with
+// maintenance voids. The caller holds the payroll gate and accounting lock.
+func deleteExpenseTx(ctx context.Context, tx pgx.Tx, id string) error {
 	var expenseID string
-	if err = tx.QueryRow(ctx, `SELECT id::text FROM expenses WHERE id=$1 FOR UPDATE`, id).Scan(&expenseID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM expenses WHERE id=$1 FOR UPDATE`, id).Scan(&expenseID); err != nil {
 		return mapNotFound(err)
 	}
 	// Saved allocations are drafts until finalization. Check frozen snapshots as
 	// well as ledgers, including legacy reimbursements without payout receipts.
 	var finalized bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND (
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND (
  s.report @> jsonb_build_object('edits',jsonb_build_object('expenseDeductions',jsonb_build_array(jsonb_build_object('expenseId',$1::text))))
  OR s.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','expense-reimburse:'||$1::text)))
  OR EXISTS(SELECT 1 FROM expense_payments p JOIN expenses e ON e.id=p.expense_id
@@ -690,7 +699,7 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return commitPayrollMutation(ctx, tx)
+	return nil
 }
 
 const selectExpensesSQL = `

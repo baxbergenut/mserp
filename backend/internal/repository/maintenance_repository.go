@@ -565,6 +565,9 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return err
+	}
 	if err = setBoardActor(ctx, tx, "", "work_order"); err != nil {
 		return err
 	}
@@ -584,14 +587,7 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 	before, _ := json.Marshal(old)
 	var expenseJSON []byte
 	if old.ExpenseID != nil {
-		var paid bool
-		if err := tx.QueryRow(ctx, `SELECT driver_settled OR EXISTS(SELECT 1 FROM expense_payments WHERE expense_id=e.id) OR accounting_verified FROM expenses e WHERE id=$1 FOR UPDATE`, *old.ExpenseID).Scan(&paid); err != nil {
-			return err
-		}
-		if paid {
-			return fmt.Errorf("%w: paid or verified maintenance charges cannot be voided", ErrMaintenanceInvalid)
-		}
-		if err := tx.QueryRow(ctx, "SELECT to_jsonb(e) FROM expenses e WHERE id=$1", *old.ExpenseID).Scan(&expenseJSON); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT to_jsonb(e) FROM expenses e WHERE id=$1 FOR UPDATE", *old.ExpenseID).Scan(&expenseJSON); err != nil {
 			return err
 		}
 	}
@@ -599,7 +595,7 @@ func (r *MaintenanceRepository) Void(ctx context.Context, id string, version int
 		return err
 	}
 	if old.ExpenseID != nil {
-		if _, err := tx.Exec(ctx, "DELETE FROM expenses WHERE id=$1", *old.ExpenseID); err != nil {
+		if err := deleteExpenseTx(ctx, tx, *old.ExpenseID); err != nil {
 			return err
 		}
 	}

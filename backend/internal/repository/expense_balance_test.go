@@ -92,16 +92,22 @@ func TestExpenseBalanceCorrectionsDatabase(t *testing.T) {
 		if _, err = pool.Exec(ctx, `UPDATE expense_balance_corrections SET reason='erase' WHERE expense_id=$1`, expense.ID); err == nil {
 			t.Fatal("immutable audit changed")
 		}
-		if err = repo.DeleteExpense(ctx, expense.ID); err == nil {
-			t.Fatal("retained correction audit deleted")
-		}
 		exec(`INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,'2026-10-19','{}')`, driver)
+		if err = repo.DeleteExpense(ctx, expense.ID); !errors.Is(err, ErrExpenseFinalized) {
+			t.Fatal("finalized correction source deleted", err)
+		}
 		if err = repo.CorrectExpenseBalance(ctx, expense.ID, actor, request("5")); err == nil {
 			t.Fatal("finalized allocation accepted correction")
 		}
 		exec(`UPDATE payroll_settlements SET finalized=false WHERE driver_id=$1`, driver)
 		if err = repo.CorrectExpenseBalance(ctx, expense.ID, actor, request("5")); err != nil {
 			t.Fatal("reopened balance", err)
+		}
+		if err = repo.DeleteExpense(ctx, expense.ID); err != nil {
+			t.Fatal("reopened correction source could not be deleted", err)
+		}
+		if got := scalar(`SELECT count(*)::text FROM expense_balance_corrections WHERE expense_id=$1 AND expense_snapshot->>'id'=$1::text`, expense.ID); got != "3" {
+			t.Fatal("deletion lost correction audit or invoice snapshots", got)
 		}
 		// Historical assumed-paid entries can be corrected without losing their baseline.
 		legacy, err := repo.CreateExpense(ctx, ExpenseInput{CategoryID: category, ExpenseDate: date, DriverID: &driver, Amount: "50", ExpenseType: payTestString("Historical repair"), CoveredBy: payTestString("Driver")})
