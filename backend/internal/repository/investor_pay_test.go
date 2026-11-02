@@ -82,6 +82,11 @@ func TestInvestorPayDatabase(t *testing.T) {
 				// by 041, and its registry entries follow the restored 160 registry.
 				sql = strings.Replace(sql, strings.ReplaceAll(string(sharedMigration), "\r\n", "\n"), "", 1)
 				sql = strings.Replace(sql, strings.ReplaceAll(string(verificationMigration), "\r\n", "\n"), "", 1)
+				availabilityMigration, availabilityErr := os.ReadFile("../../sql/187_load_source_availability.sql")
+				if availabilityErr != nil {
+					t.Fatal(availabilityErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(availabilityMigration), "\r\n", "\n"), "", 1)
 				sql = withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, sql))
 			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
@@ -127,6 +132,13 @@ func TestInvestorPayDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				if _, err = admin.Exec(ctx, string(verificationMigration)); err != nil {
+					t.Fatal(err)
+				}
+				availabilityMigration, availabilityErr := os.ReadFile("../../sql/187_load_source_availability.sql")
+				if availabilityErr != nil {
+					t.Fatal(availabilityErr)
+				}
+				if _, err = admin.Exec(ctx, string(availabilityMigration)); err != nil {
 					t.Fatal(err)
 				}
 			}
