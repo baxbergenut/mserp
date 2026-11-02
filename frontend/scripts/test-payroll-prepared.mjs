@@ -34,7 +34,7 @@ try {
       window.__payrollNotify = () => { for (const stream of window.__payrollStreams) stream.dispatchEvent(new Event('changed')); };
     });
     page.on('pageerror',e=>errors.push(e.message));
-    let state='preparing',generation=10,retries=0,commits=0,placements=0,retryRelease;
+    let state='preparing',generation=10,retries=0,commits=0,placements=0,retryRelease,readFailures=1;
     const requests=[],receipts=new Map(),readWeeks=[];
     let driver={id,fullName:'Prepared Test',truckUnit:'P1',payType:'gross_percentage',payRate:'80',isOwnerOperator:true,
       dispatcherId:'',dispatcherName:'',fuelTotal:'0.00',tollTotal:'0.00',issues:[],statementRevision:revision(1),
@@ -73,6 +73,7 @@ try {
       }
       if(path===`/${kind}-pay/${id}/cost-transactions`){expect(url.searchParams.get('revision')).toBe(driver.statementRevision);return route.fulfill({json:{sourceTotal:'0.00',carry:'0.00',due:'0.00',transactions:[],preparation:{state:'ready'}}});}
       if(path===`/${kind}-pay`||path===`/${kind}-pay/statements/${id}`){
+        if(path===`/${kind}-pay`&&readFailures>0){readFailures--;return route.fulfill({status:502,body:'Bad Gateway'});}
         readWeeks.push(url.searchParams.get('weekStart'));
         if(path.includes('/statements/')){
           if(url.searchParams.has('revision'))expect(url.searchParams.get('revision')).toBe(driver.statementRevision);
@@ -85,17 +86,33 @@ try {
       return route.fulfill({json:path==='/tasks/count'?{count:0}:[]});
     });
     await page.goto(`${base}/accounting/${kind}-pay?weekStart=${week}`);
+    await expect(page.getByRole('alert').filter({hasText:'Retrying automatically'})).toBeVisible();
     await expect(page.getByText('Preparing this week…',{exact:true})).toBeVisible();
+    await expect(page.getByRole('alert').filter({hasText:'Retrying automatically'})).toHaveCount(0);
     state='ready';generation++;
+    await page.evaluate(() => window.__payrollNotify());
     const expand=page.getByRole('button',{name:kind==='investor'?'Prepared Test P1':'Prepared Test',exact:true});
     await expect(expand).toBeVisible();await expand.click();
     await expect(page.getByRole('region',{name:'Prepared Test weekly loads'})).toBeVisible();
+    await page.waitForTimeout(200);
+    const idleReads=readWeeks.length;
+    await page.waitForTimeout(1600);
+    expect(readWeeks.length,'idle pages must not poll statement freshness').toBe(idleReads);
+    await page.evaluate(() => { for(const stream of window.__payrollStreams)stream.dispatchEvent(new Event('open')); });
+    await expect.poll(()=>readWeeks.length).toBeGreaterThan(idleReads);
     state='updating';
     expect(await page.evaluate(() => window.__payrollStreams.size)).toBe(1);
     await page.evaluate(() => window.__payrollNotify());
     await expect(page.getByText('Updating statements. The last complete values are shown.',{exact:true})).toBeVisible({timeout:800});
     await expect(page.getByRole('button',{name:'Prepared Test, weekly comment',exact:true})).toBeDisabled();
     await expect(page.getByRole('region',{name:'Prepared Test weekly loads'})).toContainText('PREPARED-1');
+    readFailures=1;
+    await page.evaluate(() => window.__payrollNotify());
+    await expect(page.getByRole('alert').filter({hasText:'Retrying automatically'})).toBeVisible();
+    state='ready';generation++;
+    // Recover even when the commit notification is lost, retaining the table.
+    await expect(page.getByText('Updating statements. The last complete values are shown.',{exact:true})).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({hasText:'Retrying automatically'})).toHaveCount(0);
     state='failed';await page.evaluate(() => window.__payrollNotify());
     await page.getByRole('button',{name:'Retry preparation',exact:true}).click();
     await expect.poll(()=>retries).toBe(1);

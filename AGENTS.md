@@ -104,7 +104,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   source revisions under their shared gate. Intervening source changes require
   complete captured-revision and old/new routing proof outside the locked component;
   missing evidence still conflicts. Prepared pages receive commit-only invalidation
-  hints, with authorized snapshot reads and polling recovery. Current HTTP reads
+  hints, with authorized snapshot reads on commits, stream reconnects and page focus;
+  payroll pages never poll freshness periodically. Failed reads retry with bounded
+  backoff and preparation failure transitions emit a commit notification. Shared
+  resource maps are checked once per page snapshot, with exact local overrides.
+  Current HTTP reads
   lease interactive preparation priority for ten seconds without advancing jobs;
   priority expires after navigation.
   Ordinary preparation requests must not rewrite existing jobs, even with identical

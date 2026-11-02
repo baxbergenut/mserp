@@ -155,8 +155,11 @@ build, vet and Linux deployment compatibility checks passed.
 | 6: concurrency | Ordered cross-week resource locks, source gate, SQL claims, exact resource epochs, independent-resource concurrency, shared-resource serialization, quiesced reversible transition | Independent/shared races, source races, complete writer audit and helper recovery |
 | 7: release | Compatible deploy helper, ordered runtime gates, transition CLI/helper, reconciliation and recovery procedures | Main CI/deployment, prepared cohort and production diagnostics; signed-in visual verification by the operator |
 
-Prepared pages receive commit-only invalidation hints and retain one-second polling
-for recovery. Notifications carry no financial payload and never recursively enqueue
+Prepared pages receive commit-only invalidation hints without periodic freshness
+polling. Stream reconnects, returning to the page and explicit reloads recover
+missed hints; failed reads retry with bounded backoff. Preparation failure transitions
+also notify clients so they can expose Retry instead of remaining Updating.
+Notifications carry no financial payload and never recursively enqueue
 source work. Authorized reads always validate the current snapshot. Refreshes are
 coalesced and paused while drafts, commands or settlement reviews are active.
 Open comment editors register their local draft immediately, before a live read can
@@ -164,6 +167,16 @@ replace readiness. A focused regression reproduces a source-update notification
 while typing and verifies that Save still reaches the server on both pages.
 Current HTTP reads lease preparation priority for ten seconds; that lease expires
 after navigation and never advances a calculation generation.
+
+Dense shared resource maps are validated once per page snapshot. Each statement's
+local revisions and overrides are still checked exactly, including stale shared
+keys overridden locally, inline maps and missing shared maps. This avoids checking
+the same 6,000-key component separately for every row. See
+`performance/payroll-event-driven-latency.txt` for production read-only plans and
+the isolated command/concurrency checks. Saved finalization already has a zero-
+calculator metadata path; first allocations, installment confirmations and changed
+source values retain their authoritative financial work. Reopening retains the
+existing post-unfreeze calculation when required to produce current balances.
 
 Single-resource commands can accept intervening source changes only with complete
 captured-revision and old/new routing proof outside their locked component. Missing
