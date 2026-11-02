@@ -96,10 +96,12 @@ func TestPayrollSparseHistoricalPreparationDatabase(t *testing.T) {
 		err = pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM payroll_projection_weeks WHERE week_start>$1::date OR week_start BETWEEN '2001-01-01' AND '2005-12-26')
  AND NOT EXISTS(SELECT 1 FROM payroll_projection_jobs WHERE week_start>$1::date)
  AND NOT EXISTS(SELECT 1 FROM payroll_statement_state WHERE week_start>$1::date)
- AND (SELECT count(*) FROM payroll_projection_generations)=$2
+ AND (SELECT count(*) FROM payroll_projection_generations)<$2
+ AND NOT EXISTS(SELECT 1 FROM payroll_projection_generations g WHERE NOT EXISTS(SELECT 1 FROM payroll_projection_weeks w WHERE w.generation_id=g.id)
+ AND NOT EXISTS(SELECT 1 FROM payroll_statement_current c WHERE c.generation_id=g.id))
  AND EXISTS(SELECT 1 FROM driver_pay_weeks WHERE week_start=date_trunc('week','2300-01-01'::date))`, current, retained).Scan(&clean)
 		if err != nil || !clean {
-			t.Fatal("retirement lost immutable history/financial records or retained future/empty projections", clean, err)
+			t.Fatal("retirement retained obsolete generations/views or lost financial records", clean, err)
 		}
 		// The worker itself must also skip a future request, even before seeding.
 		if err = repo.RequestPayrollPreparation(ctx, future, false); err == nil {

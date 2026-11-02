@@ -17,7 +17,7 @@ type PayrollRetirement struct {
 }
 
 // Operator-only, with all writers quiesced. Source invoices, payment allocations,
-// audit history and immutable versions survive. A current report difference
+// financial audit history and compact references survive. A current report difference
 // aborts the entire retirement, including any pinned pre-ledger cost evidence.
 func (r *DriverPayRepository) RetirePayrollBefore(ctx context.Context, first string) (PayrollRetirement, error) {
 	result := PayrollRetirement{FirstWeek: first}
@@ -99,6 +99,10 @@ func (r *DriverPayRepository) RetirePayrollBefore(ctx context.Context, first str
 		}
 	}
 	result.VerifiedWeeks = len(weeks)
+	// Retain compact audit identities for retirement, not statement copies.
+	if _, err = tx.Exec(ctx, `SELECT payroll_retain_statement_reference(id) FROM payroll_statement_current WHERE week_start<$1`, start); err != nil {
+		return result, err
+	}
 	for _, query := range []string{`UPDATE payroll_projection_control SET first_week=$1 WHERE singleton`,
 		`DELETE FROM payroll_statement_state WHERE week_start<$1`, `DELETE FROM payroll_projection_weeks WHERE week_start<$1`,
 		`DELETE FROM payroll_projection_jobs WHERE week_start<$1`} {

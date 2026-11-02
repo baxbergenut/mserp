@@ -21,7 +21,7 @@ const browser = await chromium.launch();
 try {
   for (const investor of [false, true]) {
     const driver = {
-      id: statementId, fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
+      id: statementId, statementRevision:'18900000-0000-0000-0000-000000000001', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
       ...(investor ? { investorId: 'owner', truckId: statementId, autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
@@ -31,13 +31,18 @@ try {
         generatedCharges: [{ scheduleId: 'schedule', kind: 'recurring', name: 'Insurance', amount: '-50.00', scheduledAmount: '-50.00', overridden: false, version: 1, scheduleVersion: 1, typeVersion: 1 }],
       },
     };
-    let detailReads=0, summaryReads=0;
+    let detailReads=0, summaryReads=0, expiredReads=0, financialWrites=0;
     const errors = [];
     const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
     page.on('pageerror', e => errors.push(e.message));
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
+      if(request.method() !== 'GET' && /^\/(driver|investor)-pay/.test(path)) financialWrites++;
       if (path === '/driver-pay' || path === '/investor-pay' || /^\/(driver|investor)-pay\/statements\//.test(path)) {
+        if(path.includes('/statements/') && new URL(request.url()).searchParams.get('revision')==='18900000-0000-0000-0000-000000000001') {
+          expiredReads++; driver.statementRevision='18900000-0000-0000-0000-000000000002';
+          return route.fulfill({status:409,json:{error:'This statement changed; refresh the statement',code:'statement_version_expired'}});
+        }
         const summary=new URL(request.url()).searchParams.get('summary')==='1';
         let row=structuredClone(driver);
         if(summary) summaryReads++;
@@ -66,6 +71,7 @@ try {
     await expand.click();
     await expect(page.getByText('Loading statement…',{exact:true})).toBeVisible();
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toBeVisible();expect(detailReads).toBe(1);
+    expect(expiredReads).toBe(1);expect(financialWrites).toBe(0);
     await expect(page.getByRole('button',{name:'Export statement',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Sheets adjustment',exact:true})).toHaveCount(0);
     await expand.click();await expand.click();expect(detailReads).toBe(1);

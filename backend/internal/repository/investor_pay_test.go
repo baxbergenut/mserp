@@ -69,10 +69,6 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			boardMigration, e := os.ReadFile("../../sql/188_status_board_operational.sql")
-			if e != nil {
-				t.Fatal(e)
-			}
 			identityMigration, e := os.ReadFile("../../sql/064_load_truck_identity.sql")
 			if e != nil {
 				t.Fatal(e)
@@ -81,6 +77,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			identityInit := strings.Replace(identitySQL, "BEGIN;\n", "", 1)
 			identityInit = strings.TrimSpace(strings.TrimSuffix(identityInit, "COMMIT;\n"))
 			sql := strings.ReplaceAll(string(init), "\r\n", "\n")
+			var deferredMigrations [][]byte
 			if mode == "migration" {
 				// The available-week trigger needs the statement table introduced
 				// by 041, and its registry entries follow the restored 160 registry.
@@ -91,8 +88,20 @@ func TestInvestorPayDatabase(t *testing.T) {
 					t.Fatal(availabilityErr)
 				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(availabilityMigration), "\r\n", "\n"), "", 1)
+				storageMigration, storageErr := os.ReadFile("../../sql/189_payroll_current_storage.sql")
+				if storageErr != nil {
+					t.Fatal(storageErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
+				for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql", "189_payroll_current_storage.sql"} {
+					body, err := os.ReadFile("../../sql/" + name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					deferredMigrations = append(deferredMigrations, body)
+					sql = strings.Replace(sql, strings.ReplaceAll(string(body), "\r\n", "\n"), "", 1)
+				}
 				sql = withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, sql))
-				sql = strings.Replace(sql, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
 			}
 			m := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
@@ -133,21 +142,10 @@ func TestInvestorPayDatabase(t *testing.T) {
 			}
 			applyAccountingCutoverMigration(t, ctx, admin)
 			if mode == "migration" {
-				if _, err = admin.Exec(ctx, string(sharedMigration)); err != nil {
-					t.Fatal(err)
-				}
-				if _, err = admin.Exec(ctx, string(verificationMigration)); err != nil {
-					t.Fatal(err)
-				}
-				availabilityMigration, availabilityErr := os.ReadFile("../../sql/187_load_source_availability.sql")
-				if availabilityErr != nil {
-					t.Fatal(availabilityErr)
-				}
-				if _, err = admin.Exec(ctx, string(availabilityMigration)); err != nil {
-					t.Fatal(err)
-				}
-				if _, err = admin.Exec(ctx, string(boardMigration)); err != nil {
-					t.Fatal(err)
+				for _, body := range deferredMigrations {
+					if _, err = admin.Exec(ctx, string(body)); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			if _, err = admin.Exec(ctx, `GRANT USAGE ON SCHEMA `+quoted+` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON drivers,dispatchers,trucks,truck_driver_assignments,loads,gross_board_entries,gross_board_extra_entries,driver_pay_weeks,app_users,fuel_transactions,fuel_transaction_items,tolls TO mserp_app`); err != nil {

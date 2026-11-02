@@ -306,7 +306,8 @@ func (r *DriverPayRepository) PreparedCostTransactions(ctx context.Context, kind
 FROM payroll_statement_versions v LEFT JOIN payroll_statement_state s ON s.kind=v.kind AND s.statement_id=v.statement_id AND s.week_start=v.week_start
 LEFT JOIN payroll_projection_weeks w ON w.week_start=v.week_start
 JOIN payroll_projection_generations g ON g.id=CASE WHEN s.version_id=v.id THEN w.generation_id ELSE v.generation_id END
-WHERE v.kind=$1 AND v.statement_id=$2::uuid AND v.week_start=$3 AND v.id=coalesce(nullif($5,'')::uuid,s.version_id)`, kind, id, week, cost, revision).Scan(&body, &snapshot, &calendar, &calculator, &schema)
+WHERE v.kind=$1 AND v.statement_id=$2::uuid AND v.week_start=$3 AND s.version_id=v.id
+AND v.id=coalesce(nullif($5,'')::uuid,s.version_id)`, kind, id, week, cost, revision).Scan(&body, &snapshot, &calendar, &calculator, &schema)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if revision != "" {
 			return result, ErrPayrollVersionExpired

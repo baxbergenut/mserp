@@ -49,6 +49,7 @@ payroll_shared_migration=185_payroll_shared_dependencies.sql
 expense_verification_migration=186_expense_verification_metadata.sql
 load_availability_migration=187_load_source_availability.sql
 board_operational_migration=188_status_board_operational.sql
+payroll_storage_migration=189_payroll_current_storage.sql
 
 # BEGIN BACKUP POLICY
 collect_pending_migrations() {
@@ -97,7 +98,7 @@ prepare_release_backup() {
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
-    local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata load_availability board_operational
+    local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata load_availability board_operational payroll_current
     # Detect the committed schema even if recording the migration ledger failed.
     applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
     [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; } || return 1
@@ -134,6 +135,8 @@ compatible_release() {
     fi
     load_availability=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.load_source_availability') IS NOT NULL") || return 1
     [[ $load_availability == f ]] || { [[ $load_availability == t ]] && [[ -f $1/migrations/$load_availability_migration ]]; } || return 1
+    payroll_current=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_statement_current') IS NOT NULL") || return 1
+    [[ $payroll_current == f ]] || { [[ $payroll_current == t ]] && [[ -f $1/migrations/$payroll_storage_migration ]]; } || return 1
     cost_start_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_cost_start') IS NOT NULL") || return 1
     [[ $cost_start_installed == f ]] && return 0
     [[ $cost_start_installed == t ]] || return 1
@@ -220,6 +223,19 @@ fi
 # Resolve and validate the entire pending set before writing the migration ledger
 # or leaving a release directory behind. Any lookup/backup failure stops activation.
 collect_pending_migrations "$extract_dir/migrations"
+# The compacting cutover must have a final, writer-quiesced recovery snapshot.
+if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq "$payroll_storage_migration"; then
+    cutover_started=true
+    systemctl stop mserp-api.service
+    if systemctl is-active --quiet mserp-expense-sheet.service; then
+        expense_exporter_stopped=true
+        systemctl stop mserp-expense-sheet.service
+    fi
+    if systemctl is-active --quiet fleet-review.service; then
+        fleet_review_stopped=true
+        systemctl stop fleet-review.service
+    fi
+fi
 prepare_release_backup
 
 chown -R root:root "$extract_dir"
@@ -254,16 +270,16 @@ for migration_name in "${pending_migrations[@]}"; do
     if [[ $applied == 1 ]]; then
         continue
     fi
-    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" ]]; then
+    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" ]]; then
         # No old application may write between a contract cutover and activation.
         cutover_started=true
         systemctl stop mserp-api.service
-        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
+        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi
     fi
-    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" ]] && systemctl is-active --quiet fleet-review.service; then
+    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" ]] && systemctl is-active --quiet fleet-review.service; then
         fleet_review_stopped=true
         systemctl stop fleet-review.service
     fi

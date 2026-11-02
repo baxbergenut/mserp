@@ -34,7 +34,7 @@ func TestStatusBoardOperationalDatabase(t *testing.T) {
 		}
 		// Any synchronous payroll publication makes an operational save fail.
 		if _, err := admin.Exec(ctx, `CREATE FUNCTION reject_board_payroll() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'board must not calculate payroll'; END $$;
- CREATE TRIGGER reject_board_payroll BEFORE INSERT ON payroll_statement_versions FOR EACH ROW EXECUTE FUNCTION reject_board_payroll()`); err != nil {
+ CREATE TRIGGER reject_board_payroll BEFORE INSERT ON payroll_projection_generations FOR EACH ROW EXECUTE FUNCTION reject_board_payroll()`); err != nil {
 			t.Fatal(err)
 		}
 		rows, err := pool.Query(ctx, `SELECT d.id::text,e.load_number FROM drivers d JOIN gross_board_entries e ON e.driver_id=d.id WHERE normalized_name LIKE 'board %' ORDER BY d.id`)
@@ -245,7 +245,7 @@ func TestStatusBoardOperationalDatabase(t *testing.T) {
 		if err = pay.EnablePayrollShadow(ctx); err == nil {
 			t.Fatal("missing operational row guard accepted")
 		}
-		if _, err = admin.Exec(ctx, `ALTER TABLE fleet_status_history ENABLE TRIGGER board_operational_history; DROP TRIGGER reject_board_payroll ON payroll_statement_versions; DROP FUNCTION reject_board_payroll()`); err != nil {
+		if _, err = admin.Exec(ctx, `ALTER TABLE fleet_status_history ENABLE TRIGGER board_operational_history; DROP TRIGGER reject_board_payroll ON payroll_projection_generations; DROP FUNCTION reject_board_payroll()`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = pay.DispatchPayrollChanges(ctx); err != nil {

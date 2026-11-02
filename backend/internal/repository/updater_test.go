@@ -35,7 +35,7 @@ func TestUpdaterDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	var lateMigrations []string
-	for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql"} {
+	for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql", "189_payroll_current_storage.sql"} {
 		body, readErr := os.ReadFile("../../sql/" + name)
 		if readErr != nil {
 			t.Fatal(readErr)

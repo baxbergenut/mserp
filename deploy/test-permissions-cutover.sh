@@ -24,6 +24,8 @@ touch "$test_root/new/migrations/$accounting_cutover_migration"
 touch "$test_root/new/migrations/$payroll_cost_start_migration"
 touch "$test_root/new/migrations/$expense_balance_migration"
 eval "$(sed -n '/^compatible_release() {/,/^activate_release() {/p' "$helper" | sed '$d')"
+payroll_storage_migration=189_payroll_current_storage.sql
+mock_payroll_current=f
 runuser() {
     local result=$mock
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
@@ -40,6 +42,7 @@ runuser() {
     if [[ $* == *"to_regclass('public.payroll_resource_dependency_sets')"* ]]; then result=$mock_shared_dependencies; fi
     if [[ $* == *"public.payroll_expense_verification_change"* ]]; then result=$mock_verification_metadata; fi
     if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
+    if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -186,3 +189,14 @@ if compatible_release "$test_root/new"; then echo 'Board classification query fa
 mock_board_operational=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown board classification allowed rollback' >&2; exit 1; fi
 echo 'Status Board compatibility checks passed'
+
+mock_board_operational=t
+mock_payroll_current=t
+if compatible_release "$test_root/new"; then echo 'Current payroll storage allowed an old binary' >&2; exit 1; fi
+touch "$test_root/new/migrations/$payroll_storage_migration"
+compatible_release "$test_root/new"
+mock_payroll_current=error
+if compatible_release "$test_root/new"; then echo 'Current payroll schema failure allowed rollback' >&2; exit 1; fi
+mock_payroll_current=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown current payroll schema allowed rollback' >&2; exit 1; fi
+echo 'Current payroll storage compatibility checks passed'

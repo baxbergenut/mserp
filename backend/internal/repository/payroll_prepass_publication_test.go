@@ -64,7 +64,7 @@ func TestPayrollNativePrePassPublicationDatabase(t *testing.T) {
 				versions := id(`SELECT count(*)::text FROM payroll_statement_versions`)
 				if scenario == "publication_failure" {
 					if _, err = admin.Exec(ctx, `CREATE FUNCTION fail_prepass_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test PrePass publication failure'; END $$;
- CREATE TRIGGER fail_prepass_publication BEFORE INSERT ON payroll_statement_versions FOR EACH ROW EXECUTE FUNCTION fail_prepass_publication()`); err != nil {
+ CREATE TRIGGER fail_prepass_publication BEFORE INSERT ON payroll_projection_generations FOR EACH ROW EXECUTE FUNCTION fail_prepass_publication()`); err != nil {
 						t.Fatal(err)
 					}
 				}

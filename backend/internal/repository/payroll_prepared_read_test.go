@@ -51,13 +51,11 @@ func TestPreparedPayrollReadsDatabase(t *testing.T) {
 			if err != nil || detail.Drivers[0].Summary != nil || detail.Drivers[0].StatementRevision != version {
 				t.Fatal("detail version mismatch", err)
 			}
-			originalEvidence := map[string]PayCostTransactions{}
 			for _, cost := range []string{"fuel", "toll"} {
 				want, err := repo.CostTransactions(ctx, kind, id, week, cost)
 				if err != nil {
 					t.Fatal(err)
 				}
-				originalEvidence[cost] = want
 				measured, metrics := db.WithQueryMetrics(ctx)
 				got, err := repo.PreparedCostTransactions(measured, kind, id, week, cost)
 				if err != nil {
@@ -98,23 +96,15 @@ func TestPreparedPayrollReadsDatabase(t *testing.T) {
 			if _, err = repo.PrepareNextPayrollWeek(ctx); err != nil {
 				t.Fatal(err)
 			}
-			retained, err := NewDriverPayRepository(pool).PreparedPayroll(ctx, kind, week, PayPageQuery{ID: id, StatementRevision: version}, true)
-			if err != nil || retained.Drivers[0].StatementRevision != version || retained.Drivers[0].Loads[0].TotalMiles != detail.Drivers[0].Loads[0].TotalMiles {
-				t.Fatal("retained detail silently advanced", err)
+			if _, err = NewDriverPayRepository(pool).PreparedPayroll(ctx, kind, week, PayPageQuery{ID: id, StatementRevision: version}, true); !errors.Is(err, ErrPayrollVersionExpired) {
+				t.Fatal("superseded detail must expire without substituting current values", err)
 			}
 			if _, err = repo.PreparedPayroll(ctx, kind, week, PayPageQuery{ID: id, StatementRevision: "18200000-0000-0000-0000-000000000099"}, true); !errors.Is(err, ErrPayrollVersionExpired) {
 				t.Fatal("expired revision did not require review", err)
 			}
 			for _, cost := range []string{"fuel", "toll"} {
-				got, err := repo.PreparedCostTransactions(ctx, kind, id, week, cost, version)
-				if err != nil || got.Preparation.State != "updating" {
-					t.Fatal("retained cost revision", err)
-				}
-				got.Preparation = nil
-				a, _ := json.Marshal(originalEvidence[cost])
-				b, _ := json.Marshal(got)
-				if string(a) != string(b) {
-					t.Fatal("cost evidence silently advanced", cost)
+				if _, err = repo.PreparedCostTransactions(ctx, kind, id, week, cost, version); !errors.Is(err, ErrPayrollVersionExpired) {
+					t.Fatal("superseded cost evidence must expire", cost, err)
 				}
 			}
 			if _, err = repo.PreparedCostTransactions(ctx, kind, id, week, "toll", "18200000-0000-0000-0000-000000000099"); !errors.Is(err, ErrPayrollVersionExpired) {

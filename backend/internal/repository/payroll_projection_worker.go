@@ -13,8 +13,8 @@ import (
 // weeks remain available through explicit on-demand preparation.
 func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error {
 	current := ChargeCurrentWeek()
-	// Serialize retirement with source/financial publication. Immutable versions
-	// and receipts survive; only automatic empty pointers and future views retire.
+	// Serialize retirement with source/financial publication. Financial records
+	// and receipts survive; obsolete current views and caches may be removed.
 	tx, closeWrite, err := r.beginPayrollWrite(ctx)
 	if err != nil {
 		return err
@@ -71,6 +71,9 @@ func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error 
  WHERE j.week_start=w.week_start AND j.requested_generation=j.completed_generation
  AND (g.calendar_week<>$1::date OR g.calculator_version<>$2 OR g.schema_version<>$3)`, current, payrollCalculatorVersion, payrollProjectionSchemaVersion)
 	if err != nil {
+		return err
+	}
+	if err = maintainPayrollStorage(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

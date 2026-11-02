@@ -141,6 +141,11 @@ func beginPayrollCommand(ctx context.Context, tx pgx.Tx, actor, requestID, name,
 	var result []byte
 	err = tx.QueryRow(ctx, `SELECT command,request_hash,result FROM payroll_command_receipts WHERE actor_id=$1::uuid AND request_id=$2::uuid`, actor, requestID).Scan(&oldName, &oldHash, &result)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if expected != "" {
+			if _, err = tx.Exec(ctx, `SELECT payroll_retain_statement_reference($1::uuid)`, expected); err != nil {
+				return nil, nil, err
+			}
+		}
 		return c, nil, nil
 	}
 	if err != nil {
@@ -457,18 +462,21 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 		if selection != nil {
 			drivers, trucks = selection.drivers, selection.trucks
 		}
-		old, e := tx.Query(ctx, `SELECT kind,statement_id::text FROM payroll_statement_state WHERE week_start=$1
+		previousVersions := map[PayrollStatementIdentity]string{}
+		old, e := tx.Query(ctx, `SELECT kind,statement_id::text,version_id::text FROM payroll_statement_state WHERE week_start=$1
  AND ($2::boolean OR (kind='driver' AND statement_id=ANY($3::uuid[])) OR (kind='investor' AND statement_id=ANY($4::uuid[])))`, w, selection == nil, drivers, trucks)
 		if e != nil {
 			return nil, e
 		}
 		for old.Next() {
 			identity := PayrollStatementIdentity{WeekStart: w.Format(time.DateOnly)}
-			if e = old.Scan(&identity.Kind, &identity.ID); e != nil {
+			var version string
+			if e = old.Scan(&identity.Kind, &identity.ID, &version); e != nil {
 				old.Close()
 				return nil, e
 			}
 			affectedSet[identity] = true
+			previousVersions[identity] = version
 		}
 		old.Close()
 		if e = old.Err(); e != nil {
@@ -492,10 +500,29 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 				return nil, e
 			}
 		}
-		for i, kind := range []string{"driver", "investor"} {
-			for _, d := range reports[i].Drivers {
-				affectedSet[PayrollStatementIdentity{kind, d.ID, w.Format(time.DateOnly)}] = true
+		// Unchanged publication reuses its current revision. Receipts enumerate
+		// only real changes and removals, rather than claiming no-op copies.
+		published, e := tx.Query(ctx, `SELECT kind,statement_id::text,version_id::text FROM payroll_statement_state WHERE week_start=$1
+ AND ($2::boolean OR (kind='driver' AND statement_id=ANY($3::uuid[])) OR (kind='investor' AND statement_id=ANY($4::uuid[])))`, w, selection == nil, drivers, trucks)
+		if e != nil {
+			return nil, e
+		}
+		for published.Next() {
+			identity := PayrollStatementIdentity{WeekStart: w.Format(time.DateOnly)}
+			var version string
+			if e = published.Scan(&identity.Kind, &identity.ID, &version); e != nil {
+				published.Close()
+				return nil, e
 			}
+			if previousVersions[identity] == version {
+				delete(affectedSet, identity)
+			} else {
+				affectedSet[identity] = true
+			}
+		}
+		published.Close()
+		if e = published.Err(); e != nil {
+			return nil, e
 		}
 	}
 	// These exact events belong to this command and all their materialized

@@ -39,6 +39,7 @@ var payrollUnrelatedTables = []string{
 	"payroll_protocol_events",
 	"payroll_projection_jobs", "payroll_projection_generations", "payroll_statement_versions", "payroll_statement_state",
 	"payroll_projection_weeks", "payroll_command_receipts", "payroll_command_versions",
+	"payroll_statement_current", "payroll_statement_references", "payroll_storage_cutovers",
 	"payroll_load_facts",
 	"payroll_routing_facts",
 	"payroll_cost_months", "payroll_source_months",
