@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -73,6 +75,26 @@ func TestNormalizeELDVIN(t *testing.T) {
 	}
 	if _, ok := normalizeELDVIN("short"); ok {
 		t.Fatal("short VIN accepted")
+	}
+}
+
+func TestSyncFiveELDRefreshesValidUnitsWhenProviderTimestampIsNull(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"units":[{"truck_number":"3065","vin":"1M8GDM9AXKP042788","coordinates":{"lat":41.88,"lng":-87.62},"timestamp":null},{"truck_number":"17","vin":"1M8GDM9AXKP042789","coordinates":{"lat":40.7,"lng":-74.0},"timestamp":"2026-11-02T14:30:00Z"}]}`)
+	}))
+	defer server.Close()
+	repo := &fakeFiveELDRepo{active: map[string]struct{}{"1M8GDM9AXKP042788": {}, "1M8GDM9AXKP042789": {}}}
+	client := fiveeld.NewClientWithHTTPClient(server.URL, "key", "provider", server.Client())
+	job := NewSyncFiveELDJob(client, repo, "1", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	result, err := job.Run(context.Background())
+	if err != nil || repo.failed != nil {
+		t.Fatalf("err=%v failure=%v", err, repo.failed)
+	}
+	if result.Fetched != 2 || result.Invalid != 1 || result.Saved != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(repo.stored) != 1 || repo.stored[0].ProviderTruckNumber != "17" || repo.stored[0].ReportedAt.IsZero() {
+		t.Fatalf("only the valid GPS observation should be written: %+v", repo.stored)
 	}
 }
 

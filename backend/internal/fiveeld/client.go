@@ -69,7 +69,10 @@ func (c *Client) CurrentPositions(ctx context.Context, usdot string) ([]Position
 	for _, unit := range response.Units {
 		reportedAt, err := time.Parse(time.RFC3339Nano, unit.Timestamp)
 		if err != nil {
-			return nil, fmt.Errorf("Five ELD unit %q has an invalid timestamp", unit.TruckNumber)
+			// Preserve the unit for the sync job's invalid-record accounting.
+			// A missing or malformed timestamp must not abort the fleet refresh
+			// or turn an undated position into a current GPS observation.
+			reportedAt = time.Time{}
 		}
 		positions = append(positions, Position{
 			TruckNumber: strings.TrimSpace(unit.TruckNumber),

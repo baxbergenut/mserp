@@ -1403,7 +1403,10 @@ assignment lookup lists.
   Five ELD uses migration 050 and server-only API key/provider-token/USDOT
   configuration. A bounded interval poll matches current positions to assigned
   trucks by normalized VIN and caches the coordinates in PostgreSQL. Opening the
-  board never calls Five ELD. The Latest location column is immediately before
+  board never calls Five ELD. Missing/malformed position timestamps remain zero
+  for the sync job's invalid-unit count; skip those GPS writes without aborting
+  valid units or replacing the affected truck's last known observation. The
+  Latest location column is immediately before
   Destination and shows the latest known coordinates regardless of age,
   copies them on click and exposes the exact provider timestamp only on hover;
   missing values stay blank. Loads contains no truck telemetry. Fleet-readable

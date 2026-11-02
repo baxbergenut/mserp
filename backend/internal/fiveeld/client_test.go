@@ -43,3 +43,24 @@ func TestClientDoesNotLeakResponseBodyInErrors(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestClientKeepsInvalidTimestampUnitsWithoutAbortingPositions(t *testing.T) {
+	for _, timestamp := range []string{`null`, `""`, `"invalid"`, `"2026-11-02T09:00:00"`} {
+		t.Run(timestamp, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprintf(w, `{"units":[{"truck_number":"3065","vin":"1M8GDM9AXKP042788","timestamp":%s},{"truck_number":"17","vin":"1M8GDM9AXKP042789","timestamp":"2026-11-02T14:30:00Z"}]}`, timestamp)
+			}))
+			defer server.Close()
+			positions, err := NewClientWithHTTPClient(server.URL, "key", "provider", server.Client()).CurrentPositions(context.Background(), "1")
+			if err != nil || len(positions) != 2 {
+				t.Fatalf("positions=%+v err=%v", positions, err)
+			}
+			if positions[0].TruckNumber != "3065" || !positions[0].ReportedAt.IsZero() {
+				t.Fatalf("invalid observation gained a timestamp: %+v", positions[0])
+			}
+			if got := positions[1].ReportedAt.Format("2006-01-02T15:04:05Z07:00"); got != "2026-11-02T14:30:00Z" {
+				t.Fatalf("valid observation timestamp=%s", got)
+			}
+		})
+	}
+}
