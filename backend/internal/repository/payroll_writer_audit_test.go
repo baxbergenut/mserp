@@ -103,6 +103,8 @@ func TestPayrollAdditionalWriterGatesDatabase(t *testing.T) {
 		fleet := NewFleetRepository(pool)
 		// Nonexistent records deliberately distinguish entering the gate first
 		// from proceeding to row lookup/locking before entering the protocol.
+		// Inspection-only PTI writers deliberately bypass this gate; their inverse
+		// concurrency and payroll invariants are covered by the PTI classification test.
 		for _, test := range []struct {
 			name string
 			run  func(context.Context) error
@@ -113,10 +115,6 @@ func TestPayrollAdditionalWriterGatesDatabase(t *testing.T) {
 			}},
 			{"odometer source", func(ctx context.Context) error {
 				return (&MaintenanceRepository{pool: pool}).SaveOdometerSource(ctx, projectionDriver, OdometerSourceInput{Source: "auto"})
-			}},
-			{"pti layout", func(ctx context.Context) error {
-				_, err := fleet.SavePTILayout(ctx, "", PTILayoutChange{Version: 1})
-				return err
 			}},
 			{"feedback edit", func(ctx context.Context) error {
 				return (&FeedbackRepository{pool: pool}).Update(ctx, projectionDriver, FeedbackInput{}, AuthUser{Administrator: true})
