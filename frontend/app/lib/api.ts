@@ -150,6 +150,7 @@ export function subscribeTaskEvents(onChange: () => void, onUnauthorized: () => 
 export function subscribePayEvents(investor: boolean, onChange: () => void) {
   const events = new EventSource(`${API_BASE}/${investor ? "investor" : "driver"}-pay/events`, { withCredentials: true });
   events.addEventListener("changed", onChange);
+  events.addEventListener("open", onChange);
   events.addEventListener("unauthorized", () => events.close());
   return () => events.close();
 }

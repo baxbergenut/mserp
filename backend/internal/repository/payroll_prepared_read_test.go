@@ -113,3 +113,72 @@ func TestPreparedPayrollReadsDatabase(t *testing.T) {
 		}
 	})
 }
+
+// Sharing a validation must preserve the expanded map's exact semantics, even
+// for a stale shared key overridden locally or a missing/empty shared map.
+func TestPreparedPayrollSharedFreshnessDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		repo := NewDriverPayRepository(pool)
+		if err := repo.EnablePayrollShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		week, _ := chargeWeek("2026-10-05")
+		if err := repo.RequestPayrollPreparation(ctx, week, false); err != nil {
+			t.Fatal(err)
+		}
+		if worked, err := repo.PrepareNextPayrollWeek(ctx); err != nil || !worked {
+			t.Fatal(worked, err)
+		}
+		var packed []byte
+		if err := pool.QueryRow(ctx, `SELECT payroll_pack_resource_snapshot(
+ ARRAY(SELECT 'expense:freshness-'||n FROM generate_series(1,5600)n),'')`).Scan(&packed); err != nil {
+			t.Fatal(err)
+		}
+		check := func(name string, value []byte, want bool) {
+			t.Helper()
+			if _, err := pool.Exec(ctx, `UPDATE payroll_statement_current SET resource_dependencies=$1 WHERE kind='driver'`, value); err != nil {
+				t.Fatal(err)
+			}
+			var exact bool
+			if err := pool.QueryRow(ctx, `SELECT bool_and(payroll_resources_current(resource_dependencies)) FROM payroll_statement_current WHERE kind='driver'`).Scan(&exact); err != nil || exact != want {
+				t.Fatal(name, "reference", exact, want, err)
+			}
+			page, err := repo.ReadPreparedPayrollPage(ctx, "driver", week, PayPageQuery{Summary: true})
+			if err != nil || (page.State == "ready") != want {
+				t.Fatal(name, "page freshness differs", page.State, want, err)
+			}
+		}
+		check("shared current", packed, true)
+		if _, err := pool.Exec(ctx, `INSERT INTO payroll_resource_revisions(resource_key,revision) VALUES('expense:freshness-1',1)`); err != nil {
+			t.Fatal(err)
+		}
+		check("shared stale", packed, false)
+		var overridden []byte
+		if err := pool.QueryRow(ctx, `SELECT $1::jsonb||'{"expense:freshness-1":1}'::jsonb`, packed).Scan(&overridden); err != nil {
+			t.Fatal(err)
+		}
+		check("local override of shared key", overridden, true)
+		if _, err := pool.Exec(ctx, `UPDATE payroll_resource_revisions SET revision=2 WHERE resource_key='expense:freshness-1'`); err != nil {
+			t.Fatal(err)
+		}
+		check("local override stale", overridden, false)
+		check("missing shared", []byte(`{"$shared":"missing"}`), false)
+		check("inline current", []byte(`{"expense:freshness-1":2}`), true)
+		check("inline stale", []byte(`{"expense:freshness-1":1}`), false)
+		var emptyShared []byte
+		if err := pool.QueryRow(ctx, `INSERT INTO payroll_resource_dependency_sets(fingerprint,dependencies)
+ VALUES(encode(sha256(convert_to('{}','UTF8')),'hex'),'{}') RETURNING jsonb_build_object('$shared',fingerprint)`).Scan(&emptyShared); err != nil {
+			t.Fatal(err)
+		}
+		check("empty shared global protocol", emptyShared, true)
+		if _, err := pool.Exec(ctx, `UPDATE payroll_projection_control SET protocol_mode='resources' WHERE singleton`); err != nil {
+			t.Fatal(err)
+		}
+		check("empty shared resource protocol", emptyShared, false)
+		if err := pool.QueryRow(ctx, `SELECT $1::jsonb||'{"expense:freshness-1":2}'::jsonb`, emptyShared).Scan(&overridden); err != nil {
+			t.Fatal(err)
+		}
+		check("empty shared with current local", overridden, true)
+	})
+}

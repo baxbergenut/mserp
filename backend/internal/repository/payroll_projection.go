@@ -257,9 +257,15 @@ func (r *DriverPayRepository) failPayrollProjection(ctx context.Context, job pay
 	if errors.As(cause, &pgerr) && (pgerr.Code == "40001" || pgerr.Code == "40P01") {
 		message = ""
 	}
-	_, err := r.pool.Exec(ctx, `UPDATE payroll_projection_jobs SET lease_token=NULL,lease_until=NULL,last_error=$3,
+	// With event-driven pages, a real failure transition must be visible too.
+	// Lease churn and superseded attempts must not generate periodic refreshes.
+	_, err := r.pool.Exec(ctx, `WITH previous AS MATERIALIZED (
+ SELECT last_error FROM payroll_projection_jobs WHERE week_start=$1 AND lease_token=$2::uuid
+ ), failed AS (
+ UPDATE payroll_projection_jobs SET lease_token=NULL,lease_until=NULL,last_error=$3,
  available_at=clock_timestamp()+make_interval(secs=>CASE WHEN $3='' THEN 0 ELSE least(30,power(2,least(attempts,5))::int) END)
- WHERE week_start=$1 AND lease_token=$2::uuid`, job.Week, job.Token, message)
+ WHERE week_start=$1 AND lease_token=$2::uuid RETURNING week_start
+ ) SELECT pg_notify('payroll_projection_visible','') FROM failed,previous WHERE previous.last_error IS DISTINCT FROM $3`, job.Week, job.Token, message)
 	return err
 }
 

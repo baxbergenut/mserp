@@ -10,7 +10,7 @@ import (
 )
 
 // Notifications carry no financial data. Normal authorized snapshot reads still
-// determine freshness; reconnecting clients and polling recover missed hints.
+// determine freshness; stream reconnects and page focus recover missed hints.
 func registerPayrollLive(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, auth *authHandler, pay *repository.DriverPayRepository) func() {
 	events := []*taskEvents{}
 	for _, kind := range []string{"driver", "investor"} {

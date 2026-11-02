@@ -137,12 +137,31 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 		// need not rewrite it. Keep the legacy input token tied to this snapshot.
 		result.Report.Revision = payrollInputRevision(kind, week.Format(time.DateOnly), calendar, financialSnapshot)
 	}
-	rows, err := tx.Query(ctx, `SELECT v.id::text,v.summary,payroll_resources_current(v.resource_dependencies) FROM (
+	// Dense components share thousands of dependency revisions. Check each shared
+	// map once in this read snapshot, then check every statement's local overrides.
+	// Re-expanding that map for every summary made polling monopolize the database.
+	rows, err := tx.Query(ctx, `WITH versions AS MATERIALIZED (
  SELECT v.id,v.summary,v.statement_id,v.resource_dependencies FROM payroll_statement_state s JOIN payroll_statement_versions v ON v.id=s.version_id
  WHERE $3='' AND s.week_start=$1 AND s.kind=$2
  UNION ALL SELECT v.id,v.summary,v.statement_id,v.resource_dependencies FROM payroll_statement_current v JOIN payroll_statement_state s ON s.version_id=v.id
  WHERE v.id=nullif($3,'')::uuid AND v.week_start=$1 AND v.kind=$2
- ) v ORDER BY v.summary->>'fullName',v.statement_id`, week, kind, query.StatementRevision)
+ ), shared AS MATERIALIZED (
+ SELECT d.fingerprint,(d.dependencies<>'{}' OR
+ (SELECT protocol_mode='global' FROM payroll_projection_control WHERE singleton)) AS valid,
+ ARRAY(SELECT e.key FROM jsonb_each_text(d.dependencies) e(key,value)
+ LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
+ WHERE coalesce(r.revision,0)<>e.value::bigint) AS stale_keys
+ FROM payroll_resource_dependency_sets d JOIN (
+ SELECT DISTINCT resource_dependencies->>'$shared' AS fingerprint FROM versions
+ WHERE resource_dependencies ? '$shared') refs USING(fingerprint)
+ ) SELECT v.id::text,v.summary,CASE WHEN v.resource_dependencies ? '$shared' THEN
+ shared.fingerprint IS NOT NULL AND (shared.valid OR v.resource_dependencies-'$shared'<>'{}') AND NOT EXISTS(
+ SELECT 1 FROM unnest(shared.stale_keys) key WHERE NOT v.resource_dependencies ? key) AND NOT EXISTS(
+ SELECT 1 FROM jsonb_each_text(v.resource_dependencies-'$shared') d(key,value)
+ LEFT JOIN payroll_resource_revisions r ON r.resource_key=d.key WHERE coalesce(r.revision,0)<>d.value::bigint)
+ ELSE payroll_resources_current(v.resource_dependencies) END
+ FROM versions v LEFT JOIN shared ON shared.fingerprint=v.resource_dependencies->>'$shared'
+ ORDER BY v.summary->>'fullName',v.statement_id`, week, kind, query.StatementRevision)
 	if err != nil {
 		return result, err
 	}

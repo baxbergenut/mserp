@@ -1,0 +1,54 @@
+2026-11-02 payroll latency investigation
+
+Production baseline release: 576ddc3224adfd1dc604f9bed4fe2ce23ea9e803
+No production financial commands were issued for this investigation.
+
+Observed existing user requests:
+  Driver finalization: 949 to 9171 ms; up to 561 DB calls / 6 calculations.
+  Driver reopening: 700 to 5534 ms; up to 223 DB calls / 2 calculations.
+  Financial lock waits were roughly 0.3-1.5 ms. This was primarily calculation/
+  database CPU contention, not waiting for a global payroll financial lock.
+  Open pages polled every second, even after preparation became ready.
+
+Read-only production EXPLAIN ANALYZE, 2026-10-19 Driver Pay (94 statements):
+  Existing per-row resource freshness: 3466 ms, 794899 shared-buffer hits.
+  Final query (shared stale-key maps once, exact per-row overrides):
+  61.8 ms execution, 1603 shared-buffer hits; zero payroll calculations.
+  One shared dependency set contained 6063 resource keys.
+  These are database query timings, not end-to-end browser command timings.
+
+All 332 current statement resource maps were current and all 3 preparation jobs
+were complete when inspected. No persistent failed production job was found.
+Observed nginx 502 errors were connection-refused errors during API deployment
+stops (including the quiesced 189 cleanup and the later 19:24:51-54 UTC release).
+No API crash/restart loop was found. API NRestarts=0.
+
+Changes:
+  No periodic browser payroll freshness timer. Commit events, stream reconnects,
+  focus/visibility and explicit reload drive reads. Failed reads alone retry with
+  bounded backoff; recovered read errors clear without clearing financial errors.
+  Drafts, active commands and settlement reviews pause external replacement.
+  Actual preparation failure transitions notify clients; lease churn does not.
+  Shared dependency sets are checked once per read snapshot with exact semantics.
+  No financial calculation, posting, resource-lock or optimistic-revision rule
+  was weakened. No statement history or extra statement version was added.
+
+Local disposable synthetic fixture (176 drivers/trucks, 6000 expenses, 6000 tolls,
+11449 fuel transactions, historical assignment component), resource protocol:
+  Saved driver finalization: 76-116 ms, no calculator phase.
+  Driver reopening: 97-113 ms.
+  Saved investor finalization: 76-81 ms, no calculator phase.
+  Investor reopening: 107-108 ms.
+  These are diagnostic local repository timings, not production/browser promises.
+
+Validation:
+  Prepared read/freshness parity, fresh and incremental schemas.
+  Shared/local stale revisions, local override, missing shared/inline maps.
+  Preparation priority snapshot/lease starvation regression.
+  Prepared single/bulk driver/investor finalize/reopen and atomic rollback.
+  Resource concurrency/shared-balance races, including both independent saves
+  entering their canonical writes before either commits.
+  Full synthetic projection parity and command diagnostics.
+  Browser checks on both pages: no idle freshness polling, reconnect invalidation,
+  initial/read-time 502 recovery, Updating recovery, draft preservation, lost
+  financial response replay, in-flight typing, placement and calendar boundaries.

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -66,5 +67,24 @@ func TestPayrollCommittedNotificationsDatabase(t *testing.T) {
 		if err = pool.QueryRow(ctx, `SELECT count(*) FROM payroll_projection_changes`).Scan(&after); err != nil || before != after {
 			t.Fatal("publication recursively captured source work", before, after, err)
 		}
+		if err = repo.RequestPayrollPreparation(ctx, week, true); err != nil {
+			t.Fatal(err)
+		}
+		job, err := repo.claimPayrollProjection(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = repo.failPayrollProjection(ctx, job, errors.New("synthetic preparation failure")); err != nil {
+			t.Fatal(err)
+		}
+		wait(true)
+		page, err := repo.ReadPreparedPayrollPage(ctx, "driver", week, PayPageQuery{})
+		if err != nil || page.State != "failed" {
+			t.Fatal("failure notification did not expose a retryable state", page.State, err)
+		}
+		if err = repo.failPayrollProjection(ctx, job, ErrPayrollProjectionSuperseded); err != nil {
+			t.Fatal(err)
+		}
+		wait(false)
 	})
 }

@@ -108,6 +108,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [preparationError, setPreparationError] = useState("");
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
@@ -135,13 +136,22 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     if (editingDraft || dirty || saving || refreshing || loadedQuery.current === queryKey) return;
     let cancelled = false;
     const controller = new AbortController();
-    const timer = setTimeout(() => {
+    let retryDelay = 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = () => {
       setLoading(true);
       fetchPay(week, controller.signal).then(value => {
-        if (!cancelled && !draftEditors.current.size) { loadedQuery.current = queryKey; setReport(value); setError(""); }
-      }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load payroll"); })
+        if (!cancelled && !draftEditors.current.size) { loadedQuery.current = queryKey; setReport(value); setError(""); setPreparationError(""); }
+      }).catch(err => {
+        if (!cancelled) {
+          setPreparationError(err instanceof Error ? err.message : "Unable to load payroll");
+          timer = setTimeout(load, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 30_000);
+        }
+      })
         .finally(() => { if (!cancelled) setLoading(false); });
-    }, 0);
+    };
+    timer = setTimeout(load, 0);
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [week, fetchPay, queryKey, editingDraft, dirty, saving, refreshing]);
   // Revalidate aggregates without replacing drafts or blanking the table.
@@ -157,33 +167,50 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     });
     return () => controller.abort();
   }, [refreshRequest, editingDraft, dirty, saving, refreshing, loading, fetchPay, week]);
-  // Commit notifications prompt a validated read; polling recovers missed hints.
+  // Read on commits, stream reconnects and returning to the page, never on a
+  // periodic freshness timer. A failed read alone gets a bounded retry delay.
   // Keep one read in flight and preserve drafts, commands and settlement reviews.
   useEffect(() => {
     if (!hasPreparedReport || editingDraft || dirty || saving || refreshing || loading || settlement) return;
     let cancelled = false;
     let inFlight = false;
     let pending = false;
+    let retryDelay = 1000;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
-    const poll = () => {
+    const refresh = () => {
       clearTimeout(timer);
       if (cancelled) return;
       if (inFlight) { pending = true; return; }
       inFlight = true;
+      let failed = false;
       fetchPay(week, controller.signal).then(value => {
+        retryDelay = 1000;
         if (!cancelled && !draftEditors.current.size && !savingRef.current && !Object.keys(changesRef.current).length) {
+          setPreparationError("");
           setReport(current => current?.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state ? current : value);
         }
-      }).catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Unable to check payroll preparation"); })
+      }).catch(reason => {
+        if (!cancelled) {
+          failed = true;
+          setPreparationError(reason instanceof Error ? reason.message : "Unable to load payroll changes");
+        }
+      })
         .finally(() => {
           inFlight = false;
-          if (!cancelled) { timer = setTimeout(poll, pending ? 0 : 1000); pending = false; }
+          if (!cancelled && (pending || failed)) {
+            timer = setTimeout(refresh, pending ? 0 : retryDelay);
+            if (failed) retryDelay = Math.min(retryDelay * 2, 30_000);
+            pending = false;
+          }
         });
     };
-    timer = setTimeout(poll, 1000);
-    const unsubscribe = subscribePayEvents(investor, poll);
-    return () => { cancelled = true; unsubscribe(); controller.abort(); clearTimeout(timer); };
+    timer = setTimeout(refresh, 0);
+    const unsubscribe = subscribePayEvents(investor, refresh);
+    const visible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("focus", visible);
+    return () => { cancelled = true; unsubscribe(); document.removeEventListener("visibilitychange", visible); window.removeEventListener("focus", visible); controller.abort(); clearTimeout(timer); };
   }, [hasPreparedReport, editingDraft, dirty, saving, refreshing, loading, settlement, fetchPay, week, investor]);
   const receiveSettlement = (receipt: DriverPayWeek) => {
     undoStack.current = []; pendingUndo.current = false;
@@ -427,6 +454,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     {report?.issues?.map((issue, i) => <p key={i} role="alert" className="rounded border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300">{issue}</p>)}
     {report?.preparation && report.preparation.state !== "ready" && <div role="status" className="rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">{report.preparation.state === "failed" ? "Statement preparation failed. The last complete values are shown." : report.preparation.state === "preparing" ? "Preparing this week…" : "Updating statements. The last complete values are shown."}{report.preparation.state === "failed" && <button className={`${payButtonClass} ml-3`} disabled={saving || refreshing} onClick={() => { void retryPayPreparation(investor, week).then(() => fetchPay(week)).then(setReport).catch(reason => setError(reason instanceof Error ? reason.message : "Unable to retry preparation")); }}>Retry preparation</button>}</div>}
     {report?.notices?.map((notice, i) => <p key={i} className="rounded border border-zinc-700 p-3 text-xs text-zinc-400">{notice}</p>)}
+    {preparationError && <div role="alert" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-200">{preparationError} Retrying automatically…</div>}
     {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still here."}<button className={`${payButtonClass} ml-3`} disabled={saving || busy} onClick={() => dirty ? void save() : void reload()}>{dirty ? "Retry save" : "Retry"}</button>{dirty && <button className={`${payButtonClass} ml-2`} disabled={saving || busy} onClick={() => void reload()}>Reload saved version</button>}</div>}
     {report?.managedInSheets&&<p className="rounded-lg border border-zinc-700 p-3 text-sm text-amber-200">Managed in Sheets · historical payroll is read-only. Unfinished statements are archived drafts.</p>}
     {sourceError && <p role="alert" className="text-sm text-red-300">{sourceError} This edit has not been saved.</p>}
