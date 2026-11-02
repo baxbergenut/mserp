@@ -36,7 +36,10 @@ Shop/OOS retain current crew, but new operating assignments require returning
 the truck to service. Existing assignments can be ended or moved elsewhere.
 
 Truck profile changes and returns require a nonblank reason (maximum 1000
-characters), current status version and trucks.edit. Manual Terminated refuses
+characters) and current status version. Any signed-in user may change truck
+status or return a truck to service through the status endpoints; the profile
+controls are available to everyone with truck viewing access. Other truck
+profile edits still require trucks.edit. Manual Terminated refuses
 employed direct/team operators; resolve their assignments explicitly first.
 Return to service derives Ready/In use and refuses outstanding work-order
 restrictions. Rehire never returns a restricted/terminated truck to service.

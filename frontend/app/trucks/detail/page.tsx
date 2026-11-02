@@ -67,7 +67,9 @@ export default function TruckDetailPage() {
         <div className="flex flex-wrap items-center gap-4 p-5 sm:p-6">
           <div className="min-w-0"><PageHeader><div><div className="flex flex-wrap items-center gap-3"><TruckIcon className="h-5 w-5 shrink-0 text-zinc-500" /><h1 className="text-xl font-semibold text-zinc-100">Truck {truck.unitNumber}</h1><FleetStatusBadge status={truck.operatingStatus ?? operatingStatus(truck.status)} showReady/></div></div></PageHeader><p className="break-all font-mono text-xs text-zinc-400">VIN · {truck.vin || "Not recorded"}</p></div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2" role="group" aria-label="Truck actions">
-            {permissions.includes("trucks.edit") && <><button className="ui-button" onClick={()=>{setReturnToService(false);setChangingCondition(true);}}>Change status</button>{["shop","out_of_service","terminated"].includes(truck.operatingStatus??"")&&<button className="ui-button" onClick={()=>{setReturnToService(true);setChangingCondition(true);}}>Return to service</button>}<button className="ui-button ui-button-primary" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit truck</button></>}
+            <button className="ui-button" onClick={()=>{setReturnToService(false);setChangingCondition(true);}}>Change status</button>
+            {["shop","out_of_service","terminated"].includes(truck.operatingStatus??"")&&<button className="ui-button" onClick={()=>{setReturnToService(true);setChangingCondition(true);}}>Return to service</button>}
+            {permissions.includes("trucks.edit") && <button className="ui-button ui-button-primary" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Edit truck</button>}
             {permissions.includes("trucks.delete")&&<button className="ui-button text-red-400" onClick={()=>setDeleting(true)}>Delete truck</button>}
           </div>
         </div>

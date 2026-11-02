@@ -3219,6 +3219,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ### Unified truck statuses (149)
 
+- Any authenticated user may PATCH truck /status or legacy /condition. Truck profile status/return-to-service controls do not require trucks.edit; viewing access and other profile-edit permissions remain unchanged. Reasons, versions, audit history and operational guards still apply.
+
 - Truck Status replaces the visible Condition and Active/Inactive controls: Ready, In use, Shop, OOS, Terminated. Ready/In use derive from employed direct/current team operators; Home/Vacation/rest retain In use. Shop/OOS keep assignments and block new dispatch/assignments. All restrictions are explicitly reversible with a reason; rehire never clears them. Terminated takes precedence, then OOS, Shop and automatic allocation.
 - PATCH /trucks/{id}/status and legacy /condition share reason/version/permission guards. Manual Terminated refuses employed operators; owner-operator offboarding retains the existing ownership and continuing-investor safeguards. Active is derived compatibility data, never an independent command; OOS/Terminated are false without automatically clearing crew. Legacy raw status codes and the internal condition history track remain compatible.
 - Board SHOP/STOP/ACCIDENT require statusReason and set Shop; HOLD is retired. Hold for Load remains an annotation. Independent work-order restrictions require reasons and explicit release; payment/completion never releases them. New assignment writers share database guards. Lookups expose operatingStatus without private reasons.
