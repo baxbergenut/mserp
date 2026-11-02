@@ -352,7 +352,7 @@ func (r *InventoryRepository) Save(ctx context.Context, collection string, input
 	if !inventoryUUID.MatchString(input.RequestID) {
 		return InventoryRecord{}, inventoryInvalid("A unique request ID is required")
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return InventoryRecord{}, err
 	}
@@ -659,7 +659,7 @@ func (r *InventoryRepository) Move(ctx context.Context, m InventoryMovement, act
 	m.Actor = ""
 	m.CreatedAt = time.Time{}
 	hash := inventoryHash(m)
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}

@@ -113,15 +113,6 @@ func TestPayrollAdditionalWriterGatesDatabase(t *testing.T) {
 				_, err := fleet.CompleteFiveELDTruckReview(ctx, projectionDriver, "", 1, TruckInput{})
 				return err
 			}},
-			{"odometer source", func(ctx context.Context) error {
-				return (&MaintenanceRepository{pool: pool}).SaveOdometerSource(ctx, projectionDriver, OdometerSourceInput{Source: "auto"})
-			}},
-			{"feedback edit", func(ctx context.Context) error {
-				return (&FeedbackRepository{pool: pool}).Update(ctx, projectionDriver, FeedbackInput{}, AuthUser{Administrator: true})
-			}},
-			{"feedback vote", func(ctx context.Context) error {
-				return (&FeedbackRepository{pool: pool}).Vote(ctx, projectionDriver, projectionDriver, true)
-			}},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				short, cancel := context.WithTimeout(ctx, 100*time.Millisecond)

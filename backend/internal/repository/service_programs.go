@@ -156,7 +156,7 @@ func (r *MaintenanceRepository) SaveProgram(ctx context.Context, p ServiceProgra
 	if p.AssigneeRoleIDs == nil {
 		p.AssigneeRoleIDs = []string{}
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return p, err
 	}
@@ -299,7 +299,7 @@ func (r *MaintenanceRepository) SaveProgramTrucks(ctx context.Context, program s
 	if len(items) < 1 || len(items) > 500 {
 		return ErrMaintenanceInvalid
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -358,7 +358,7 @@ func (r *MaintenanceRepository) SaveProgramBaseline(ctx context.Context, program
 	if err != nil || date.After(maintenanceToday()) || in.LastMiles != nil && (*in.LastMiles < 0 || *in.LastMiles > 2000000000) {
 		return fmt.Errorf("%w: enter a service date through today and a nonnegative odometer", ErrMaintenanceInvalid)
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}

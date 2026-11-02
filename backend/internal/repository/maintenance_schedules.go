@@ -86,7 +86,7 @@ func (r *MaintenanceRepository) SaveReading(ctx context.Context, in MaintenanceR
 	if err != nil || in.Mileage < 0 {
 		return in, ErrMaintenanceInvalid
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return in, err
 	}
@@ -168,7 +168,7 @@ func (r *MaintenanceRepository) SaveSchedule(ctx context.Context, in Maintenance
 	if in.ServiceCode != "pm" {
 		return in, ErrMaintenanceInvalid
 	}
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return in, err
 	}

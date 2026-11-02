@@ -791,3 +791,9 @@ shadow worker to reconcile retained projections. Retry derived work through
 `RequestPayrollPreparation(..., true)`; never replay a financial command. Keep
 stored source events and version history when disabling the worker or rolling
 back the application. The additive schema does not require a financial rollback.
+
+## Operational source audit
+
+Migration 192 removes reviewed unrelated writes from capture and source locking.
+See [PAYROLL_SOURCE_CLASSIFICATION.md](PAYROLL_SOURCE_CLASSIFICATION.md) for the
+exact boundaries, mixed financial writers, repeated-import handling and validation.

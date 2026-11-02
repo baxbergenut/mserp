@@ -33,6 +33,17 @@ func payrollCacheKey(kind string, week time.Time, snapshot string) string {
 // dependency, including newly tracked tables and financial audit inputs. Changes
 // to these operational tables cannot affect a payroll amount, name or warning.
 var payrollUnrelatedTables = []string{
+	// Reviewed operational state; canonical expenses, profiles and source transactions
+	// remain captured separately, including SQL-triggered canonical changes.
+	"access_audit", "app_roles", "role_expense_category_access", "phone_normalization_audit",
+	"feedback_attachments", "feedback_comments", "feedback_messages", "feedback_posts", "feedback_status_history", "feedback_votes",
+	"fleet_trailers", "inventory_assets", "inventory_equipment", "inventory_events", "inventory_imports", "inventory_lines", "inventory_locations", "inventory_stock_movements", "inventory_supplies", "inventory_transponder_notes",
+	"maintenance_changes", "maintenance_configuration", "maintenance_documents", "maintenance_odometer_readings", "maintenance_pm_baselines", "maintenance_reading_changes", "maintenance_records", "maintenance_schedules", "maintenance_types", "maintenance_vendors", "service_programs", "service_program_trucks",
+	"expense_documents", "expense_sheet_export_config", "expense_sheet_exports", "files",
+	"fleetscope_driver_intake", "fleetscope_driver_terminations", "fleetscope_webhook_receipts",
+	"prepass_toll_sync_days", "relay_fuel_sync_days", "prepass_truck_mapping_events", "toll_flag_review_events", "toll_reports", "toll_transaction_links",
+	"weighmytruck_audit", "weighmytruck_billing", "weighmytruck_events", "weighmytruck_imports", "weighmytruck_memberships", "weighmytruck_requests", "weighmytruck_sync_days",
+	"dispatcher_commission_rules", "dispatcher_pay_history", "dispatcher_pay_inputs", "dispatcher_pay_statements",
 	"weekly_pti_weeks", "weekly_pti_rows", "weekly_pti_events",
 	"weekly_pti_layout_state", "weekly_pti_layout", "weekly_pti_layout_events",
 	"load_source_availability",

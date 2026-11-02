@@ -152,7 +152,7 @@ func readCommissionRules(ctx context.Context, tx pgx.Tx) ([]CommissionRuleVersio
 	return out, rows.Err()
 }
 func (r *DispatcherPayRepository) Rules(ctx context.Context) ([]CommissionRuleVersion, error) {
-	tx, err := beginPayrollSourceMutation(ctx, r.pool)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return nil, err
 	}

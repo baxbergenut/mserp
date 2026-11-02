@@ -101,7 +101,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 					t.Fatal(storageErr)
 				}
 				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
-				prior = withoutPTIPayrollMigration(t, prior)
+				prior = withoutUnrelatedPayrollMigration(t, withoutPTIPayrollMigration(t, prior))
 				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
 				exec(string(telemetryMigration))
@@ -112,6 +112,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(boardMigration))
 				exec(string(storageMigration))
 				applyPTIPayrollMigration(t, ctx, admin)
+				applyUnrelatedPayrollMigration(t, ctx, admin)
 			} else {
 				exec(body)
 			}
@@ -313,7 +314,7 @@ func TestPayrollProjectionDatabase(t *testing.T) {
 			}
 		})
 		t.Run("coverage_rejects_unknown_or_disabled_inputs", func(t *testing.T) {
-			for _, sql := range []string{`CREATE TABLE unclassified_payroll_source(id int)`, `ALTER TABLE loads DISABLE TRIGGER payroll_projection_update`, `ALTER TABLE loads DISABLE TRIGGER payroll_cache_update`} {
+			for _, sql := range []string{`CREATE TABLE unclassified_payroll_source(id int)`, `ALTER TABLE loads DISABLE TRIGGER payroll_projection_update`, `ALTER TABLE loads DISABLE TRIGGER payroll_cache_update`, `ALTER TABLE app_users DISABLE TRIGGER zz_payroll_user_metadata`, `ALTER TABLE tolls DISABLE TRIGGER payroll_cache_update`} {
 				tx, err := admin.Begin(ctx)
 				if err != nil {
 					t.Fatal(err)
