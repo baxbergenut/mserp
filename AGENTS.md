@@ -886,6 +886,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Status Board, Gross Board (including Daily loads), and payroll share opt-in
   spreadsheet selection/navigation in `app/lib/spreadsheetGrid.ts`: click selects,
   arrows move, typing replaces, F2/double-click edits with a caret, Ctrl/Cmd+C copies.
+  Ctrl/Cmd+V replaces the selected editable cell without first entering it;
+  inputs already being edited retain native paste and selection behavior.
   Gross Board marks stacked fields with data-grid-cell. Suggestions retain their
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status

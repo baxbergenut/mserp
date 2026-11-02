@@ -85,6 +85,15 @@ try {
     expect(await loads.locator('[data-pay-totals] > th').evaluate(cell => getComputedStyle(cell).borderTopWidth)).toBe('1px');
     expect(await region.locator('tr:last-child > td').first().evaluate(cell => getComputedStyle(cell).borderBottomWidth)).toBe('1px');
     const fuel = page.getByLabel('Grid Test, Fuel, amount', { exact: true });
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await fuel.click(); await expect(fuel.locator('..')).toBeFocused();
+    await page.evaluate(() => navigator.clipboard.writeText('13'));
+    await page.keyboard.press('Control+v'); await expect(fuel).toHaveValue('-13.00');
+    await expect(fuel.locator('..')).toBeFocused();
+    await expect.poll(() => driver.edits.fuelOverride).toBe('-13');
+    await page.keyboard.press('Control+z');
+    await expect(fuel).toHaveValue('-40.00');
+    await expect.poll(() => driver.edits.fuelOverride).toBe(null);
     await fuel.click(); await page.keyboard.type('9'); await page.keyboard.press('Control+z');
     await expect(fuel).toHaveValue('-40.00'); await expect(fuel.locator('..')).toBeFocused();
     await fuel.click(); await expect(fuel).not.toBeFocused(); await expect(fuel.locator('..')).toBeFocused(); await expect(fuel).toHaveValue('-40.00'); await page.keyboard.type('12');
@@ -130,6 +139,8 @@ try {
     await page.keyboard.press('ArrowRight');
     const driverGross = loads.getByRole('cell', { name: '$350.00', exact: true }).first();
     await expect(driverGross).toBeFocused();
+    await page.evaluate(() => navigator.clipboard.writeText('999'));
+    await page.keyboard.press('Control+v'); await expect(driverGross).toHaveText('$350.00');
     await page.keyboard.type('123'); await expect(driverGross).toHaveText('$350.00');
     await page.keyboard.press('ArrowDown');
     await expect(loads.getByRole('cell', { name: '$350.00', exact: true }).nth(1)).toBeFocused();
@@ -161,5 +172,5 @@ try {
     expect(errors).toEqual([]);
     await page.close();
   }
-  console.log('Payroll grid browser checks passed for driver and investor: row geometry, borders, conditional scrolling, replacement typing, arrow keys, saved undo, source preview/undo, narrow layout.');
+  console.log('Payroll grid browser checks passed for driver and investor: selected-cell paste, read-only paste guard, row geometry, borders, conditional scrolling, replacement typing, arrow keys, saved undo, source preview/undo, narrow layout.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -4,6 +4,7 @@ export {
   editGridCell as editPayCell,
   isGridReplacementInput as isPayReplacementInput,
   navigateGrid as navigatePayGrid,
+  pasteGridCell as pastePayCell,
   registerGridInput as registerPayInput,
   selectGridCell as selectPayCell,
 } from "@/app/lib/spreadsheetGrid";

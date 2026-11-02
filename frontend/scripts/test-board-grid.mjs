@@ -67,6 +67,17 @@ try {
   expect((await trailer.boundingBox()).width).toBeGreaterThanOrEqual(98);
 
   await trailer.click(); await expect(trailerCell).toBeFocused();
+  await page.evaluate(() => navigator.clipboard.writeText('PASTED'));
+  await page.keyboard.press('Control+v'); await expect(trailer).toHaveValue('PASTED');
+  await expect(trailerCell).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(field('Trailer', 'Bob Grid').locator('..')).toBeFocused();
+  await page.keyboard.press('ArrowUp'); await expect(trailerCell).toBeFocused();
+  // Caret editing still pastes into the selected text, rather than replacing the cell.
+  await page.keyboard.press('F2');
+  await trailer.evaluate(input => input.setSelectionRange(0, 3));
+  await page.evaluate(() => navigator.clipboard.writeText('TE'));
+  await page.keyboard.press('Control+v'); await expect(trailer).toHaveValue('TETED');
+  await page.keyboard.press('Escape');
   await page.keyboard.type('NEW'); await expect(trailer).toHaveValue('NEW');
   await page.keyboard.press('ArrowDown'); await expect(field('Trailer', 'Bob Grid').locator('..')).toBeFocused();
   await page.keyboard.press('ArrowUp'); await expect(trailerCell).toBeFocused();
@@ -92,6 +103,8 @@ try {
   readOnly = true; await page.reload();
   const beforeSaves = saves;
   await expect(trailer).toBeDisabled(); await trailerCell.click(); await page.keyboard.type('NO');
+  await page.evaluate(() => navigator.clipboard.writeText('NO'));
+  await page.keyboard.press('Control+v');
   await expect(trailer).toHaveValue('NEXW'); expect(saves).toBe(beforeSaves);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -102,7 +115,9 @@ try {
   const original = amount(week);
   await expect(original).toHaveValue('$400.00');
   await original.click(); await expect(original.locator('..')).toBeFocused();
-  await page.keyboard.type('123'); await expect(original).toHaveValue('123');
+  await page.evaluate(() => navigator.clipboard.writeText('123'));
+  await page.keyboard.press('Control+v'); await expect(original).toHaveValue('$123.00');
+  await expect(original.locator('..')).toBeFocused();
   await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-13').locator('..')).toBeFocused();
   await page.keyboard.press('ArrowDown'); await expect(amount('2026-10-13', 'driver rate').locator('..')).toBeFocused();
   await page.keyboard.type('456'); await page.keyboard.press('Enter');
@@ -114,8 +129,11 @@ try {
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
   await expect(dialog).toBeVisible();
   const modalAmounts = dialog.getByLabel('Alice Grid, 2026-10-14, total gross', { exact: true });
-  await modalAmounts.first().click(); await page.keyboard.type('222');
-  await expect(modalAmounts.first()).toHaveValue('222');
+  await modalAmounts.first().click();
+  await page.evaluate(() => navigator.clipboard.writeText('222'));
+  await page.keyboard.press('Control+v');
+  await expect(modalAmounts.first()).toHaveValue('$222.00');
+  await expect(modalAmounts.first().locator('..')).toBeFocused();
   await page.keyboard.press('ArrowRight'); await expect(modalAmounts.nth(1).locator('..')).toBeFocused();
   await page.keyboard.type('333'); await page.keyboard.press('Enter');
   await dialog.getByRole('button', { name: 'Apply changes', exact: true }).click();
@@ -134,5 +152,5 @@ try {
   await listCell.dblclick();
   expect(await page.evaluate(() => getSelection()?.toString())).not.toBe('');
   expect(errors).toEqual([]);
-  console.log('Board grid checks passed: replacement, caret editing, navigation, copying, suggestions, read-only cells, autosave, daily-load dialog, layout, and location icon.');
+  console.log('Board grid checks passed: selected-cell paste, native caret paste, replacement, navigation, copying, suggestions, read-only cells, autosave, daily-load dialog, layout, and location icon.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

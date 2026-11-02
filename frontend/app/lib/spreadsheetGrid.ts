@@ -129,6 +129,22 @@ export function copyGridCell(event: ClipboardEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
+export function pasteGridCell(event: ClipboardEvent<HTMLElement>) {
+  const target = event.target as HTMLElement;
+  // Inputs already being edited keep native paste (including text selection).
+  if (event.defaultPrevented || excluded(target) || target.closest('input,textarea,select,button,a')) return;
+  const cell = target.closest<Cell>(cellSelector);
+  if (!cell || cell.querySelector("table") || !cell.querySelector(textInputSelector)) return;
+  if (!event.clipboardData.types.includes("text/plain")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  editCell(cell, event.clipboardData.getData("text/plain"));
+  // Commit the replacement through the field's usual blur/save path and keep
+  // the cell selected, ready for another paste or arrow navigation.
+  cell.tabIndex = -1;
+  cell.focus({ preventScroll: true });
+}
+
 export function navigateGrid(event: KeyboardEvent<HTMLElement>) {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing) return;
   const target = event.target as HTMLElement;
@@ -178,4 +194,5 @@ export const spreadsheetGridEvents = {
   onDoubleClick: editGridCell,
   onKeyDown: navigateGrid,
   onCopy: copyGridCell,
+  onPaste: pasteGridCell,
 };

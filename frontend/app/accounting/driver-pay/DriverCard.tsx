@@ -13,7 +13,7 @@ import { SourceChargeRows } from "./SourceChargeRows";
 import { ExpenseRowLabel, ExpenseRows } from "./ExpenseRows";
 import { StatementMenu } from "./StatementMenu";
 import { PaySourceCell } from "./PaySourceCell";
-import { copyPayCell, editPayCell, navigatePayGrid, selectPayCell } from "./payGrid";
+import { copyPayCell, editPayCell, navigatePayGrid, pastePayCell, selectPayCell } from "./payGrid";
 import { PayInput } from "./PayInput";
 import styles from "./payGrid.module.css";
 import { LoadTransferDialog } from "./LoadTransferDialog";
@@ -192,7 +192,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
  {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — adjust deductions to what was collected. Unpaid balances carry forward.</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
-          <table onMouseDown={selectPayCell} onDoubleClick={editPayCell} onCopy={copyPayCell} onKeyDown={navigatePayGrid} className={`${styles.grid} w-full min-w-[1504px] table-fixed border-separate border-spacing-0 text-left text-xs`}>
+          <table onMouseDown={selectPayCell} onDoubleClick={editPayCell} onCopy={copyPayCell} onPaste={pastePayCell} onKeyDown={navigatePayGrid} className={`${styles.grid} w-full min-w-[1504px] table-fixed border-separate border-spacing-0 text-left text-xs`}>
             <colgroup>{displayColumns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>
             <thead className="bg-zinc-950 text-[10px] text-zinc-400"><tr>{displayColumns.map(([label], index) => <th key={label}
               title={label === "Driver gross" ? "Gross Board driver gross used for percentage pay" : undefined}
