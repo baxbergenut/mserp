@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"mserp/internal/prepass"
@@ -289,6 +290,68 @@ func TestPayrollRepeatedImportsDatabase(t *testing.T) {
 		sync()
 		if fence() == next {
 			t.Fatal("changed toll amount disappeared")
+		}
+	})
+}
+
+func TestPayrollTollReviewRaceDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		repo := NewTollRepository(pool)
+		toll := prepass.Transaction{TollID: 19202, AccountNumber: json.Number("1"), PostDateTime: "2026-10-05T12:00:00", ExitDateTime: "2026-10-05T12:00:00", VehicleNumber: "REVIEW-RACE", TollCharge: json.Number("2.50")}
+		if _, err := repo.UpsertDay(ctx, "production", time.Now(), []prepass.Transaction{toll}, time.Now(), false); err != nil {
+			t.Fatal(err)
+		}
+		var id string
+		if err := pool.QueryRow(ctx, `SELECT id FROM tolls WHERE prepass_toll_id=19202`).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		for _, bulk := range []bool{false, true} {
+			hold, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer hold.Rollback(ctx)
+			var blocker int
+			if err = hold.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blocker); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = hold.Exec(ctx, `UPDATE tolls SET amount=amount+1 WHERE id=$1`, id); err != nil {
+				t.Fatal(err)
+			}
+			work, cancel := context.WithTimeout(ctx, 3*time.Second)
+			done := make(chan error, 1)
+			go func() {
+				in := TollFlagReviewInput{ID: inventoryID(), Revision: strings.Repeat("0", 64), Reviewed: true}
+				if bulk {
+					done <- repo.ReviewTollFlagsBulk(work, []TollFlagReviewChange{{TollID: id, ID: in.ID, Revision: in.Revision}}, "")
+				} else {
+					done <- repo.ReviewTollFlag(work, id, in, "")
+				}
+			}()
+			blocked := false
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) {
+				if err = admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))`, blocker).Scan(&blocked); err != nil {
+					t.Fatal(err)
+				}
+				if blocked {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err = hold.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			result := <-done
+			cancel()
+			var conflict *TollLinkError
+			if !blocked || !errors.As(result, &conflict) {
+				t.Fatal("concurrent review must return a refresh conflict", bulk, blocked, result)
+			}
+		}
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM toll_flag_review_events`).Scan(&count); err != nil || count != 0 {
+			t.Fatal("raced review committed audit data", count, err)
 		}
 	})
 }

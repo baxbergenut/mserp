@@ -40,6 +40,10 @@ them; the exact JSON payload and confirmed local driver must both match. Actual
 provider import batches retain source serialization because they can change money
 or attribution. This does not remove financial concurrency checks.
 
+Single and bulk toll reviews map aborted repeatable-read/deadlock races to the
+existing refresh conflict response (409), including commit-time failures. Forced
+source-update races verify that neither path commits a partial review receipt.
+
 Deployment requires the matching helper first. Migration 192 quiesces API, expense
 export and review-portal writers, reclassifies tables, removes their six capture/
 protocol triggers, installs exact metadata guards, and requests one rebuild against
