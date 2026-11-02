@@ -486,6 +486,16 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   record IDs, five-minute operational refresh, and morning 21-day reconciliation.
   `backend/internal/repository/load_sync_repository.go` owns operational candidate
   selection and source-only refreshes without replaying fleet assignments.
+  Migration 187 records complete ID-filtered lookup presence separately in
+  `load_source_availability`. Failed/partial lookups never mark records missing.
+  Status Board number lookups exclude confirmed missing sources; pinned IDs never
+  rebind to a recreated same-number order. Missing queued sources become unavailable;
+  current selections retain identity with a review warning and no stale stops.
+  Historical loads and all financial resolution remain unchanged. Presence evidence
+  is explicitly unrelated to payroll, including its cache registry. Install the
+  updated deploy helper before 187; it quiesces writers and rejects older binaries.
+  Status Board uses transaction-local JIT off and hydrates current-week financial
+  details after historical duplicate detection, preserving Gross Board parity.
 - `backend/internal/jobs/sync_fuel.go`: synchronous missing-day Relay fuel sync.
 - `backend/internal/jobs/sync_tolls.go`: synchronous missing-day PrePass toll
   sync in API-compatible date windows.

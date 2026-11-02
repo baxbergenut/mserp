@@ -581,7 +581,7 @@ export interface BoardStop { key: string; type: string; location: string; appoin
 export interface BoardLoad {
   manual?: boolean;
   planId: string; date: string; slot: number; number: string; loadId: number | null;
-  sourceStatus: string; sourceDriver: string; syncedAt: string; stops: BoardStop[]; warning: string;
+  sourceStatus: string; sourceDriver: string; sourceMissing?: boolean; syncedAt: string; stops: BoardStop[]; warning: string;
 }
 export interface BoardLoads {
   detailsOmitted?: boolean;

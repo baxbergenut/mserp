@@ -184,7 +184,9 @@ func boardAutomationContext(load *BoardLoad, stop *BoardStop, truck string) stri
 
 // Resolve a unique imported load without manufacturing a Gross Board plan.
 func importedBoardLoad(ctx context.Context, tx pgx.Tx, number string) (*BoardLoad, error) {
-	rows, err := tx.Query(ctx, `SELECT id,load_id,status,coalesce(driver_id::text,''),synced_at::text,raw_payload FROM clustie_loads WHERE lower(btrim(load_id))=lower(btrim($1)) ORDER BY id LIMIT 2`, number)
+	// SourceDriver is unused here: operational selection belongs to Clustie.
+	// Avoid rebuilding the fleet-wide financial assignment view for each driver.
+	rows, err := tx.Query(ctx, `SELECT id,load_id,status,synced_at::text,raw_payload FROM loads l WHERE lower(btrim(load_id))=lower(btrim($1)) AND `+boardAvailableSourceSQL+` ORDER BY id LIMIT 2`, number)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +196,7 @@ func importedBoardLoad(ctx context.Context, tx pgx.Tx, number string) (*BoardLoa
 		var p BoardLoad
 		var id int
 		var raw []byte
-		if err = rows.Scan(&id, &p.Number, &p.SourceStatus, &p.SourceDriver, &p.SyncedAt, &raw); err != nil {
+		if err = rows.Scan(&id, &p.Number, &p.SourceStatus, &p.SyncedAt, &raw); err != nil {
 			return nil, err
 		}
 		if chosen != nil {

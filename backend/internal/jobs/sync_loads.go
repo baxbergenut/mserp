@@ -33,6 +33,7 @@ type loadSyncRepository interface {
 	RefreshLoads(context.Context, []repository.LoadRecord) error
 	ReconcileLoads(context.Context, []repository.LoadRecord) error
 	OperationalLoadIDs(context.Context, time.Time, time.Time) ([]int, error)
+	RecordLoadSourceLookup(context.Context, []int, []int) error
 }
 
 type SyncLoadsJob struct {
@@ -163,7 +164,8 @@ func (j *SyncLoadsJob) RunOperational(ctx context.Context) (SyncLoadsResult, err
 	}
 	result := SyncLoadsResult{Since: from}
 	for start := 0; start < len(ids); start += 25 {
-		loads, err := client.FetchLoadsByIDs(ctx, ids[start:min(start+25, len(ids))])
+		requested := ids[start:min(start+25, len(ids))]
+		loads, err := client.FetchLoadsByIDs(ctx, requested)
 		if err != nil {
 			return result, err
 		}
@@ -171,6 +173,13 @@ func (j *SyncLoadsJob) RunOperational(ctx context.Context) (SyncLoadsResult, err
 		addLoadsByID(byID, loads)
 		saved, err := j.save(ctx, byID, j.repo.RefreshLoads)
 		if err != nil {
+			return result, err
+		}
+		returned := make([]int, 0, len(loads))
+		for _, load := range loads {
+			returned = append(returned, load.ID)
+		}
+		if err := j.repo.RecordLoadSourceLookup(ctx, requested, returned); err != nil {
 			return result, err
 		}
 		result.Fetched += len(byID)

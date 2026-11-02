@@ -47,10 +47,11 @@ payroll_telemetry_migration=183_payroll_telemetry_classification.sql
 payroll_operational_migration=184_payroll_operational_sources.sql
 payroll_shared_migration=185_payroll_shared_dependencies.sql
 expense_verification_migration=186_expense_verification_metadata.sql
+load_availability_migration=187_load_source_availability.sql
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
-    local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata
+    local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata load_availability
     # Detect the committed schema even if recording the migration ledger failed.
     applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
     [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; } || return 1
@@ -81,6 +82,8 @@ compatible_release() {
         verification_metadata=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regprocedure('public.payroll_expense_verification_change(jsonb,jsonb)') IS NOT NULL") || return 1
         [[ $verification_metadata == f ]] || { [[ $verification_metadata == t ]] && [[ -f $1/migrations/$expense_verification_migration ]]; } || return 1
     elif [[ $projection_installed != f ]]; then return 1; fi
+    load_availability=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.load_source_availability') IS NOT NULL") || return 1
+    [[ $load_availability == f ]] || { [[ $load_availability == t ]] && [[ -f $1/migrations/$load_availability_migration ]]; } || return 1
     cost_start_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_cost_start') IS NOT NULL") || return 1
     [[ $cost_start_installed == f ]] && return 0
     [[ $cost_start_installed == t ]] || return 1
@@ -201,16 +204,16 @@ for migration in "${migrations[@]}"; do
     if [[ $applied == 1 ]]; then
         continue
     fi
-    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" ]]; then
+    if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" ]]; then
         # No old application may write between a contract cutover and activation.
         cutover_started=true
         systemctl stop mserp-api.service
-        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
+        if [[ $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" ]] && systemctl is-active --quiet mserp-expense-sheet.service; then
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi
     fi
-    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" ]] && systemctl is-active --quiet fleet-review.service; then
+    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" ]] && systemctl is-active --quiet fleet-review.service; then
         fleet_review_stopped=true
         systemctl stop fleet-review.service
     fi

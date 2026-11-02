@@ -29,17 +29,18 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
-	Manual       bool        `json:"manual,omitempty"`
-	PlanID       string      `json:"planId"`
-	Date         string      `json:"date"`
-	Slot         int         `json:"slot"`
-	Number       string      `json:"number"`
-	LoadID       *int        `json:"loadId"`
-	SourceStatus string      `json:"sourceStatus"`
-	SourceDriver string      `json:"sourceDriver"`
-	SyncedAt     string      `json:"syncedAt"`
-	Stops        []BoardStop `json:"stops"`
-	Warning      string      `json:"warning"`
+	Manual        bool        `json:"manual,omitempty"`
+	PlanID        string      `json:"planId"`
+	Date          string      `json:"date"`
+	Slot          int         `json:"slot"`
+	Number        string      `json:"number"`
+	LoadID        *int        `json:"loadId"`
+	SourceStatus  string      `json:"sourceStatus"`
+	SourceDriver  string      `json:"sourceDriver"`
+	SourceMissing bool        `json:"sourceMissing,omitempty"`
+	SyncedAt      string      `json:"syncedAt"`
+	Stops         []BoardStop `json:"stops"`
+	Warning       string      `json:"warning"`
 }
 type boardLoadState struct {
 	Manual                []BoardLoad       `json:"manual,omitempty"`
@@ -238,6 +239,11 @@ func terminalLoad(status string) bool {
 	return false
 }
 func annotateLoad(p *BoardLoad, driver string) {
+	if p.SourceMissing {
+		p.Warning = "DataTruck no longer returns this source record; clear or replace the load"
+		p.Stops = []BoardStop{}
+		return
+	}
 	if p.LoadID == nil {
 		p.Warning = "Unmatched plan"
 		if p.Manual {
@@ -351,6 +357,9 @@ func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) stri
 
 // Read-only reconciliation: no calendar or upstream status can promote a load.
 func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (map[string]BoardLoads, error) {
+	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
+		return nil, err
+	}
 	day, _ := time.Parse(time.DateOnly, from)
 	week := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
 	weekEnd := day.AddDate(0, 0, 7-(int(day.Weekday())+6)%7).Format(time.DateOnly)
@@ -392,7 +401,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		return nil, err
 	}
 	plans := map[string][]BoardLoad{}
-	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb)
+	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb),NOT (`+boardAvailableSourceSQL+`)
  FROM `+boardPlansSQL+` e `+grossBoardResolvedLoad+`
  LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
@@ -407,7 +416,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		var id string
 		var p BoardLoad
 		var raw []byte
-		if err = rows.Scan(&id, &p.PlanID, &p.Date, &p.Slot, &p.Number, &p.LoadID, &p.SourceStatus, &p.SourceDriver, &p.SyncedAt, &raw); err != nil {
+		if err = rows.Scan(&id, &p.PlanID, &p.Date, &p.Slot, &p.Number, &p.LoadID, &p.SourceStatus, &p.SourceDriver, &p.SyncedAt, &raw, &p.SourceMissing); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -421,6 +430,26 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		return nil, err
 	}
 	manualPlans, err := readManualBoardLoads(ctx, tx, states)
+	if err != nil {
+		return nil, err
+	}
+	// A saved selection may outlive its plan. Recheck its exact source ID;
+	// never silently switch a pinned selection to a recreated order.
+	missingIDs := map[int]bool{}
+	missingRows, err := tx.Query(ctx, `SELECT load_id FROM load_source_availability WHERE NOT present`)
+	if err != nil {
+		return nil, err
+	}
+	for missingRows.Next() {
+		var id int
+		if err := missingRows.Scan(&id); err != nil {
+			missingRows.Close()
+			return nil, err
+		}
+		missingIDs[id] = true
+	}
+	err = missingRows.Err()
+	missingRows.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -463,6 +492,12 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		view.CustomOrder = len(s.Order) > 0
 		if s.Current != nil {
 			current := refreshedBoardCurrent(*s.Current, plans[id])
+			if current.LoadID != nil && missingIDs[*current.LoadID] {
+				current.SourceMissing = true
+				annotateLoad(&current, id)
+				s.DestinationSource = false
+				view.DestinationSource, view.StopKey = false, ""
+			}
 			view.Current = &current
 			if !manualMismatch[id] {
 				if stop := lateBoardStop(s, current, entries[id].Status, entries[id].Destination); stop != nil {
@@ -510,7 +545,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				}
 				seen[*p.LoadID] = true
 			}
-			if completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || terminalLoad(p.SourceStatus) {
+			if p.SourceMissing || completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || terminalLoad(p.SourceStatus) {
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] {
 				view.Hidden = append(view.Hidden, p)

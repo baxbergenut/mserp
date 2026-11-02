@@ -135,6 +135,8 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testBoardAutomationDatabase(t, ctx, pool, repo, fleet)
 			testNextPickupTimesDatabase(t, ctx, pool, repo, fleet)
 			testBoardLoadReconnection(t, ctx, pool, repo, fleet)
+			testBoardSourceAvailability(t, ctx, pool, repo, fleet)
+			testBoardCurrentEntryParity(t, ctx, pool)
 			testDriverBoardOrder(t, ctx, pool, repo, fleet)
 			testDispatcherBoardOrder(t, ctx, pool, repo)
 			city := "Louisville"

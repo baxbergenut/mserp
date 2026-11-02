@@ -24,6 +24,7 @@ type fakeLoadSyncClient struct {
 	dateHook    func()
 	newHook     func(int) ([]datatruck.Load, error)
 	batches     [][]int
+	batchHook   func([]int) ([]datatruck.Load, error)
 }
 
 func (f *fakeLoadSyncClient) FetchLoadsAfterID(_ context.Context, afterID int) ([]datatruck.Load, error) {
@@ -50,6 +51,9 @@ func (f *fakeLoadSyncClient) FetchLoadsByDateSinceThroughID(
 
 func (f *fakeLoadSyncClient) FetchLoadsByIDs(_ context.Context, ids []int) ([]datatruck.Load, error) {
 	f.batches = append(f.batches, append([]int(nil), ids...))
+	if f.batchHook != nil {
+		return f.batchHook(ids)
+	}
 	loads := []datatruck.Load{}
 	for _, id := range ids {
 		loads = append(loads, datatruck.Load{ID: id, Status: "delivered"})
@@ -64,6 +68,7 @@ type fakeLoadSyncRepository struct {
 	ids       []int
 	refreshes int
 	upsertErr error
+	lookups   [][2][]int
 }
 
 func (f *fakeLoadSyncRepository) MaxLoadID(context.Context) (int, error) {
@@ -95,6 +100,32 @@ func (f *fakeLoadSyncRepository) RefreshLoads(ctx context.Context, records []rep
 
 func (f *fakeLoadSyncRepository) OperationalLoadIDs(context.Context, time.Time, time.Time) ([]int, error) {
 	return f.ids, nil
+}
+
+func (f *fakeLoadSyncRepository) RecordLoadSourceLookup(_ context.Context, requested, returned []int) error {
+	f.lookups = append(f.lookups, [2][]int{append([]int{}, requested...), append([]int{}, returned...)})
+	return nil
+}
+
+func TestOperationalLookupRecordsOnlyCompleteResponses(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		repo := &fakeLoadSyncRepository{ids: []int{10, 11}}
+		client := &fakeLoadSyncClient{batchHook: func([]int) ([]datatruck.Load, error) {
+			if failed {
+				return nil, errors.New("provider failed")
+			}
+			return []datatruck.Load{{ID: 11, Status: "in_transit"}}, nil
+		}}
+		job := NewSyncLoadsJob(client, repo, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		_, err := job.RunOperational(context.Background())
+		if failed {
+			if err == nil || len(repo.lookups) != 0 {
+				t.Fatal("failed lookup changed availability", err, repo.lookups)
+			}
+		} else if err != nil || len(repo.lookups) != 1 || len(repo.lookups[0][0]) != 2 || len(repo.lookups[0][1]) != 1 || repo.lookups[0][1][0] != 11 {
+			t.Fatal("complete lookup not recorded exactly", err, repo.lookups)
+		}
+	}
 }
 
 func (f *fakeLoadSyncRepository) ReconcileLoads(ctx context.Context, records []repository.LoadRecord) error {

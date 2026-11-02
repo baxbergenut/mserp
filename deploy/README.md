@@ -36,6 +36,13 @@ API/export/portal writers while installing the exact expense-verification metada
 exception, and refuses older binaries whose payroll coverage checks cannot recognize
 the new trigger. All financial edits continue to publish synchronously.
 
+Migration 187 adds operational DataTruck source-presence evidence without changing
+historical loads or financial matching. Install the matching deploy helper first;
+it quiesces API/export/portal writers for the schema coverage change and refuses
+older binaries afterward. Missing provider IDs become unavailable on Status Board,
+and only a unique remaining live source can resolve an unpinned number. Pinned
+selections retain their source ID for review. Failed lookups never mark sources missing.
+
 Production is served at `https://clustie.io`. The apex A record points to
 `137.184.102.22`; `www` is a CNAME for `clustie.io`, managed with Namecheap DNS.
 Nginx redirects HTTP and `https://www.clustie.io` to the canonical HTTPS URL.

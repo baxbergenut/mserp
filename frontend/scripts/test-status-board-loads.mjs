@@ -73,7 +73,7 @@ try {
   await expect(destination).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'CURRENT · Current load', exact: true })).toBeVisible();
   await expect(panel.getByText('Removed from queue (1)', { exact: true })).toBeVisible();
-  await expect(panel.getByText('Delivered or cancelled (1)', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Unavailable loads (1)', { exact: true })).toBeVisible();
 
   // Identical live snapshots must not refetch, lock controls, or shift the panel.
   holdDetails = true;

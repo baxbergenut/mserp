@@ -12,6 +12,7 @@ payroll_telemetry_migration=183_payroll_telemetry_classification.sql
 payroll_operational_migration=184_payroll_operational_sources.sql
 payroll_shared_migration=185_payroll_shared_dependencies.sql
 expense_verification_migration=186_expense_verification_metadata.sql
+load_availability_migration=187_load_source_availability.sql
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
 trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
@@ -36,6 +37,7 @@ runuser() {
     if [[ $* == *"table_name='relay_driver_links'"* ]]; then result=$mock_operational_excluded; fi
     if [[ $* == *"to_regclass('public.payroll_resource_dependency_sets')"* ]]; then result=$mock_shared_dependencies; fi
     if [[ $* == *"public.payroll_expense_verification_change"* ]]; then result=$mock_verification_metadata; fi
+    if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -51,6 +53,7 @@ mock_telemetry_excluded=f
 mock_operational_excluded=f
 mock_shared_dependencies=f
 mock_verification_metadata=f
+mock_load_availability=f
 mock=f
 compatible_release "$test_root/old"
 compatible_release "$test_root/new"
@@ -159,3 +162,13 @@ if compatible_release "$test_root/new"; then echo 'Verification metadata schema 
 mock_verification_metadata=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown verification metadata schema allowed rollback' >&2; exit 1; fi
 echo 'Permission, expense verification, accounting, Fuel/Toll, balance and payroll compatibility checks passed'
+
+mock_verification_metadata=t
+mock_load_availability=t
+if compatible_release "$test_root/new"; then echo 'Load availability allowed an old payroll binary' >&2; exit 1; fi
+touch "$test_root/new/migrations/$load_availability_migration"
+compatible_release "$test_root/new"
+mock_load_availability=error
+if compatible_release "$test_root/new"; then echo 'Load availability schema failure allowed rollback' >&2; exit 1; fi
+mock_load_availability=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown load availability schema allowed rollback' >&2; exit 1; fi

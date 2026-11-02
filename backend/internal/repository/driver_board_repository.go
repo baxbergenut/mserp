@@ -121,6 +121,11 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		return result, err
 	}
 	defer tx.Rollback(ctx)
+	// These interactive queries are too short to amortize PostgreSQL's JIT
+	// compilation. Keep this transaction-local; payroll jobs retain their policy.
+	if _, err = tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
+		return result, err
+	}
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
 		return result, err
 	}
@@ -182,7 +187,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		return result, err
 	}
 	// Use the same exact load resolution and entered/source precedence as Gross Board.
-	rows, err = tx.Query(ctx, grossBoardEffective+"SELECT "+grossBoardEntryColumns+` FROM effective
+	rows, err = tx.Query(ctx, driverBoardCurrentEntries+"SELECT "+grossBoardEntryColumns+` FROM effective
  WHERE service_date >= $1::date AND driver_id IN (SELECT id FROM drivers WHERE active)
  ORDER BY driver_id,service_date,slot`, week)
 	if err != nil {

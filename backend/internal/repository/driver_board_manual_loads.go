@@ -21,20 +21,26 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 	if len(numbers) == 0 {
 		return result, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT id,load_id,status,coalesce(driver_id::text,''),synced_at::text,raw_payload
- FROM clustie_loads WHERE lower(btrim(load_id))=ANY($1::text[]) ORDER BY id`, numbers)
+	rows, err := tx.Query(ctx, `SELECT id,load_id,status,synced_at::text,raw_payload,`+boardAvailableSourceSQL+`
+ FROM loads l WHERE lower(btrim(load_id))=ANY($1::text[]) ORDER BY id`, numbers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	counts := map[string]int{}
+	missing := map[string]bool{}
 	sources := map[string]BoardLoad{}
 	for rows.Next() {
 		var p BoardLoad
 		var id int
 		var raw []byte
-		if err = rows.Scan(&id, &p.Number, &p.SourceStatus, &p.SourceDriver, &p.SyncedAt, &raw); err != nil {
+		var available bool
+		if err = rows.Scan(&id, &p.Number, &p.SourceStatus, &p.SyncedAt, &raw, &available); err != nil {
 			return nil, err
+		}
+		if !available {
+			missing[key(p.Number)] = true
+			continue
 		}
 		p.LoadID, p.Stops = &id, boardStops(raw)
 		counts[key(p.Number)]++
@@ -46,6 +52,7 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 	for driver, s := range states {
 		for _, saved := range s.Manual {
 			p := BoardLoad{Manual: true, PlanID: saved.PlanID, Number: saved.Number, Stops: []BoardStop{}}
+			p.SourceMissing = counts[key(saved.Number)] == 0 && missing[key(saved.Number)]
 			if counts[key(saved.Number)] == 1 {
 				p = sources[key(saved.Number)]
 				p.Manual, p.PlanID, p.Number = true, saved.PlanID, saved.Number

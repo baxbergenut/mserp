@@ -127,5 +127,12 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 	if err := results.Close(); err != nil {
 		return err
 	}
+	ids := make([]int, 0, len(records))
+	for _, record := range records {
+		ids = append(ids, record.ID)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE load_source_availability SET present=true,checked_at=now() WHERE load_id=ANY($1::int[]) AND NOT present`, ids); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
