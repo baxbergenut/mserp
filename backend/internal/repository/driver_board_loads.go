@@ -741,6 +741,17 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 				view.Next = next
 			}
 		}
+		if a.StopKey != "" {
+			if e.Status != "DISPATCHED" && e.Status != "ENROUTE" && e.Status != "RESERVED" {
+				return result, ErrBoardLoadSelection
+			}
+			status, err := applyBoardProgressStop(&s, view, a.StopKey, e.Status != "DISPATCHED")
+			if err != nil {
+				return result, err
+			}
+			e.Status, e.Destination = status, ""
+			break
+		}
 		switch e.Status {
 		case "DISPATCHED":
 			e.Status = boardProgressStatus("ENROUTE", view.Next)

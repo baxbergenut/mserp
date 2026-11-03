@@ -63,6 +63,7 @@ var routeAccessPolicies = []routeAccess{
 	{"POST", "/auth/password", "authenticated"},
 	{"GET", "/auth/session", "authenticated"},
 	{"PUT", "/auth/theme", "authenticated"},
+	{"GET", "/settings/theme-usage", "authenticated"},
 	{"POST", "/auth/birthday", "authenticated"},
 	{"GET", "/dispatcher-pay", "dispatcher_pay.read"},
 	{"GET", "/dispatcher-pay/rules", "dispatcher_pay.read"},

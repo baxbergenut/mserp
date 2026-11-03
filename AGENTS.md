@@ -1122,6 +1122,12 @@ and requires no schema migration.
 - `frontend/app/globals.css`: Tailwind import, theme tokens, and global animation/
   scrollbar styles.
 - `frontend/app/themes.css`, `app/lib/themes.ts`, and `components/ThemeProvider.tsx`:
+  Settings appearance shows aggregate theme counts/percentages for enabled accounts
+  with roles via authenticated GET /settings/theme-usage; no identities are returned.
+  Counts refresh after a personal theme save, on focus and every 30 visible seconds.
+  Theme cards sort by descending account count; ties keep the palette order.
+  Settings users sorts online first, then latest activity, and shows the unfiltered
+  online account count using the existing two-minute heartbeat definition.
   personal color themes. Settings > Appearance is available to all signed-in users;
   administrative tabs still require `access.manage`. `PUT /auth/theme` stores only
   the session user's validated choice in `app_users.theme` (migration 065), without
@@ -1450,9 +1456,16 @@ assignment lookup lists.
   ST without ZIP codes; custom addresses retain their exact text and stop identity.
   The muted PU/DEL indicator remains. Text edits detach destination source safely.
   Status labels are centered in the space left of the chevron, in sentence case without changing stored status values,
-  and match trailer text size. Gross columns are centered fixed 110px widths;
+  and match trailer text size. Status fits the widest displayed label plus its
+  chevron and padding (70px minimum), without taking spare viewport width.
+  Gross columns are centered fixed 110px widths;
   phone is fixed 124px. Current load, truck, destination, ETA and next load grow
-  to measured content, with horizontal overflow confined to the board. Truck
+  to measured content. Destination uses the 80th percentile of nonempty displayed
+  addresses, between 160px and 280px, and never shares spare viewport width.
+  Next load grows to fit its number and pickup details, aligned together on the
+  left with an 8px gap. Address outliers cannot stretch the sheet.
+  Longer values truncate, retain full hover text and remain
+  fully editable. Horizontal overflow stays confined to the board. Truck
   cells show only the unit; restriction validation still applies. Dispatcher group
   headings, column headings and all driver cells scroll horizontally together;
   only the table header stays pinned vertically. Expanded sidebar
@@ -1477,7 +1490,11 @@ assignment lookup lists.
   Status-cell labels advance pickup/delivery; only the chevron opens the neutral
   dropdown. Pickup shows delivery and sets RESERVED when Next is nonempty,
   otherwise ENROUTE; these labels also follow queue changes during reads.
-  Multi-delivery progress offers a next-stop chooser. The server records each
+  Multi-delivery progress offers every pickup and delivery in the next-stop chooser,
+  including the current and completed stops. Applying a pickup sets DISPATCHED
+  without completing the delivery being left. Applying the current stop keeps it
+  active; revisiting a completed delivery reopens that stop. Other completion
+  receipts survive. The server records each
   completed stop under its source load identity in operational load-state JSON;
   out-of-order choices cannot skip remaining deliveries, including blank addresses.
   completedStopKeys is returned for the current load and participates in revision
@@ -2490,6 +2507,10 @@ assignment lookup lists.
   calculation scripts, and targeted browser checks.
 
 ## Validation
+
+Production TLS listeners must keep HTTP/2 enabled: task and board/payroll SSE
+streams across tabs can otherwise exhaust HTTP/1.1 connections and stall sidebar
+navigation. Site configuration is installed separately; see deploy/README.md.
 
 Run from the indicated subdirectory:
 

@@ -38,3 +38,32 @@ func TestBoardDeliveryProgress(t *testing.T) {
 		t.Fatal("did not finish after every delivery", state, err)
 	}
 }
+
+func TestBoardProgressStopSelection(t *testing.T) {
+	id := 43
+	view := BoardLoads{Current: &BoardLoad{LoadID: &id, Stops: []BoardStop{
+		{Key: "pu", Type: "pickup", Location: "Pickup address"},
+		{Key: "del1", Type: "delivery", Location: "First delivery"},
+		{Key: "del2", Type: "delivery"},
+	}}, StopKey: "del2", Next: []BoardLoad{{PlanID: "next"}}}
+	prefix := boardCompletionKey(*view.Current) + "/"
+	state := boardLoadState{Current: view.Current, StopKey: view.StopKey, CompletedStops: map[string]bool{prefix + "del1": true}}
+	if _, err := applyBoardProgressStop(&state, view, "unknown", true); !errors.Is(err, ErrBoardLoadSelection) || state.StopKey != "del2" || len(state.CompletedStops) != 1 {
+		t.Fatal("invalid selection changed progress", state, err)
+	}
+	if status, err := applyBoardProgressStop(&state, view, "pu", true); err != nil || status != "DISPATCHED" || state.StopKey != "pu" || !state.DestinationSource || len(state.CompletedStops) != 1 {
+		t.Fatal("pickup did not restore Dispatched without completing delivery", state, status, err)
+	}
+	view.StopKey = "pu"
+	if status, err := applyBoardProgressStop(&state, view, "del1", false); err != nil || status != "RESERVED" || len(state.CompletedStops) != 0 {
+		t.Fatal("completed delivery could not be revisited", state, status, err)
+	}
+	view.StopKey = "del1"
+	if _, err := applyBoardProgressStop(&state, view, "del1", true); err != nil || len(state.CompletedStops) != 0 {
+		t.Fatal("selecting current destination completed it", state, err)
+	}
+	view.Next = nil
+	if status, err := applyBoardProgressStop(&state, view, "del2", true); err != nil || status != "ENROUTE" || !state.CompletedStops[prefix+"del1"] || state.DestinationSource {
+		t.Fatal("delivery progression lost receipt or invented address", state, status, err)
+	}
+}

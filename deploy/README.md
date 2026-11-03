@@ -137,6 +137,13 @@ JSON responses (minimum 1 KB), with `Vary: Accept-Encoding`. Site configuration
 changes are installed separately from release archives; back up the active
 configuration, run `nginx -t`, and reload only after validation.
 
+Keep HTTP/2 enabled on every TLS listener (`listen ... ssl http2` on Nginx
+1.24). Each browser tab can hold task and board/payroll event streams open;
+HTTP/1.1's per-origin connection limit can stall sidebar navigation with three
+board tabs. HTTP/2 multiplexes those streams and page requests. Verify `h2`
+negotiation after installing the site configuration; updating the API release
+alone does not install this change.
+
 Database migrations should remain backward-compatible with the previous
 application release because an application rollback does not automatically
 reverse a successful database migration. Database backups are intentionally

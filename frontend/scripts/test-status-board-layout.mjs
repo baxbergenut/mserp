@@ -47,6 +47,18 @@ async function setup(page) {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await setup(page);
+  // Typical addresses size the column; a single long address cannot stretch it.
+  entries.slice(0, 10).forEach(entry => { entry.destination = 'Indianapolis, IN'; });
+  await page.reload();
+  const destinationColumnWidth = () => page.getByLabel('Scroll Driver 0 · Destination', { exact: true }).evaluate(el => el.closest('td').getBoundingClientRect().width);
+  await expect.poll(destinationColumnWidth).toBeGreaterThanOrEqual(160);
+  const typicalDestinationWidth = await destinationColumnWidth();
+  entries[0].destination = '12345 Exceptionally Long Distribution Center Boulevard, Indianapolis, Indiana 46201';
+  await page.reload();
+  await expect.poll(destinationColumnWidth).toBe(typicalDestinationWidth);
+  expect(await destinationColumnWidth()).toBeLessThanOrEqual(280);
+  entries.slice(0, 10).forEach(entry => { entry.destination = ''; });
+  await page.reload();
   expect((await page.locator('thead th').allTextContents()).slice(-2)).toEqual(['Home time', 'Driver address']);
   await expect(page.getByLabel('Scroll Driver 0 · Driver address', { exact: true })).toHaveText('Louisville, KY');
   await expect(page.getByLabel('Scroll Driver 1 · Driver address', { exact: true })).toHaveText('—');
@@ -65,6 +77,7 @@ try {
     if (["HOME","HOME (YARD)","VACATION"].includes(value)) { if(value!=="VACATION"){await page.getByLabel("Home start date",{exact:true}).fill("2026-10-23");await page.getByLabel("Back date",{exact:true}).fill("2026-10-27");} await page.getByRole("button",{name:"Apply dates",exact:true}).click(); }
     if (["SHOP","STOP","ACCIDENT"].includes(value)) { await page.getByLabel("Truck status reason",{exact:true}).fill("Reported equipment problem"); await page.getByRole("button",{name:"Apply status",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
+    await expect.poll(() => page.getByLabel('Scroll Driver 0 · Advance load', { exact: true }).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     if (['HOME', 'HOME (YARD)', 'VACATION'].includes(value)) {
       await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Louisville, KY');
       expect(entries[0].destination).toBe(''); // Displaying home never writes the dispatch destination.

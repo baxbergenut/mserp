@@ -347,6 +347,24 @@ func TestAccessDatabase(t *testing.T) {
 			if themed.User.Theme != "default" {
 				t.Fatal("theme changed another user's preference")
 			}
+			// All signed-in users can see aggregates without access to identities.
+			status(call("GET", "/settings/theme-usage", nil, nil, ""), 401)
+			usageResponse := call("GET", "/settings/theme-usage", nil, viewerCookie, "")
+			status(usageResponse, 200)
+			var usage repository.ThemeUsage
+			if err := json.Unmarshal(usageResponse.Body.Bytes(), &usage); err != nil {
+				t.Fatal(err)
+			}
+			if usage.Counts["solarized-light"] != 1 || usage.TotalUsers < 2 || strings.Contains(usageResponse.Body.String(), "email") || strings.Contains(usageResponse.Body.String(), "username") {
+				t.Fatalf("invalid aggregate theme usage: %s", usageResponse.Body.String())
+			}
+			exec(`INSERT INTO app_users(username,password_hash,role_id,active,theme) VALUES('Disabled theme fixture',$1,$2,false,'solarized-light')`, string(hash), viewerRole)
+			withoutDisabled := call("GET", "/settings/theme-usage", nil, viewerCookie, "")
+			status(withoutDisabled, 200)
+			if withoutDisabled.Body.String() != usageResponse.Body.String() {
+				t.Fatal("disabled account counted in theme usage")
+			}
+			exec(`DELETE FROM app_users WHERE username='Disabled theme fixture'`)
 			status(call("GET", "/loads", nil, viewerCookie, ""), 204)
 			status(call("GET", "/settings/access", nil, viewerCookie, ""), 403)
 			status(call("POST", "/jobs/sync-loads", nil, viewerCookie, viewerSession.CSRFToken), 403)

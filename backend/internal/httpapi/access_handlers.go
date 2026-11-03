@@ -35,6 +35,16 @@ func registerAccessRoutes(r chi.Router, h *authHandler, repo *repository.AuthRep
 		h.logger.Error("access administration failed", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "access settings could not be saved")
 	}
+	r.Get("/settings/theme-usage", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		usage, err := repo.ThemeUsage(r.Context())
+		if err != nil {
+			h.logger.Error("read theme usage", "error", err)
+			writeAPIError(w, http.StatusInternalServerError, "could not load theme usage")
+			return
+		}
+		writeJSON(w, http.StatusOK, usage)
+	})
 	r.Get("/settings/access", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		data, err := repo.AccessData(r.Context())

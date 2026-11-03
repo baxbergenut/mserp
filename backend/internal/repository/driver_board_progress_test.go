@@ -179,6 +179,15 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	if view().SourceDestination != "Orlando, FL" || e.CurrentLoad != "PROGRESS-B" {
 		t.Fatal("chosen delivery not retained", view(), e)
 	}
+	pickup := v.Current.Stops[0].Key
+	backToPickup := act(BoardLoadAction{Action: "advance", StopKey: pickup})
+	if e.Status != "DISPATCHED" || view().SourceDestination != "Boston, MA" || len(view().CompletedStopKeys) != 0 {
+		t.Fatal("pickup selection did not restore destination and Dispatched", view(), e)
+	}
+	undo(backToPickup.Entry.UndoID)
+	if view().StopKey != orlando || e.Status != "ENROUTE" {
+		t.Fatal("pickup selection undo did not restore delivery", view(), e)
+	}
 	e.Destination = "123 Custom Avenue, Orlando, FL"
 	rows, err = repo.Save(ctx, []DriverBoardEntry{e}, actor)
 	if err != nil {

@@ -60,24 +60,44 @@ try {
   await expect(field('Destination')).toHaveValue('4500 Very Long Custom Distribution Center Boulevard, Atlanta, GA 30301');
   expect((await read()).destinationSource).toBe(false);
   const destinationWidth = await field('Destination').evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth }));
-  expect(destinationWidth.scroll).toBeLessThanOrEqual(destinationWidth.width + 1);
+  expect(destinationWidth.width).toBeLessThanOrEqual(280);
+  expect(destinationWidth.scroll).toBeGreaterThan(destinationWidth.width);
+  await expect(field('Destination')).toHaveAttribute('title', '4500 Very Long Custom Distribution Center Boulevard, Atlanta, GA 30301');
+  expect(await field('Destination').evaluate(el => el.closest('td').getBoundingClientRect().width)).toBeLessThanOrEqual(280);
   await field('Destination').fill(''); await saved();
   await expect(field('Destination')).toHaveValue('Atlanta, GA');
   await field('Advance load').click();
   const dialog = page.getByRole('dialog', { name: 'Next stop · Avery Bennett' });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('radio')).toHaveCount(3);
+  await expect(dialog.getByText('Pickup · Current destination', { exact: true })).toBeVisible();
   await dialog.getByLabel('Fort Worth, TX', { exact: true }).check();
-  await dialog.getByRole('button', { name: 'Go to next stop', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply destination', exact: true }).click();
   await expect(dialog).toHaveCount(0); await saved();
   await expect(field('Destination')).toHaveValue('Fort Worth, TX');
   await expect(field('Status')).toHaveValue('ENROUTE');
+  await field('Advance load').click();
+  await expect(dialog.getByRole('radio')).toHaveCount(3);
+  await dialog.getByLabel('Atlanta, GA', { exact: true }).check();
+  await dialog.getByRole('button', { name: 'Apply destination', exact: true }).click();
+  await saved();
+  await expect(field('Status')).toHaveValue('DISPATCHED');
+  await expect(field('Destination')).toHaveValue('Atlanta, GA');
+  expect((await read()).completedStopKeys ?? []).toEqual([]);
+  await page.reload();
+  await expect(field('Status')).toHaveValue('DISPATCHED');
+  await expect(field('Destination')).toHaveValue('Atlanta, GA');
+  await field('Advance load').click();
+  await dialog.getByLabel('Fort Worth, TX', { exact: true }).check();
+  await dialog.getByRole('button', { name: 'Apply destination', exact: true }).click();
+  await saved();
   await field('Advance load').click();
   await expect(dialog.getByLabel('Dallas, TX', { exact: true })).toBeChecked();
   // Opening/cancelling does not complete any stop.
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect((await read()).completedStopKeys ?? []).toEqual([]);
   await field('Advance load').click();
-  await dialog.getByRole('button', { name: 'Go to next stop', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply destination', exact: true }).click();
   await saved(); await expect(field('Destination')).toHaveValue('Dallas, TX');
   await expect(field('Current load')).toHaveValue(number);
   expect((await read()).completedStopKeys).toHaveLength(1);
@@ -105,9 +125,15 @@ try {
   const wide = await widths();
   await page.setViewportSize({ width: 1280, height: 800 });
   expect(await widths()).toEqual(wide);
-  for (const name of ['Phone', 'Current load', 'Destination', 'ETA', 'Next load']) {
+  for (const name of ['Phone', 'Current load', 'Destination', 'ETA', 'Next load', 'Next pickup time']) {
     expect(await field(name).evaluate(el => el.scrollWidth <= el.clientWidth + 1), `${name} is clipped`).toBe(true);
   }
+  const nextSpacing = await row.evaluate(el => { const number = el.querySelector('button[aria-label$=" · Next load"]'); const pickup = el.querySelector('button[aria-label$=" · Next pickup time"]'); return pickup.getBoundingClientRect().left - number.getBoundingClientRect().right; });
+  expect(nextSpacing).toBe(8);
+  await expect(field('Next load')).toHaveAttribute('title', /NEXT-LONG-LOAD-123456789/);
+  await page.setViewportSize({ width: 3840, height: 1000 });
+  expect(await field('Next load').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  expect(await field('Destination').evaluate(el => el.closest('td').getBoundingClientRect().width)).toBeLessThanOrEqual(280);
   expect(await page.locator('aside').first().evaluate(el => el.getBoundingClientRect().width)).toBe(208);
   expect(errors).toEqual([]);
   // Fill two more review rows using the normal versioned save API.

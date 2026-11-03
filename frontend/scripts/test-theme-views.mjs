@@ -21,6 +21,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   let user = 'viewer', failSave = false, accessReads = 0;
   const preferences = { viewer: 'default', teammate: 'default', admin: 'default' };
+  const users = [
+    { id: 'old', username: 'Older activity', active: true, lastActivityAt: '2026-10-01T12:00:00Z' },
+    { id: 'never', username: 'Never logged in', active: true },
+    { id: 'recent', username: 'Recent activity', active: true, lastActivityAt: '2026-11-03T12:00:00Z' },
+    { id: 'online', username: 'Online user', active: true, online: true, lastActivityAt: '2026-11-03T11:00:00Z' },
+  ];
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
@@ -30,9 +36,14 @@ try {
       preferences[user] = route.request().postDataJSON().theme;
       return route.fulfill({ status: 204 });
     }
+    if (path === '/settings/theme-usage') {
+      const counts = {};
+      for (const theme of Object.values(preferences)) counts[theme] = (counts[theme] ?? 0) + 1;
+      return route.fulfill({ json: { totalUsers: 3, counts } });
+    }
     if (path === '/settings/access') {
       accessReads++;
-      return route.fulfill({ json: { users: [], roles: [], permissions: [], expenseCategories: [] } });
+      return route.fulfill({ json: { users, roles: [], permissions: [], expenseCategories: [] } });
     }
     await route.fulfill({ json: [] });
   });
@@ -42,6 +53,9 @@ try {
   await expect(page.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('tab', { name: 'Users', exact: true })).toHaveCount(0);
   expect(accessReads).toBe(0);
+  await expect(page.getByRole('button', { name: /^Clustie \(default\)/ })).toContainText('3 users · 100%');
+  await expect(page.getByRole('button', { name: /^Clustie \(default\)/ })).toContainText('Most popular');
+  await expect(page.getByRole('button', { name: /^Solarized Light/ })).toContainText('0 users · 0%');
   const choices = [
     ['Solarized Light', 'solarized-light', 'rgb(253, 246, 227)', 'light'],
     ['Solarized Dark', 'solarized-dark', 'rgb(0, 43, 54)', 'dark'],
@@ -56,6 +70,7 @@ try {
     await expect(button).toBeEnabled();
     await expect(button).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('html')).toHaveAttribute('data-theme', id);
+    await expect(button).toContainText('1 user · 33%');
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(background);
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(scheme);
     await page.reload();
@@ -77,6 +92,12 @@ try {
   user = 'admin'; preferences.admin = 'default-light';
   await page.goto(`${base}/settings`);
   await page.getByRole('tab', { name: 'Users', exact: true }).click();
+  await expect(page.getByText('1 user online', { exact: true })).toBeVisible();
+  await expect(page.locator('tbody tr td:first-child > p:first-child')).toHaveText(['Online user', 'Recent activity', 'Older activity', 'Never logged in']);
+  await page.getByPlaceholder('Search names or emails…').fill('Older');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByText('1 user online', { exact: true })).toBeVisible();
+  await page.getByPlaceholder('Search names or emails…').fill('');
   // A browser that last visited the removed Status colors tab must recover.
   await page.evaluate(() => {
     for (const key of Object.keys(sessionStorage)) if (key.endsWith(':view:access:tab')) sessionStorage.setItem(key, JSON.stringify('status-colors'));
@@ -96,6 +117,15 @@ try {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: /^Clustie \(default\)/ }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'default');
+  await expect(page.getByRole('button', { name: /^Clustie \(default\)/ })).toBeEnabled();
+  preferences.viewer = 'default'; preferences.teammate = 'dark-modern'; preferences.admin = 'dark-modern';
+  await page.reload();
+  const rankedThemes = page.getByRole('group', { name: 'Color theme', exact: true }).getByRole('button');
+  await expect(rankedThemes.nth(0)).toContainText('Dark Modern');
+  await expect(rankedThemes.nth(0)).toContainText('2 users · 67%');
+  await expect(rankedThemes.nth(1)).toContainText('Clustie (default)');
+  await expect(rankedThemes.nth(2)).toContainText('Solarized Light');
+  await expect(rankedThemes.nth(3)).toContainText('Solarized Dark');
   expect(errors).toEqual([]);
   console.log('Theme views passed: all palettes, persistence, per-user isolation, save failure, non-admin settings, logout reset, dialog portals and narrow layout.');
 } finally {

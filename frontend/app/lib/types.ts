@@ -1084,6 +1084,8 @@ export interface AccessRole {
  permanent?: boolean;
   id: string; name: string; permissions: string[]; expenseCategoryAccess: ExpenseCategoryAccess[]; system: boolean; version: number;
 }
+export interface ThemeUsage { totalUsers: number; counts: Record<string, number>; }
+
 export interface AccessData {
   users: ManagedUser[]; roles: AccessRole[]; permissions: PermissionDefinition[];
   expenseCategories: { id: string; name: string; active: boolean }[];

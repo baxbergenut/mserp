@@ -9,11 +9,11 @@ export function NextStopDialog({ name, status, loads, onApply, onClose }: {
   name: string; status: string; loads: BoardLoads;
   onApply: (stopKey: string) => Promise<unknown>; onClose: () => void;
 }) {
-  const stops = nextDeliveryStops(status, loads);
-  const [selected, setSelected] = useState(stops[0]?.key ?? "");
+  const stops = loads.current?.stops ?? [];
+  const [selected, setSelected] = useState(nextDeliveryStops(status, loads)[0]?.key ?? loads.stopKey);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  return <Modal title={`Next stop · ${name}`} isSaving={busy} submitLabel="Go to next stop" submitDisabled={!selected}
+  return <Modal title={`Next stop · ${name}`} isSaving={busy} submitLabel="Apply destination" submitDisabled={!selected}
     onClose={onClose} onSubmit={async event => {
       event.preventDefault(); if (busy || !selected) return;
       setBusy(true); setError("");
@@ -22,10 +22,10 @@ export function NextStopDialog({ name, status, loads, onApply, onClose }: {
       finally { setBusy(false); }
     }}>
     <fieldset className="space-y-2" disabled={busy}>
-      <legend className="mb-3 text-sm text-zinc-400">Choose the next delivery for {loads.current?.number}.</legend>
+      <legend className="mb-3 text-sm text-zinc-400">Choose the current destination for {loads.current?.number}.</legend>
       {stops.map(stop => <label key={stop.key} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-700 p-3 hover:bg-zinc-800">
-        <input type="radio" name="next-stop" value={stop.key} checked={selected === stop.key} onChange={() => setSelected(stop.key)} className="mt-0.5" />
-        <span className="min-w-0 text-sm text-zinc-200">{stop.location || "Delivery address unavailable"}{stop.schedule?.label && <span className="mt-1 block text-xs text-zinc-400">{stop.schedule.label}</span>}</span>
+        <input type="radio" aria-label={stop.location || "Address unavailable"} name="next-stop" value={stop.key} checked={selected === stop.key} onChange={() => setSelected(stop.key)} className="mt-0.5" />
+        <span className="min-w-0 text-sm text-zinc-200"><span className="mb-1 block text-xs text-zinc-400">{stop.type.toLowerCase() === "pickup" ? "Pickup" : "Delivery"}{stop.key === loads.stopKey ? " · Current destination" : loads.completedStopKeys?.includes(stop.key) ? " · Completed" : ""}</span>{stop.location || "Address unavailable"}{stop.schedule?.label && <span className="mt-1 block text-xs text-zinc-400">{stop.schedule.label}</span>}</span>
       </label>)}
     </fieldset>
     {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}

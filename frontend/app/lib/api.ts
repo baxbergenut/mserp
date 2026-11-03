@@ -391,6 +391,7 @@ export async function login(email: string, password: string): Promise<AuthSessio
 
 export const changePassword = (currentPassword: string, newPassword: string) => apiRequest<void>("/auth/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
 export const fetchAccess = () => apiRequest<AccessData>("/settings/access");
+export const fetchThemeUsage = () => apiRequest<import("./types").ThemeUsage>("/settings/theme-usage");
 export const saveTheme = (theme: string) => apiRequest<void>("/auth/theme", { method: "PUT", body: JSON.stringify({ theme }) });
 export const claimBirthday = () => apiRequest<{ celebrate: boolean; name?: string; countdownAt?: string; serverNow: string }>("/auth/birthday", { method: "POST" });
 export const fetchSystemTaskAssignments = () => apiRequest<SystemTaskAssignment[]>("/settings/system-tasks");
