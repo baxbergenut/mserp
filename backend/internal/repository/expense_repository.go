@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -382,6 +383,17 @@ func (r *ExpenseRepository) loadWorkOrderDescriptions(ctx context.Context, value
 }
 
 func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInput) (Expense, error) {
+	if input.DriverID == nil && input.TruckID == nil && input.OwnerID == nil && input.ApplicantID == nil &&
+		input.Maintenance == nil && input.CoveredBy != nil && strings.EqualFold(strings.TrimSpace(*input.CoveredBy), "Company") &&
+		(input.PaymentType == nil || !strings.EqualFold(strings.TrimSpace(*input.PaymentType), "Reimburse")) {
+		id, err := r.createCompanyExpense(ctx, input)
+		if err != nil {
+			return Expense{}, err
+		}
+		if id != "" {
+			return r.GetExpense(ctx, id)
+		}
+	}
 	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return Expense{}, err
@@ -401,6 +413,36 @@ func (r *ExpenseRepository) CreateExpense(ctx context.Context, input ExpenseInpu
 		return Expense{}, err
 	}
 	return r.GetExpense(ctx, id)
+}
+
+// The database checks the stored routing and rejects maintenance or linked
+// expenses. Only that explicit rejection can retry through the normal writer.
+func (r *ExpenseRepository) createCompanyExpense(ctx context.Context, input ExpenseInput) (string, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	var enabled bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+ WHERE t.tgrelid='expenses'::regclass AND t.tgname='zz_payroll_company_expense'
+ AND t.tgenabled IN ('O','A') AND t.tgtype=7 AND p.proname='guard_payroll_company_expense')`).Scan(&enabled)
+	if err != nil || !enabled {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('mserp.payroll.company_expense','on',true)`); err != nil {
+		return "", err
+	}
+	id, err := insertExpense(ctx, tx, input)
+	if err != nil {
+		var database *pgconn.PgError
+		if errors.As(err, &database) && database.Code == "23514" && database.ConstraintName == "payroll_company_expense" {
+			return "", nil
+		}
+		return "", err
+	}
+	return id, tx.Commit(ctx)
 }
 
 func (r *ExpenseRepository) CreateExpenses(ctx context.Context, inputs []ExpenseInput) ([]Expense, error) {

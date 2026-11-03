@@ -17,20 +17,26 @@ import (
 
 func withoutUnrelatedPayrollMigration(t *testing.T, source string) string {
 	t.Helper()
-	b, e := os.ReadFile("../../sql/192_payroll_unrelated_sources.sql")
-	if e != nil {
-		t.Fatal(e)
+	for _, name := range []string{"192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql"} {
+		body, err := os.ReadFile("../../sql/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source = strings.Replace(source, strings.ReplaceAll(string(body), "\r\n", "\n"), "", 1)
 	}
-	return strings.Replace(source, strings.ReplaceAll(string(b), "\r\n", "\n"), "", 1)
+	return source
 }
+
 func applyUnrelatedPayrollMigration(t *testing.T, ctx context.Context, c *pgx.Conn) {
 	t.Helper()
-	b, e := os.ReadFile("../../sql/192_payroll_unrelated_sources.sql")
-	if e != nil {
-		t.Fatal(e)
-	}
-	if _, e = c.Exec(ctx, string(b)); e != nil {
-		t.Fatal(e)
+	for _, name := range []string{"192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql"} {
+		body, err := os.ReadFile("../../sql/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c.Exec(ctx, string(body)); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
