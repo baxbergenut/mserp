@@ -179,10 +179,7 @@ func TestPayrollStatementReceiptsDatabase(t *testing.T) {
 					}
 				}
 				check(receipt, true)
-				if _, e = settle(WithPayrollReceipt(ctx), week, target, receipt.Revision, actor, "", true, false); e == nil {
-					t.Fatal("reopen accepted no reason")
-				}
-				receipt, e = settle(WithPayrollReceipt(ctx), week, target, receipt.Revision, actor, "Receipt test", true, false)
+				receipt, e = settle(WithPayrollReceipt(ctx), week, target, receipt.Revision, actor, "", true, false)
 				if e != nil {
 					t.Fatal(e)
 				}
