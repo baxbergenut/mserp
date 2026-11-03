@@ -18,7 +18,7 @@ import (
 // Bump whenever calculation/display semantics or the persisted shape changes.
 // These versions are independent of both canonical edit versions and job leases.
 const payrollCalculatorVersion = "payroll-182-v4"
-const payrollProjectionSchemaVersion = 7
+const payrollProjectionSchemaVersion = 8
 
 var ErrPayrollProjectionCoverage = errors.New("payroll projection source capture is incomplete")
 var ErrPayrollProjectionSuperseded = errors.New("payroll projection inputs or lease changed")

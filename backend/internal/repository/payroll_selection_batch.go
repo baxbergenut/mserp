@@ -83,7 +83,8 @@ func payrollSelectionBatchContext(ctx context.Context, tx pgx.Tx, weeks []string
 // Resolve each dated source week once, then attach it to the periods that need
 // it. Legacy overrides can add remote source weeks, but must never merge the
 // financial destination graphs of distinct report periods.
-const payrollSelectionPeriodsSQL = `WITH periods AS MATERIALIZED (SELECT unnest($1::date[]) week),
+const payrollSelectionPeriodsSQL = `WITH company_label AS MATERIALIZED (` + payrollCompanyOwnershipLabelSQL + `),
+ periods AS MATERIALIZED (SELECT unnest($1::date[]) week),
  legacy_weeks AS MATERIALIZED (
  SELECT w.week_start week FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)
@@ -128,4 +129,5 @@ const payrollSelectionPeriodsSQL = `WITH periods AS MATERIALIZED (SELECT unnest(
  UNION SELECT p.week,e.a,e.b FROM periods p CROSS JOIN shared_edges e
  UNION SELECT period,CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM relevant_sources
  UNION SELECT period,'truck:'||truck_id,'owner:'||owner_id FROM relevant_sources
- ) SELECT array_agg(period ORDER BY period)::text[],a COLLATE "C",b COLLATE "C" FROM edges WHERE a IS NOT NULL AND b IS NOT NULL GROUP BY a COLLATE "C",b COLLATE "C"`
+ ) SELECT array_agg(period ORDER BY period)::text[],a COLLATE "C",b COLLATE "C" FROM edges WHERE a IS NOT NULL AND b IS NOT NULL` +
+	payrollSkipCompanyLabelSQL + ` GROUP BY a COLLATE "C",b COLLATE "C"`

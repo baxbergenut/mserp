@@ -211,6 +211,19 @@ func payrollContextWeek(ctx context.Context) string {
 	return w
 }
 
+// The built-in company owner describes employment. Without an owner ledger it
+// cannot transfer a balance between trucks. Preserve the original graph when
+// any legacy owner ledger or saved investor statement references the company.
+const payrollCompanyOwnershipLabelSQL = `SELECT 'owner:'||i.id AS key FROM investors i
+ WHERE i.id='` + CompanyOwnerID + `' AND i.is_company
+ AND NOT EXISTS(SELECT 1 FROM expenses e WHERE e.owner_id=i.id)
+ AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms t WHERE t.owner_id=i.id)
+ AND NOT EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.owner_id=i.id)
+ AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=i.id)`
+
+const payrollSkipCompanyLabelSQL = ` AND a IS DISTINCT FROM (SELECT key FROM company_label)
+ AND b IS DISTINCT FROM (SELECT key FROM company_label)`
+
 const payrollSelectionSharedEdgesSQL = `SELECT 'owner:'||id,'driver:'||driver_id FROM investors WHERE driver_id IS NOT NULL
  UNION SELECT 'truck:'||id,'owner:'||owner_id FROM trucks WHERE owner_id IS NOT NULL
  UNION SELECT 'driver:'||charge_driver_id,'truck:'||truck_id FROM expenses WHERE charge_driver_id IS NOT NULL AND truck_id IS NOT NULL
@@ -228,7 +241,7 @@ func payrollSelectionEdgesSQL(fuelSQL string) string {
 }
 
 func payrollSelectionEdgesWithSharedSQL(fuelSQL, sharedSQL string) string {
-	return `WITH cost_weeks AS MATERIALIZED (
+	return `WITH company_label AS MATERIALIZED (` + payrollCompanyOwnershipLabelSQL + `), cost_weeks AS MATERIALIZED (
  SELECT nullif($1,'')::date week
  UNION SELECT w.week_start FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)
@@ -264,5 +277,5 @@ func payrollSelectionEdgesWithSharedSQL(fuelSQL, sharedSQL string) string {
  UNION SELECT a,b FROM fuel_edges
  UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM relevant_sources
  UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM relevant_sources
- ) SELECT a,b FROM edges WHERE a IS NOT NULL AND b IS NOT NULL`
+ ) SELECT a,b FROM edges WHERE a IS NOT NULL AND b IS NOT NULL` + payrollSkipCompanyLabelSQL
 }
