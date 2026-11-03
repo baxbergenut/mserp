@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/db"
 )
 
 var ErrGrossBoardConflict = errors.New("another dispatcher changed one of these days; reload the board before saving again")
@@ -367,7 +368,9 @@ func (r *GrossBoardRepository) Save(ctx context.Context, entries []GrossBoardEnt
 }
 
 func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossBoardEntry, actors ...string) ([]GrossBoardEntry, error) {
+	finishLockWait := db.Phase(ctx, "gross_source_lock_wait")
 	tx, err := beginPayrollMutation(ctx, r.pool)
+	finishLockWait()
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +386,10 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return nil, err
 	}
 	// Preserve the existing fleet-status then financial lock order.
-	if err = lockTruckAccounting(ctx, tx); err != nil {
+	finishLockWait = db.Phase(ctx, "gross_financial_lock_wait")
+	err = lockTruckAccounting(ctx, tx)
+	finishLockWait()
+	if err != nil {
 		return nil, err
 	}
 	allUnchanged := len(entries) > 0

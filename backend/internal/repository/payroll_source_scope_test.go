@@ -141,8 +141,24 @@ func TestPayrollResourceSourceScopeSaveDatabase(t *testing.T) {
 				input.RequestID = fmt.Sprintf("18200000-0000-0000-0000-%012d", sequence)
 				input.ExpectedStatementRevision = page.Drivers[0].StatementRevision
 				input.Notes = fmt.Sprintf("Independent source save %d", pass)
-				if _, err = pool.Exec(ctx, `UPDATE loads SET total_pay=total_pay+1 WHERE id=18202`); err != nil {
+				if _, err = NewGrossBoardRepository(pool).SaveChanges(WithPayrollPublication(ctx), []GrossBoardEntry{{DriverID: "18200000-0000-0000-0000-000000009701", Date: "2026-10-05", DriverRate: fmt.Sprint(901 + sequence), Fields: []string{"driverRate"}}}, actor); err != nil {
 					t.Fatal(err)
+				}
+				visible, err := repo.PreparedPayroll(ctx, kind, week, PayPageQuery{}, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, row := range visible.Drivers {
+					if row.ID == id && row.PreparationState != "ready" {
+						t.Fatal("unrelated statement disabled by board save", kind, row.PreparationState)
+					}
+					if row.ID == "18200000-0000-0000-0000-000000009701" && row.PreparationState == "ready" {
+						t.Fatal("related statement enabled before preparation")
+					}
+				}
+				detail, err := repo.PreparedPayroll(ctx, kind, week, PayPageQuery{ID: id}, true)
+				if err != nil || detail.Preparation.State != "ready" {
+					t.Fatal("unrelated detail blocked", kind, err)
 				}
 				var saved DriverPayEdits
 				if kind == "driver" {
@@ -157,7 +173,7 @@ func TestPayrollResourceSourceScopeSaveDatabase(t *testing.T) {
 					t.Fatal("missing committed version")
 				}
 				var pending bool
-				if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_projection_changes WHERE table_name='loads' AND dispatched_at IS NULL)`).Scan(&pending); err != nil || !pending {
+				if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_projection_changes WHERE table_name='gross_board_entries' AND dispatched_at IS NULL)`).Scan(&pending); err != nil || !pending {
 					t.Fatal("command acknowledged unrelated source work", err)
 				}
 				for _, date := range []string{"2026-10-05", "2026-10-12"} {

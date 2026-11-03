@@ -25,7 +25,33 @@ The user removed the 300 ms routine-action latency requirement and requested tha
 optimization conclude with practical measured results. The original latency targets
 remain useful comparisons, not claims that this implementation meets them. Financial
 correctness, complete atomic publication, stale-input rejection and recovery remain
-mandatory. No automatic financial retry against a newer revision is allowed.
+mandatory for payroll commands. Gross Board's explicitly requested asynchronous
+source boundary is described below. No automatic financial retry against a newer revision is allowed.
+
+## Gross Board asynchronous saves and statement readiness
+
+Interactive Gross Board saves acknowledge the committed canonical edit and its
+durable source capture, then let the existing payroll worker coalesce and publish
+affected statements. A process restart or calculation failure cannot lose the board
+edit. Source revisions invalidate stale prepared values before the response; stale
+financial commands remain rejected. Internal callers can still opt into atomic
+publication through SaveEntries. Split/source review and frozen snapshot semantics
+are unchanged. There is no new version history or database migration.
+
+Prepared read responses include `preparationState` on each statement. In resource
+mode, a complete proof of every intervening captured source revision and its old/new
+routing lets an unrelated dependency component remain ready. Exact resource epochs,
+calendar, calculator/schema and coverage checks still apply. Unknown/missing capture
+blocks readiness; a stale weekly header alone does not disable unrelated rows.
+Commands independently repeat their source/component proof under locks. Summary
+totals remain the last complete values while the weekly header is updating.
+
+TestGrossBoardAsyncSaveDatabase covers both protocols and fresh/incremental schemas:
+immediate committed reads/notifications without calculations, stale finalization,
+durable worker failure/restart recovery, exact driver/investor parity and frozen
+snapshots. TestPayrollResourceSourceScopeSaveDatabase covers independent edit and
+finalization during pending Gross Board work; the concurrent-finalization browser
+suite verifies only affected rows are disabled on both payroll pages.
 
 The user removed both whole-week buttons and the small finalized-count row from
 both pages. Individual finalization/reopening and the top Finalization metric remain.
@@ -76,8 +102,9 @@ retry signal before taking the financial gate. The entire attempted transaction
 rolls back; the same original versions are retried once with source -> fleet ->
 driver lock ordering. This never retries a stale-edit conflict. The history row
 guard prevents financial-track changes through the operational marker, and missing
-guards fail catalog coverage. Gross Board, expenses and payroll commands retain
-synchronous atomic publication. Install the matching deploy helper before 188.
+guards fail catalog coverage. Expenses and payroll commands retain synchronous
+atomic publication; Gross Board uses the asynchronous boundary above. Install the
+matching deploy helper before 188.
 
 ## November 1 save regression and calendar correction
 

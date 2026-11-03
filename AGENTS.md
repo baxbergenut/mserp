@@ -3488,8 +3488,14 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   into the latest row under the financial lock. Ordinary saves do not require
   the caller's row version. Missing fields supports older full-row clients.
   Existing current-row counters order live snapshots; no version history is added.
-  Identical field retries skip writes/publication. Financial saves still publish
-  payroll atomically before acknowledgement.
+  Identical field retries skip writes/publication. Interactive SaveChanges commits
+  canonical rows, source revisions and durable payroll work before acknowledgement;
+  the worker publishes payroll separately. Internal SaveEntries can still request
+  synchronous publication. Do not acknowledge before the board transaction commits.
+  Prepared payroll exposes per-statement preparationState. Complete captured source
+  impact and exact dependency checks keep unrelated resource-mode statements editable
+  and finalizable while affected statements update. Unknown impact fails closed;
+  stale financial commands still revalidate under the existing source/resource locks.
 - Autosave waits for 300 ms without edits and flushes on requested navigation.
   New typing during an in-flight request remains queued as field deltas. Dedicated
   user/week/tab-scoped session storage retains pending drafts and only their edit
@@ -3504,4 +3510,6 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   and historical duplicate/transfer handling are unchanged.
 - Checks: test-gross-board-reliability.mjs, test-gross-board-daily-loads.mjs,
   test-investors-e2e.mjs --gross-live-only; TestGrossBoardDatabase,
-  TestGrossBoardPatchPublicationDatabase, TestFleetStatusDatabase, TestLoadTripsDatabase.
+  TestGrossBoardPatchPublicationDatabase, TestGrossBoardAsyncSaveDatabase,
+  TestPayrollResourceSourceScopeSaveDatabase, TestFleetStatusDatabase, TestLoadTripsDatabase.
+  The live Gross Board E2E runs with prepared payroll and its worker enabled.

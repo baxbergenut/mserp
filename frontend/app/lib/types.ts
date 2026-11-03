@@ -1356,6 +1356,7 @@ export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
+	preparationState?: "ready" | "preparing" | "updating" | "failed";
 	statementRevision?: string;
   brokerReimbursements?: { expenseId: string; loadNumber: string; expenseType: string; expenseDate: string; amount: string }[];
   displayEmploymentTypes?: EmploymentType[];

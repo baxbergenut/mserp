@@ -20,7 +20,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     const errors = [], requests = [], release = new Map();
     page.on('pageerror', e => errors.push(e.message));
-    let blockFinalization = false;
+    let blockFinalization = false, preparationState = 'ready';
+    let savedComment = '';
     const rows = ['Alpha', 'Bravo', 'Charlie'].map((name, i) => ({
       id: `18200000-0000-4000-8000-00000000000${i+1}`, fullName: name, truckUnit: String(i+101),
       ...(kind === 'investor' ? { investorId: `owner-${i}` } : {}),
@@ -28,11 +29,17 @@ try {
       statementRevision: `18200000-0000-4000-8000-00000000100${i+1}`,
       edits: { driverId: `18200000-0000-4000-8000-00000000000${i+1}`, weekStart:week, version:1, notes:'', comments:{}, adjustments:[], fuelOverride:null, tollOverride:null }
     }));
-    const snapshot = () => ({ weekStart:week, revision:'inputs:fixture', drivers:structuredClone(rows), preparation:{ state:'ready', generation:'generation-1' } });
+    const snapshot = () => ({ weekStart:week, revision:'inputs:fixture', drivers:structuredClone(rows), preparation:{ state:preparationState, generation:'generation-1' } });
     await page.route('**/api/**', async route => {
       const req=route.request(), url=new URL(req.url()), path=url.pathname.slice(4);
       if (path === '/auth/session') return route.fulfill({json:{ user:{id:'user',username:'Test',permissions:[`${kind}_pay.read`,`${kind}_pay.edit`,`${kind}_pay.finalize`,`${kind}_pay.reopen`],theme:'default'},csrfToken:'fixture'}});
       if (path.endsWith('/availability')) return route.fulfill({json:{firstWeek:week,currentWeek:week}});
+      if (path === `/${kind}-pay` && req.method() === 'PUT') {
+        const input=req.postDataJSON(), row=rows.find(row=>row.id===input.driverId);
+        expect(row.preparationState).toBe('ready'); savedComment=input.notes;
+        row.edits={...input,version:row.edits.version+1};
+        return route.fulfill({json:{...row.edits,statementRevision:row.statementRevision,committedStatement:structuredClone(row)}});
+      }
       if (path === `/${kind}-pay/finalize`) {
         const input=req.postDataJSON(); requests.push(input);
         const row=rows.find(row=>row.id===input.driverId);
@@ -50,7 +57,8 @@ try {
       }
       return route.fulfill({json:path==='/tasks/count'?{count:0}:[]});
     });
-    await page.goto(`http://127.0.0.1:${server.address().port}/accounting/${kind}-pay?weekStart=${week}`);
+    const base = process.env.MSERP_PAYROLL_BROWSER_URL ?? `http://127.0.0.1:${server.address().port}`;
+    await page.goto(`${base}/accounting/${kind}-pay?weekStart=${week}`);
     const alpha=page.getByRole('button',{name:new RegExp('^Finalize Alpha')}), bravo=page.getByRole('button',{name:new RegExp('^Finalize Bravo')});
     await alpha.click();
     await expect(alpha).toBeDisabled(); await expect(alpha).toHaveText('Finalizing…');
@@ -60,7 +68,7 @@ try {
     await alpha.dispatchEvent('click'); // Disabled/stale click cannot enqueue a duplicate.
     expect(requests).toHaveLength(2);
     const charlie=page.getByRole('button',{name:kind==='investor'?'Charlie 103':'Charlie',exact:true});
-    await charlie.click();
+    if (await charlie.getAttribute('aria-expanded') === 'false') await charlie.click();
     await page.getByRole('button',{name:'Charlie, weekly comment',exact:true}).click();
     await page.getByLabel('Comment',{exact:true}).fill('Keep this draft while the other two finalize');
     release.get(rows[1].id)();
@@ -90,6 +98,20 @@ try {
     await expect(review).toContainText('Review Bravo');
     await review.getByRole('button',{name:'Cancel',exact:true}).click();
     await expect(review).toHaveCount(0);
+    // A board edit makes Alpha stale; independent payrolls remain actionable.
+    preparationState='updating'; blockFinalization=false; release.clear();
+    rows.forEach((row,i)=>{delete row.settlement; row.preparationState=i===0?'updating':'ready';});
+    await page.reload();
+    await expect(alpha).toBeDisabled(); await expect(bravo).toBeEnabled();
+    await bravo.click(); await expect.poll(()=>requests.length).toBe(5);
+    release.get(rows[1].id)();
+    await expect(page.getByRole('row').filter({hasText:'Bravo'}).locator('td').last()).toHaveText('Reviewer');
+    if (await charlie.getAttribute('aria-expanded') === 'false') await charlie.click();
+    await page.getByRole('button',{name:'Charlie, weekly comment',exact:true}).click();
+    await page.getByLabel('Comment',{exact:true}).fill('Independent edit while another payroll updates');
+    await page.getByRole('button',{name:'Save comment',exact:true}).click();
+    await expect.poll(()=>savedComment).toBe('Independent edit while another payroll updates');
+    await expect(alpha).toBeDisabled();
     expect(errors).toEqual([]);
     await page.close();
   }

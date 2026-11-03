@@ -1,6 +1,11 @@
 import type { DriverPayAdjustment, DriverPayDriver, DriverPayEdits, DriverPayWeek } from "@/app/lib/types";
 import { decimalDisplay, hundredths, validDecimal } from "@/app/gross-board/board";
 
+export function payStatementReady(report: DriverPayWeek | null | undefined, row: DriverPayDriver | undefined) {
+  if (!row) return false;
+  return row.preparationState ? row.preparationState === "ready" : !report?.preparation || report.preparation.state === "ready";
+}
+
 export function centsAmount(cents: bigint) {
   const magnitude = cents < BigInt(0) ? -cents : cents;
   return `${cents < BigInt(0) ? "-" : ""}${magnitude / BigInt(100)}.${String(magnitude % BigInt(100)).padStart(2, "0")}`;
@@ -86,7 +91,7 @@ export function applyPayReceipt(report: DriverPayWeek, receipt: DriverPayWeek): 
     const previous = next.drivers.find(d => d.id === row.id);
     if (!previous) continue;
     if (!previous.truckInactive) finalizedDelta += Number(!!row.settlement?.finalized) - Number(!!previous.settlement?.finalized);
-    next = applyPayDetails(next, previous, { ...row, edits: { ...row.edits, inputRevision: receipt.revision } });
+    next = applyPayDetails(next, previous, { ...row, preparationState: "ready", edits: { ...row.edits, inputRevision: receipt.revision } });
   }
   return next.pagination ? { ...next, pagination: { ...next.pagination, finalized: next.pagination.finalized + finalizedDelta } } : next;
 }
@@ -105,7 +110,7 @@ export function applyPaySave(report: DriverPayWeek, saved: DriverPayEdits): Driv
 		delete edits.committedStatement;
 		delete edits.affectedStatements;
 		delete edits.requestId;
-		return applyPayDetails(report, previous, { ...saved.committedStatement, statementRevision: saved.statementRevision, edits });
+		return applyPayDetails(report, previous, { ...saved.committedStatement, preparationState: "ready", statementRevision: saved.statementRevision, edits });
 	}
   let delta = BigInt(0);
   const drivers = report.drivers.map(driver => {

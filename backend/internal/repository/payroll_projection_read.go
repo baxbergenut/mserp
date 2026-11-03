@@ -24,6 +24,7 @@ type PreparedPayrollPage struct {
 
 type PreparedPayrollVersion struct {
 	Revision string `json:"revision"`
+	State    string `json:"state"`
 }
 
 type PayrollPreparation struct {
@@ -61,6 +62,7 @@ func (r *DriverPayRepository) PreparedPayroll(ctx context.Context, kind string, 
 	for i := range page.Report.Drivers {
 		d := &page.Report.Drivers[i]
 		d.StatementRevision = page.Statements[d.ID].Revision
+		d.PreparationState = page.Statements[d.ID].State
 		d.Edits.ExpectedStatementRevision = d.StatementRevision
 	}
 	return page.Report, nil
@@ -137,6 +139,18 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 		// need not rewrite it. Keep the legacy input token tied to this snapshot.
 		result.Report.Revision = payrollInputRevision(kind, week.Format(time.DateOnly), calendar, financialSnapshot)
 	}
+	// A stale weekly header does not make every statement stale. Prove the
+	// complete intervening source impact once, then compare each statement's
+	// exact dependency component without invoking the calculator.
+	compatible := len(missing) == 0 && calendar == ChargeCurrentWeek() && result.Calculator == payrollCalculatorVersion && schema == payrollProjectionSchemaVersion
+	var changedRoots []string
+	var completeImpact bool
+	if compatible && snapshot != current {
+		changedRoots, completeImpact, err = payrollChangedSourceRoots(ctx, tx, snapshot, current)
+		if err != nil {
+			return result, err
+		}
+	}
 	// Dense components share thousands of dependency revisions. Check each shared
 	// map once in this read snapshot, then check every statement's local overrides.
 	// Re-expanding that map for every summary made polling monopolize the database.
@@ -148,6 +162,7 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
  ), shared AS MATERIALIZED (
  SELECT d.fingerprint,(d.dependencies<>'{}' OR
  (SELECT protocol_mode='global' FROM payroll_projection_control WHERE singleton)) AS valid,
+ d.dependencies ?| $5::text[] AS source_changed,
  ARRAY(SELECT e.key FROM jsonb_each_text(d.dependencies) e(key,value)
  LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
  WHERE coalesce(r.revision,0)<>e.value::bigint) AS stale_keys
@@ -159,17 +174,20 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
  SELECT 1 FROM unnest(shared.stale_keys) key WHERE NOT v.resource_dependencies ? key) AND NOT EXISTS(
  SELECT 1 FROM jsonb_each_text(v.resource_dependencies-'$shared') d(key,value)
  LEFT JOIN payroll_resource_revisions r ON r.resource_key=d.key WHERE coalesce(r.revision,0)<>d.value::bigint)
- ELSE payroll_resources_current(v.resource_dependencies) END
+ ELSE payroll_resources_current(v.resource_dependencies) END,
+ $4 AND (SELECT protocol_mode='resources' FROM payroll_projection_control WHERE singleton)
+ AND v.resource_dependencies<>'{}'::jsonb
+ AND NOT (v.resource_dependencies ?| $5::text[]) AND NOT coalesce(shared.source_changed,false)
  FROM versions v LEFT JOIN shared ON shared.fingerprint=v.resource_dependencies->>'$shared'
- ORDER BY v.summary->>'fullName',v.statement_id`, week, kind, query.StatementRevision)
+ ORDER BY v.summary->>'fullName',v.statement_id`, week, kind, query.StatementRevision, completeImpact, changedRoots)
 	if err != nil {
 		return result, err
 	}
 	for rows.Next() {
 		var version string
 		var body []byte
-		var currentResources bool
-		if err = rows.Scan(&version, &body, &currentResources); err != nil {
+		var currentResources, unrelatedSources bool
+		if err = rows.Scan(&version, &body, &currentResources, &unrelatedSources); err != nil {
 			rows.Close()
 			return result, err
 		}
@@ -182,7 +200,11 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 			return result, err
 		}
 		result.Report.Drivers = append(result.Report.Drivers, d)
-		result.Statements[d.ID] = PreparedPayrollVersion{Revision: version}
+		state := result.State
+		if compatible && currentResources && (snapshot == current || unrelatedSources) {
+			state = "ready"
+		}
+		result.Statements[d.ID] = PreparedPayrollVersion{Revision: version, State: state}
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
@@ -228,6 +250,9 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 				result.Report.Drivers[i] = detail
 			}
 		}
+	}
+	if query.ID != "" && len(result.Report.Drivers) == 1 && result.Statements[query.ID].State == "ready" {
+		result.State = "ready"
 	}
 	return result, tx.Commit(ctx)
 }

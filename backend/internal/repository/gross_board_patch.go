@@ -21,6 +21,12 @@ func (r *GrossBoardRepository) SaveChanges(ctx context.Context, entries []GrossB
 			entries[i].Fields = GrossBoardEditableFields
 		}
 	}
+	// A board acknowledgement means its canonical rows are durable. Source
+	// revisions and pending payroll work commit in this same transaction, so
+	// prepared payroll immediately becomes stale and cannot be finalized. The
+	// durable worker publishes it separately, including after a process restart.
+	// Do not make a dispatcher wait for every affected statement calculation.
+	ctx = context.WithValue(ctx, payrollPublicationKey{}, false)
 	return r.SaveEntries(ctx, entries, actor)
 }
 

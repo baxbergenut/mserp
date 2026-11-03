@@ -125,6 +125,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	PreparationState       string                        `json:"preparationState,omitempty"`
 	StatementRevision      string                        `json:"statementRevision,omitempty"`
 	BrokerReimbursements   []BrokerReimbursementReminder `json:"brokerReimbursements,omitempty"`
 	costTransactions       []PayCostTransaction

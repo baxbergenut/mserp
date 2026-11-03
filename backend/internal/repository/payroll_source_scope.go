@@ -19,8 +19,30 @@ func payrollSourcesUnrelated(ctx context.Context, tx pgx.Tx, before, current str
 	if !ok || !resource.single || resource.resources == nil || before == "" || current == "" {
 		return false, nil
 	}
+	roots, complete, err := payrollChangedSourceRoots(ctx, tx, before, current)
+	if err != nil || !complete {
+		return false, err
+	}
+	claimed := map[string]bool{}
+	for _, key := range resource.resources.keys {
+		claimed[key] = true
+	}
+	for _, root := range roots {
+		if claimed[root] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// A repeatable read may use the same complete capture proof to label each
+// statement. Financial commands still require the locked wrapper above.
+func payrollChangedSourceRoots(ctx context.Context, tx pgx.Tx, before, current string) ([]string, bool, error) {
+	if before == "" || current == "" {
+		return nil, false, nil
+	}
 	if before == current {
-		return true, nil
+		return []string{}, true, nil
 	}
 	parse := func(value string) (map[string]int64, bool) {
 		result := map[string]int64{}
@@ -36,11 +58,11 @@ func payrollSourcesUnrelated(ctx context.Context, tx pgx.Tx, before, current str
 	}
 	old, valid := parse(before)
 	if !valid {
-		return false, nil
+		return nil, false, nil
 	}
 	now, valid := parse(current)
 	if !valid || len(old) != len(now) {
-		return false, nil
+		return nil, false, nil
 	}
 	type revisionRange struct {
 		Table    string `json:"table"`
@@ -51,24 +73,24 @@ func payrollSourcesUnrelated(ctx context.Context, tx pgx.Tx, before, current str
 	for table, previous := range old {
 		latest, found := now[table]
 		if !found || latest < previous {
-			return false, nil
+			return nil, false, nil
 		}
 		if latest != previous {
 			ranges = append(ranges, revisionRange{table, previous, latest})
 		}
 	}
 	if len(ranges) == 0 {
-		return false, nil
+		return nil, false, nil
 	}
 	body, err := json.Marshal(ranges)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	rows, err := tx.Query(ctx, `SELECT c.id,c.table_name,c.source_revision
  FROM jsonb_to_recordset($1::jsonb) r("table" text,previous bigint,current bigint)
  JOIN payroll_projection_changes c ON c.table_name=r."table" AND c.source_revision>r.previous AND c.source_revision<=r.current`, body)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	defer rows.Close()
 	seen := map[string]map[int64]bool{}
@@ -77,7 +99,7 @@ func payrollSourcesUnrelated(ctx context.Context, tx pgx.Tx, before, current str
 		var id, revision int64
 		var table string
 		if err = rows.Scan(&id, &table, &revision); err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if seen[table] == nil {
 			seen[table] = map[int64]bool{}
@@ -86,26 +108,17 @@ func payrollSourcesUnrelated(ctx context.Context, tx pgx.Tx, before, current str
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		return false, err
+		return nil, false, err
 	}
 	rows.Close()
 	for _, interval := range ranges {
 		if int64(len(seen[interval.Table])) != interval.Current-interval.Previous {
-			return false, nil
+			return nil, false, nil
 		}
 	}
 	impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", ids)
 	if err != nil || impact == nil || len(impact.roots) == 0 {
-		return false, err
+		return nil, false, err
 	}
-	claimed := map[string]bool{}
-	for _, key := range resource.resources.keys {
-		claimed[key] = true
-	}
-	for _, root := range impact.roots {
-		if claimed[root] {
-			return false, nil
-		}
-	}
-	return true, nil
+	return impact.roots, true, nil
 }
