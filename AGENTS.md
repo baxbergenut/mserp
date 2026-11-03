@@ -48,6 +48,13 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
+- Migration 193 lets a single unassigned Company expense save without the
+  payroll source gate. A database guard checks the stored row after routing.
+  Driver, truck, owner, applicant, reimbursement, broker and Maintenance
+  inputs use the ordinary financial path. Company inserts still queue the
+  normal Sheets export receipt. Install the matching deploy helper before
+  the quiesced migration.
+
 - Migration 192 excludes reviewed operational feedback, inventory, maintenance,
   export/access and provider bookkeeping from payroll capture and source locks.
   See `docs/PAYROLL_SOURCE_CLASSIFICATION.md` for boundaries and regression checks.
