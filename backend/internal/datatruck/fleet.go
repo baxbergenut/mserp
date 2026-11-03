@@ -38,7 +38,11 @@ func (c *Client) FleetList(ctx context.Context, kind string, filters []map[strin
 	if err != nil {
 		return nil, err
 	}
-	next := c.baseURL + "/" + kind + "/list/?page_size=10&filter=" + url.QueryEscape(string(encoded))
+	pageSize := "10"
+	if kind == "drivers" {
+		pageSize = "100"
+	}
+	next := c.baseURL + "/" + kind + "/list/?page_size=" + pageSize + "&filter=" + url.QueryEscape(string(encoded))
 	var out []map[string]any
 	seen := map[string]bool{}
 	for next != "" {

@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"mserp/internal/datatruck"
+	"mserp/internal/phone"
 )
 
 type DataTruckProvider interface {
@@ -154,7 +158,24 @@ func (r *DataTruckRepository) Enroll(ctx context.Context, kind, id string) error
 	}
 	state := "review"
 	var receipt json.RawMessage
-	if err == nil {
+	if err == nil && kind == "drivers" {
+		var roster []map[string]any
+		roster, err = r.client.FleetList(ctx, kind, []map[string]string{{"column": "mc_number", "value": strconv.Itoa(r.mcID), "contains": "is"}})
+		if err == nil {
+			var existing map[string]any
+			existing, err = dataTruckExistingDriver(payload, roster)
+			if err == nil && existing != nil {
+				err = r.linkExistingDriver(ctx, conn, id, payload, existing)
+				if err == nil {
+					return nil
+				}
+			}
+		}
+		if err == nil && payload["driver_type"] == "" {
+			err = &DriverServiceError{"Assign the driver's truck so their company or owner-operator classification is known before enrolling in DataTruck."}
+		}
+	}
+	if err == nil && kind != "drivers" {
 		for _, filter := range checks {
 			var existing []map[string]any
 			existing, err = r.client.FleetList(ctx, kind, filter)
@@ -227,6 +248,87 @@ func (r *DataTruckRepository) Enroll(ctx context.Context, kind, id string) error
 	}
 	return err
 }
+
+// The roster is freshly fetched with the configured carrier filter. A name by
+// itself is insufficient, and competing name/contact matches require review.
+func dataTruckExistingDriver(profile map[string]any, roster []map[string]any) (map[string]any, error) {
+	text := func(v any) string { s, _ := v.(string); return strings.TrimSpace(s) }
+	equal := func(a, b any) bool { return text(a) != "" && strings.EqualFold(text(a), text(b)) }
+	contact := phone.Imported(text(profile["contact_number"]))
+	var possible []map[string]any
+	for _, remote := range roster {
+		account, _ := remote["account"].(map[string]any)
+		nameMatch := equal(profile["first_name"], account["first_name"]) && equal(profile["last_name"], account["last_name"])
+		remoteContact := phone.Imported(text(remote["contact_number"]))
+		phoneMatch := contact != nil && remoteContact != nil && *contact == *remoteContact
+		emailMatch := equal(profile["email"], account["email"])
+		if nameMatch || phoneMatch || emailMatch {
+			if !nameMatch || (!phoneMatch && !emailMatch) {
+				return nil, &DriverServiceError{"A possible matching driver exists in DataTruck, but the name and contact details do not confirm the link. Review both profiles before adding."}
+			}
+			possible = append(possible, remote)
+		}
+	}
+	if len(possible) == 0 {
+		return nil, nil
+	}
+	if len(possible) != 1 {
+		return nil, &DriverServiceError{"Multiple matching drivers exist in DataTruck. Review them before linking this driver."}
+	}
+	provider, err := strconv.ParseInt(fmt.Sprint(possible[0]["id"]), 10, 64)
+	if err != nil || provider <= 0 {
+		return nil, &DriverServiceError{"DataTruck did not return a valid driver ID. Review the matching profile before adding."}
+	}
+	return possible[0], nil
+}
+
+func (r *DataTruckRepository) linkExistingDriver(ctx context.Context, conn *pgxpool.Conn, driver string, requested, remote map[string]any) error {
+	provider, _ := strconv.ParseInt(fmt.Sprint(remote["id"]), 10, 64)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	// Fence concurrent local edits while establishing the baseline. Linking does
+	// not enqueue a PUT or claim that existing provider profile fields were saved.
+	var baseline []byte
+	var status string
+	if err = tx.QueryRow(ctx, `SELECT datatruck_driver_profile(d),status FROM drivers d WHERE id=$1 FOR SHARE`, driver).Scan(&baseline, &status); err != nil {
+		return err
+	}
+	if status == "terminated" {
+		return &DriverServiceError{"Terminated drivers cannot be added to DataTruck."}
+	}
+	var profile map[string]any
+	if err = json.Unmarshal(baseline, &profile); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(profile, dataTruckCreatedProfile(requested)) {
+		return &DriverServiceError{"The driver profile changed while checking DataTruck. Refresh before adding again."}
+	}
+	var claimed bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM datatruck_enrollments WHERE environment=$1 AND entity_kind='drivers' AND provider_id=$2 AND entity_id<>$3)`, r.client.Environment(), provider, driver).Scan(&claimed); err != nil {
+		return err
+	}
+	if claimed {
+		return &DriverServiceError{"This DataTruck driver is already linked to another Clustie driver. Review the existing link before adding."}
+	}
+	evidence, err := json.Marshal(map[string]any{"basis": "fresh carrier-scoped roster with unique matching name and contact", "provider": remote})
+	if err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE datatruck_enrollments SET state='done',last_error='',environment=$2,provider_id=$3,provider_carrier_id=$4,
+ profile_baseline=$5,identity_evidence=$6,payload=NULL,receipt=NULL,sent_at=NULL,version=version+1,updated_at=now()
+ WHERE entity_kind='drivers' AND entity_id=$1 AND state='running'`, driver, r.client.Environment(), provider, r.mcID, baseline, evidence)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return &DriverServiceError{"DataTruck setup changed. Refresh before adding this driver again."}
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *DataTruckRepository) payload(ctx context.Context, q chargeQuery, kind, id string) (map[string]any, [][]map[string]string, error) {
 	invalid := func(message string) (map[string]any, [][]map[string]string, error) {
 		return nil, nil, &DriverServiceError{message}
@@ -247,10 +349,10 @@ func (r *DataTruckRepository) payload(ctx context.Context, q chargeQuery, kind, 
 		if first == "" || last == "" || len(phone) != 10 {
 			return invalid("Add a confirmed first name, last name and phone number to the driver profile before enrolling in DataTruck.")
 		}
-		if employment == "unassigned" {
-			return invalid("Assign the driver's truck so their company or owner-operator classification is known before enrolling in DataTruck.")
-		}
 		driverType := "company_driver"
+		if employment == "unassigned" {
+			driverType = ""
+		}
 		if employment == "owner_operator" {
 			driverType = "owner_operator"
 		}
@@ -263,11 +365,7 @@ func (r *DataTruckRepository) payload(ctx context.Context, q chargeQuery, kind, 
 				data[k] = v
 			}
 		}
-		checks := [][]map[string]string{check("contact_number", "+1"+phone), {{"column": "account__first_name", "value": first, "contains": "is"}, {"column": "account__last_name", "value": last, "contains": "is"}}}
-		if email != "" {
-			checks = append(checks, check("account__email", email))
-		}
-		return data, checks, nil
+		return data, nil, nil
 	}
 	var unit, vin, make, model, plate, state, color, registration, employment string
 	var year, mileage int

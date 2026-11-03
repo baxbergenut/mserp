@@ -3,9 +3,12 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"reflect"
+	"testing"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"mserp/internal/datatruck"
-	"testing"
 )
 
 type dataTruckFake struct {
@@ -15,6 +18,10 @@ type dataTruckFake struct {
 	uncertain, duplicate bool
 	payload              map[string]any
 	kind                 string
+	roster               []map[string]any
+	listErr              error
+	filters              []map[string]string
+	onList               func()
 }
 
 func (f *dataTruckFake) Configured() bool    { return true }
@@ -32,7 +39,17 @@ func (f *dataTruckFake) UpdateDriver(_ context.Context, _ int64, body json.RawMe
 	}
 	return json.RawMessage(`{"detail":"success"}`), nil
 }
-func (f *dataTruckFake) FleetList(context.Context, string, []map[string]string) ([]map[string]any, error) {
+func (f *dataTruckFake) FleetList(_ context.Context, _ string, filters []map[string]string) ([]map[string]any, error) {
+	f.filters = filters
+	if f.onList != nil {
+		f.onList()
+	}
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if f.roster != nil {
+		return f.roster, nil
+	}
 	if f.remote != nil {
 		return []map[string]any{f.remote}, nil
 	}
@@ -138,6 +155,119 @@ func testDataTruckEnrollment(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		t.Fatal("receipt history missing", audit, err)
 	}
 	testDataTruckDriverUpdates(t, ctx, pool)
+	testDataTruckExistingEnrollment(t, ctx, pool)
+}
+
+func TestDataTruckExistingDriver(t *testing.T) {
+	profile := map[string]any{"first_name": "Existing", "last_name": "Driver", "contact_number": "+15551112222", "email": "existing@example.test"}
+	remote := func(id any, first, contact, email string) map[string]any {
+		return map[string]any{"id": id, "account": map[string]any{"first_name": first, "last_name": "DRIVER", "email": email}, "contact_number": contact}
+	}
+	for _, tc := range []struct {
+		name   string
+		roster []map[string]any
+		match  bool
+		review bool
+	}{
+		{"no match", []map[string]any{remote(1, "Unrelated", "5559998888", "other@example.test")}, false, false},
+		{"formatted phone and case", []map[string]any{remote(1, " EXISTING ", "(555) 111-2222", "")}, true, false},
+		{"name and email", []map[string]any{remote(1, "Existing", "5559998888", "EXISTING@EXAMPLE.TEST")}, true, false},
+		{"name alone", []map[string]any{remote(1, "Existing", "5559998888", "")}, false, true},
+		{"phone alone", []map[string]any{remote(1, "Different", "5551112222", "")}, false, true},
+		{"email alone", []map[string]any{remote(1, "Different", "", "existing@example.test")}, false, true},
+		{"ambiguous", []map[string]any{remote(1, "Existing", "5551112222", ""), remote(2, "Existing", "5551112222", "")}, false, true},
+		{"competing weak match", []map[string]any{remote(1, "Existing", "5551112222", ""), remote(2, "Existing", "5559998888", "")}, false, true},
+		{"missing ID", []map[string]any{remote(nil, "Existing", "5551112222", "")}, false, true},
+		{"invalid ID", []map[string]any{remote(0, "Existing", "5551112222", "")}, false, true},
+		{"unusable contact", []map[string]any{remote(1, "Existing", "invalid", "")}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			match, err := dataTruckExistingDriver(profile, tc.roster)
+			if (match != nil) != tc.match || (err != nil) != tc.review {
+				t.Fatalf("match=%v review=%v, want match=%v review=%v", match != nil, err, tc.match, tc.review)
+			}
+		})
+	}
+}
+
+func testDataTruckExistingEnrollment(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	var driver string
+	err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,first_name,last_name,email,phone,pay_type,pay_rate) VALUES('Existing Enrollment','existing enrollment','Existing','Enrollment','existing@example.test','5553334444','cpm',0) RETURNING id::text`).Scan(&driver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := map[string]any{"id": 2001, "account": map[string]any{"first_name": "EXISTING", "last_name": "ENROLLMENT", "email": "existing@example.test"}, "contact_number": "(555) 333-4444"}
+	fake := &dataTruckFake{roster: []map[string]any{remote}}
+	repo := NewDataTruckRepository(pool, fake, 17)
+	// A previous duplicate rejection is recovered on the next explicit add.
+	if _, err = pool.Exec(ctx, `INSERT INTO datatruck_enrollments(entity_kind,entity_id,state,last_error) VALUES('drivers',$1,'review','Possible match')`, driver); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.Enroll(ctx, "drivers", driver); err != nil {
+		t.Fatal(err)
+	}
+	status, err := repo.Status(ctx, "drivers", driver)
+	if err != nil || status.State != "done" || status.ProviderID == nil || *status.ProviderID != 2001 || fake.calls != 0 || fake.updates != 0 {
+		t.Fatal("existing driver not linked without provider mutation", status, err)
+	}
+	if !reflect.DeepEqual(fake.filters, []map[string]string{{"column": "mc_number", "value": "17", "contains": "is"}}) {
+		t.Fatal("roster was not carrier scoped", fake.filters)
+	}
+	var valid bool
+	err = pool.QueryRow(ctx, `SELECT environment='test-tenant' AND provider_carrier_id=17 AND profile_baseline=datatruck_driver_profile(d) AND identity_evidence->'provider'->>'id'='2001' AND sent_at IS NULL AND receipt IS NULL FROM datatruck_enrollments e JOIN drivers d ON d.id=e.entity_id WHERE e.entity_kind='drivers' AND e.entity_id=$1`, driver).Scan(&valid)
+	if err != nil || !valid {
+		t.Fatal("link evidence or baseline missing", err)
+	}
+	var updates int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM datatruck_driver_updates WHERE driver_id=$1`, driver).Scan(&updates); err != nil || updates != 0 {
+		t.Fatal("linking queued a profile overwrite", updates, err)
+	}
+	var other string
+	err = pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,first_name,last_name,email,phone,pay_type,pay_rate) VALUES('Other Enrollment','other enrollment','Other','Enrollment','existing@example.test','5553334444','cpm',0) RETURNING id::text`).Scan(&other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote["account"].(map[string]any)["first_name"] = "Other"
+	if err = repo.Enroll(ctx, "drivers", other); err == nil || fake.calls != 0 {
+		t.Fatal("claimed identity was adopted or created", err)
+	}
+	status, err = repo.Status(ctx, "drivers", other)
+	if err != nil || status.State != "review" || status.ProviderID != nil {
+		t.Fatal("claimed identity did not retain review state", status, err)
+	}
+	fake.listErr = errors.New("roster unavailable")
+	if err = repo.Enroll(ctx, "drivers", other); err == nil || fake.calls != 0 {
+		t.Fatal("failed roster allowed creation", err)
+	}
+	fake.listErr = nil
+	// An edit during discovery invalidates the identity evidence before linking.
+	remote["id"] = 2002
+	writer, err := pgxpool.NewWithConfig(ctx, pool.Config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	fake.onList = func() {
+		if _, err := writer.Exec(ctx, `UPDATE drivers SET phone='5556667777' WHERE id=$1`, other); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = repo.Enroll(ctx, "drivers", other); err == nil || fake.calls != 0 {
+		t.Fatal("concurrent profile change did not prevent linking", err)
+	}
+	fake.onList = nil
+	status, err = repo.Status(ctx, "drivers", other)
+	if err != nil || status.State != "review" || status.ProviderID != nil {
+		t.Fatal("concurrent edit linked a stale identity", status, err)
+	}
+	// Later explicit profile edits still queue the normal durable update.
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET phone='5553335555' WHERE id=$1`, driver); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM datatruck_driver_updates WHERE driver_id=$1 AND provider_id=2001 AND state='queued'`, driver).Scan(&updates); err != nil || updates != 1 {
+		t.Fatal("linked profile edits no longer queue updates", updates, err)
+	}
 }
 
 func testDataTruckDriverUpdates(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

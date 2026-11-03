@@ -7,6 +7,10 @@ DOB and unknown outcomes hold for review without replay. Truck/dispatcher
 assignments and lifecycle/dispatch changes are excluded. Success-only creation
 receipts resolve IDs by read-only carrier-scoped checks. See
 `docs/integrations/DATATRUCK_ENROLLMENT.md` for the contract and validation.
+Driver enrollment fetches the current carrier roster and links a unique matching
+first/last name plus phone or email without a provider write. Ambiguous/contact-only
+matches and IDs already linked locally remain in review. Linking atomically records
+provider evidence and the local profile baseline; subsequent edits queue normal PUTs.
 
 Read this file before doing anything else in a new task. Then read the nearest
 nested `AGENTS.md` for the area being changed. Do not scan the entire repository

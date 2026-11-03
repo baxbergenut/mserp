@@ -4,7 +4,7 @@
 
 `datatruck_enrollments.provider_id` stores DataTruck's numeric driver/truck ID
 separately from the local UUID. A tenant/kind/ID unique index prevents duplicate
-links. Existing drivers require reviewed contact evidence; trucks use unique
+links. Existing drivers require unique matching name/contact evidence; trucks use unique
 exact VINs. Links retain evidence and append-only enrollment events, without
 creating provider accounts or changing assignments. Profiles show the saved ID.
 
@@ -110,8 +110,17 @@ Migration 128 adds `datatruck_enrollments` plus append-only attempt snapshots in
 `datatruck_enrollment_events`. Exact outgoing payload, tenant, send time and
 successful receipt are committed server-side. Raw upstream error bodies never
 reach the browser or logs. Roster preflights check driver phone, reviewed name and
-email, or truck VIN and exact unit; any possible match blocks creation for review
-without adopting an existing identity. A dedicated advisory lock serializes
+email, or truck VIN and exact unit. At each driver add, a fresh, fully paginated
+carrier-scoped roster is fetched (100 drivers per page). A single matching first
+and last name plus normalized phone or case-insensitive email links the existing
+numeric ID instead of sending a create request. Any competing name/contact match,
+invalid ID or ID already linked to another local driver holds for review. Name
+alone never establishes a link. Linking saves the current local profile baseline
+and provider evidence atomically, without a provider POST/PUT or an initial profile
+overwrite. Later profile edits retain the normal update behavior. Existing drivers
+can be linked before truck classification is recorded; new creations still require
+it. A failed roster fetch never permits creation. Truck matches still block creation
+for review without adopting an identity. A dedicated advisory lock serializes
 enrollment preflights across workers. Pagination cannot forward credentials to
 another origin.
 
@@ -123,7 +132,9 @@ Definite rejections and failures before sending can be retried explicitly.
 
 Validation: `TestRelayDriverDatabase` exercises fresh/migrated schemas as
 `mserp_app`, transactionally queued drivers/trucks, payload mapping, missing
-prerequisites, duplicate detection and uncertain no-replay behavior using a fake
-provider. `internal/datatruck/fleet_test.go` checks the HTTP boundary.
+prerequisites, existing-driver linking/evidence, claimed-identity protection,
+duplicate detection and uncertain no-replay behavior using a fake provider.
+`TestDataTruckExistingDriver` covers matching and ambiguity;
+`internal/datatruck/fleet_test.go` checks the HTTP boundary and roster pagination.
 `node scripts/test-driver-services-views.mjs` checks both setup entrypoints,
 default selection, opt-out, truck saved results, read-only views and mobile.

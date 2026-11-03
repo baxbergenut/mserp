@@ -60,6 +60,33 @@ func TestFleetListRejectsForeignPagination(t *testing.T) {
 	}
 }
 
+func TestDriverRosterReadsEveryPage(t *testing.T) {
+	calls := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/drivers/list/" || r.Method != http.MethodGet || r.Header.Get("Authorization") != "Token secret" {
+			t.Error("wrong roster request")
+		}
+		if calls == 1 {
+			var filters []map[string]string
+			if r.URL.Query().Get("page_size") != "100" || json.Unmarshal([]byte(r.URL.Query().Get("filter")), &filters) != nil || len(filters) != 1 || filters[0]["column"] != "mc_number" || filters[0]["value"] != "17" {
+				t.Error("carrier filter or page size missing")
+			}
+			w.Write([]byte(`{"results":[{"id":1}],"next":"/drivers/list/?page=2"}`))
+		} else {
+			w.Write([]byte(`{"results":[{"id":2}],"next":null}`))
+		}
+	}))
+	defer s.Close()
+	c := NewClient("secret", "test")
+	c.baseURL = s.URL
+	c.gate = nil
+	rows, err := c.FleetList(context.Background(), "drivers", []map[string]string{{"column": "mc_number", "value": "17", "contains": "is"}})
+	if err != nil || calls != 2 || len(rows) != 2 || rows[1]["id"] != float64(2) {
+		t.Fatal("incomplete roster", rows, calls, err)
+	}
+}
+
 func TestDriverUpdateNeverRetries(t *testing.T) {
 	calls := 0
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
