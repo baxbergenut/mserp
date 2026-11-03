@@ -160,9 +160,8 @@ async function finalize(p, kind, week, d) {
 async function reopen(p, kind, week, d) {
   await measure(p, kind, week, 'reopenDialog', async () => {
     await row(p, d).click({ button: 'right' }); await p.getByRole('menuitem', { name: kind === 'driver' ? 'Reopen driver' : 'Reopen truck', exact: true }).click();
-    await expect(p.getByLabel('Reason for reopening')).toBeVisible();
+    await expect(p.getByRole('button', { name: 'Reopen settlement', exact: true })).toBeVisible();
   }, 300);
-  await p.getByLabel('Reason for reopening').fill('Synthetic performance verification');
   await measure(p, kind, week, 'reopen', async () => {
     const [result] = await Promise.all([
       p.waitForResponse(r => new URL(r.url()).pathname === `/api/${kind}-pay/reopen`),

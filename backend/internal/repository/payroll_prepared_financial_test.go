@@ -154,7 +154,7 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
 							command := PayrollSettlementCommand{RequestID: fmt.Sprintf("18200000-0000-0000-0000-%012d", seq), ExpectedStatementRevision: version}
 							settle := func() error {
 								if kind == "driver" {
-									_, e := repo.Settle(WithPayrollReceipt(ctx), week, id, page.Revision, actor, "Financial parity reopen", reopen, !reopen, command)
+									_, e := repo.Settle(WithPayrollReceipt(ctx), week, id, page.Revision, actor, "", reopen, !reopen, command)
 									return e
 								}
 								_, e := repo.SettleInvestor(WithPayrollReceipt(ctx), week, id, page.Revision, actor, "Financial parity reopen", reopen, !reopen, command)
@@ -192,6 +192,7 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
 								t.Fatal(err)
 							}
 							parts := strings.Split(t.Name(), "/")
+							assertNoPayrollActionHistory(t, ctx, pool)
 							key := fmt.Sprintf("%s/%s/%t/%t", parts[len(parts)-1], kind, bulk, reopen)
 							if !prepared {
 								want[key] = actual

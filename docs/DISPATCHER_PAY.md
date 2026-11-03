@@ -63,7 +63,8 @@ follow the board. The weekly input form can override the count or restore
 records the current source count, and later reads derive the live count again.
 Manual days (whole 0–7) and comments are versioned per driver-week. Editing is
 blocked while any affected dispatcher statement is finalized.
-Inputs, finalizations and reason-required reopenings have append-only history.
+Weekly input edits, finalizations and reopenings do not append action history.
+Reopening requires no note. Current finalized statements remain frozen.
 
 Finalization checks the reviewed calculation's revision and statement version
 under the shared accounting lock, then saves the complete rule / row / money
@@ -103,7 +104,7 @@ Older split snapshots without recorded own mileage display a dash for that field
 - POST /dispatcher-pay/rules (expectedRevision, effectiveWeek, rules)
 - PUT /dispatcher-pay/inputs (weekStart, driverId, homeDays, autoHomeDays, note, version)
 - POST /dispatcher-pay/finalize or /reopen (weekStart, dispatcherId, revision,
-  version; reopening also requires reason)
+  version; reopening needs no reason)
 
 ## Validation
 
@@ -111,6 +112,6 @@ Older split snapshots without recorded own mileage display a dash for that field
 exact thresholds, promotion cap, home-day reductions, weighted RPM and credits.
 Set MSERP_DISPATCHER_PAY_TEST_DATABASE_URL to a disposable localhost database
 ending in _test for fresh / upgraded app-role database checks, effective dates,
-stale writes, frozen snapshots, reopenings, audit immutability and cache enrollment.
+stale writes, frozen snapshots, note-free reopenings, absent action history and cache enrollment.
 `node scripts/test-dispatcher-pay-e2e.mjs` uses review-local's isolated real API,
 database and browser. CI runs the dispatcher database suite before deployment.

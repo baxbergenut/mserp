@@ -97,7 +97,7 @@ type DispatcherStatementChange struct {
 	DispatcherID string `json:"dispatcherId"`
 	Revision     string `json:"revision"`
 	Version      int    `json:"version"`
-	Reason       string `json:"reason"`
+	Reason       string `json:"reason,omitempty"` // Accepted for legacy clients; ignored.
 }
 
 func dispatcherWeek(value string) (time.Time, error) {
@@ -565,22 +565,16 @@ func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in
 	if !found {
 		return chargeInvalid("This driver has no Gross Board loads in the selected week")
 	}
-	var before json.RawMessage
 	var version int
-	err = tx.QueryRow(ctx, `SELECT to_jsonb(i),version FROM dispatcher_pay_inputs i WHERE week_start=$1 AND driver_id=$2`, w, in.DriverID).Scan(&before, &version)
+	err = tx.QueryRow(ctx, `SELECT version FROM dispatcher_pay_inputs i WHERE week_start=$1 AND driver_id=$2`, w, in.DriverID).Scan(&version)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
 	if version != in.Version {
 		return ErrDispatcherPayConflict
 	}
-	var after json.RawMessage
-	err = tx.QueryRow(ctx, `INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days,note,auto_home_days) VALUES($1,$2,$3,$4,$5)
- ON CONFLICT(week_start,driver_id) DO UPDATE SET home_days=excluded.home_days,note=excluded.note,auto_home_days=excluded.auto_home_days,version=dispatcher_pay_inputs.version+1 RETURNING to_jsonb(dispatcher_pay_inputs)`, w, in.DriverID, in.HomeDays, in.Note, in.AutoHomeDays).Scan(&after)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO dispatcher_pay_history(week_start,actor_id,action,before_value,after_value) VALUES($1,$2,'weekly_input',$3,$4)`, w, actor, before, after)
+	_, err = tx.Exec(ctx, `INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days,note,auto_home_days) VALUES($1,$2,$3,$4,$5)
+ ON CONFLICT(week_start,driver_id) DO UPDATE SET home_days=excluded.home_days,note=excluded.note,auto_home_days=excluded.auto_home_days,version=dispatcher_pay_inputs.version+1`, w, in.DriverID, in.HomeDays, in.Note, in.AutoHomeDays)
 	if err != nil {
 		return err
 	}
@@ -594,10 +588,6 @@ func (r *DispatcherPayRepository) ChangeStatement(ctx context.Context, week stri
 	if in.DispatcherID == "" {
 		return chargeInvalid("Unassigned loads cannot be finalized")
 	}
-	in.Reason = strings.TrimSpace(in.Reason)
-	if reopen && (in.Reason == "" || len([]rune(in.Reason)) > 1000) {
-		return chargeInvalid("Provide a reopen reason, up to 1,000 characters")
-	}
 	// Read committed lets the first reads after a contended accounting lock see
 	// the preceding writer's commit. Board/rule/input writers share this lock;
 	// effective load amounts are resolved in one SQL statement below.
@@ -609,10 +599,9 @@ func (r *DispatcherPayRepository) ChangeStatement(ctx context.Context, week stri
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
 	}
-	var before json.RawMessage
 	var closed bool
 	var version int
-	err = tx.QueryRow(ctx, `SELECT to_jsonb(s),finalized,version FROM dispatcher_pay_statements s WHERE week_start=$1 AND dispatcher_id=$2`, w, in.DispatcherID).Scan(&before, &closed, &version)
+	err = tx.QueryRow(ctx, `SELECT finalized,version FROM dispatcher_pay_statements s WHERE week_start=$1 AND dispatcher_id=$2`, w, in.DispatcherID).Scan(&closed, &version)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
@@ -654,15 +643,6 @@ func (r *DispatcherPayRepository) ChangeStatement(ctx context.Context, week stri
 		_, err = tx.Exec(ctx, `INSERT INTO dispatcher_pay_statements(week_start,dispatcher_id,report,actor_id) VALUES($1,$2,$3,$4)
  ON CONFLICT(week_start,dispatcher_id) DO UPDATE SET finalized=true,report=excluded.report,version=dispatcher_pay_statements.version+1,actor_id=excluded.actor_id,updated_at=now()`, w, in.DispatcherID, raw, actor)
 	}
-	if err != nil {
-		return err
-	}
-	action := "finalize"
-	if reopen {
-		action = "reopen"
-	}
-	after, _ := json.Marshal(in)
-	_, err = tx.Exec(ctx, `INSERT INTO dispatcher_pay_history(week_start,actor_id,action,before_value,after_value) VALUES($1,$2,$3,$4,$5)`, w, actor, action, before, after)
 	if err != nil {
 		return err
 	}

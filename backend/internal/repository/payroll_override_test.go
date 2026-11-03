@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -97,10 +96,6 @@ func TestPayrollOverrideDatabase(t *testing.T) {
 					t.Fatal("override snapshot changed after source refresh")
 				}
 				if kind == "driver" {
-					events, err := pay.SettlementHistory(ctx, driver, week.Format(time.DateOnly))
-					if err != nil || len(events) != 1 || events[0].Reason != "Finalized with override" || !events[0].Report.Settlement.Override {
-						t.Fatal("override event missing", events, err)
-					}
 					history, err := pay.History(ctx, driver, Pagination{PageSize: 100})
 					if err != nil {
 						t.Fatal(err)
@@ -114,24 +109,11 @@ func TestPayrollOverrideDatabase(t *testing.T) {
 					if !found {
 						t.Fatal("profile history lost override")
 					}
-				} else {
-					var audit []byte
-					if err := pool.QueryRow(ctx, `SELECT details FROM truck_settlement_events WHERE truck_id=$1 AND action='finalized' ORDER BY created_at DESC LIMIT 1`, truck).Scan(&audit); err != nil {
-						t.Fatal(err)
-					}
-					var event struct {
-						Override bool `json:"override"`
-					}
-					if err := json.Unmarshal(audit, &event); err != nil || !event.Override {
-						t.Fatal("investor override audit missing", err)
-					}
 				}
-				if _, err := settle(ctx, week, target, get(week).Revision, actor, "", true, true); err == nil {
-					t.Fatal("override removed the reopen reason requirement")
+				if _, err := settle(ctx, week, target, get(week).Revision, actor, "", true, true); err != nil {
+					t.Fatal("reopen without a reason failed", err)
 				}
-				if _, err := settle(ctx, week, target, get(week).Revision, actor, "Review source", true, false); err != nil {
-					t.Fatal(err)
-				}
+				assertNoPayrollActionHistory(t, ctx, pool)
 				// An unmatched extra load has no fee; whole-week override still freezes
 				// the current values and retains every review issue.
 				exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES($1,$2::date,1,'UNMATCHED')`, driver, week.Format(time.DateOnly))
@@ -139,7 +121,7 @@ func TestPayrollOverrideDatabase(t *testing.T) {
 				if _, err := settle(ctx, week, "", report.Revision, actor, "", false, true); err != nil {
 					t.Fatal("whole-week override failed", err)
 				}
-				if _, err := settle(ctx, week, "", get(week).Revision, actor, "Review whole week", true, false); err != nil {
+				if _, err := settle(ctx, week, "", get(week).Revision, actor, "", true, false); err != nil {
 					t.Fatal(err)
 				}
 				future, _ := chargeWeek(ChargeCurrentWeek())

@@ -56,7 +56,7 @@ export async function runPayrollOverrideE2E({ page, base, sql, schema, temp }) {
     await page.getByRole('menuitem', { name: isInvestor ? 'Reopen truck' : 'Reopen driver', exact: true }).click();
     dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('checkbox', { name: overrideName })).toHaveCount(0);
-    await dialog.getByLabel('Reason for reopening').fill('Review missing source location');
+    await expect(page.getByLabel('Reason for reopening')).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Reopen settlement', exact: true }).click();
     await expect(dialog).toHaveCount(0);
 
@@ -76,7 +76,7 @@ export async function runPayrollOverrideE2E({ page, base, sql, schema, temp }) {
     await expect(page.getByRole('button', { name: 'Reopen week', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name, exact: true }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: isInvestor ? 'Reopen truck' : 'Reopen driver', exact: true }).click();
-    await page.getByLabel('Reason for reopening').fill('Review individual override');
+    await expect(page.getByLabel('Reason for reopening')).toHaveCount(0);
     await page.getByRole('button', { name: 'Reopen settlement', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   }

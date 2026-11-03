@@ -410,7 +410,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     settlementPending.current.add(driverId); setSettling(new Set(settlementPending.current)); setError(""); setMessage("");
     try {
       try {
-        const receipt = await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, "", false, true, driverId ? row?.statementRevision : report.preparation?.generation);
+        const receipt = await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, false, true, driverId ? row?.statementRevision : report.preparation?.generation);
         receiveSettlement(receipt); setMessage("Finalized");
       } catch (err) {
         if (err instanceof APIError && err.code === "finalization_blocked") {

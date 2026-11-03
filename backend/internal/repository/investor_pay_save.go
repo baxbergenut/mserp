@@ -127,9 +127,6 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 			return edits, err
 		}
 	}
-	if err = truckAudit(ctx, tx, card.ID, edits.WeekStart, "pay_edits", actor, edits); err != nil {
-		return edits, err
-	}
 	if err = setPaySaveRevision(ctx, tx, "investor", &edits); err != nil {
 		return edits, err
 	}
@@ -144,9 +141,8 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
 		return empty, finalizationBlocked("Future weeks cannot be finalized")
 	}
-	if reopen && (strings.TrimSpace(reason) == "" || len([]rune(reason)) > 2000) {
-		return empty, chargeInvalid("Provide a reason for reopening, up to 2,000 characters")
-	}
+	// Legacy clients may still send a reason; it is no longer collected or saved.
+	reason = ""
 	if override {
 		reason = "Finalized with override"
 	}
@@ -255,11 +251,6 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			return d, e
 		}
 		writeBatch.Queue(`INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,report,finalized,finalized_at,finalized_by) VALUES($1,$2::date,$3,$4,$5,true,now(),$6) ON CONFLICT(truck_id,week_start) DO UPDATE SET owner_id=excluded.owner_id,edits=excluded.edits,report=excluded.report,finalized=true,version=investor_pay_weeks.version+1,finalized_at=now(),finalized_by=excluded.finalized_by`, d.ID, report.WeekStart, d.InvestorID, edits, body, actor)
-		detail, e := json.Marshal(map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d})
-		if e != nil {
-			return d, e
-		}
-		writeBatch.Queue(`INSERT INTO truck_settlement_events(truck_id,week_start,action,actor_id,details) VALUES($1,$2::date,'finalized',nullif($3,'')::uuid,$4)`, d.ID, report.WeekStart, actor, detail)
 		return d, nil
 	}
 	inputs, _ := ctx.Value(payrollFinalizeKey{}).(*payrollFinalizeInputs)
@@ -329,22 +320,13 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			committed.Drivers = append(committed.Drivers, d)
 			continue
 		}
-		action := "finalized"
-		if reopen {
-			action = "reopened"
-		}
-		detail, e := json.Marshal(map[string]any{"reason": reason, "override": override, "issues": report.Issues, "report": d})
-		if e != nil {
-			return empty, e
-		}
-		writeBatch.Queue(`INSERT INTO truck_settlement_events(truck_id,week_start,action,actor_id,details) VALUES($1,$2::date,$3,nullif($4,'')::uuid,$5)`, d.ID, report.WeekStart, action, actor, detail)
 		committed.Drivers = append(committed.Drivers, d)
 	}
 	if count == 0 {
 		return empty, chargeInvalid("No eligible investor settlements selected")
 	}
 	if len(bulkReopen) > 0 {
-		if err = reopenPreparedInvestorWeek(ctx, tx, report, actor, reason, bulkReopen); err != nil {
+		if err = reopenPreparedInvestorWeek(ctx, tx, report, bulkReopen); err != nil {
 			return empty, err
 		}
 	}

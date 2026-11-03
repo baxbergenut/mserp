@@ -354,10 +354,11 @@ func TestDispatcherPayDatabase(t *testing.T) {
 				t.Fatal("future rules affected earlier week")
 			}
 			change.Version = frozen.Statements[0].Version
-			change.Reason = "Review corrected board"
+			change.Reason = ""
 			if err = repo.ChangeStatement(ctx, "2099-01-05", change, "test", true); err != nil {
 				t.Fatal(err)
 			}
+			assertNoPayrollActionHistory(t, ctx, pool)
 			reopened := get()
 			if reopened.Statements[0].Finalized || reopened.Statements[0].Pay != 137.5 {
 				t.Fatal("reopen did not calculate", reopened)
@@ -379,13 +380,11 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			if get().Statements[0].Rows[0].HomeDays != 0 {
 				t.Fatal("automatic days did not follow later Gross Board changes")
 			}
-			// Audit and rules are immutable even as the application owner.
+			// Effective commission rules remain immutable as the application owner.
 			if _, err = pool.Exec(ctx, `UPDATE dispatcher_commission_rules SET actor_id='changed'`); err == nil {
 				t.Fatal("rules mutable")
 			}
-			if _, err = pool.Exec(ctx, `DELETE FROM dispatcher_pay_history`); err == nil {
-				t.Fatal("audit mutable")
-			}
+			assertNoPayrollActionHistory(t, ctx, pool)
 			var count int
 			if err = pool.QueryRow(ctx, `SELECT count(*) FROM payroll_cache_revisions WHERE table_name LIKE 'dispatcher_%'`).Scan(&count); err != nil || count < 4 {
 				t.Fatal("cache registration missing", count, err)

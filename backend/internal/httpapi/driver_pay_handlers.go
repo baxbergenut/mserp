@@ -170,23 +170,6 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 		}
 		writeJSON(w, 200, result)
 	})
-	r.Get("/drivers/{id}/settlement-history", func(w http.ResponseWriter, r *http.Request) {
-		id, ok := pathID(w, r)
-		if !ok {
-			return
-		}
-		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), repo.FirstPayrollWeek())
-		if err != nil {
-			writeAPIError(w, 400, err.Error())
-			return
-		}
-		result, err := repo.SettlementHistory(r.Context(), id, week.Format("2006-01-02"))
-		if err != nil {
-			fail(w, err)
-			return
-		}
-		writeJSON(w, 200, result)
-	})
 	for _, action := range []string{"finalize", "reopen"} {
 		reopen := action == "reopen"
 		r.Post("/driver-pay/"+action, func(w http.ResponseWriter, r *http.Request) {

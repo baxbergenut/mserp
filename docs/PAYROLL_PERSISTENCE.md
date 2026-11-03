@@ -1,5 +1,19 @@
 # Persistent payroll implementation
 
+## Pay-page action history
+
+Driver, Investor and Dispatcher Pay no longer collect reopening notes or append
+finalization/reopening and routine edit history snapshots. Driver profile weekly
+statements remain available; the separate action log and settlement-history API
+are removed. Current frozen statements, financial ledgers, correction audits,
+source revision capture and command receipts remain unchanged. Legacy reason
+inputs are accepted but ignored on reopening. Existing action rows remain dormant;
+no schema migration or historical deletion is performed.
+
+Validation covers note-free UI submission on all three pages, no new action rows,
+legacy/prepared single and bulk financial parity, stale revisions and atomic
+rollback.
+
 ## Release status
 
 This release implements persistent Driver Pay and Investor Pay, building on
@@ -15,7 +29,7 @@ mandatory. No automatic financial retry against a newer revision is allowed.
 
 The user removed both whole-week buttons and the small finalized-count row from
 both pages. Individual finalization/reopening and the top Finalization metric remain.
-The compatible bulk API retains combined validation, ordering, individual audits
+The compatible bulk API retains combined validation, ordering
 and all-or-nothing rollback. Current browser measurements use individual actions.
 
 Migration 185 shares large immutable resource revision maps by content hash. Each
@@ -151,7 +165,7 @@ build, vet and Linux deployment compatibility checks passed.
 | 2: persistent reads | Stored summary/detail/evidence, repeatable snapshot, retained version reads, preparation/failure/retry states, drafts and view restoration | Zero calculator calls; 2 summary / 3 expanded payroll-data queries |
 | 3: incremental preparation | Normalized trip/routing facts, exact balance buckets, captured old/new components, separate dated scopes, conservative fallback when completeness is unknown | Full-input parity including dated teams, owners, future reservations, expense boundaries and historical components |
 | 4: commands | Validated stored inputs, exact authoritative collection limits, atomic affected-version publication, durable actor-scoped receipts, exact replay, preserved implicit deductions | Financial parity, rollback, lost responses, in-flight typing and related edits |
-| 5: finalization and reopening | Prepared source/resource fencing, original posting/confirmation rules, post-write frozen snapshots, explicit review/override/reason behavior, atomic bulk reopening | Single/bulk parity and second-statement failure rollback |
+| 5: finalization and reopening | Prepared source/resource fencing, original posting/confirmation rules, post-write frozen snapshots, explicit review/override behavior and note-free reopening, atomic bulk reopening | Single/bulk parity and second-statement failure rollback |
 | 6: concurrency | Ordered cross-week resource locks, source gate, SQL claims, exact resource epochs, independent-resource concurrency, shared-resource serialization, quiesced reversible transition | Independent/shared races, source races, complete writer audit and helper recovery |
 | 7: release | Compatible deploy helper, ordered runtime gates, transition CLI/helper, reconciliation and recovery procedures | Main CI/deployment, prepared cohort and production diagnostics; signed-in visual verification by the operator |
 
@@ -417,7 +431,7 @@ tables are excluded. This is intentionally broader than the known financial join
 | Expenses and collections | `expense_repository.go`, `expense_maintenance.go`, `expense_external.go`, `expense_balance.go`, `driver_charges_pay.go`, `maintenance_repository.go`; supported import/export workflows | Driver, investor and expense principals, reimbursement vs charge, corrections, external receipts, current/future reservations. Existing financial locks and immutable receipt protections remain. |
 | Escrow, recurring charges and installments | `driver_charges_repository.go`, `driver_charges_pay.go`, `truck_charges.go` and related canonical SQL guards | Account/schedule/type, old/new effective dates, releases, collections and later remaining balances. No generic merged balance replaces these distinctions. |
 | Fuel, toll and scale sources | Fuel and toll repositories/jobs, `toll_transaction_links.go`, `toll_truck_links.go`, `prepass_fleet.go`, `weighmytruck_settlements.go` | Dated driver/truck attribution, linked-source changes, first-live-week rules, carry, original evidence. Capture never calls a provider. |
-| Payroll edits / settlements / undo | `driver_pay_repository.go`, `investor_pay_save.go`, `payroll_settlements.go`, `payroll_source_accept.go`, payroll bulk helpers | Canonical edit/settlement revisions, frozen snapshots, confirmations, reservations, individual audits. Comment saves retain existing implicit deductions. |
+| Payroll edits / settlements / undo | `driver_pay_repository.go`, `investor_pay_save.go`, `payroll_settlements.go`, `payroll_source_accept.go`, payroll bulk helpers | Canonical edit/settlement revisions, frozen snapshots, confirmations, reservations and exact retry receipts. No action-history snapshots. Comment saves retain existing implicit deductions. |
 | Direct SQL and existing database triggers | The same classified tables, regardless of entry point | AFTER STATEMENT capture for INSERT/UPDATE/DELETE/TRUNCATE in the source transaction. Rollback also rolls back the event. |
 | Derived work | Projection generations, statement versions/state, jobs, receipts | No recursive source invalidation. Canonical ledgers are never written by preparation. |
 

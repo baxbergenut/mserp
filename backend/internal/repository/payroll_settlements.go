@@ -60,15 +60,6 @@ func finalizationReview(report DriverPayWeek, id, format string, args ...any) er
 	return &PayrollFinalizationBlockedError{error: chargeInvalid(format, args...), Review: &report}
 }
 
-type SettlementEvent struct {
-	Action    string          `json:"action"`
-	Version   int             `json:"version"`
-	Actor     string          `json:"actor"`
-	Reason    string          `json:"reason"`
-	CreatedAt time.Time       `json:"createdAt"`
-	Report    DriverPayDriver `json:"report"`
-}
-
 func payrollRevision(report DriverPayWeek) string {
 	report.Revision = ""
 	b, _ := json.Marshal(report)
@@ -147,9 +138,8 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
 		return empty, finalizationBlocked("Future weeks cannot be finalized")
 	}
-	if reopen && (strings.TrimSpace(reason) == "" || len([]rune(reason)) > 2000) {
-		return empty, chargeInvalid("Provide a reason for reopening, up to 2,000 characters")
-	}
+	// Legacy clients may still send a reason; it is no longer collected or saved.
+	reason = ""
 	if override {
 		reason = "Finalized with override"
 	}
@@ -256,9 +246,6 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				if _, err = tx.Exec(ctx, `UPDATE driver_charge_schedules SET version=version+1 WHERE id=$1`, id); err != nil {
 					return empty, err
 				}
-				if err = chargeAudit(ctx, tx, id, "", actor, "payroll_reopened", map[string]string{"weekStart": report.WeekStart, "reason": reason}); err != nil {
-					return empty, err
-				}
 			}
 		} else {
 			if err = savePaySources(ctx, tx, d, &d.Edits, "driver", actor); err != nil {
@@ -328,22 +315,8 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				if _, err = tx.Exec(ctx, `UPDATE driver_charge_schedules SET version=version+1 WHERE id=$1`, row.ScheduleID); err != nil {
 					return empty, err
 				}
-				if err = chargeAudit(ctx, tx, row.ScheduleID, "", actor, "payroll_finalized", row); err != nil {
-					return empty, err
-				}
 			}
 			pending[d.ID] = confirmed
-		}
-		if !reopen {
-			continue
-		}
-		action := "finalized"
-		if reopen {
-			action = "reopened"
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO payroll_settlement_events(driver_id,week_start,version,action,actor_id,reason,report)
-   SELECT driver_id,week_start,version,$3,nullif($4,'')::uuid,$5,report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, action, actor, reason); err != nil {
-			return empty, err
 		}
 	}
 	if selected == 0 {
@@ -385,8 +358,6 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			}
 			freezeBatch.Queue(`INSERT INTO payroll_settlements(driver_id,week_start,report,confirmed_schedules,finalized_by,reason) VALUES($1,$2::date,$3,$4,nullif($5,'')::uuid,$6)
    ON CONFLICT(driver_id,week_start) DO UPDATE SET version=payroll_settlements.version+1,finalized=true,report=excluded.report,confirmed_schedules=excluded.confirmed_schedules,finalized_by=excluded.finalized_by,finalized_at=now(),reopened_at=NULL,reopened_by=NULL,reason=excluded.reason`, d.ID, report.WeekStart, body, confirmed, actor, reason)
-			freezeBatch.Queue(`INSERT INTO payroll_settlement_events(driver_id,week_start,version,action,actor_id,reason,report)
- SELECT driver_id,week_start,version,'finalized',nullif($3,'')::uuid,$4,report FROM payroll_settlements WHERE driver_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart, actor, reason)
 			delete(pending, d.ID)
 		}
 		if len(pending) != 0 {
@@ -462,25 +433,4 @@ func overlaySelectedPayrollSettlements(ctx context.Context, tx pgx.Tx, report Dr
 		}
 	}
 	return report, nil
-}
-
-func (r *DriverPayRepository) SettlementHistory(ctx context.Context, driver, week string) ([]SettlementEvent, error) {
-	rows, err := r.pool.Query(ctx, `SELECT e.action,e.version,coalesce(u.username,''),e.reason,e.created_at,e.report FROM payroll_settlement_events e LEFT JOIN app_users u ON u.id=e.actor_id WHERE e.driver_id=$1 AND e.week_start=$2::date ORDER BY e.version DESC`, driver, week)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := []SettlementEvent{}
-	for rows.Next() {
-		var e SettlementEvent
-		var body []byte
-		if err = rows.Scan(&e.Action, &e.Version, &e.Actor, &e.Reason, &e.CreatedAt, &body); err != nil {
-			return nil, err
-		}
-		if err = json.Unmarshal(body, &e.Report); err != nil {
-			return nil, err
-		}
-		result = append(result, e)
-	}
-	return result, rows.Err()
 }

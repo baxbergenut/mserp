@@ -93,7 +93,7 @@ try {
  await page.reload();await expect(section).toContainText('Source values changed');await expect(section).toContainText('$85.00');
  await expect(section.getByRole('button',{name:`Edit home days for ${driverName}`})).toBeDisabled();
  await section.getByRole('button',{name:'Reopen',exact:true}).click();
- await page.getByRole('dialog').getByLabel('Reason',{exact:true}).fill('Review corrected Gross Board values');
+ await expect(page.getByRole('dialog').getByLabel('Reason',{exact:true})).toHaveCount(0);
  await page.getByRole('dialog').getByRole('button',{name:'Reopen',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(section).toContainText('$100.00');await expect(section.getByText('Draft',{exact:true})).toHaveCount(0);
  await expect(section.getByText(finalizedStatement.finalizedBy,{exact:true})).toHaveCount(0);

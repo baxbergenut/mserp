@@ -79,7 +79,7 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   await page.screenshot({ path: join(temp, 'investor-pay-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: 'Payroll Hector PAY-EXTRA', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Reopen truck', exact: true }).click();
-  await page.getByLabel('Reason for reopening').fill('E2E correction');
+  await expect(page.getByLabel('Reason for reopening')).toHaveCount(0);
   await page.getByRole('button', { name: 'Reopen settlement', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Payroll Hector PAY-EXTRA', exact: true }).click({ button: 'right' });

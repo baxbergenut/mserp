@@ -28,6 +28,8 @@ try {
     let canFinalize = false, holdPreview = false, releasePreview;
     let failure = null;
     const writes = [];
+    const reopens = [];
+    let canReopen = false;
     const week = '2026-10-26';
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname.slice(4);
@@ -41,13 +43,17 @@ try {
         if (holdPreview) await new Promise(resolve => { releasePreview = resolve; });
         finalized = true;
       }
+      if (path === `/${kind}-pay/reopen`) {
+        reopens.push(route.request().postDataJSON());
+        finalized = false;
+      }
       if (holdPreview && path === `/${kind}-pay` && !new URL(route.request().url()).searchParams.has('summary')) {
         await new Promise(resolve => { releasePreview = resolve; });
       }
       let data = [];
-      if (path === '/auth/session') data = { user: { id: 'test', username: 'Test', permissions: ['driver_pay.read', 'investor_pay.read', 'dispatcher_pay.read', 'drivers.read', 'investors.read', ...(canFinalize ? [`${kind}_pay.finalize`] : [])], expenseCategoryAccess: [], theme: 'default' }, csrfToken: 'fixture' };
+      if (path === '/auth/session') data = { user: { id: 'test', username: 'Test', permissions: ['driver_pay.read', 'investor_pay.read', 'dispatcher_pay.read', 'drivers.read', 'investors.read', ...(canFinalize ? [`${kind}_pay.finalize`] : []), ...(canReopen ? [`${kind}_pay.reopen`] : [])], expenseCategoryAccess: [], theme: 'default' }, csrfToken: 'fixture' };
       else if (path === '/auth/birthday') data = { eligible: false, serverTime: new Date().toISOString() };
-      else if (/^\/(driver|investor)-pay(\/finalize|\/settlement-preview)?$/.test(path)) data = {
+      else if (/^\/(driver|investor)-pay(\/finalize|\/reopen|\/settlement-preview)?$/.test(path)) data = {
         weekStart: week, revision: 'fixture',
         pagination: { page: 1, pageSize: 25, total, totalPages: 1, dispatchers: [], finalized: finalized && total ? 1 : 0, statements: total, loads: 0, review: 0, fee: '0', payable: '0' },
         drivers: total ? [{ id: 'statement', fullName: 'Test Recipient', ...(kind === 'investor' ? { investorId: 'owner' } : {}), payType: 'cpm', payRate: '0.75', employmentType: 'unassigned', dispatcherName: 'Dispatch', truckUnit: '101', loads: [], fuelTotal: '0', tollTotal: '0', summary: { loads: 0, missingFees: 0, review: 0, fee: '0', payable: '0' }, settlement: { finalized, finalizedBy: finalizer, finalizedAt: '2026-10-30T12:00:00Z', version: 1 }, edits: { driverId: 'statement', weekStart: week, version: 1, comments: {}, adjustments: [], fuelOverride: null, tollOverride: null } }] : [],
@@ -60,7 +66,7 @@ try {
         const template = data.drivers[0];
         data.drivers.push(...['Zulu', 'Alpha'].map(name => ({ ...template, id: `draft-${name}`, fullName: `Draft ${name}`, settlement: null })));
       }
-      if (path.endsWith('/finalize') && kind !== 'dispatcher') {
+      if ((path.endsWith('/finalize') || path.endsWith('/reopen')) && kind !== 'dispatcher') {
         const input = route.request().postDataJSON();
         data.receipt = true;
         data.pagination = undefined;
@@ -118,7 +124,7 @@ try {
       await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(finalize).toHaveCount(0);
-      expect(writes).toEqual([{ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: false, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) }]);
+      expect(writes).toEqual([{ weekStart: week, revision: 'fixture', driverId: 'statement', override: false, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) }]);
 
       finalized = false;
       failure = { status: 400, code: 'finalization_blocked', error: 'Resolve loads needing review' };
@@ -134,7 +140,7 @@ try {
       await dialog.getByRole('button', { name: 'Finalize anyway', exact: true }).click();
       await expect(dialog).toHaveCount(0);
       await expect(row.locator('td').last()).toHaveText('Payroll Reviewer');
-      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', driverId: 'statement', reason: '', override: true, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+      expect(writes.at(-1)).toEqual({ weekStart: week, revision: 'fixture', driverId: 'statement', override: true, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
 
       for (const blocked of [
         { status: 409, code: 'conflict', error: 'Statement changed; reload' },
@@ -155,6 +161,33 @@ try {
       await expect(page.getByRole('button', { name: 'Finalize week', exact: true })).toHaveCount(0);
       await expect(finalize).toBeEnabled();
     }
+    // Reopening needs no note on any pay page, and respects its own permission.
+    finalized = true; total = 1; canReopen = false;
+    await page.reload();
+    if (kind === 'dispatcher') {
+      await expect(page.getByRole('button', { name: 'Reopen', exact: true })).toHaveCount(0);
+    } else {
+      await page.getByRole('row').filter({ hasText: 'Test Recipient' }).click({ button: 'right' });
+      await expect(page.getByRole('menuitem', { name: /^Reopen/ })).toHaveCount(0);
+    }
+    canReopen = true;
+    await page.reload();
+    if (kind === 'dispatcher') {
+      await page.getByRole('button', { name: 'Reopen', exact: true }).click();
+    } else {
+      await page.getByRole('row').filter({ hasText: 'Test Recipient' }).click({ button: 'right' });
+      await page.getByRole('menuitem', { name: /^Reopen/ }).click();
+    }
+    const reopenDialog = page.getByRole('dialog', { name: /^Reopen/ });
+    await expect(reopenDialog).toBeVisible();
+    await expect(reopenDialog.locator('textarea,input')).toHaveCount(0);
+    await reopenDialog.getByRole('button', { name: /^Reopen/ }).click();
+    await expect(reopenDialog).toHaveCount(0);
+    await expect(page.getByText('Payroll Reviewer', { exact: true })).toHaveCount(0);
+    expect(reopens).toHaveLength(1);
+    expect(reopens[0]).not.toHaveProperty('reason');
+    await expect(progress).toHaveAttribute('aria-valuenow', '0');
+
     finalized = true; total = 1; finalizer = '';
     await page.reload();
     await expect(progress).toHaveAttribute('aria-valuenow', '100');

@@ -48,6 +48,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
+## Pay-page actions
+
+Driver, Investor and Dispatcher Pay reopen without a note. Finalize/reopen and
+routine pay-page edits do not append action-history snapshots; driver profiles
+show weekly statements without an action log. The settlement-history endpoint
+is retired. Legacy reason inputs are accepted but ignored for reopening. Current
+frozen statements, optimistic versions, canonical collections/confirmations,
+financial correction audits and idempotent command receipts remain authoritative.
+Existing legacy event rows are left in place; this change stops new action writes
+and requires no schema migration.
+
 ## Repository map
 
 ### Backend
@@ -140,8 +151,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   Retirement deletes older saved statement rows and current projections, preserves
   source invoices/payment allocations/audits and compact statement references, and verifies every
   retained report before committing a receipt. API, UI and seeding honor the boundary.
-  Prepared bulk reopening batches confirmation/metadata writes and retains every
-  individual audit; collection allocations remain unchanged. Publication shares
+  Prepared bulk reopening batches confirmation/metadata writes without action-history
+  snapshots; collection allocations remain unchanged. Publication shares
   inputs only after canonical writes. Resource transactions may retain validated
   source revisions under their shared gate. Intervening source changes require
   complete captured-revision and old/new routing proof outside the locked component;
@@ -623,8 +634,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   users, preserving busy/save guards without expanding the row. Only a server
   `finalization_blocked` review failure opens a compact issue dialog with explicit
   Finalize anyway; no checkbox or normal confirmation is shown. Overrides retain
-  the reviewed revision and audit. Conflicts, permissions and collection errors
-  never offer a bypass. Reopening still asks for a reason.
+  the reviewed revision. Conflicts, permissions and collection errors
+  never offer a bypass. Reopening needs no reason.
   Unfinalized statements sort before finalized statements, before Driver/Investor
   pagination; each group retains its existing order. Reopening restores draft placement.
   Their third summary card shows week-wide finalization percentage and green progress;
@@ -1253,8 +1264,7 @@ browser bundle.
   requires `driver_board.write`.
 - Driver pay: `GET/PUT /driver-pay`, `POST /driver-pay/refresh-loads`,
   `POST /driver-pay/finalize` and `/reopen` (optional driverId, report revision;
-  reopening requires a reason). `GET /drivers/{id}/pay-history` is paginated;
-  `GET /drivers/{id}/settlement-history?weekStart=...` returns the audit snapshots.
+  reopening needs no reason). `GET /drivers/{id}/pay-history` is paginated.
   GET accepts Monday `weekStart`; PUT saves one driver's versioned weekly notes,
   per-entry comments and adjustments. Refresh accepts `weekStart` and updates
   source details of already-linked loads only, including older report weeks.
@@ -1637,7 +1647,7 @@ assignment lookup lists.
   Existing payments retain their destination. Reads never collect expenses;
   autosave/finalize saves displayed deductions. Reopening preserves payments.
   Finalization freezes reports, checks revisions and shares the payroll lock;
-  reopening requires a reason. Negative net has no automatic debt carry beyond
+  reopening needs no reason. Negative net has no automatic debt carry beyond
   existing expense balances. Financial dashboard calculations remain separate.
   API: GET /truck-charges; PUT /truck-charges/terms and /recurring;
   GET/PUT /investor-pay; POST /investor-pay/finalize and /reopen. Shared payroll
@@ -1930,8 +1940,8 @@ assignment lookup lists.
   expense deductions, pins generated charges and confirms installment deductions.
   payroll_settlements freezes the full report with actor/time; source or profile
   changes do not change finalized history. Database guards reject payroll/payment
-  edits until reopened. A reason is required to reopen; audit events retain every
-  snapshot. Reopening reverses only installment confirmations made by finalization;
+  edits until reopened. Reopening needs no reason; action-history snapshots are not
+  saved. Reopening reverses only installment confirmations made by finalization;
   saved expense payments remain paid until corrected, matching payment-on-save.
   Whole-week actions are atomic and ignore UI filters. Charge writes share an
   advisory lock; finalization obtains its exclusive session counterpart before
@@ -1942,7 +1952,7 @@ assignment lookup lists.
   issues and offers Override and finalize, bypassing future-week and all report,
   statement and load review checks (including missing fees, counted as zero).
   Permissions, current revisions, financial locks and ledger validation still
-  apply. Frozen JSON and audit history retain the override and unresolved issues;
+  apply. Current frozen JSON retains the override and unresolved issues;
   finalized rows show Finalized* with an accessible Finalized with override label.
   No migration is needed.
   `TestPayrollOverrideDatabase` uses `MSERP_DRIVER_CHARGES_TEST_DATABASE_URL`;
@@ -2390,8 +2400,8 @@ assignment lookup lists.
   home days add tier-only credit, capped at one promotion by default; promotion
   CAN reduce pay. Dated dispatcher credit and transfers allocate each load once.
   Immutable editable rule revisions apply from their effective Monday; weekly
-  inputs are versioned, finalization freezes rules/amounts and reopening requires
-  a reason. New dispatcher_pay.edit/rules/finalize/reopen permissions require View.
+  inputs are versioned, finalization freezes rules/amounts and reopening needs
+  no reason. New dispatcher_pay.edit/rules/finalize/reopen permissions require View.
   Legacy dispatcher percentages are retained only for compatibility. See
   docs/DISPATCHER_PAY.md and TestDispatcherPayDatabase with disposable local
   MSERP_DISPATCHER_PAY_TEST_DATABASE_URL; browser: test-dispatcher-pay-e2e.mjs.
@@ -2820,7 +2830,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   refresh. Blocking review errors include the reviewed report/revision; stale
   conflicts never retry automatically. Saves acquire the existing financial lock
   before their repeatable-read snapshot, so receipt revisions cannot adopt unseen
-  source commits. Reopening reasons, immutable snapshots and audit remain required.
+  source commits. Reopening needs no reason or action log; current frozen statements
+  and financial receipts remain required.
   TestPayrollStatementReceiptsDatabase covers both pages and fresh/migrated schemas.
 - Migration 180 completes missing trigger events on already registered inputs.
   Install the updated deployment helper first; it pauses writers for that DDL.
@@ -2845,7 +2856,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   lock, reads the immutable target, and calculates live balances after the write.
   Whole-week finalization shares validation only for distinct source principals;
   shared principals retain sequential checks. Expense/payment triggers, per-row
-  audit records and atomic rollback remain active. Final snapshots use post-write
+  financial records and atomic rollback remain active. Final snapshots use post-write
   calculations/source revisions. Performance tests compare the original full
   trip/assignment projection against summaries and every selected statement.
 
@@ -2931,7 +2942,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   responses remain 204. Ctrl+Z/Cmd+Z uses an in-memory page-session stack for
   payroll edits and source acceptance; saves retain current concurrency versions,
   and undo waits for in-flight saves. Reload/filter/week changes clear the stack.
-  Finalization and reopening keep their explicit audited workflows. Arrow keys
+  Finalization and reopening keep their explicit versioned workflows. Arrow keys
   navigate editable and read-only payroll cells, and Ctrl+C copies the selected
   cell. One click selects the cell without highlighting text; typing replaces its
   value, while F2 or double-click edits existing text with a caret. Sourced amount

@@ -125,7 +125,6 @@ var routeAccessPolicies = []routeAccess{
 	{"GET", "/drivers/{id}/notes", "drivers.read"},
 	{"POST", "/drivers/{id}/notes", "drivers.edit"},
 	{"GET", "/drivers/{id}/pay-history", "driver_pay.read"},
-	{"GET", "/drivers/{id}/settlement-history", "driver_pay.read"},
 	{"PATCH", "/drivers/{id}/status", "drivers.edit"},
 	{"GET", "/drivers/{id}/team", "drivers.read"},
 	{"PUT", "/drivers/{id}/team", "driver_pay.edit"},

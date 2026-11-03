@@ -268,7 +268,7 @@ try {
   await expect(page.getByLabel('E2e Driver, Advance, charge amount',{exact:true})).toBeDisabled();
   await page.getByRole('button', {name:'E2e Driver',exact:true}).click({button:'right'});
   await page.getByRole('menuitem', {name:'Reopen driver',exact:true}).click();
-  await page.getByLabel('Reason for reopening').fill('Correct weekly settlement');
+  await expect(page.getByLabel('Reason for reopening')).toHaveCount(0);
   await page.getByRole('button', {name:'Reopen settlement',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByLabel('E2e Driver, Advance, charge amount',{exact:true})).toBeEditable();

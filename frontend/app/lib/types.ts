@@ -1552,9 +1552,8 @@ export interface ChargeBulk {
 export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }
 
 export interface PayrollSettlement { finalized: boolean; override?: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
-export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; weekStart: string; revision: string; driverId?: string; reason: string; override: boolean }
+export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; weekStart: string; revision: string; driverId?: string; reason?: string; override: boolean }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
-export interface SettlementEvent { action: string; version: number; actor: string; reason: string; createdAt: string; report: DriverPayDriver }
 
 export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number }
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }

@@ -101,10 +101,7 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	if err != nil || find(current, ownerDriver).PayRate != oldRate {
 		t.Fatal("finalized snapshot changed with profile", err)
 	}
-	if _, err = pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "", true, false); err == nil {
-		t.Fatal("reopen without reason accepted")
-	}
-	reopened, err := pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "Correct deduction", true, false)
+	reopened, err := pay.Settle(ctx, week, ownerDriver, current.Revision, actor, "", true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,10 +131,7 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 			t.Fatal("whole-week missed driver")
 		}
 	}
-	events, err := pay.SettlementHistory(ctx, ownerDriver, week.Format(time.DateOnly))
-	if err != nil || len(events) != 3 || events[1].Reason != "Correct deduction" {
-		t.Fatal("settlement audit history", events, err)
-	}
+	assertNoPayrollActionHistory(t, ctx, pool)
 	history, err := pay.History(ctx, ownerDriver, Pagination{PageSize: 12})
 	if err != nil || history.Total == 0 || !history.Items[0].Driver.Settlement.Finalized {
 		t.Fatal("profile pay history", history, err)
@@ -151,7 +145,7 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 			t.Fatal("duplicate installment collection", s.Confirmed)
 		}
 	}
-	opened, err := pay.Settle(ctx, week, "", final.Revision, actor, "Recheck the whole week", true, false)
+	opened, err := pay.Settle(ctx, week, "", final.Revision, actor, "", true, false)
 	if err != nil {
 		t.Fatal("whole week reopen", err)
 	}
