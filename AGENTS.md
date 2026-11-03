@@ -2354,7 +2354,8 @@ assignment lookup lists.
   API, fetches posting-date ranges of at most 31 days with pagination, and
   never fetches earlier than January 1 of the current UTC year. It upserts by
   the stable PrePass toll ID. Completed UTC posting dates are
-  recorded, while the current UTC date is rechecked. Vehicle numbers are matched
+  recorded. Each sync rechecks the latest 14 UTC posting dates, including today,
+  for late-arriving transactions. Vehicle numbers are matched
   to normalized truck units; unmatched tolls remain stored and are reconciled
   after the truck is added. PrePass timestamps may omit a timezone; toll dates
   and times use the calendar and clock fields encoded by PrePass so they remain

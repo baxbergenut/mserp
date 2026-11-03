@@ -11,6 +11,7 @@ import (
 )
 
 const maxPrePassRangeDays = 31
+const recentPrePassDays = 14
 
 type tollClient interface {
 	FetchTransactions(context.Context, time.Time, time.Time) ([]prepass.Transaction, error)
@@ -79,9 +80,15 @@ func (j *SyncTollsJob) Run(ctx context.Context) (SyncTollsResult, error) {
 	if err := j.store.ReconcileTruckAssignments(ctx); err != nil {
 		return SyncTollsResult{}, fmt.Errorf("reconcile PrePass toll truck assignments: %w", err)
 	}
-	completed, err := j.store.CompletedDays(ctx, j.environment, startDate, today)
-	if err != nil {
-		return SyncTollsResult{}, fmt.Errorf("load completed PrePass toll sync days: %w", err)
+	// PrePass can add transactions after a posting date was first fetched.
+	recheckFrom := today.AddDate(0, 0, 1-recentPrePassDays)
+	var completed map[string]struct{}
+	if startDate.Before(recheckFrom) {
+		var err error
+		completed, err = j.store.CompletedDays(ctx, j.environment, startDate, recheckFrom.AddDate(0, 0, -1))
+		if err != nil {
+			return SyncTollsResult{}, fmt.Errorf("load completed PrePass toll sync days: %w", err)
+		}
 	}
 
 	result := SyncTollsResult{
@@ -89,20 +96,16 @@ func (j *SyncTollsJob) Run(ctx context.Context) (SyncTollsResult, error) {
 		EndDate:   today.Format(time.DateOnly),
 	}
 	for day := startDate; !day.After(today); {
-		if day.Before(today) {
-			if _, ok := completed[day.Format(time.DateOnly)]; ok {
-				result.DaysSkipped++
-				day = day.AddDate(0, 0, 1)
-				continue
-			}
+		if _, ok := completed[day.Format(time.DateOnly)]; ok {
+			result.DaysSkipped++
+			day = day.AddDate(0, 0, 1)
+			continue
 		}
 
 		rangeEnd := day
 		for count := 0; count < maxPrePassRangeDays && !rangeEnd.After(today); count++ {
-			if rangeEnd.After(day) && rangeEnd.Before(today) {
-				if _, ok := completed[rangeEnd.Format(time.DateOnly)]; ok {
-					break
-				}
+			if _, ok := completed[rangeEnd.Format(time.DateOnly)]; ok {
+				break
 			}
 			rangeEnd = rangeEnd.AddDate(0, 0, 1)
 		}

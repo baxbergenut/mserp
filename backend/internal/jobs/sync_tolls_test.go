@@ -49,12 +49,19 @@ type fakeTollStore struct {
 }
 
 func (f *fakeTollStore) CompletedDays(
-	context.Context,
-	string,
-	time.Time,
-	time.Time,
+	_ context.Context,
+	_ string,
+	start time.Time,
+	end time.Time,
 ) (map[string]struct{}, error) {
-	return f.completed, nil
+	days := make(map[string]struct{})
+	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+		key := day.Format(time.DateOnly)
+		if _, ok := f.completed[key]; ok {
+			days[key] = struct{}{}
+		}
+	}
+	return days, nil
 }
 
 func (f *fakeTollStore) ReconcileTruckAssignments(context.Context) error {
@@ -76,9 +83,9 @@ func (f *fakeTollStore) UpsertDay(
 	return repository.TollSyncDayResult{Saved: len(transactions)}, nil
 }
 
-func TestSyncTollsBatchesMissingDaysAndLeavesCurrentDayOpen(t *testing.T) {
+func TestSyncTollsSkipsOldCompletedDaysAndRechecksRecentDays(t *testing.T) {
 	client := &fakeTollClient{}
-	store := &fakeTollStore{completed: map[string]struct{}{"2026-07-03": {}}}
+	store := &fakeTollStore{completed: map[string]struct{}{"2026-07-03": {}, "2026-07-07": {}}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	job := NewSyncTollsJob(
 		client,
@@ -88,7 +95,7 @@ func TestSyncTollsBatchesMissingDaysAndLeavesCurrentDayOpen(t *testing.T) {
 		logger,
 	)
 	job.now = func() time.Time {
-		return time.Date(2026, time.July, 5, 15, 0, 0, 0, time.UTC)
+		return time.Date(2026, time.July, 20, 15, 0, 0, 0, time.UTC)
 	}
 
 	result, err := job.Run(context.Background())
@@ -104,13 +111,13 @@ func TestSyncTollsBatchesMissingDaysAndLeavesCurrentDayOpen(t *testing.T) {
 	if got := client.calls[0]; got.start.Day() != 1 || got.end.Day() != 3 {
 		t.Fatalf("first fetch = %#v", got)
 	}
-	if got := client.calls[1]; got.start.Day() != 4 || got.end.Day() != 6 {
+	if got := client.calls[1]; got.start.Day() != 4 || got.end.Day() != 21 {
 		t.Fatalf("second fetch = %#v", got)
 	}
-	if result.DaysFetched != 4 || result.DaysSkipped != 1 || result.Saved != 4 {
+	if result.DaysFetched != 19 || result.DaysSkipped != 1 || result.Saved != 19 {
 		t.Fatalf("result = %+v", result)
 	}
-	if len(store.upserts) != 4 {
+	if len(store.upserts) != 19 {
 		t.Fatalf("upserts = %#v", store.upserts)
 	}
 	if store.upserts[len(store.upserts)-1].markComplete {
