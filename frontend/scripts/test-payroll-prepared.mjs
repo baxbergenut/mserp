@@ -103,15 +103,16 @@ try {
     state='updating';
     expect(await page.evaluate(() => window.__payrollStreams.size)).toBe(1);
     await page.evaluate(() => window.__payrollNotify());
-    await expect(page.getByText('Updating statements. The last complete values are shown.',{exact:true})).toBeVisible({timeout:800});
     await expect(page.getByRole('button',{name:'Prepared Test, weekly comment',exact:true})).toBeDisabled();
+    await expect(page.getByText('Updating statements. The last complete values are shown.',{exact:true})).toHaveCount(0);
+    await expect(page.getByText('Updating…',{exact:true})).toHaveCount(0);
     await expect(page.getByRole('region',{name:'Prepared Test weekly loads'})).toContainText('PREPARED-1');
     readFailures=1;
     await page.evaluate(() => window.__payrollNotify());
     await expect(page.getByRole('alert').filter({hasText:'Retrying automatically'})).toBeVisible();
     state='ready';generation++;
     // Recover even when the commit notification is lost, retaining the table.
-    await expect(page.getByText('Updating statements. The last complete values are shown.',{exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Prepared Test, weekly comment',exact:true})).toBeEnabled();
     await expect(page.getByRole('alert').filter({hasText:'Retrying automatically'})).toHaveCount(0);
     state='failed';await page.evaluate(() => window.__payrollNotify());
     await page.getByRole('button',{name:'Retry preparation',exact:true}).click();

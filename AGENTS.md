@@ -59,7 +59,8 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   and principal claims without table-wide revision row locks. Financial postings,
   installment confirmations and genuinely shared balances keep their guards.
   Driver/Investor Pay track finalization per row, merge concurrent receipts and
-  pause background replacement while requests are pending. Check
+  pause background replacement while requests are pending. Routine page-wide
+  Updating messages are hidden; preparation failures retain their retry controls. Check
   TestPreparedZeroCostFinalizationDatabase, TestPayrollResourceConcurrencyDatabase
   and frontend/scripts/test-payroll-concurrent-finalization.mjs.
 
