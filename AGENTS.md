@@ -3260,6 +3260,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ### Driver leave plans and dispatcher accounts (142–143)
 
+- Driver address follows Home time and shows only profile city/state. The board
+  API includes city/state without street or ZIP. HOME, HOME (YARD), and VACATION
+  display that address as Destination without changing saved load/manual destinations.
 - Status Board Home time uses versioned driver_board.leave_plan JSON (homeStart,
   homeEnd, vacationReturn). Calendar dates use New York; Monday–Sunday dates show
   HOME FRI/BACK TUE, otherwise day/month. Home switches to Back only once its

@@ -49,6 +49,8 @@ type DriverBoardDriver struct {
 	TruckUnit                  string               `json:"truckUnit"`
 	TruckID                    string               `json:"truckId"`
 	Phone                      string               `json:"phone"`
+	City                       string               `json:"city"`
+	State                      string               `json:"state"`
 	DispatcherID               string               `json:"dispatcherId"`
 	DispatcherName             string               `json:"dispatcherName"`
 	Location                   *DriverBoardLocation `json:"location"`
@@ -142,7 +144,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  CASE WHEN t.id IS NULL THEN '' WHEN t.status='terminated' THEN 'terminated'
  WHEN t.status='out_of_service' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='out_of_service') THEN 'out_of_service'
  WHEN t.status='maintenance' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='shop') THEN 'shop'
- ELSE 'in_use' END,d.availability_status,d.status_version
+ ELSE 'in_use' END,d.availability_status,d.status_version,coalesce(d.city,''),coalesce(d.state,'')
  FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
@@ -168,7 +170,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion, &d.City, &d.State)
 		if err != nil {
 			rows.Close()
 			return result, err

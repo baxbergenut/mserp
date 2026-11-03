@@ -44,7 +44,7 @@ import { useDriverRowDrag } from "./useDriverRowDrag";
 const columns = [
   ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
   ["Total gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
-  ["Destination", 110], ["ETA", 180], ["Next load", 180], ["Notes", 130], ["Home time", 120],
+  ["Destination", 110], ["ETA", 180], ["Next load", 180], ["Notes", 130], ["Home time", 120], ["Driver address", 140],
 ] as const;
 const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
 const minimumWidth = columnWeight;
@@ -216,6 +216,8 @@ export default function DriverBoardPage() {
           </tr>)}
           {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.map((d, i) => {
             const entry = entries[d.id];
+            const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
+            const atHome = ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status);
             const sum = totals(index.byDriver.get(d.id) ?? []);
             const loads = previewCurrentLoad(board?.loads[d.id], entry, board?.entries.find(e => e.driverId === d.id));
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
@@ -260,7 +262,7 @@ export default function DriverBoardPage() {
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>
-                <td className={cellClass}>{loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
+                <td className={cellClass}>{atHome ? <span aria-label={`${d.fullName} · Destination from home address`} title={homeAddress || "Home address not set"} className="block truncate px-1.5 text-zinc-200">{homeAddress || "—"}</span> : loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
                   title={`${stopLabel ? `${stopLabel} · ` : ""}${compactLoadLocation(loads.sourceDestination) || "Select a stop"}${!canEdit ? " · Read only" : destinationBusy ? " · Wait for board changes to save" : otherStop ? ` · Click to switch to ${oppositeType}: ${compactLoadLocation(otherStop.location)}` : " · Choose a stop in Loads"}`}
                   className="flex h-8 w-full items-center gap-1 px-1.5 text-left text-[11px] text-blue-200 enabled:hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:cursor-default"
                   onClick={async () => {
@@ -273,6 +275,7 @@ export default function DriverBoardPage() {
                 <td className={cellClass}><div className="flex h-8 w-full items-center"><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group h-full min-w-0 flex-1 truncate px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <span className={next.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}</span> : "—"}</button>{next && nextStop && <button type="button" data-grid-action aria-label={`${d.fullName} · Next pickup time`} title={canEdit ? "Edit next pickup time" : nextPickup?.detail} disabled={!canEdit || disabled || next.loadId === null} aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id} className="mr-1 max-w-[75%] shrink-0 truncate rounded px-1 py-1 text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500" onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}</div></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
                 <td className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>
+                <td className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>
               </tr>
             </Fragment>;
           })}

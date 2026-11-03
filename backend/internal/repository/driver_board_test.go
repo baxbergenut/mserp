@@ -140,7 +140,8 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testDriverBoardOrder(t, ctx, pool, repo, fleet)
 			testDispatcherBoardOrder(t, ctx, pool, repo)
 			city := "Louisville"
-			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, City: &city}
+			state := "KY"
+			input := DriverInput{FullName: "Board Driver", PayType: "cpm", PayRate: 0.65, Active: true, City: &city, State: &state}
 			driver, err := fleet.CreateDriver(ctx, input)
 			if err != nil {
 				t.Fatal(err)
@@ -169,6 +170,9 @@ func TestDriverBoardDatabase(t *testing.T) {
 			}
 			if !board.ELD.Configured || board.Drivers[0].Location == nil || board.Drivers[0].Location.Latitude != 41.881 || board.Drivers[0].Location.Longitude != -87.623 {
 				t.Fatalf("Five ELD board location: %+v", board.Drivers)
+			}
+			if board.Drivers[0].City != city || board.Drivers[0].State != state || board.Drivers[1].City != "" || board.Drivers[1].State != "" {
+				t.Fatalf("board home city/state must use the driver profile and preserve missing values: %+v", board.Drivers)
 			}
 			eldRepo := NewFiveELDRepository(pool)
 			for _, age := range []time.Duration{16 * time.Minute, 72 * time.Hour} {

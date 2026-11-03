@@ -18,7 +18,8 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 const base = `http://127.0.0.1:${server.address().port}`;
 const drivers = Array.from({ length: 100 }, (_, i) => ({ id: `driver-${i}`, fullName: `Scroll Driver ${i}`, active: true, driverType: 'M',
-  truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', phone: '', location: null }));
+  truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', phone: '', location: null,
+  city: i === 0 ? 'Louisville' : '', state: i === 0 ? 'Kentucky' : '' }));
 let entries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: 'ENROUTE', destination: '', eta: d.id === 'driver-0' ? '13:00 · 300 mi' : '', notes: '', homeTime: '', version: 1 }));
 const loads = { current: null, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: '2026-10-12', revision: 'fixture', customOrder: false };
 const errors = [];
@@ -46,6 +47,9 @@ async function setup(page) {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await setup(page);
+  expect((await page.locator('thead th').allTextContents()).slice(-2)).toEqual(['Home time', 'Driver address']);
+  await expect(page.getByLabel('Scroll Driver 0 · Driver address', { exact: true })).toHaveText('Louisville, KY');
+  await expect(page.getByLabel('Scroll Driver 1 · Driver address', { exact: true })).toHaveText('—');
   const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'At PU', 'Health issue', 'At DEL', 'HOME (YARD)', 'NEW DRIVER', '34 RESET', 'ACCIDENT'];
   const status = page.getByLabel('Scroll Driver 0 · Status', { exact: true });
   expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses]);
@@ -61,12 +65,54 @@ try {
     if (["HOME","HOME (YARD)","VACATION"].includes(value)) { if(value!=="VACATION"){await page.getByLabel("Home start date",{exact:true}).fill("2026-10-23");await page.getByLabel("Back date",{exact:true}).fill("2026-10-27");} await page.getByRole("button",{name:"Apply dates",exact:true}).click(); }
     if (["SHOP","STOP","ACCIDENT"].includes(value)) { await page.getByLabel("Truck status reason",{exact:true}).fill("Reported equipment problem"); await page.getByRole("button",{name:"Apply status",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
+    if (['HOME', 'HOME (YARD)', 'VACATION'].includes(value)) {
+      await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Louisville, KY');
+      expect(entries[0].destination).toBe(''); // Displaying home never writes the dispatch destination.
+    } else {
+      await expect(page.getByLabel('Scroll Driver 0 · Destination', { exact: true })).toBeVisible();
+    }
     const cell = status.locator('xpath=ancestor::td');
     await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);
     await expect(cell).toHaveCSS('color', ['READY', 'DISPATCHED', 'SHOP'].includes(value) ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)');
   }
   await page.reload();
   await expect(status).toHaveValue('ACCIDENT');
+  // Home takes precedence over a retained load destination, including after reload.
+  loads.destinationSource = true;
+  loads.sourceDestination = 'Dallas, Texas, 75236';
+  entries[0].status = 'VACATION';
+  await page.reload();
+  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Louisville, KY');
+  await page.locator('[data-scroll-key="driver-board"]').evaluate(area => { area.scrollLeft = area.scrollWidth; });
+  await page.getByLabel('Scroll Driver 0 · Driver address', { exact: true }).click();
+  await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-home-address.png') });
+  await page.locator('[data-scroll-key="driver-board"]').evaluate(area => { area.scrollLeft = 0; });
+  drivers[0].city = '';
+  drivers[0].state = '';
+  await page.reload();
+  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('—');
+  drivers[0].state = 'KY';
+  await page.reload();
+  await expect(page.getByLabel('Scroll Driver 0 · Driver address', { exact: true })).toHaveText('KY');
+  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('KY');
+  drivers[0].city = 'Lexington';
+  await page.reload();
+  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Lexington, KY');
+  await status.selectOption('ACCIDENT');
+  await page.getByLabel('Truck status reason', { exact: true }).fill('Reported equipment problem');
+  await page.getByRole('button', { name: 'Apply status', exact: true }).click();
+  await expect.poll(() => entries[0].status).toBe('ACCIDENT');
+  await expect(page.getByLabel('Scroll Driver 0 · Destination from load', { exact: true })).toHaveText('Dallas, TX');
+  loads.destinationSource = false;
+  entries[0].destination = 'Manual dispatch destination';
+  entries[0].status = 'HOME';
+  await page.reload();
+  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Lexington, KY');
+  await status.selectOption('READY');
+  await expect.poll(() => entries[0].status).toBe('READY');
+  await expect(page.getByLabel('Scroll Driver 0 · Destination', { exact: true })).toHaveValue('Manual dispatch destination');
+  entries[0].status = 'ACCIDENT';
+  await page.reload();
   await page.getByRole('button', { name: 'Status filter', exact: true }).click();
   const statusChoices = page.getByRole('group', { name: 'Status choices', exact: true });
   expect(await statusChoices.locator('label').allTextContents()).toEqual(['No status', ...sheetStatuses]);
@@ -148,5 +194,5 @@ try {
   });
   await expect.poll(() => mobile.locator('[data-scroll-key="driver-board"]').evaluate(e => e.scrollTop)).toBeGreaterThan(0);
   expect(errors).toEqual([]);
-  console.log('Status Board layout passed: 23 sheet statuses/colors, save/reload/filter, legacy preservation, mutually exclusive persisted ETA, zero miles, legacy display, page/table wheel handoff, reverse scrolling, bottom containment, horizontal overflow, resize and touch.');
+  console.log('Status Board layout passed: home city/state column and destination precedence, missing/partial/updated addresses, restored load/manual destinations, 23 sheet statuses/colors, save/reload/filter, legacy preservation, persisted ETA, page/table scrolling, horizontal overflow, resize and touch.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

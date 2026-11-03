@@ -489,6 +489,8 @@ export interface DriverBoardDriver {
   driverType: "O" | "M" | "%-O" | "M-O" | "%";
   truckUnit: string;
   phone: string;
+  city: string;
+  state: string;
   dispatcherId: string;
   dispatcherName: string;
   location: DriverBoardLocation | null;

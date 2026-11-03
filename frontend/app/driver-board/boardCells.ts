@@ -7,5 +7,7 @@ export function selectedBoardCell(target: EventTarget | null) {
   const cell = target.closest<HTMLTableCellElement>("td,th");
   const row = cell?.closest<HTMLTableRowElement>("tr[data-driver-id]");
   if (!cell || !row || !row.closest('[data-status-board-grid]')) return null;
-  return { driverId: row.dataset.driverId!, column: boardCellKeys[cell.cellIndex] };
+  const column = boardCellKeys[cell.cellIndex];
+  if (!column) return null; // Profile-only columns have no editable board cursor.
+  return { driverId: row.dataset.driverId!, column };
 }
