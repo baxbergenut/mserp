@@ -10,9 +10,10 @@ export function DecimalInput({ value, displayValue, onValueChange, nonnegative =
   // Database responses normalize numbers to two places. Keep the exact text
   // under the caret while editing, even when an autosave or refresh finishes.
   const [typing, setTyping] = useState<string | null>(null);
-  return <input {...props} value={typing ?? displayValue}
-    onFocus={event => { setTyping(compactDecimal(value)); props.onFocus?.(event); }}
-    onBlur={event => { setTyping(null); props.onBlur?.(event); }}
+  const [focused, setFocused] = useState(false);
+  return <input {...props} value={typing ?? (focused ? compactDecimal(value) : displayValue)}
+    onFocus={event => { setFocused(true); props.onFocus?.(event); }}
+    onBlur={event => { setFocused(false); setTyping(null); props.onBlur?.(event); }}
     onChange={event => {
       const text = event.currentTarget.value;
       const next = decimalInputValue(text, nonnegative);

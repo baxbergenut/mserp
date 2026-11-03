@@ -8,6 +8,11 @@ export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard,
   for (const [key, e] of next) if (protectedDays.has(`${e.driverId}:${e.date}`)) protectedKeys.add(key);
   for (const [key, e] of previous) {
     const incomingEntry = next.get(key);
+    // Native rows are cleared with versioned tombstones, never deleted. A read
+    // started before an insert must not erase the just-acknowledged row. Transfers
+    // can genuinely disappear/reappear at a different placement.
+    if (!incomingEntry && e.version > 0 && !e.transferVersion
+      && incoming.drivers.some(driver => driver.id === e.driverId)) protectedKeys.add(key);
     // The visible Monday slot may alternate between its native row and a
     // weekend source. Their row versions are independent; an absent entry may
     // also mean a transfer was restored, rather than a stale row snapshot.

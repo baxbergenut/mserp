@@ -1,7 +1,7 @@
 "use client";
 
 
-import { GrossBoardBalanceResetContext, usePermissions } from "@/app/lib/access";
+import { CurrentUserIDContext, GrossBoardBalanceResetContext, usePermissions } from "@/app/lib/access";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 
@@ -13,7 +13,7 @@ import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo,
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
-import { selectedGrossCell } from "./grossCells";
+import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, reconcileGrossPatches, type GrossDrafts } from "./drafts";
 import { mergeGrossLive } from "./liveMerge";
 import { GrossPresence } from "./GrossPresence";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
@@ -27,7 +27,7 @@ import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { BoardScrollArea } from "./BoardScrollArea";
-import { entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, reconcileAutosave, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 80, 112, 112];
@@ -60,6 +60,9 @@ export default function GrossBoardPage() {
   }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
   const canEdit=hasEditPermission&&!board?.managedInSheets;
+  const userId = useContext(CurrentUserIDContext);
+  const draftKey = `gross-board-drafts:v1:${userId}:${week}`;
+  const baselinesRef = useRef<GrossDrafts>({});
   const [changes, setChanges] = useState<Record<string, GrossBoardEntry>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,9 +82,16 @@ export default function GrossBoardPage() {
   const savedRef = useRef<Record<string, GrossBoardEntry>>({});
   const changesRef = useRef(changes);
   const busyKeys = useRef<string[]>([]);
+  const connectedRef = useRef(false);
+  const setDrafts = useCallback((value: GrossDrafts) => {
+    changesRef.current = value;
+    setChanges(value);
+    if (!writeGrossDrafts(draftKey, value, baselinesRef.current)) setRefreshError("This browser cannot keep a recovery copy. Keep this page open until Saved appears.");
+  }, [draftKey]);
   const receiveLive = useRef<(value?: GrossBoard) => void>(() => {});
   const resumeLive = useRef<() => void>(() => {});
   const live = useGrossLive(week, useCallback((value?: GrossBoard) => receiveLive.current(value), []));
+  useLayoutEffect(() => { connectedRef.current = live.connected; }, [live.connected]);
   const dirty = canEdit && Object.keys(changes).length > 0;
   useLayoutEffect(() => { idleRef.current = !loading; resumeLive.current(); }, [dirty, saving, loading]);
   const dates = useMemo(() => weekdays.map((_, index) => addDays(week, index)), [week]);
@@ -95,32 +105,38 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchGrossBoard(week).then((value) => { if (!cancelled) setBoard(value); })
+    fetchGrossBoard(week).then((value) => {
+      if (cancelled) return;
+      const recovery = hasEditPermission ? readGrossDrafts(draftKey) : null;
+      if (recovery) {
+        const restored = restoreGrossDrafts(recovery.changes, recovery.baselines, value.entries);
+        baselinesRef.current = restored.baselines;
+        setDrafts(restored.changes);
+        if (Object.keys(restored.changes).length) setMessage("Recovered unsaved edits");
+      }
+      setBoard(current => mergeGrossLive(current, value, new Set(Object.keys(changesRef.current)), new Set()));
+    })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load board"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [week]);
+  }, [week, draftKey, hasEditPermission, setDrafts]);
 
-  // Pushes apply directly. Keep each editor's original concurrency token;
+  // Pushes apply directly while pending field edits and open dialogs stay put;
   // GET requests remain available for recovery and explicit reloads.
   useEffect(() => {
     let cancelled = false;
     let inFlight = false;
     let pending = false;
     let latest: GrossBoard | undefined;
+    let revision = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const accept = (value: GrossBoard) => {
       if (cancelled || value.weekStart !== week) return;
       latest = value;
-      if (!idleRef.current || document.hidden) return;
+      if (!idleRef.current) return;
       setBoard(current => {
         const keys = new Set([...Object.keys(changesRef.current), ...busyKeys.current]);
         const days = new Set(Array.from(document.querySelectorAll<HTMLElement>('[data-gross-editor-day]')).map(e => e.dataset.grossEditorDay!));
-        const cell = document.activeElement?.matches('input,textarea,select') ? selectedGrossCell(document.activeElement) : null;
-        if (cell?.date) {
-          if (cell.slot < 0) days.add(`${cell.driverId}:${cell.date}`);
-          else keys.add(entryKey(cell.driverId,cell.date,cell.slot));
-        }
         return mergeGrossLive(current,value,keys,days);
       });
       setRefreshError("");
@@ -129,27 +145,29 @@ export default function GrossBoardPage() {
       if (!idleRef.current || document.visibilityState !== "visible" || inFlight) return;
       pending = false;
       inFlight = true;
+      const started = revision;
       try {
         const value = await fetchGrossBoard(week);
-        accept(value);
+        if (started === revision) accept(value);
       } catch {
         if (!cancelled) setRefreshError("Automatic load refresh is unavailable. Your edits still autosave; retry to reconnect.");
       } finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
     const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
-    receiveLive.current = value => value ? accept(value) : schedule();
+    receiveLive.current = value => { if (value) { revision++; accept(value); } else schedule(); };
     resumeLive.current = () => { if (latest) accept(latest); };
-    const fallback = setInterval(schedule, 30000);
+    const fallback = setInterval(() => { if (!connectedRef.current) schedule(); }, 30000);
     const focus = schedule;
     window.addEventListener("focus", focus);
     document.addEventListener("visibilitychange", focus);
-    document.addEventListener("focusout", focus);
-    return () => { cancelled = true; receiveLive.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
+    const blur = () => { clearTimeout(timer); timer = setTimeout(() => { if (latest) accept(latest); }, 0); };
+    document.addEventListener("focusout", blur);
+    return () => { cancelled = true; receiveLive.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", blur); };
   }, [week]);
 
   useEffect(() => {
     if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     const leave = (event: MouseEvent) => {
       const link = (event.target as Element).closest?.("a[href]");
       if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
@@ -235,14 +253,14 @@ export default function GrossBoardPage() {
     const previous = current[key] ?? baseline;
     const next = update(previous);
     if (next === previous) return;
+    if (!current[key]) baselinesRef.current[key] = baseline;
     const result = { ...current, [key]: next };
     // A revert during an in-flight save is a new edit; the old saved value
     // will be replaced by that response, so it must remain queued.
     if (!(slot > 0 && baseline.version === 0) && !savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
-    changesRef.current = result;
-    setChanges(result);
+    setDrafts(result);
     setMessage("");
-  }, [canEdit]);
+  }, [canEdit, setDrafts]);
 
   const save = useCallback(async () => {
     if (!canEdit || savingRef.current || invalid || !Object.keys(changesRef.current).length || loading) return;
@@ -253,9 +271,10 @@ export default function GrossBoardPage() {
     busyKeys.current = Object.keys(snapshot);
     setSaving(true); setError(""); setMessage("");
     try {
-      const committed = await saveGrossBoard(week, Object.values(snapshot));
+      const committed = await saveGrossBoard(week, Object.entries(snapshot).map(([key, entry]) => ({ ...entry, fields: grossDraftFields(entry, baselinesRef.current[key]) })));
       committed.forEach(entry => { savedRef.current[entryKey(entry.driverId,entry.date,entry.slot)] = entry; });
-      const remaining = reconcileAutosave(changesRef.current,snapshot,committed);
+      const remaining = reconcileGrossPatches(changesRef.current,snapshot,committed);
+      for (const entry of committed) baselinesRef.current[entryKey(entry.driverId, entry.date, entry.slot)] = entry;
       changesRef.current = remaining;
       setBoard((current) => {
         if (!current) return current;
@@ -263,7 +282,7 @@ export default function GrossBoardPage() {
         committed.forEach((entry) => { entries[entryKey(entry.driverId, entry.date, entry.slot)] = entry; });
         return { ...current, entries: Object.values(entries) };
       });
-      setChanges(remaining);
+      setDrafts(remaining);
       setMessage("Saved");
       // The stream refreshes carry and matching metadata. Recover by GET when
       // disconnected, preserving newer edits and navigation flushes.
@@ -275,18 +294,18 @@ export default function GrossBoardPage() {
       }
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activityRef.current += 1; busyKeys.current = []; savingRef.current = false; setSaving(false); }
-  }, [canEdit, live.connected, invalid, loading, week]);
+  }, [canEdit, live.connected, invalid, loading, week, setDrafts]);
 
   useEffect(() => {
     if (!dirty || saving || error || invalid || loading) return;
-    const timer = setTimeout(() => { void save(); }, 0);
+    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 300);
     return () => clearTimeout(timer);
-  }, [dirty, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
+  }, [changes, dirty, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 
   async function reload() {
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
     activityRef.current += 1;
-    changesRef.current = {}; setChanges({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
+    baselinesRef.current = {}; setDrafts({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
   }
 
   return (

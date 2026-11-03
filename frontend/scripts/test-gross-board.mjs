@@ -248,3 +248,30 @@ const splitResult = reconcileAutosave({[key]:splitLater}, {[key]:splitPending}, 
 assert.equal(splitResult[key].driverRate,'750');
 assert.equal(splitResult[key].splitReview,undefined);
 console.log('Split autosave preserves companion typing and consumes accepted review decisions.');
+
+// Field-patch reconciliation consumes acknowledgements but never replays the
+// stale values of fields that were changed by another page during a request.
+const draftSource = readFileSync(new URL('../app/gross-board/drafts.ts', import.meta.url), 'utf8');
+const boardModule = `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`;
+const draftCode = ts.transpileModule(draftSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText.replace('"./board"', JSON.stringify(boardModule));
+const { grossDraftFields, reconcileGrossPatches, restoreGrossDrafts } = await import(`data:text/javascript;base64,${Buffer.from(draftCode).toString('base64')}`);
+assert.deepEqual(grossDraftFields({ ...annotated, driverRate: '777' }, annotated), ['driverRate']);
+assert.deepEqual(grossDraftFields({ ...annotated, driverRate: '0.050' }, { ...annotated, driverRate: '0.05' }), ['driverRate']);
+const patchBase = { ...annotated, driverRate: '800', note: 'Old note' };
+const patchSent = { ...patchBase, driverRate: '850' };
+const patchNew = { ...patchSent, driverRate: '875' };
+const patchCommitted = { ...patchSent, driverRate: '850.00', note: 'Other page note', version: 10 };
+const patchRemaining = reconcileGrossPatches({ [key]: patchNew }, { [key]: patchSent }, [patchCommitted]);
+assert.equal(patchRemaining[key].driverRate, '875');
+assert.equal(patchRemaining[key].note, 'Other page note');
+assert.deepEqual(grossDraftFields(patchRemaining[key], patchCommitted), ['driverRate']);
+assert.deepEqual(reconcileGrossPatches({ [key]: patchSent }, { [key]: patchSent }, [patchCommitted]), {});
+const recovery = restoreGrossDrafts({ [key]: patchNew }, { [key]: patchBase }, [patchCommitted]);
+assert.equal(recovery.changes[key].driverRate, '875');
+assert.equal(recovery.changes[key].note, 'Other page note');
+assert.deepEqual(restoreGrossDrafts({ [key]: patchSent }, { [key]: patchBase }, [patchCommitted]).changes, {});
+assert.equal(reconcileGrossPatches({ [key]: { ...pendingMatch, note: 'Queued note' } }, { [key]: pendingMatch }, [serverMatch])[key].driverRate, '900.00');
+const nativeInserted = { ...liveEmpty, loadNumber: 'NEW', version: 1 };
+const nativeBoard = { ...liveBoard([nativeInserted]), drivers: [{ id: nativeInserted.driverId }] };
+assert.equal(mergeGrossLive(nativeBoard, { ...nativeBoard, entries: [] }, new Set(), new Set()).entries[0].loadNumber, 'NEW');
+console.log('Gross Board field patches passed: independent edits, lost acknowledgements, reload recovery, queued source matching and stale inserts.');

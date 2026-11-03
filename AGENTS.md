@@ -374,7 +374,7 @@ and requires no schema migration.
   their saved historical method; arbitrary new methods are rejected.
 - `backend/internal/httpapi/gross_board_handlers.go` and
   `backend/internal/repository/gross_board_repository.go`: weekly dispatch plans,
-  exact load matching, suggestions, and versioned atomic autosaves.
+  exact load matching, suggestions, and atomic field-patch autosaves.
   Migration 152 adds explicit DataTruck trip selection (`load_trip_id`) and an
   immutable selection audit. Import retains the complete typed `trips` list;
   multi-trip orders require a reviewed selection in the compact Split dialog.
@@ -905,8 +905,9 @@ and requires no schema migration.
   heartbeat every 10 seconds and clear on leave. Both boards share
   `components/boards/useLiveBoard.ts` for stream/presence lifecycle.
   `liveMerge.ts` retains dirty/saving slots and active day-dialog baselines while
-  other slots refresh immediately. Daily loads applies its original draft versions,
-  so concurrent edits conflict instead of silently overwriting saved changes.
+  other slots refresh immediately. Daily loads sends only fields edited since
+  opening; concurrent changes to separate fields survive. Same-field saves use
+  last-write-wins without user-facing row-version conflicts.
   Run `node scripts/test-investors-e2e.mjs --gross-live-only` with a disposable
   MSERP_INVESTOR_TEST_DATABASE_URL for two-user data/presence, week isolation,
   no extra GET, concurrent typing, modal conflicts, reconnect and latency checks.
@@ -3466,3 +3467,30 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   one-time `-initialize-gross-board-rate-balances` API binary command uses the
   service environment to record zero targets for the entire driver roster.
   A retry after a successful initialization skips the batch.
+
+## Gross Board reliable field saves
+
+- Gross Board accepts planning edits regardless of driver/truck availability.
+  Operational dispatch checks remain on Status Board. Finalized payroll, transfer
+  and reviewed source/split protections still apply.
+- PUT /gross-board accepts per-entry `fields`; SaveChanges merges those fields
+  into the latest row under the financial lock. Ordinary saves do not require
+  the caller's row version. Missing fields supports older full-row clients.
+  Existing current-row counters order live snapshots; no version history is added.
+  Identical field retries skip writes/publication. Financial saves still publish
+  payroll atomically before acknowledgement.
+- Autosave waits for 300 ms without edits and flushes on requested navigation.
+  New typing during an in-flight request remains queued as field deltas. Dedicated
+  user/week/tab-scoped session storage retains pending drafts and only their edit
+  baselines across reloads, expires after seven days, and clears on acknowledgement
+  or explicit discard. This is separate from viewMemory (which never stores drafts).
+- Live snapshots update same-account tabs and untouched focused fields. A stale
+  snapshot cannot remove an acknowledged native insert. Focusout applies cached
+  live data without another GET; periodic fallback reads run only when disconnected.
+- Gross Board queries rank historical duplicates before hydrating the requested
+  load details; per-save response queries restrict ranking to the edited driver.
+  Interactive reads/writes disable JIT and use custom plans. Financial semantics
+  and historical duplicate/transfer handling are unchanged.
+- Checks: test-gross-board-reliability.mjs, test-gross-board-daily-loads.mjs,
+  test-investors-e2e.mjs --gross-live-only; TestGrossBoardDatabase,
+  TestGrossBoardPatchPublicationDatabase, TestFleetStatusDatabase, TestLoadTripsDatabase.

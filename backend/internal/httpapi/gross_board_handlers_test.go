@@ -32,6 +32,7 @@ func TestGrossBoardValidation(t *testing.T) {
 		{"NaN", func(r *grossBoardRequest) { r.Entries[0].DriverRate = "NaN" }},
 		{"bad driver", func(r *grossBoardRequest) { r.Entries[0].DriverID = "bad" }},
 		{"bad version", func(r *grossBoardRequest) { r.Entries[0].Version = -1 }},
+		{"unknown patch field", func(r *grossBoardRequest) { r.Entries[0].Fields = []string{"version"} }},
 		{"duplicate", func(r *grossBoardRequest) { r.Entries = append(r.Entries, r.Entries[0]) }},
 		{"alternate uuid duplicate", func(r *grossBoardRequest) {
 			e := r.Entries[0]
@@ -79,5 +80,11 @@ func TestGrossBoardNotes(t *testing.T) {
 	r := grossBoardRequest{WeekStart: "2026-09-28", Entries: []repository.GrossBoardEntry{{DriverID: "00000000-0000-0000-0000-000000000001", Date: "2026-09-28", Note: &note}}}
 	if err := r.validate(); err != nil || r.Entries[0].Note == nil || *r.Entries[0].Note != "" {
 		t.Fatal("cleared load kept note", err)
+	}
+	note = "A note-only patch"
+	r.Entries[0].Note = &note
+	r.Entries[0].Fields = []string{"note"}
+	if err := r.validate(); err != nil || *r.Entries[0].Note != note {
+		t.Fatal("note-only patch was cleared", err)
 	}
 }

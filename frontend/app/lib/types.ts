@@ -1113,6 +1113,7 @@ export interface GrossBoardTrip {
 
 export interface GrossBoardEntry {
   splitReview?: LoadSplitReview;
+  fields?: string[];
  sourceDate?: string;
  sourceSlot?: number;
  transferVersion?: number;

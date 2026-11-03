@@ -309,6 +309,21 @@ func TestFleetStatusDatabase(t *testing.T) {
 				t.Fatal(savedEffective, effective, e)
 			}
 			beforeReads := scalar(`SELECT count(*)::text FROM fleet_status_history`)
+			// Financial planning accepts loads while the driver is resting, without
+			// changing availability or requiring an operational dispatch transition.
+			grossPlan := GrossBoardEntry{DriverID: d.ID, Date: boardLoadToday(time.Now()), Slot: 97, LoadNumber: "RESTING-PLAN"}
+			planned, planErr := NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{grossPlan}, actor)
+			if planErr != nil {
+				t.Fatal("Gross Board must ignore availability", planErr)
+			}
+			if got := scalar(`SELECT availability_status FROM drivers WHERE id=$1`, d.ID); got != "rest" {
+				t.Fatal("planning changed availability", got)
+			}
+			planned[0].Deleted = true
+			if _, planErr = NewGrossBoardRepository(pool).SaveChanges(ctx, planned, actor); planErr != nil {
+				t.Fatal(planErr)
+			}
+			beforeReads = scalar(`SELECT count(*)::text FROM fleet_status_history`)
 			if _, e = board.Get(ctx, time.Now()); e != nil {
 				t.Fatal(e)
 			}

@@ -24,6 +24,7 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
+	Fields                 []string         `json:"fields,omitempty"`
 	SplitReview            *LoadSplitReview `json:"splitReview,omitempty"`
 	SourceDate             string           `json:"sourceDate,omitempty"`
 	SourceSlot             int              `json:"sourceSlot,omitempty"`
@@ -126,23 +127,33 @@ const grossBoardResolvedLoad = `
 // Entered values take precedence over current source values. Carry uses the same
 // effective entries as the grid, with exact numeric arithmetic. A repeated
 // system load for one driver contributes only on its earliest board date.
-var grossBoardEffective = `WITH resolved AS (
- SELECT e.*, l.id AS matched_id,
+var grossBoardEffective = `WITH ranked AS MATERIALIZED (
+ SELECT e.*, matched.id AS matched_id,
+ matched.id IS NOT NULL AND row_number() OVER (
+   PARTITION BY e.driver_id, matched.id,e.load_trip_id ORDER BY e.source_date,e.source_slot) > 1 AS duplicate
+ FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
+ WHERE e.source_date < $1::date+7
+), resolved AS (
+ SELECT e.*,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
  CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END END AS effective_original,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
  trip_source.original AS system_original, trip_source.miles AS system_miles,
- trip_source.split,trip_source.review AS trip_review,trip_source.review_reason AS trip_review_reason,trip_source.options AS trips,
- l.id IS NOT NULL AND row_number() OVER (
-   PARTITION BY e.driver_id, l.id,e.load_trip_id ORDER BY e.source_date,e.source_slot) > 1 AS duplicate
- FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + loadTripSourceSQL + `
- WHERE e.source_date < $1::date+7
+ trip_source.split,trip_source.review AS trip_review,trip_source.review_reason AS trip_review_reason,trip_source.options AS trips
+ FROM ranked e LEFT JOIN loads l ON l.id=e.matched_id ` + loadTripSourceSQL + `
 ), effective AS (
  SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
  THEN effective_original-driver_rate END AS balance_change
  FROM resolved WHERE service_date < $1::date+7
 ) `
+
+// Keep all historical rows for duplicate ranking, but hydrate trip JSON only
+// after selecting the requested dates. A single save can additionally restrict
+// that ranking to its driver: each partition is already driver-scoped.
+func grossBoardEffectiveForDriver() string {
+	return strings.Replace(grossBoardEffective, "WHERE e.source_date < $1::date+7", "WHERE e.source_date < $1::date+7 AND e.driver_id=$2::uuid", 1)
+}
 
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
@@ -169,6 +180,11 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return GrossBoard{}, err
 	}
 	defer tx.Rollback(ctx)
+	// These interactive queries contain many lateral projections. JIT startup
+	// can exceed the query itself, especially while several boards are open.
+	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
+		return GrossBoard{}, err
+	}
 	board, err := readGrossBoard(ctx, tx, week)
 	if err != nil {
 		return board, err
@@ -356,6 +372,9 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
+		return nil, err
+	}
 	actor := ""
 	if len(actors) > 0 {
 		actor = actors[0]
@@ -366,6 +385,24 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 	// Preserve the existing fleet-status then financial lock order.
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return nil, err
+	}
+	allUnchanged := len(entries) > 0
+	for i := range entries {
+		if entries[i].Fields != nil {
+			var unchanged bool
+			entries[i], unchanged, err = mergeGrossBoardPatch(ctx, tx, entries[i])
+			if err != nil {
+				return nil, err
+			}
+			allUnchanged = allUnchanged && unchanged
+		} else {
+			allUnchanged = false
+		}
+	}
+	// Retrying an acknowledged value does not invalidate payroll or rewrite the
+	// row. This also handles an acknowledgement lost during a browser reload.
+	if allUnchanged {
+		return entries, tx.Commit(ctx)
 	}
 	entries, err = prepareSplitReviews(ctx, tx, entries)
 	if err != nil {
@@ -392,17 +429,8 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 			e.Note = &empty
 			e.LoadTripID = nil
 		}
-		if !e.Deleted && e.LoadNumber != "" && e.DayStatus == "" {
-			var previous string
-			if err := tx.QueryRow(ctx, `SELECT coalesce((SELECT load_number FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date AND $3=0 UNION ALL SELECT load_number FROM gross_board_extra_entries WHERE driver_id=$1 AND service_date=$2::date AND slot=$3 AND NOT deleted LIMIT 1),'')`, e.DriverID, e.Date, e.Slot).Scan(&previous); err != nil {
-				return nil, err
-			}
-			if !strings.EqualFold(strings.TrimSpace(previous), strings.TrimSpace(e.LoadNumber)) && e.Date >= boardLoadToday(time.Now()) {
-				if err := requireDispatchableTruck(ctx, tx, e.DriverID); err != nil {
-					return nil, err
-				}
-			}
-		}
+		// Gross Board records financial plans regardless of fleet availability.
+		// Operational dispatch checks belong to Status Board, not this editor.
 		var loadID *int
 		if e.LoadRecordID != nil {
 			var id int
@@ -570,7 +598,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		if err != nil {
 			return nil, err
 		}
-		err = scanGrossBoardEntry(tx.QueryRow(ctx, grossBoardEffective+"SELECT "+grossBoardEntryColumns+
+		err = scanGrossBoardEntry(tx.QueryRow(ctx, grossBoardEffectiveForDriver()+"SELECT "+grossBoardEntryColumns+
 			" FROM effective WHERE driver_id=$2 AND service_date=$3::date AND slot=$4", date, entries[i].DriverID, entries[i].Date, entries[i].Slot), &entries[i])
 		if err != nil {
 			return nil, err

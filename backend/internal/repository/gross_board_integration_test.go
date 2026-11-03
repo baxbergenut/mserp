@@ -643,6 +643,53 @@ func TestGrossBoardDatabase(t *testing.T) {
 			}
 		}
 	}
+	t.Run("field saves ignore stale counters and preserve other edits", func(t *testing.T) {
+		day := "2027-01-04"
+		initial := GrossBoardEntry{DriverID: carryDriver, Date: day, LoadNumber: "PATCH-PLAN", OriginalRate: "1000", DriverRate: "800", Miles: "500"}
+		created, err := repo.SaveChanges(ctx, []GrossBoardEntry{initial}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		stale := created[0]
+		note := "Other dispatcher's note"
+		noteEdit := stale
+		noteEdit.Note, noteEdit.Fields = &note, []string{"note"}
+		if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{noteEdit}, ""); err != nil {
+			t.Fatal(err)
+		}
+		stale.DriverRate, stale.Fields = "750", []string{"driverRate"}
+		saved, err := repo.SaveChanges(ctx, []GrossBoardEntry{stale}, "")
+		if err != nil || saved[0].DriverRate != "750.00" || saved[0].Note == nil || *saved[0].Note != note || saved[0].OriginalRate != "1000.00" {
+			t.Fatalf("stale field patch lost independent work: %+v %v", saved, err)
+		}
+		stale.DriverRate = "700"
+		saved, err = repo.SaveChanges(ctx, []GrossBoardEntry{stale}, "")
+		if err != nil || saved[0].DriverRate != "700.00" {
+			t.Fatal("latest field write did not win", saved, err)
+		}
+		counter := saved[0].Version
+		retried, retryErr := repo.SaveChanges(ctx, []GrossBoardEntry{stale}, "")
+		if retryErr != nil || retried[0].Version != counter {
+			t.Fatal("same-value retry rewrote the row", retried, retryErr)
+		}
+		stale.DriverRate = ""
+		saved, err = repo.SaveChanges(ctx, []GrossBoardEntry{stale}, "")
+		if err != nil || saved[0].DriverRate != "" || *saved[0].Note != note {
+			t.Fatal("explicit clear lost", saved, err)
+		}
+		// The entire batch still rolls back when a later entry is invalid.
+		stale.DriverRate = "600"
+		bad := stale
+		bad.Slot = 1
+		bad.Fields = []string{"notAField"}
+		if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{stale, bad}, ""); err == nil {
+			t.Fatal("invalid patch accepted")
+		}
+		var rate string
+		if err = pool.QueryRow(ctx, `SELECT coalesce(driver_rate::text,'') FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date`, carryDriver, day).Scan(&rate); err != nil || rate != "" {
+			t.Fatal("partial patch batch committed", rate, err)
+		}
+	})
 	t.Run("rate reset", func(t *testing.T) {
 		if _, count, err := repo.ResetRateBalance(ctx, week, "", "0", ""); err != nil || count != 3 {
 			t.Fatal("all drivers must receive the baseline", count, err)

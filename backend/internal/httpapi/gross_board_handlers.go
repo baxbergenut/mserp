@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,14 @@ func (request *grossBoardRequest) validate() error {
 	seen := map[string]bool{}
 	for i := range request.Entries {
 		e := &request.Entries[i]
+		if len(e.Fields) > len(repository.GrossBoardEditableFields) {
+			return errors.New("too many edited fields")
+		}
+		for _, field := range e.Fields {
+			if !slices.Contains(repository.GrossBoardEditableFields, field) {
+				return errors.New("invalid edited field")
+			}
+		}
 		if !isUUID(e.DriverID) {
 			return errors.New("invalid driver id")
 		}
@@ -75,7 +84,7 @@ func (request *grossBoardRequest) validate() error {
 		if e.Note != nil && (len([]rune(*e.Note)) > 5000 || strings.ContainsRune(*e.Note, '\x00')) {
 			return errors.New("load notes must be 5000 characters or fewer and cannot contain null characters")
 		}
-		if e.Deleted || e.DayStatus != "" || e.LoadNumber == "" {
+		if (e.Fields == nil || slices.Contains(e.Fields, "loadNumber") || slices.Contains(e.Fields, "dayStatus") || slices.Contains(e.Fields, "deleted")) && (e.Deleted || e.DayStatus != "" || e.LoadNumber == "") {
 			empty := ""
 			e.Note = &empty
 		}
@@ -248,7 +257,7 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		entries, err := repo.SaveEntries(r.Context(), request.Entries, session.User.ID)
+		entries, err := repo.SaveChanges(r.Context(), request.Entries, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return

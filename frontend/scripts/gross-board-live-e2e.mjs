@@ -22,21 +22,21 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
   const field=(p,name='total gross',day=week,driver='Gross Live A')=>p.getByLabel(`${driver}, ${day}, ${name}`,{exact:true});
   const numeric=async locator=>Number((await locator.inputValue()).replace(/[$,]/g,''));
   const fill=async(input,value)=>{await input.focus();await input.fill(value)};
-  const saved=()=>expect(page.getByText('All changes saved',{exact:true})).toBeVisible();
+  const saved=()=>expect(page.getByRole('status').filter({hasText:/^Saved$/})).toBeVisible();
   await page.goto(base+'/gross-board');
   await expect(page.getByText('Live',{exact:true})).toBeVisible();
   expect((await page.request.post(base+'/api/settings/roles',{headers,data:{name:'Gross live viewer',permissions:['board.read']}})).status()).toBe(204);
   const access=await(await page.request.get(base+'/api/settings/access')).json();
   const role=access.roles.find(r=>r.name==='Gross live viewer');
   const password=randomBytes(20).toString('hex');
-  expect((await page.request.post(base+'/api/settings/users',{headers,data:{username:'Gross Viewer',email:'gross-live@example.com',password,roleId:role.id,active:true}})).status()).toBe(200);
+  expect((await page.request.post(base+'/api/settings/users',{headers,data:{username:'Gross Viewer',firstName:'Gross',lastName:'Viewer',email:'gross-live@example.com',password,roleId:role.id,active:true}})).status()).toBe(200);
   const context=await page.context().browser().newContext({viewport:{width:1800,height:1050}});
   const viewer=await context.newPage();
   const errors=[];viewer.on('pageerror',e=>errors.push(e.message));
   try {
     await page.setViewportSize({width:1800,height:1050});
     await viewer.goto(base+'/login');
-    await viewer.getByLabel('Email or existing username',{exact:true}).fill('gross-live@example.com');
+    await viewer.getByLabel('Email',{exact:true}).fill('gross-live@example.com');
     await viewer.getByLabel('Password',{exact:true}).fill(password);
     await viewer.getByRole('button',{name:'Sign in',exact:true}).click();
     await expect(viewer.getByRole('heading',{name:'Gross Board',exact:true})).toBeVisible();
@@ -60,6 +60,16 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await fill(field(page),'1444');
     await expect.poll(()=>numeric(field(viewer)),{timeout:1500}).toBe(1444);
     await saved();viewer.off('request',track);expect(reads).toEqual([]);
+    // A second page under the exact same cookie/user must receive data too.
+    const sameContext = await page.context().browser().newContext({storageState: await page.context().storageState(),viewport:{width:1800,height:1050}});
+    const sameUser = await sameContext.newPage();
+    try {
+      await sameUser.goto(base+'/gross-board');
+      await expect(sameUser.getByText('Live',{exact:true})).toBeVisible();
+      await field(sameUser, 'driver rate').focus();
+      await fill(field(page, 'driver rate'), '811'); await saved();
+      await expect.poll(()=>numeric(field(sameUser, 'driver rate'))).toBe(811);
+    } finally { await sameContext.close(); }
     // Notes update through the same stream.
     await page.locator(`[data-gross-driver="${id}"][data-gross-date="${week}"] [data-gross-field="loadNumber"]`).click({button:'right'});
     await page.getByRole('menuitem',{name:'Add note',exact:true}).click();
@@ -109,9 +119,8 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     expect((await page.request.put(base+'/api/gross-board',{headers,data:{weekStart:week,entries:[{...changed,driverRate:'455'}]}})).status()).toBe(200);
     await expect(draft).toHaveValue('333');
     await editor.getByRole('button',{name:'Apply changes',exact:true}).click();
-    await expect(page.getByRole('main').getByRole('alert')).toContainText('changed');
-    expect((await entry(id,add(1))).driverRate).toBe('455.00');
-    page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Reload',exact:true}).click();
+    await saved();
+    expect((await entry(id,add(1))).driverRate).toBe('333.00');
     await viewerDialog.getByRole('button',{name:'Close',exact:true}).last().click();
     // Reconnect receives current data immediately; expired/navigation cursors clear.
     await viewer.context().setOffline(true);await expect(viewer.getByText('Connecting…',{exact:true})).toBeVisible();
@@ -124,6 +133,6 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await viewerCell.locator('[data-gross-field="miles"]').click();await expect(cursor).toHaveCount(1);
     await viewer.goto(base+'/account');await expect(cursor).toHaveCount(0);
     expect(errors).toEqual([]);
-    console.log('Gross Board live E2E passed: direct data, no follow-up board GET, numeric caret/queued typing, totals, notes, week isolation, exact Daily loads presence, protected modal versions, read-only access, reconnect, expiry and cleanup.');
+    console.log('Gross Board live E2E passed: direct data, no follow-up board GET, numeric caret/queued typing, totals, notes, week isolation, exact Daily loads presence, last-write modal patches, read-only access, reconnect, expiry and cleanup.');
   }finally{setNetworkLatency(0);await context.close()}
 }

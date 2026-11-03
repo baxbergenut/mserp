@@ -1,4 +1,4 @@
-// Fixture-only browser regressions. Enforce real optimistic versions and decimal normalization.
+// Fixture-only browser regressions. Apply field patches and decimal normalization.
 // MSERP_GROSS_BOARD_BROWSER_URL can check deployed assets; all API requests remain mocked.
 import { chromium, expect } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -39,12 +39,10 @@ try {
         holdNextSave = false;
         await new Promise(resolve => { releaseSave = resolve; });
       }
-      if (changes.some(c => c.version !== (entries.find(e => e.date === c.date && e.slot === c.slot)?.version ?? 0))) {
-        conflicts.push(changes);
-        return route.fulfill({ status: 409, json: { error: 'another dispatcher changed one of these days; reload the board before saving again' } });
-      }
       const committed = changes.map(c => {
-        const next = { ...c, version: c.version + 1, acceptSystemValues: false };
+        const current = entries.find(e => e.date === c.date && e.slot === c.slot);
+        const next = { ...current, driverId: c.driverId, date: c.date, slot: c.slot, version: (current?.version ?? 0) + 1, acceptSystemValues: false };
+        for (const field of c.fields ?? Object.keys(c)) if (field !== 'version') next[field] = c[field];
         for (const field of ['originalRate', 'driverRate', 'miles', 'enteredOriginalRate', 'enteredMiles']) {
           if (next[field] !== '') next[field] = Number(next[field]).toFixed(2);
         }
@@ -127,12 +125,12 @@ try {
   await expect(field(secondDay, 'load number or status', 3)).toHaveValue('FOURTH');
   await daily.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-  // A genuinely stale server version still rejects writes and preserves the draft.
+  // Stale row counters do not block field patches; unrelated remote notes survive.
   await open(); await field(week, 'driver rate').click(); await page.keyboard.type('700'); await page.keyboard.press('Enter');
-  saved(week).version++;
-  await apply(); await expect.poll(() => conflicts.length).toBe(1);
-  await expect(page.getByRole('alert').filter({ hasText: 'another dispatcher' })).toBeVisible();
-  expect(saved(week).driverRate).toBe('800.00');
+  saved(week).version++; saved(week).note = "Remote note";
+  await apply(); await expect.poll(() => saved(week).driverRate).toBe('700.00');
+  expect(saved(week).note).toBe('Remote note');
+  expect(conflicts).toEqual([]);
 
   saved(week).originalRate = '900.00'; saved(week).enteredOriginalRate = '900.00';
   readOnly = true; await page.reload(); await open();
@@ -141,5 +139,5 @@ try {
   await expect(review).toBeVisible();
   await expect(review.getByRole('button', { name: 'Accept system values', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('Daily loads passed: review dialogs, clear-to-system fallback, second/third-load persistence during autosave, reload, genuine conflict and read-only guards.');
+  console.log('Daily loads passed: review dialogs, clear-to-system fallback, second/third-load persistence during autosave, reload, last-write field merging and read-only guards.');
 } finally { releaseSave?.(); await browser.close(); await new Promise(resolve => server.close(resolve)); }
