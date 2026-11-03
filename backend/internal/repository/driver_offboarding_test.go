@@ -150,9 +150,11 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 			if got := scalar(`SELECT outcome FROM driver_termination_truck_actions WHERE truck_id=$1`, truck.ID); got != "inactivated" {
 				t.Fatal(got)
 			}
-			if _, err = NewGrossBoardRepository(pool).SaveEntries(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "TERMINATED-BLOCKED", Slot: 0}}); err == nil {
-				t.Fatal("retained terminated owner accepted a new load")
+			if _, err = NewDriverBoardRepository(pool).Save(ctx, []DriverBoardEntry{{DriverID: d.ID, CurrentLoad: "TERMINATED-BLOCKED"}}); err == nil {
+				t.Fatal("Status Board dispatched a retained terminated owner")
 			}
+			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "TERMINATED-PLAN", Slot: 0}}, actor)
+			must(err)
 			// Neither editor may silently discard the retained link on a later save.
 			input.Status = "terminated"
 			input.Active = false
@@ -179,9 +181,13 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 			if !d.Active || d.DispatcherID != nil || truck.Active {
 				t.Fatal("rehire changed truck/dispatcher")
 			}
-			if _, err = NewGrossBoardRepository(pool).SaveEntries(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "INACTIVE-TRUCK-BLOCKED", Slot: 0}}); !errors.Is(err, ErrTruckUnavailable) {
-				t.Fatal("rehire bypassed inactive truck", err)
+			blockedDispatch := DriverBoardEntry{DriverID: d.ID, CurrentLoad: "INACTIVE-TRUCK-BLOCKED"}
+			must(pool.QueryRow(ctx, `SELECT coalesce((SELECT version FROM driver_board WHERE driver_id=$1),0)`, d.ID).Scan(&blockedDispatch.Version))
+			if _, err = NewDriverBoardRepository(pool).Save(ctx, []DriverBoardEntry{blockedDispatch}); !errors.Is(err, ErrTruckUnavailable) {
+				t.Fatal("Status Board rehire bypassed inactive truck", err)
 			}
+			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "INACTIVE-TRUCK-PLAN", Slot: 0}}, actor)
+			must(err)
 			d, err = terminate(d)
 			must(err)
 			if got := scalar(`SELECT outcome FROM driver_termination_truck_actions WHERE truck_id=$1 AND termination_id=(SELECT termination_id FROM drivers WHERE id=$2)`, truck.ID, d.ID); got != "already_inactive" {
@@ -247,9 +253,11 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 			if !continuing && scalar(`SELECT outcome FROM driver_termination_truck_actions WHERE truck_id=$1`, truck.ID) != "held" {
 				t.Fatal("inactive investor conflict not held")
 			}
-			if _, err = NewGrossBoardRepository(pool).SaveEntries(ctx, []GrossBoardEntry{{DriverID: owner.ID, Date: boardLoadToday(time.Now()), LoadNumber: "HELD-OWNER-BLOCKED", Slot: 0}}); err == nil {
-				t.Fatal("terminated owner dispatched on an active held truck")
+			if _, err = NewDriverBoardRepository(pool).Save(ctx, []DriverBoardEntry{{DriverID: owner.ID, CurrentLoad: "HELD-OWNER-BLOCKED"}}); err == nil {
+				t.Fatal("Status Board dispatched a terminated owner on an active held truck")
 			}
+			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: owner.ID, Date: boardLoadToday(time.Now()), LoadNumber: "HELD-OWNER-PLAN", Slot: 0}}, actor)
+			must(err)
 			page, err := NewCustomTaskRepository(pool).List(ctx, Pagination{}, truck.UnitNumber, "open")
 			must(err)
 			if (continuing && page.Total != 0) || (!continuing && page.Total != 1) {

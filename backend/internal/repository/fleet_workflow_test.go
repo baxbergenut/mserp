@@ -94,12 +94,13 @@ func testFleetWorkOrderWorkflow(t *testing.T, ctx context.Context, admin *pgx.Co
 	if _, err := boardRepo.Save(ctx, []DriverBoardEntry{{DriverID: driver, CurrentLoad: "NEW-BLOCKED"}}); !errors.Is(err, ErrTruckUnavailable) {
 		t.Fatal("Status Board ignored hold", err)
 	}
-	if _, err := admin.Exec(ctx, `GRANT SELECT ON gross_board_entries,gross_board_extra_entries TO mserp_app`); err != nil {
+	if _, err := admin.Exec(ctx, `GRANT SELECT ON loads TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON gross_board_entries,gross_board_extra_entries TO mserp_app`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewGrossBoardRepository(pool).SaveEntries(ctx, []GrossBoardEntry{{DriverID: driver, Date: boardLoadToday(time.Now()), LoadNumber: "NEW-BLOCKED", Slot: 0}}); !errors.Is(err, ErrTruckUnavailable) {
-		t.Fatal("Gross Board ignored hold", err)
+	if _, err := NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: driver, Date: boardLoadToday(time.Now()), LoadNumber: "NEW-PLAN", Slot: 0}}, ""); err != nil {
+		t.Fatal("Gross Board planning must ignore operational holds", err)
 	}
+	status("out_of_service")
 	second.Version = other.Version
 	second.WorkStatus = payTestString("canceled")
 	second.CancelReason = "Duplicate report"
