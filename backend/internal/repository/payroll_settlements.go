@@ -264,12 +264,11 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			if err = savePaySources(ctx, tx, d, &d.Edits, "driver", actor); err != nil {
 				return empty, err
 			}
-			postCosts := true
-			if prepared {
-				postCosts, err = payrollDriverCostsNeedPosting(ctx, tx, d)
-				if err != nil {
-					return empty, err
-				}
+			// Both the fenced prepared path and the authoritative locked read
+			// omit absent zero postings, keeping their canonical ledgers equal.
+			postCosts, err := payrollDriverCostsNeedPosting(ctx, tx, d)
+			if err != nil {
+				return empty, err
 			}
 			if postCosts {
 				if err = saveDriverPayCosts(ctx, tx, d, d.Edits, actor); err != nil {
