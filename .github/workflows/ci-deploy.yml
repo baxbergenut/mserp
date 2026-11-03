@@ -177,6 +177,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-payroll-prepared.mjs
 
+      - name: Verify concurrent statement finalizations
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-payroll-concurrent-finalization.mjs
+
       - name: Verify pinnable headers and Gross Board load search in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend

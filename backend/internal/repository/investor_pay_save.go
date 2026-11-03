@@ -298,14 +298,15 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			for i := range expenses {
 				expenses[i].Apply = !expenses[i].Saved
 			}
-			if !bulkExpenses {
+			postExpenses := !prepared || payrollExpensesNeedPosting(expenses)
+			if !bulkExpenses && postExpenses {
 				if err = saveInvestorExpenses(ctx, tx, d, actor, expenses); err != nil {
 					return empty, err
 				}
 			}
 			if bulkExpenses {
 				d.Edits.ExpenseDeductions = expenseInputs.deductions(d.ID, false)
-			} else {
+			} else if postExpenses {
 				d.Edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, d.ID, d.InvestorID, report.WeekStart, false)
 				if err != nil {
 					return empty, err

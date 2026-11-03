@@ -212,6 +212,32 @@ publication, including rollback when publication fails.
 
 ## Measurements and limits
 
+November 3 individual-finalization follow-up: Driver and Investor Pay allow
+overlapping finalizations and unrelated row editing, with per-statement pending
+state, duplicate-click suppression and receipt merges. Background reads pause
+until active finalizations finish so older responses cannot replace committed
+cards or other drafts. Concurrent blocking reviews queue separately.
+
+The backend skips expense recalculation for freshly fenced, already-saved
+allocations, directly checks exact canonical Fuel/Toll receipts, and avoids
+loading schedule inputs when every installment is already confirmed. First
+all-zero cost finalizations without overrides or existing collections avoid an
+unnecessary zero posting and the resulting financial invalidation. Existing
+nonzero collections and explicit zero deferrals retain normal posting rules.
+Resource-mode finalization no longer locks every table-revision row; the shared
+source gate and ordered resource claims remain. Truly shared financial resources
+still serialize, and canonical source writers still require the source gate.
+
+The isolated fresh/incremental tests measured first zero-cost finalization at
+59–61 ms with zero calculations, and simultaneous saved finalizations at 65–67 ms
+(including a forced overlap barrier), also with zero calculations. These are local
+synthetic observations, not production latency guarantees. Tests hold shared
+revision/job/week rows locked while both commands reach their canonical writes,
+check exact reference-report parity and retry receipts, and retain shared-balance
+and stale-source rejection coverage. The browser fixture verifies reverse-order
+responses, per-row pending state, duplicate suppression and unrelated drafts on
+both payroll pages.
+
 The final bounded browser pass completed **504 measured actions with zero failures**
 across Driver Pay and Investor Pay for 2026-09-28, 2026-10-19 and 2026-10-26.
 It retained the standard 175 ms artificial API delay. Each page/week group contains

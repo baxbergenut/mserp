@@ -48,6 +48,17 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ### Backend
 
+- Ready payroll finalizations reuse fenced saved expense allocations and exact
+  canonical cost receipts. A first all-zero Fuel/Toll statement with no override
+  or existing cost collection omits the zero posting; existing collections still
+  validate/clear normally. Resource-mode preparation uses its existing source gate
+  and principal claims without table-wide revision row locks. Financial postings,
+  installment confirmations and genuinely shared balances keep their guards.
+  Driver/Investor Pay track finalization per row, merge concurrent receipts and
+  pause background replacement while requests are pending. Check
+  TestPreparedZeroCostFinalizationDatabase, TestPayrollResourceConcurrencyDatabase
+  and frontend/scripts/test-payroll-concurrent-finalization.mjs.
+
 - Migration 193 lets a single unassigned Company expense save without the
   payroll source gate. A database guard checks the stored row after routing.
   Driver, truck, owner, applicant, reimbursement, broker and Maintenance

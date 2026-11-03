@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/db"
 )
 
 // Both commands must reach their canonical write before either can commit.
@@ -159,25 +160,74 @@ func TestPayrollResourceConcurrencyDatabase(t *testing.T) {
 				}
 			}
 		}
-		page, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{ID: independent}, true)
-		if err != nil || len(page.Drivers) != 1 || page.Preparation.State != "ready" {
-			t.Fatal("company statement preparation", err, page.Preparation)
+
+		page, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{}, true)
+		if err != nil || page.Preparation.State != "ready" {
+			t.Fatal("finalization preparation", err)
 		}
-		peer, err := admin.Begin(ctx)
+		if _, err = admin.Exec(ctx, `CREATE FUNCTION test_parallel_finalization_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
+ BEGIN PERFORM pg_advisory_xact_lock_shared(1822299); RETURN NEW; END $$;
+ CREATE TRIGGER test_parallel_finalization_barrier BEFORE INSERT OR UPDATE ON payroll_settlements FOR EACH ROW EXECUTE FUNCTION test_parallel_finalization_barrier()`); err != nil {
+			t.Fatal(err)
+		}
+		hold, err := admin.Begin(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer peer.Rollback(ctx)
-		if _, err = peer.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,182736281940))`, "driver:"+projectionDriver); err != nil {
+		if _, err = hold.Exec(ctx, `SELECT pg_advisory_xact_lock(1822299);
+ SELECT week_start FROM payroll_projection_jobs FOR UPDATE;
+ SELECT week_start FROM payroll_projection_weeks FOR UPDATE;
+ SELECT table_name FROM payroll_cache_revisions FOR UPDATE`); err != nil {
 			t.Fatal(err)
 		}
-		work, cancel := context.WithTimeout(ctx, 3*time.Second)
-		receipt, err := repo.Settle(WithPayrollReceipt(work), week, independent, page.Revision, actor, "", false, true,
-			PayrollSettlementCommand{RequestID: "18200000-0000-0000-0000-000000002299", ExpectedStatementRevision: page.Drivers[0].StatementRevision})
+		work, cancel := context.WithTimeout(ctx, 8*time.Second)
+		type settlementOutcome struct {
+			report       DriverPayWeek
+			err          error
+			calculations int64
+			elapsed      time.Duration
+			queries      int64
+		}
+		done := make(chan settlementOutcome, 2)
+		for i, d := range page.Drivers {
+			if d.ID != projectionDriver && d.ID != independent {
+				continue
+			}
+			go func(i int, d DriverPayDriver) {
+				measured, metrics := db.WithMetrics(WithPayrollReceipt(work))
+				started := time.Now()
+				receipt, err := repo.Settle(measured, week, d.ID, page.Revision, actor, "", false, true,
+					PayrollSettlementCommand{RequestID: fmt.Sprintf("18200000-0000-0000-0000-%012d", 2290+i), ExpectedStatementRevision: d.StatementRevision})
+				done <- settlementOutcome{receipt, err, metrics.Events()["payroll_calculation"], time.Since(started), metrics.Queries.Load()}
+			}(i, d)
+		}
+		waiting := 0
+		deadline := time.Now().Add(4 * time.Second)
+		for waiting < 2 && time.Now().Before(deadline) {
+			if err = pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND objid=1822299 AND NOT granted`).Scan(&waiting); err != nil {
+				break
+			}
+			if waiting < 2 {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		_ = hold.Rollback(ctx)
+		results := []settlementOutcome{<-done, <-done}
 		cancel()
-		_ = peer.Rollback(ctx)
-		if err != nil || len(receipt.Drivers) != 1 || receipt.Drivers[0].Settlement == nil || !receipt.Drivers[0].Settlement.Finalized {
-			t.Fatal("company finalization waited for an unrelated driver", err)
+		if _, err := admin.Exec(ctx, `DROP TRIGGER test_parallel_finalization_barrier ON payroll_settlements; DROP FUNCTION test_parallel_finalization_barrier()`); err != nil {
+			t.Fatal(err)
+		}
+		if err != nil || waiting != 2 {
+			t.Fatal("finalizations did not overlap independently of shared rows", waiting, err, results)
+		}
+		for _, result := range results {
+			if result.err != nil || len(result.report.Drivers) != 1 || result.report.Drivers[0].Settlement == nil || !result.report.Drivers[0].Settlement.Finalized {
+				t.Fatal("concurrent finalization", result.err)
+			}
+			if result.calculations != 0 {
+				t.Fatal("saved finalization recalculated", result.calculations)
+			}
+			t.Logf("concurrent saved finalization (including barrier wait): %s, %d queries, zero calculations", result.elapsed, result.queries)
 		}
 
 		// A legacy investor row makes the company owner a real ledger principal.

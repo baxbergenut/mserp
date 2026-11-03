@@ -264,8 +264,17 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			if err = savePaySources(ctx, tx, d, &d.Edits, "driver", actor); err != nil {
 				return empty, err
 			}
-			if err = saveDriverPayCosts(ctx, tx, d, d.Edits, actor); err != nil {
-				return empty, err
+			postCosts := true
+			if prepared {
+				postCosts, err = payrollDriverCostsNeedPosting(ctx, tx, d)
+				if err != nil {
+					return empty, err
+				}
+			}
+			if postCosts {
+				if err = saveDriverPayCosts(ctx, tx, d, d.Edits, actor); err != nil {
+					return empty, err
+				}
 			}
 			if !override && len(d.Issues) > 0 {
 				return empty, finalizationReview(report, driver, "Resolve settlement issues for %s: %s", d.FullName, strings.Join(d.Issues, "; "))
@@ -279,17 +288,10 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			for i := range deductions {
 				deductions[i].Apply = !deductions[i].Saved
 			}
-			if !bulkExpenses {
+			if !bulkExpenses && (!prepared || payrollExpensesNeedPosting(deductions)) {
 				if _, err = saveTeamExpenses(ctx, tx, d.ID, report.WeekStart, actor, deductions); err != nil {
 					return empty, err
 				}
-			}
-			if len(d.Edits.GeneratedCharges) > 0 && chargeInputs == nil {
-				data, loads, e := chargeData(ctx, tx, "")
-				if e != nil {
-					return empty, e
-				}
-				chargeInputs, chargeLoads = &data, loads
 			}
 			confirmed := []string{}
 			for _, row := range d.Edits.GeneratedCharges {
@@ -299,6 +301,13 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				}
 				if row.ConfirmedAt != nil {
 					continue
+				}
+				if chargeInputs == nil {
+					data, loads, e := chargeData(ctx, tx, "")
+					if e != nil {
+						return empty, e
+					}
+					chargeInputs, chargeLoads = &data, loads
 				}
 				for i := range chargeInputs.Schedules {
 					if chargeInputs.Schedules[i].ID == row.ScheduleID {

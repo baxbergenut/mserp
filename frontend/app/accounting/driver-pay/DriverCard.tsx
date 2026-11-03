@@ -51,6 +51,7 @@ export type DriverCardProps = {
   returnToPay?: boolean;
  onSettlement?: (reopen: boolean) => void;
  settlementDisabled?: boolean;
+ settlementPending?: boolean;
   driver: DriverPayDriver;
   edits: DriverPayEdits;
   disabled: boolean;
@@ -61,7 +62,7 @@ export type DriverCardProps = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, settlementPending, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
   const [extraNumber, setExtraNumber] = useState("");
   const [extraChoices, setExtraChoices] = useState<PayLoadPlacementResult["choices"]>([]);
   const [extraChoice, setExtraChoice] = useState("");
@@ -175,7 +176,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-right font-mono">{loadCount}</td>
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
-      <td className="border-b border-zinc-800 px-3 text-right text-zinc-400 break-words">{driver.settlement?.finalized ? driver.settlement.finalizedBy || "Unknown" : onSettlement ? <button type="button" className={`${payButtonClass} min-h-8 !py-1`} aria-label={`Finalize ${statementName}${investor ? ` ${driver.truckUnit}` : ""}`} disabled={settlementDisabled} onClick={event => { event.stopPropagation(); onSettlement(false); }}>Finalize</button> : "—"}</td>
+      <td className="border-b border-zinc-800 px-3 text-right text-zinc-400 break-words">{driver.settlement?.finalized ? driver.settlement.finalizedBy || "Unknown" : onSettlement ? <button type="button" className={`${payButtonClass} min-h-8 !py-1`} aria-label={`Finalize ${statementName}${investor ? ` ${driver.truckUnit}` : ""}`} disabled={settlementDisabled} onClick={event => { event.stopPropagation(); onSettlement(false); }}>{settlementPending ? "Finalizing…" : "Finalize"}</button> : "—"}</td>
     </tr>
     {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
     {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">

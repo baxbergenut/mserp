@@ -282,6 +282,19 @@ func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits
 		}
 	}
 	r := payCostRecord{d.ID, edits.WeekStart, chargeMoney(f), chargeMoney(t), chargeMoney(payrollCostAmount(edits.FuelOverride, fd, fuelCPM)), chargeMoney(payrollCostAmount(edits.TollOverride, td, tollCPM))}
+	// An exact canonical receipt needs no historical carry reconstruction.
+	// The caller holds the financial/resource locks; changed or legacy costs
+	// still take the complete validation and pinning path below.
+	var alreadyStored bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_pay_cost_collections
+ WHERE driver_id=$1 AND week_start=$2::date AND fuel_base=$3::numeric
+ AND toll_base=$4::numeric AND fuel_amount=$5::numeric AND toll_amount=$6::numeric)`,
+		r.Driver, r.Week, r.Fuel, r.Toll, r.FuelAmount, r.TollAmount).Scan(&alreadyStored); err != nil {
+		return err
+	}
+	if alreadyStored {
+		return nil
+	}
 	inputs, _ := ctx.Value(payrollFinalizeKey{}).(*payrollFinalizeInputs)
 	var records []payCostRecord
 	var err error

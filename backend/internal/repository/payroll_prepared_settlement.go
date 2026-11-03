@@ -12,6 +12,38 @@ import (
 
 type payrollPostWriteResultKey struct{}
 type payrollPostWriteReadKey struct{}
+
+// Only use with a freshly fenced prepared statement, whose saved allocations
+// are already authoritative. Unsaved zero deferrals still post.
+func payrollExpensesNeedPosting(rows []ExpenseDeduction) bool {
+	for _, row := range rows {
+		if !row.Saved {
+			return true
+		}
+	}
+	return false
+}
+
+// A fenced statement with no fuel/toll basis, carry, deduction or override has
+// nothing to post. Writing a zero ledger row would invalidate other periods
+// merely to represent the same zero. Explicit deferrals/legacy overrides keep
+// the normal canonical posting path.
+func payrollDriverCostsNeedPosting(ctx context.Context, tx pgx.Tx, d DriverPayDriver) (bool, error) {
+	if d.Edits.FuelOverride != nil || d.Edits.TollOverride != nil || d.Edits.Costs == nil {
+		return true, nil
+	}
+	fuel, toll := driverCostBase(d)
+	c := d.Edits.Costs
+	if fuel != 0 || toll != 0 || c.FuelCarry != "0.00" || c.TollCarry != "0.00" || c.FuelDue != "0.00" || c.TollDue != "0.00" {
+		return true, nil
+	}
+	// An old collection may need clearing after a source correction, even if
+	// today's calculated basis is zero. Only omit a genuinely absent posting.
+	var exists bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_pay_cost_collections WHERE driver_id=$1 AND week_start=$2::date)`, d.ID, d.Edits.WeekStart).Scan(&exists)
+	return exists, err
+}
+
 type payrollPostWriteResult struct {
 	tx                   pgx.Tx
 	kind, week, snapshot string
@@ -103,20 +135,24 @@ func preparedSettlementReport(ctx context.Context, tx pgx.Tx, c *payrollCommand,
 	if c == nil || c.beforeSnapshot == "" {
 		return report, ErrDriverPayConflict
 	}
-	rows, err := tx.Query(ctx, `SELECT table_name,revision FROM payroll_cache_revisions WHERE NOT table_name=ANY($1::text[]) ORDER BY table_name FOR SHARE`, payrollUnrelatedTables)
-	if err != nil {
-		return report, err
-	}
-	for rows.Next() {
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return report, err
+	// Resource transactions already hold the shared source gate and exact
+	// principal claims. Table-wide revision row locks add no protection there.
+	if !payrollConcurrent(tx) {
+		rows, err := tx.Query(ctx, `SELECT table_name,revision FROM payroll_cache_revisions WHERE NOT table_name=ANY($1::text[]) ORDER BY table_name FOR SHARE`, payrollUnrelatedTables)
+		if err != nil {
+			return report, err
+		}
+		for rows.Next() {
+		}
+		rows.Close()
+		if err = rows.Err(); err != nil {
+			return report, err
+		}
 	}
 	var header, body []byte
 	var snapshot string
 	var currentResources bool
-	err = tx.QueryRow(ctx, `SELECT CASE WHEN $2='driver' THEN g.driver_header ELSE g.investor_header END,g.input_snapshot,
+	err := tx.QueryRow(ctx, `SELECT CASE WHEN $2='driver' THEN g.driver_header ELSE g.investor_header END,g.input_snapshot,
  coalesce(rows.body,'[]'),coalesce(rows.current,true)
  FROM payroll_projection_weeks w JOIN payroll_projection_generations g ON g.id=w.generation_id
  LEFT JOIN LATERAL (SELECT jsonb_agg(v.detail) body,bool_and(payroll_resources_current(v.resource_dependencies)) current
