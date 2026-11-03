@@ -58,3 +58,23 @@ https://web.dev/case-studies/google-sheets-wasmgc
 
 These support the design principles, not a claim to reproduce all current Sheets
 internals. Clustie's authoritative financial calculation remains server-side.
+
+## Production lock contention follow-up
+
+Release 34573cad committed observed routine writes in 45–110 ms with zero payroll
+calculations. Other observed writes still took 2,039–5,661 ms, with 1,926–5,530 ms
+inside gross_source_lock_wait. Moving calculation out of the HTTP handler alone
+did not prevent its background worker from holding the source gate.
+
+PayrollWorkPriority now lets interactive board edits interrupt only this API
+process's disposable background preparation and maintenance. PostgreSQL rolls
+back the interrupted transaction, the worker releases its durable lease without
+marking payroll failed, and work resumes after all board writes finish plus a
+500 ms quiet period. Financial commands are never canceled. Existing database
+locks and revision checks remain unchanged; another process or an actual financial
+command can still impose a lock wait.
+
+A forced publication barrier on fresh and incremental databases proved board
+writes completed in 81–172 ms while the barrier remained held. The interrupted
+attempt published no partial generation, retained no lease/error, and subsequent
+worker recovery brought both payroll pages current.

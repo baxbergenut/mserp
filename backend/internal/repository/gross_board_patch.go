@@ -16,6 +16,8 @@ var GrossBoardEditableFields = []string{"loadNumber", "loadRecordId", "loadTripI
 // each patch updates just the selected fields of the latest row. Legacy clients
 // that omit fields retain their full-row replacement behavior.
 func (r *GrossBoardRepository) SaveChanges(ctx context.Context, entries []GrossBoardEntry, actor string) ([]GrossBoardEntry, error) {
+	finish := r.workPriority.interactive()
+	defer finish()
 	for i := range entries {
 		if entries[i].Fields == nil {
 			entries[i].Fields = GrossBoardEditableFields

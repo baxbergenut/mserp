@@ -38,6 +38,15 @@ financial commands remain rejected. Internal callers can still opt into atomic
 publication through SaveEntries. Split/source review and frozen snapshot semantics
 are unchanged. There is no new version history or database migration.
 
+The API shares PayrollWorkPriority between Gross Board and its derived worker.
+Interactive writes cancel unfinished background preparation/maintenance, preserving
+the database lock protocol and rolling back that derived attempt. Lease claims use
+a short bounded handoff so interruption can release the exact claimed token; yields
+do not show a failure badge. Work resumes after all board writes finish plus a
+500 ms quiet period. This scheduling hint is process-local and never cancels a
+financial command. TestGrossBoardPreemptsPayrollDatabase forces blocked publication
+and proves fast board commit, rollback, lease release and durable worker recovery.
+
 Prepared read responses include `preparationState` on each statement. In resource
 mode, a complete proof of every intervening captured source revision and its old/new
 routing lets an unrelated dependency component remain ready. Exact resource epochs,

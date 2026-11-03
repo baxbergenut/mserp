@@ -18,7 +18,10 @@ var ErrGrossBoardTrip = errors.New("select a valid trip whose allocations reconc
 
 var ErrGrossBoardLoad = errors.New("the selected load no longer matches this load number; select it again")
 
-type GrossBoardRepository struct{ pool *pgxpool.Pool }
+type GrossBoardRepository struct {
+	pool         *pgxpool.Pool
+	workPriority *PayrollWorkPriority
+}
 
 func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 	return &GrossBoardRepository{pool: pool}

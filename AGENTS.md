@@ -2707,7 +2707,8 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   classifies board rows, load state and operational audits as unrelated, and excludes
   driver dispatch history from financial capture/revisions. Actual profile and
   availability changes still commit durable payroll capture; prepared pages update
-  through the worker. Gross Board and pay-page atomic publication remain unchanged.
+  through the worker. Pay-page commands retain atomic publication; interactive
+  Gross Board saves use the asynchronous boundary documented below.
 - Operational commands take the fleet lock before driver rows, without the payroll
   gate. A database-checked marker rejects canonical source mutations before any
   payroll lock; the entire transaction rolls back and retries the original versions
@@ -3220,8 +3221,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Effective operatingStatus combines all order holds with manual restrictions;
   assignment changes preserve restrictions. Active/Inactive and crews stay separate.
 - Status Board truck cells show only the unit, without condition badges or repair details.
-  New board/Gross Board loads check holds under the truck lock; existing/historical
-  records remain editable. No external booking integration, automatic date-based
+  New Status Board loads check holds under the truck lock; Gross Board planning
+  ignores operational availability. Existing/historical records remain editable.
+  No external booking integration, automatic date-based
   release or future downtime reservation is implemented.
 - Final payment uses existing invoice fields and explicit Confirm paid & finish;
   Save invoice alone does not confirm paid. There is no separate payment endpoint
@@ -3492,6 +3494,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   canonical rows, source revisions and durable payroll work before acknowledgement;
   the worker publishes payroll separately. Internal SaveEntries can still request
   synchronous publication. Do not acknowledge before the board transaction commits.
+  The server shares PayrollWorkPriority between interactive board saves and its
+  derived worker. Board writes cancel unfinished background preparation/maintenance;
+  canceled transactions roll back and durable leases retry without a failure badge.
+  Background work resumes after all board writes finish and a 500 ms quiet period.
+  This is process-local scheduling only: all database locks, capture and publication
+  fences remain authoritative. Financial commands never register for cancellation.
   Prepared payroll exposes per-statement preparationState. Complete captured source
   impact and exact dependency checks keep unrelated resource-mode statements editable
   and finalizable while affected statements update. Unknown impact fails closed;
@@ -3511,5 +3519,6 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Checks: test-gross-board-reliability.mjs, test-gross-board-daily-loads.mjs,
   test-investors-e2e.mjs --gross-live-only; TestGrossBoardDatabase,
   TestGrossBoardPatchPublicationDatabase, TestGrossBoardAsyncSaveDatabase,
+  TestGrossBoardPreemptsPayrollDatabase, TestPayrollWorkPriority,
   TestPayrollResourceSourceScopeSaveDatabase, TestFleetStatusDatabase, TestLoadTripsDatabase.
   The live Gross Board E2E runs with prepared payroll and its worker enabled.

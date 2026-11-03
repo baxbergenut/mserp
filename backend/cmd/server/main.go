@@ -213,6 +213,8 @@ func main() {
 	dashboardRepo := repository.NewDashboardRepository(pool)
 	expenseRepo := repository.NewExpenseRepository(pool)
 	grossBoardRepo := repository.NewGrossBoardRepository(pool)
+	payrollPriority := repository.NewPayrollWorkPriority()
+	grossBoardRepo.ConfigurePayrollWorkPriority(payrollPriority)
 	authRepo := repository.NewAuthRepository(pool)
 	customTaskRepo := repository.NewCustomTaskRepository(pool)
 	aiExtractor := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIExpenseModel)
@@ -342,6 +344,7 @@ func main() {
 	payrollShadowDone := make(chan struct{})
 	if cfg.PayrollProjectionMode == "shadow" {
 		payroll := repository.NewDriverPayRepository(pool)
+		payroll.ConfigurePayrollWorkPriority(payrollPriority)
 		payroll.ConfigurePreparedReads(cfg.PayrollPreparedReads)
 		payroll.ConfigurePreparedCommands(cfg.PayrollPreparedCommands)
 		if err := payroll.EnablePayrollShadow(ctx); err != nil {

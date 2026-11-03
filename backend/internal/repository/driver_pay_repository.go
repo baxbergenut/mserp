@@ -27,6 +27,7 @@ type DriverPayRepository struct {
 	resourceLockAudit    bool // Tests exercise ordered resources while retaining the global gate.
 	resourceConcurrency  bool // Enabled only after the resource protocol exit gates.
 	firstWeek            string
+	workPriority         *PayrollWorkPriority
 }
 
 func (r *DriverPayRepository) FirstPayrollWeek() string {

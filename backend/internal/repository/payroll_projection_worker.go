@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -92,20 +93,28 @@ func (r *DriverPayRepository) RunPayrollShadow(ctx context.Context, logger *slog
 	}()
 	var nextSeed, nextHealth time.Time
 	for ctx.Err() == nil {
+		workCtx, release, err := r.workPriority.background(ctx)
+		if err != nil {
+			return
+		}
 		now := time.Now()
 		if !now.Before(nextSeed) {
-			if err := r.SeedPayrollPreparation(ctx); err != nil {
-				logger.Error("seed payroll shadow", "error", err)
+			if err := r.SeedPayrollPreparation(workCtx); err != nil {
+				if workCtx.Err() == nil {
+					logger.Error("seed payroll shadow", "error", err)
+				}
+			} else {
+				nextSeed = now.Add(time.Minute)
 			}
-			nextSeed = now.Add(time.Minute)
 		}
-		if _, err := r.DispatchPayrollChanges(ctx); err != nil && ctx.Err() == nil {
+		if _, err := r.DispatchPayrollChanges(workCtx); err != nil && workCtx.Err() == nil {
 			logger.Error("dispatch payroll shadow", "error", err)
 		}
-		worked, err := r.PrepareNextPayrollWeek(ctx)
-		if err != nil && ctx.Err() == nil {
+		worked, err := r.PrepareNextPayrollWeek(workCtx)
+		if err != nil && workCtx.Err() == nil && !errors.Is(err, ErrPayrollProjectionSuperseded) {
 			logger.Error("prepare payroll shadow", "error", err)
 		}
+		release()
 		if !now.Before(nextHealth) {
 			var pending int
 			var age float64

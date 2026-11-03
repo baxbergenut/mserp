@@ -699,7 +699,15 @@ func writePayrollProjection(ctx context.Context, tx pgx.Tx, week time.Time, requ
 // Process at most one dependency group. All weeks conservatively share source
 // dependencies in shadow mode; freshness does not rely on job completion.
 func (r *DriverPayRepository) PrepareNextPayrollWeek(ctx context.Context) (bool, error) {
-	job, err := r.claimPayrollProjection(ctx)
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	// A board edit may interrupt calculation, but must not discard the result
+	// of a just-committed lease claim. Finish this short handoff so cancellation
+	// can release that exact token instead of waiting for its lease to expire.
+	claimCtx, claimCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	job, err := r.claimPayrollProjection(claimCtx)
+	claimCancel()
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -709,6 +717,9 @@ func (r *DriverPayRepository) PrepareNextPayrollWeek(ctx context.Context) (bool,
 	workCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	if err = r.preparePayrollProjection(workCtx, job); err != nil {
+		if errors.Is(context.Cause(workCtx), errPayrollWorkYielded) {
+			err = ErrPayrollProjectionSuperseded
+		}
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
 		if releaseErr := r.failPayrollProjection(cleanupCtx, job, err); releaseErr != nil {
