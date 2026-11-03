@@ -57,16 +57,17 @@ type loginRequest struct {
 }
 
 type authUserResponse struct {
-	Administrator           bool                               `json:"administrator"`
-	AccessRevision          string                             `json:"accessRevision"`
-	Theme                   string                             `json:"theme"`
-	ID                      string                             `json:"id"`
-	Username                string                             `json:"username"`
-	Email                   string                             `json:"email"`
-	ExpenseVerificationRole string                             `json:"expenseVerificationRole"`
-	RoleID                  string                             `json:"roleId"`
-	Permissions             []string                           `json:"permissions"`
-	ExpenseCategoryAccess   []repository.ExpenseCategoryAccess `json:"expenseCategoryAccess"`
+	CanResetGrossBoardBalance bool                               `json:"canResetGrossBoardBalance"`
+	Administrator             bool                               `json:"administrator"`
+	AccessRevision            string                             `json:"accessRevision"`
+	Theme                     string                             `json:"theme"`
+	ID                        string                             `json:"id"`
+	Username                  string                             `json:"username"`
+	Email                     string                             `json:"email"`
+	ExpenseVerificationRole   string                             `json:"expenseVerificationRole"`
+	RoleID                    string                             `json:"roleId"`
+	Permissions               []string                           `json:"permissions"`
+	ExpenseCategoryAccess     []repository.ExpenseCategoryAccess `json:"expenseCategoryAccess"`
 }
 
 type sessionResponse struct {
@@ -322,7 +323,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
 		PermissionCatalog: repository.Permissions,
-		User:              authUserResponse{Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
+		User:              authUserResponse{CanResetGrossBoardBalance: canResetGrossBoardBalance(user), Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
 		CSRFToken:         csrfToken,
 		ExpiresAt:         expiresAt,
 	}

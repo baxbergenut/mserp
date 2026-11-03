@@ -77,6 +77,7 @@ type GrossBoard struct {
 }
 
 type GrossBoardBalance struct {
+	ResetThisWeek     bool   `json:"resetThisWeek,omitempty"`
 	OpeningReference  string `json:"openingReference,omitempty"`
 	DriverID          string `json:"driverId"`
 	OpeningBalance    string `json:"openingBalance"`
@@ -172,6 +173,9 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	if err != nil {
 		return board, err
 	}
+	if err = readGrossBoardOpenings(ctx, tx, week, &board); err != nil {
+		return board, err
+	}
 	return board, commitPayrollMutation(ctx, tx)
 }
 
@@ -213,27 +217,6 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 			return board, err
 		}
 		board.Entries = append(board.Entries, e)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return board, err
-	}
-	rows, err = tx.Query(ctx, grossBoardEffective+`SELECT driver_id,
- coalesce(sum(balance_change),0)::text,
- count(*) FILTER (WHERE NOT deleted AND day_status='' AND balance_change IS NULL AND NOT duplicate
- AND (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL))::int
- FROM effective WHERE service_date < $1::date GROUP BY driver_id`, week)
-	if err != nil {
-		return board, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var balance GrossBoardBalance
-		if err = rows.Scan(&balance.DriverID, &balance.OpeningBalance, &balance.OpeningIncomplete); err != nil {
-			return board, err
-		}
-		board.Balances = append(board.Balances, balance)
 	}
 	err = rows.Err()
 	rows.Close()
@@ -296,12 +279,29 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 	return board, nil
 }
 
+func readGrossBoardOpenings(ctx context.Context, tx pgx.Tx, week time.Time, board *GrossBoard) error {
+	rows, err := tx.Query(ctx, grossBoardEffective+grossBoardOpenings+`SELECT driver_id::text,opening,incomplete,reset_this_week FROM openings`, week)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var balance GrossBoardBalance
+		if err = rows.Scan(&balance.DriverID, &balance.OpeningBalance, &balance.OpeningIncomplete, &balance.ResetThisWeek); err != nil {
+			return err
+		}
+		board.Balances = append(board.Balances, balance)
+	}
+	return rows.Err()
+}
+
 func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID string, week time.Time) ([]GrossBoardBalanceLine, error) {
-	rows, err := r.pool.Query(ctx, grossBoardEffective+`SELECT service_date::text, display_number,
+	rows, err := r.pool.Query(ctx, grossBoardEffective+grossBoardOpenings+`SELECT service_date::text, display_number,
  coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(balance_change::text,''),
- (coalesce(sum(balance_change) OVER (ORDER BY service_date,slot ROWS UNBOUNDED PRECEDING),0))::text, duplicate
- FROM effective WHERE driver_id=$2 AND NOT deleted AND day_status='' AND
+ (coalesce(o.opening::numeric,0)+coalesce(sum(balance_change) OVER (ORDER BY service_date,slot ROWS UNBOUNDED PRECEDING),0))::text, duplicate
+ FROM effective e LEFT JOIN openings o ON o.driver_id=e.driver_id
+ WHERE e.driver_id=$2 AND service_date >= $1::date AND NOT deleted AND day_status='' AND
  (load_number<>'' OR effective_original IS NOT NULL OR driver_rate IS NOT NULL)
  ORDER BY service_date,slot`, week, driverID)
 	if err != nil {

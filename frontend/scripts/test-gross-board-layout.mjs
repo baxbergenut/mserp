@@ -25,11 +25,20 @@ const entry = (id, slot, originalRate, driverRate, miles) => ({ driverId: id, da
   originalRate, driverRate, miles, enteredOriginalRate: originalRate, enteredMiles: miles, version: 1, duplicate: false });
 let entries = [entry('driver-0', 0, '1800.00', '1000.00', '500.00'), entry('driver-0', 1, '400.00', '350.35', '25.60'), entry(bobId, 0, '500.00', '400.00', '0.00')];
 const errors = [];
-async function fixtures(page) {
+async function fixtures(page, canResetGrossBoardBalance = false) {
+  let balances = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date('2026-10-16T14:00:00Z'));
   await page.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname.replace('/lookups/','/').slice(4);
+    if (req.method() === 'POST' && path === '/gross-board/balance/reset') {
+      expect(canResetGrossBoardBalance).toBe(true);
+      const request = req.postDataJSON();
+      expect(request).toEqual({ driverId: 'driver-0', weekStart: week, balance: '-75.25' });
+      const balance = { driverId: request.driverId, openingBalance: '-924.90', openingIncomplete: 0, resetThisWeek: true };
+      balances = [balance];
+      return route.fulfill({ json: balance });
+    }
     if (req.method() === 'PUT' && path === '/gross-board') {
       const committed = req.postDataJSON().entries.map(e => ({ ...e, version: e.version + 1 }));
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -37,8 +46,9 @@ async function fixtures(page) {
       return route.fulfill({ json: committed });
     }
     const data = {
-      '/auth/session': { user: { id: 'layout', username: 'Layout', permissions: ['board.read', 'board.write', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'loads.read'] }, csrfToken: 'fixture' },
-      '/gross-board': { weekStart: url.searchParams.get('weekStart') ?? week, drivers, entries, balances: [] },
+      '/auth/session': { user: { id: 'layout', username: 'Layout', canResetGrossBoardBalance, permissions: ['board.read', 'board.write', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', 'loads.read'] }, csrfToken: 'fixture' },
+      '/gross-board': { weekStart: url.searchParams.get('weekStart') ?? week, drivers, entries, balances },
+      '/gross-board/balance': [{ date: '2026-10-05', loadNumber: 'PRIOR-LOAD', originalRate: '100', driverRate: '0', change: '100', balance: '100' }],
       '/gross-board/loads': [], '/tasks/count': { count: 0 }, '/sidebar-counts': {},
     };
     await route.fulfill({ json: data[path] ?? [] });
@@ -72,7 +82,22 @@ try {
   await expect(footer.nth(1)).toHaveText('525.60');
   await expect(footer.nth(4)).toHaveText('+$949.65');
   await page.getByRole('button', { name: 'Rate balance for Alice Layout', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Alice Layout · Rate balance' })).toBeVisible();
+  const details = page.getByRole('dialog', { name: 'Alice Layout · Rate balance' });
+  await expect(details).toBeVisible();
+  await expect(details.getByText('LOAD-driver-0-0', { exact: true })).toBeVisible();
+  await expect(details.getByText('PRIOR-LOAD')).toHaveCount(0);
+  await expect(details.getByRole('button', { name: 'Reset rate balance' })).toHaveCount(0);
+
+  const accountant = await browser.newPage();
+  await fixtures(accountant, true);
+  await accountant.goto(`${base}/gross-board`);
+  await accountant.getByRole('button', { name: 'Rate balance for Alice Layout', exact: true }).click();
+  await accountant.getByRole('button', { name: 'Reset rate balance' }).click();
+  await accountant.getByLabel('New rate balance').fill('-75.25');
+  await accountant.getByRole('button', { name: 'Confirm reset' }).click();
+  await expect(accountant.getByRole('status').getByText('Rate balance reset.')).toBeVisible();
+  await expect(accountant.getByText('Ending balance').locator('..')).toContainText('-$75.25');
+  await accountant.close();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
   const filter = page.getByRole('button', { name: 'Dispatcher filter', exact: true });

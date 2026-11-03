@@ -1,7 +1,7 @@
 "use client";
 
 
-import { usePermissions } from "@/app/lib/access";
+import { GrossBoardBalanceResetContext, usePermissions } from "@/app/lib/access";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 
@@ -9,9 +9,9 @@ import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck } from "lucide-react";
-import { fetchGrossBoard, saveGrossBoard } from "@/app/lib/api";
+import { fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
 import { selectedGrossCell } from "./grossCells";
 import { mergeGrossLive } from "./liveMerge";
@@ -39,6 +39,7 @@ const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg bo
 
 export default function GrossBoardPage() {
   const hasEditPermission = usePermissions().includes("board.write");
+  const canResetBalance = useContext(GrossBoardBalanceResetContext);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
@@ -394,7 +395,16 @@ export default function GrossBoardPage() {
         </table>
       </BoardScrollArea>}
       <GrossPresence peers={live.peers} />
-      {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverId={selectedDriver.id} driverName={selectedDriver.fullName} week={week}
+      {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverName={selectedDriver.fullName}
+        resetThisWeek={openings.get(selectedDriver.id)?.resetThisWeek}
+        onReset={canResetBalance && !board?.managedInSheets && week === currentChargeWeek() ? async (amount) => {
+          const opening = await resetGrossBoardBalance(selectedDriver.id, week, amount);
+          setBoard(current => current?.weekStart === week ? {
+            ...current, balances: [...current.balances.filter(balance => balance.driverId !== opening.driverId), opening],
+          } : current);
+          receiveLive.current();
+        } : undefined}
+        resetDisabled={dirty || saving || loading}
         openingReference={openings.get(selectedDriver.id)?.openingReference} opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
         entries={entryIndex.byDriver.get(selectedDriver.id) ?? []} onClose={() => setBalanceDriver(null)} />}
     </div>

@@ -1058,6 +1058,7 @@ export interface ExpenseExtraction {
 }
 
 export interface AuthUser {
+  canResetGrossBoardBalance?: boolean;
   administrator: boolean;
   accessRevision?: string;
   expenseVerificationRole: "accountant" | "";
@@ -1157,7 +1158,15 @@ export interface GrossBoard {
   weekStart: string;
   drivers: GrossBoardDriver[];
   entries: GrossBoardEntry[];
-  balances: { driverId: string; openingBalance: string; openingIncomplete: number; openingReference?:string }[];
+  balances: GrossBoardBalance[];
+}
+
+export interface GrossBoardBalance {
+  driverId: string;
+  openingBalance: string;
+  openingIncomplete: number;
+  openingReference?: string;
+  resetThisWeek?: boolean;
 }
 
 export interface GrossBoardBalanceLine {

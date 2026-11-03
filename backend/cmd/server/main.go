@@ -46,6 +46,7 @@ func main() {
 	payrollSwitch := flag.String("payroll-protocol-switch", "", "switch payroll protocol after all writers are stopped (global, dual, resources)")
 	payrollEpoch := flag.Int64("payroll-protocol-epoch", 0, "reviewed database protocol epoch required for a quiesced switch")
 	payrollRetire := flag.String("retire-payroll-before", "", "retire explicitly reviewed old draft payroll weeks with writers stopped; retain allocations and verify remaining reports")
+	resetGrossBoardBalances := flag.Bool("initialize-gross-board-rate-balances", false, "reset all driver rate balances to zero once and exit")
 	flag.Parse()
 	if *payrollCapability {
 		fmt.Println(repository.PayrollProtocolCapability)
@@ -69,6 +70,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	if *resetGrossBoardBalances {
+		week, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
+		_, count, err := repository.NewGrossBoardRepository(pool).ResetRateBalance(ctx, week, "", "0", "")
+		if err != nil {
+			logger.Error("initialize gross board rate balances", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("gross board rate balance initialization complete", "week", week.Format(time.DateOnly), "driversReset", count)
+		return
+	}
 	protocol := repository.NewDriverPayRepository(pool)
 	if *payrollRetire != "" {
 		result, retirementErr := protocol.RetirePayrollBefore(ctx, *payrollRetire)

@@ -3423,3 +3423,15 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - GET /gross-board/loads/{id}/split uses board.read; saves use existing board.write.
   See docs/integrations/DATATRUCK_LOAD_SPLITS.md and TestLoadTripsDatabase plus
   frontend/scripts/test-gross-board-splits.mjs. Deployment alone changes no amounts.
+
+## Gross Board rate balance resets
+
+- Administrators and the Accountant role with Gross Board access can reset a
+  driver's ending balance on the current New York week. Migration 194 records
+  the target, the week's included change, and the actor. Older carry is sealed
+  and later load changes affect the balance normally. The details show only
+  the selected week's loads.
+- Reset storage is outside the payroll source schema. After migration 194, the
+  one-time `-initialize-gross-board-rate-balances` API binary command uses the
+  service environment to record zero targets for the entire driver roster.
+  A retry after a successful initialization skips the batch.

@@ -51,6 +51,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Log("Checking migration and repository queries as mserp_app")
 	}
 	_, err = pool.Exec(ctx, `CREATE TEMP TABLE gross_board_transfers(driver_id uuid,source_date date,source_slot integer,dispatch_date date,dispatch_slot integer,settlement_date date,dispatcher_id text,dispatcher_name text,truck_id uuid,version integer,active boolean);
+ CREATE TEMP TABLE gross_board_rate_resets(id bigint GENERATED ALWAYS AS IDENTITY,driver_id uuid,week_start date,target numeric(12,2),week_change numeric,actor_id uuid);
  CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE drivers(id uuid PRIMARY KEY,full_name text,dispatcher_id uuid,active boolean);
  CREATE TEMP TABLE trucks(id uuid PRIMARY KEY,unit_number text);
@@ -400,7 +401,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal("week isolation failed", err)
 	}
 
-	// Cross-week history includes plans, not future weeks or incomplete rates.
+	// Opening balances carry older changes while the breakdown shows only the selected week.
 	const carryDriver = "00000000-0000-0000-0000-000000000003"
 	if _, err = pool.Exec(ctx, `INSERT INTO pg_temp.drivers VALUES($1,'Carry Driver',null,false)`, carryDriver); err != nil {
 		t.Fatal(err)
@@ -431,7 +432,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal("inactive driver's carry was hidden")
 	}
 	history, err := repo.BalanceHistory(ctx, carryDriver, week)
-	if err != nil || len(history) != 3 || history[2].Balance != "-150.00" || history[2].Change != "" {
+	if err != nil || len(history) != 2 || history[0].Date != "2026-09-28" || history[1].Balance != "-150.00" || history[1].Change != "" {
 		t.Fatalf("future or incomplete entry changed balance: %+v, %v", history, err)
 	}
 	// An unmatched number is retained exactly; no fuzzy linking.
@@ -642,4 +643,35 @@ func TestGrossBoardDatabase(t *testing.T) {
 			}
 		}
 	}
+	t.Run("rate reset", func(t *testing.T) {
+		if _, count, err := repo.ResetRateBalance(ctx, week, "", "0", ""); err != nil || count != 3 {
+			t.Fatal("all drivers must receive the baseline", count, err)
+		}
+		assertEnding := func(week time.Time, want string) {
+			t.Helper()
+			lines, err := repo.BalanceHistory(ctx, carryDriver, week)
+			if err != nil || len(lines) == 0 || lines[len(lines)-1].Balance != want {
+				t.Fatalf("expected ending balance %s: %+v, %v", want, lines, err)
+			}
+		}
+		assertEnding(week, "0.00")
+		assertEnding(week.AddDate(0, 0, 7), "150.00")
+		assertEnding(week.AddDate(0, 0, -7), "100.50")
+		actor := "00000000-0000-0000-0000-000000000011"
+		balance, count, err := repo.ResetRateBalance(ctx, week, carryDriver, "-75.25", actor)
+		if err != nil || count != 1 || !balance.ResetThisWeek || balance.OpeningBalance != "274.75" {
+			t.Fatalf("unexpected reset response: %+v, %d, %v", balance, count, err)
+		}
+		if _, count, err := repo.ResetRateBalance(ctx, week, "", "0", ""); err != nil || count != 0 {
+			t.Fatal("operator retry reapplied reset", count, err)
+		}
+		assertEnding(week, "-75.25")
+		_, err = pool.Exec(ctx, `UPDATE pg_temp.gross_board_entries SET driver_rate=driver_rate-10 WHERE driver_id=$1 AND service_date IN ('2026-09-21','2026-09-28')`, carryDriver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEnding(week, "-65.25")
+		assertEnding(week.AddDate(0, 0, 7), "84.75")
+	})
+
 }

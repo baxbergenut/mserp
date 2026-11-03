@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"mserp/internal/repository"
 )
@@ -113,6 +114,10 @@ func (request *grossBoardRequest) validate() error {
 	return nil
 }
 
+func canResetGrossBoardBalance(user repository.AuthUser) bool {
+	return user.Administrator || strings.EqualFold(strings.TrimSpace(user.RoleName), "Accountant")
+}
+
 func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.GrossBoardRepository) {
 	fail := func(w http.ResponseWriter, err error) {
 		if errors.Is(err, repository.ErrTruckUnavailable) {
@@ -200,6 +205,37 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		writeJSON(w, http.StatusOK, history)
+	})
+	r.Post("/gross-board/balance/reset", func(w http.ResponseWriter, r *http.Request) {
+		session, _ := authSessionFromContext(r.Context())
+		if !canResetGrossBoardBalance(session.User) {
+			permissionDenied(w)
+			return
+		}
+		var request struct {
+			DriverID  string `json:"driverId"`
+			WeekStart string `json:"weekStart"`
+			Balance   string `json:"balance"`
+		}
+		if err := decodeJSON(r, &request); err != nil || !isUUID(request.DriverID) || !grossBoardDecimal.MatchString(request.Balance) {
+			writeAPIError(w, http.StatusBadRequest, "a valid driver and signed amount with up to two decimal places are required")
+			return
+		}
+		if request.WeekStart != repository.ChargeCurrentWeek() {
+			writeAPIError(w, http.StatusBadRequest, "rate balances can only be reset on the current week")
+			return
+		}
+		week, _ := grossBoardWeek(request.WeekStart)
+		balance, _, err := repo.ResetRateBalance(r.Context(), week, request.DriverID, request.Balance, session.User.ID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeAPIError(w, http.StatusNotFound, "driver not found")
+			return
+		}
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, balance)
 	})
 	r.Put("/gross-board", func(w http.ResponseWriter, r *http.Request) {
 		var request grossBoardRequest

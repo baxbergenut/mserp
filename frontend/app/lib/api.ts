@@ -55,7 +55,7 @@ import type {
   RelayIdentityTask,
   GrossBoard,
   GrossBoardEntry,
-  GrossBoardBalanceLine,
+  GrossBoardBalance,
   GrossBoardLoad,
   Dispatcher,
   DispatcherInput,
@@ -226,8 +226,8 @@ export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, acti
   apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, revision: view.revision, fromDate: view.fromDate }) });
 export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry, personal = false) =>
   apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, personal }) });
-export const fetchGrossBoardBalance = (driverId: string, weekStart: string) =>
-  apiRequest<GrossBoardBalanceLine[]>(withQuery("/gross-board/balance", { driverId, weekStart }));
+export const resetGrossBoardBalance = (driverId: string, weekStart: string, balance: string) =>
+  apiRequest<GrossBoardBalance>("/gross-board/balance/reset", { method: "POST", body: JSON.stringify({ driverId, weekStart, balance }) });
 export const searchGrossBoardLoads = (search: string) =>
   apiRequest<GrossBoardLoad[]>(withQuery("/gross-board/loads", { search }));
 export const saveGrossBoard = (weekStart: string, entries: GrossBoardEntry[]) =>
