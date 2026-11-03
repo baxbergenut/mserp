@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -250,6 +251,97 @@ func TestStatusBoardOperationalDatabase(t *testing.T) {
 		}
 		if _, err = pay.DispatchPayrollChanges(ctx); err != nil {
 			t.Fatal("background status processing failed", err)
+		}
+	})
+}
+
+func TestStatusBoardLoadReturnToServiceDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		if _, err := pool.Exec(ctx, `UPDATE fleet_status_control SET enabled=true`); err != nil {
+			t.Fatal(err)
+		}
+		board := NewDriverBoardRepository(pool)
+		save := func(e DriverBoardEntry) DriverBoardEntry {
+			t.Helper()
+			rows, err := board.Save(ctx, []DriverBoardEntry{e}, "dispatch-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return rows[0]
+		}
+		setStatus := func(e DriverBoardEntry, status string) DriverBoardEntry {
+			e.Status, e.StatusEdited, e.StatusReason = status, true, "Test status change"
+			return save(e)
+		}
+		assertStatus := func(e DriverBoardEntry, status, availability, truck string) {
+			t.Helper()
+			if e.Status != status || e.FleetStatus == nil || e.FleetStatus.AvailabilityStatus != availability || e.FleetStatus.TruckOperatingStatus != truck {
+				t.Fatalf("want board %s, driver %s, truck %s, got %s %+v", status, availability, truck, e.Status, e.FleetStatus)
+			}
+		}
+		action := func(e DriverBoardEntry, action, number, plan string) BoardLoadResult {
+			t.Helper()
+			view, err := board.Loads(ctx, e.DriverID, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := board.ChangeLoads(ctx, BoardLoadAction{DriverID: e.DriverID, Version: e.Version, Revision: view.Revision, Action: action, Number: number, PlanID: plan}, "dispatch-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return result
+		}
+
+		entry := setStatus(DriverBoardEntry{DriverID: projectionDriver}, "SHOP")
+		home := setStatus(entry, "HOME")
+		assertStatus(home, "HOME", "home", "shop")
+		entry = home
+		entry.CurrentLoad = "NEW-CURRENT"
+		entry = save(entry)
+		assertStatus(entry, "DISPATCHED", "active", "in_use")
+		if _, err := board.Save(ctx, []DriverBoardEntry{home}); !errors.Is(err, ErrDriverBoardConflict) {
+			t.Fatal("stale save after return to service", err)
+		}
+		undone, err := board.Undo(ctx, entry.UndoID, entry.DriverID, entry.Version, "dispatch-test", true)
+		if err != nil || undone.CurrentLoad != "" {
+			t.Fatalf("undo load assignment: %+v %v", undone, err)
+		}
+		assertStatus(undone, "", "active", "in_use")
+
+		entry = setStatus(undone, "REST")
+		added := action(entry, "add", "QUEUED-RETURN", "")
+		assertStatus(added.Entry, "READY", "active", "in_use")
+		if added.Entry.CurrentLoad != "" || len(added.Loads.Next) != 1 {
+			t.Fatal("queue addition changed current load or did not save the next load")
+		}
+		entry = setStatus(added.Entry, "SHOP")
+		selected := action(entry, "select", "", added.Loads.Next[0].PlanID)
+		assertStatus(selected.Entry, "DISPATCHED", "active", "in_use")
+		if selected.Entry.CurrentLoad != "QUEUED-RETURN" {
+			t.Fatal("drawer did not assign the selected load")
+		}
+
+		var truckVersion int
+		if err := pool.QueryRow(ctx, `SELECT status_version FROM trucks WHERE id=$1`, projectionTruck).Scan(&truckVersion); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := NewFleetRepository(pool).ChangeTruckCondition(ctx, projectionTruck, "dispatch-test", FleetStatusChange{Status: "out_of_service", Reason: "Test OOS", Version: truckVersion}); err != nil {
+			t.Fatal(err)
+		}
+		view, err := board.Get(ctx, time.Now())
+		if err != nil || len(view.Entries) != 1 {
+			t.Fatalf("read restricted board: %v", err)
+		}
+		home = setStatus(view.Entries[0], "HOME")
+		entry = home
+		entry.CurrentLoad = "BLOCKED"
+		if _, err := board.Save(ctx, []DriverBoardEntry{entry}); !errors.Is(err, ErrTruckUnavailable) {
+			t.Fatal("assignment should respect OOS", err)
+		}
+		view, err = board.Get(ctx, time.Now())
+		if err != nil || view.Drivers[0].AvailabilityStatus != "home" || view.Entries[0].Version != home.Version || view.Entries[0].CurrentLoad != home.CurrentLoad {
+			t.Fatal("failed assignment did not roll back", err)
 		}
 	})
 }

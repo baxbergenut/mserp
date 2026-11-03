@@ -333,6 +333,9 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if readErr != nil {
 			return nil, readErr
 		}
+		if old.Version != e.Version {
+			return nil, ErrDriverBoardConflict
+		}
 		if e.LeavePlan == nil {
 			e.LeavePlan = old.LeavePlan
 		}
@@ -344,7 +347,16 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			return nil, readErr
 		}
 		if strings.TrimSpace(e.CurrentLoad) != "" && !strings.EqualFold(strings.TrimSpace(e.CurrentLoad), strings.TrimSpace(old.CurrentLoad)) {
-			if err := requireDispatchableTruck(ctx, tx, e.DriverID); err != nil {
+			if len(matchDate) > 0 {
+				explicitStatus := ""
+				if e.StatusEdited {
+					explicitStatus = e.Status
+				}
+				_, err = prepareBoardLoadAssignment(ctx, tx, e.DriverID, explicitStatus)
+			} else {
+				err = requireDispatchableTruck(ctx, tx, e.DriverID)
+			}
+			if err != nil {
 				return nil, err
 			}
 		}

@@ -452,7 +452,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(99115,'AUTO-LOAD','dispatched',0,0,'{"stops":[{"id":101555,"ordering":1,"stop_type":"delivery","schedule_type":"window","scheduled_begin_date":"2026-10-16","scheduled_begin_time":"08:00:00","scheduled_end_date":"2026-10-16","scheduled_end_time":"23:59:00","location":{"city":"South River","state":"NJ","latitude":"40.46211","longitude":"-74.3909193"}}]}')`)
+	_, err = pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,truck_unit,driver_name,raw_payload) VALUES(99115,'AUTO-LOAD','dispatched',0,0,'OTHER-TRUCK','Other Driver','{"stops":[{"id":101555,"ordering":1,"stop_type":"delivery","schedule_type":"window","scheduled_begin_date":"2026-10-16","scheduled_begin_time":"08:00:00","scheduled_end_date":"2026-10-16","scheduled_end_time":"23:59:00","location":{"city":"South River","state":"NJ","latitude":"40.46211","longitude":"-74.3909193"}}]}')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Current == nil || view.Current.PlanID != "" || view.Automation == nil || view.Automation.Appointment == nil || view.Automation.Appointment.Label != "DEL TILL 23:59 FRI" || view.Automation.StopType != "delivery" {
+	if view.Current == nil || view.Current.PlanID != "" || view.SourceDestination != "South River, NJ" || view.Automation == nil || view.Automation.Appointment == nil || view.Automation.Appointment.Label != "DEL TILL 23:59 FRI" || view.Automation.StopType != "delivery" {
 		t.Fatalf("unplanned resolution: %+v", view)
 	}
 	result, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: saved[0].Version, Revision: view.Revision, Action: "stop_time", ManualStopTime: "14:00 SUN"}, "")
@@ -486,7 +486,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil || view.Automation.ManualStopTime != "14:00 SUN" || view.Automation.Arrived {
 		t.Fatal("manual stop time did not survive cache refresh or arrival changed", err)
 	}
-	_, err = pool.Exec(ctx, `UPDATE loads SET driver_id=(SELECT id FROM drivers WHERE id<>$1 LIMIT 1) WHERE id=99115`, d.ID)
+	_, err = pool.Exec(ctx, `UPDATE loads SET driver_id=(SELECT id FROM drivers WHERE id<>$1 LIMIT 1),truck_unit='CHANGED-TRUCK' WHERE id=99115`, d.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

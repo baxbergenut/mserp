@@ -167,6 +167,21 @@ func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver strin
 	if err = json.Unmarshal(raw, &entry); err != nil {
 		return entry, err
 	}
+	switch before["status"] {
+	case "HOME", "HOME (YARD)", "REST", "34 RESET", "SHOP", "STOP", "ACCIDENT":
+		var returned bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS (
+ SELECT 1 FROM driver_board_history b JOIN fleet_status_history f ON f.action_id=b.transaction_id
+ WHERE b.id=$1 AND f.reason=$2 AND f.source_ref=b.driver_id::text
+ )`, id, boardLoadReturnReason).Scan(&returned); err != nil {
+			return entry, err
+		}
+		if returned {
+			// Undo the load change without reapplying a fleet restriction.
+			// The status trigger projects any restriction currently in force.
+			entry.Status = ""
+		}
+	}
 	if err = setBoardActor(ctx, tx, actor, "undo"); err != nil {
 		return entry, err
 	}

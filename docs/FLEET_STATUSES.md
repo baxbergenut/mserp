@@ -67,6 +67,14 @@ release a truck restriction. Operational dispatch labels require an employed,
 available driver and an unrestricted truck. Clearing an annotation releases
 nothing. Crew share truck status; personal availability remains individual.
 
+Entering or selecting a current load, adding or restoring a queued load, or
+promoting the next load returns an employed driver from Home, Rest, or 34 Reset and releases a
+manual Shop status on their assigned truck in the same transaction. The
+assigned truck returns to In use. Independent work-order holds, OOS, Terminated
+and other driver availability restrictions still block assignment. Explicit
+restriction edits take precedence over the automatic return. Undo restores the
+board load without reinstating the released fleet restrictions.
+
 Work orders offer Shop/OOS restrictions, require the reason in their description,
 and retain existing category Edit permissions for explicit release. Normal
 Maintenance expenses remain the standard expense workflow; this does not restore
