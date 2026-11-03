@@ -551,18 +551,6 @@ export interface DriverBoardOrder {
   revision: string;
 }
 
-export interface DispatcherBoardOrderAction {
-  dispatcherId: string;
-  targetDispatcherId: string;
-  after: boolean;
-  revision: string;
-}
-
-export interface DispatcherBoardOrder {
-  dispatcherIds: string[];
-  revision: string;
-}
-
 export interface SyncFiveELDResult {
   fetched: number;
   saved: number;

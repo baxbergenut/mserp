@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -41,37 +40,16 @@ func testDispatcherBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.P
 	if !slices.Equal(boardDispatcherIDs(b.Drivers), dispatchers) {
 		t.Fatal("initial dispatcher order", boardDispatcherIDs(b.Drivers))
 	}
-	action := DispatcherBoardOrderAction{DispatcherID: dispatchers[2], TargetDispatcherID: dispatchers[0], Revision: b.DispatcherOrderRevision}
-	result, err := repo.ReorderDispatchers(ctx, action, "")
-	if err != nil {
+	// A legacy client's shared preference must no longer influence anyone's board.
+	if _, err := pool.Exec(ctx, `INSERT INTO driver_board_dispatcher_order(id,dispatcher_ids) VALUES(true,$1)
+ ON CONFLICT(id) DO UPDATE SET dispatcher_ids=EXCLUDED.dispatcher_ids`, []string{dispatchers[2], dispatchers[0], dispatchers[1]}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{dispatchers[2], dispatchers[0], dispatchers[1]}
 	b = get()
-	if !slices.Equal(result.DispatcherIDs, want) || !slices.Equal(boardDispatcherIDs(b.Drivers), want) || b.DispatcherOrderRevision != result.Revision {
-		t.Fatal("dispatcher order not persisted", result, boardDispatcherIDs(b.Drivers))
+	if !slices.Equal(boardDispatcherIDs(b.Drivers), dispatchers) || b.DispatcherOrderRevision != "" {
+		t.Fatal("retired shared preference affected the board", b)
 	}
-	if _, err = repo.ReorderDispatchers(ctx, action, ""); !errors.Is(err, ErrDriverBoardOrderConflict) {
-		t.Fatal("stale reorder accepted", err)
-	}
-	var added string
-	if err = pool.QueryRow(ctx, `INSERT INTO dispatchers(full_name,normalized_name) VALUES('Order AA',gen_random_uuid()::text) RETURNING id`).Scan(&added); err != nil {
-		t.Fatal(err)
-	}
-	dispatchers = append(dispatchers, added)
-	var addedDriver string
-	if err = pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,dispatcher_id) VALUES('Order AA Driver',gen_random_uuid()::text,'cpm',0,$1) RETURNING id`, added).Scan(&addedDriver); err != nil {
-		t.Fatal(err)
-	}
-	drivers = append(drivers, addedDriver)
-	b = get()
-	if !slices.Equal(boardDispatcherIDs(b.Drivers), append(want, added)) {
-		t.Fatal("new dispatcher did not append", boardDispatcherIDs(b.Drivers))
-	}
-	action.Revision = result.Revision
-	if _, err = repo.ReorderDispatchers(ctx, action, ""); !errors.Is(err, ErrDriverBoardOrderConflict) {
-		t.Fatal("roster change was not fenced", err)
-	}
+	var err error
 	var owner string
 	if err = pool.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=current_schema() AND tablename='driver_board_dispatcher_order'`).Scan(&owner); err != nil || owner != "mserp_app" {
 		t.Fatal("dispatcher order ownership", owner, err)

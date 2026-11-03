@@ -1,10 +1,27 @@
 package httpapi
 
 import (
+	"io"
+	"log/slog"
 	"mserp/internal/repository"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
+
+func TestSharedDispatcherOrderRetired(t *testing.T) {
+	router := chi.NewRouter()
+	// No repository is needed: old clients can never reach a shared database write.
+	registerDriverBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/driver-board/dispatcher-order", strings.NewReader(`{}`)))
+	if response.Code != http.StatusGone {
+		t.Fatalf("retired ordering returned %d: %s", response.Code, response.Body.String())
+	}
+}
 
 func TestDriverBoardValidation(t *testing.T) {
 	good := repository.DriverBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Status: "ENROUTE"}

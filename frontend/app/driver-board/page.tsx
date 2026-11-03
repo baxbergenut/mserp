@@ -40,6 +40,7 @@ import { CurrentLoadInput } from "./CurrentLoadInput";
 const ETAEditor = dynamic(() => import("./ETAEditor").then(m => m.ETAEditor), { loading: () => null });
 import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 import { CellPresence } from "./CellPresence";
+import { useDispatcherOrder } from "./useDispatcherOrder";
 import { useDriverRowDrag } from "./useDriverRowDrag";
 
 const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
@@ -70,7 +71,9 @@ export default function DriverBoardPage() {
  const [today, setToday] = useState(leaveToday);
  useEffect(() => { const timer = setInterval(() => setToday(leaveToday()), 30000); return () => clearInterval(timer); }, []);
  const state = useDriverBoard(nextStop?.id ?? etaEditor?.id ?? pickupEditor?.id ?? leaveEditor?.id ?? restriction?.id);
-  const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
+  const { board: sourceBoard, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
+  const dispatcherOrder = useDispatcherOrder(sourceBoard?.drivers ?? []);
+  const board = useMemo(() => sourceBoard ? { ...sourceBoard, drivers: dispatcherOrder.drivers } : null, [sourceBoard, dispatcherOrder.drivers]);
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
   const scope = useContext(ViewMemoryContext);
@@ -133,8 +136,8 @@ export default function DriverBoardPage() {
   async function moveDispatcher(id: string, target: string, after: boolean) {
     setOrderError(""); setOrderNotice("");
     try {
-      await state.reorderDispatchers(id, target, after, board?.dispatcherOrderRevision ?? "");
-      setOrderNotice("Dispatcher order saved.");
+      const persisted = dispatcherOrder.reorder(id, target, after);
+      setOrderNotice(persisted ? "Your dispatcher order is saved in this browser." : "Order changed for this tab. Browser storage is unavailable.");
       return true;
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Dispatcher order could not be saved. Try again."); return false; }
   }
@@ -178,7 +181,7 @@ export default function DriverBoardPage() {
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
 
-      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled || rowDrag.active || !board?.dispatcherOrderRevision} pinnedFirst="" />
+      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={moveDispatcher} reorderDisabled={loading || leaving || rowDrag.active || state.actionBusy} pinnedFirst="" />
       <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, statusLabel(s)] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>

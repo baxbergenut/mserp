@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, reorderBoardDispatchers, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
+import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { applyCommittedFleetStatus, progressStatus, reconcileDriverBoard } from "./board";
@@ -158,21 +158,6 @@ export function useDriverBoard(lockedDriverId?: string) {
         const group = current.drivers.filter(d => d.dispatcherId === result.dispatcherId).sort((a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity));
         let index = 0;
         return { ...current, drivers: current.drivers.map(d => d.dispatcherId === result.dispatcherId ? group[index++] : d), driverOrderRevisions: { ...current.driverOrderRevisions, [result.dispatcherId]: result.revision } };
-      });
-    } finally { orderSavingRef.current = false; setOrderSaving(false); }
-  }
-
-  async function reorderDispatchers(dispatcherId: string, targetDispatcherId: string, after: boolean, revision: string) {
-    if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) return;
-    if (!board || dispatcherId === targetDispatcherId || board.dispatcherOrderRevision !== revision) return;
-    orderSavingRef.current = true;
-    setOrderSaving(true);
-    try {
-      const result = await reorderBoardDispatchers({ dispatcherId, targetDispatcherId, after, revision });
-      setBoard(current => {
-        if (!current || current.dispatcherOrderRevision !== revision) return current;
-        const ranks = new Map(result.dispatcherIds.map((id, i) => [id, i]));
-        return { ...current, drivers: [...current.drivers].sort((a, b) => (ranks.get(a.dispatcherId) ?? Infinity) - (ranks.get(b.dispatcherId) ?? Infinity)), dispatcherOrderRevision: result.revision };
       });
     } finally { orderSavingRef.current = false; setOrderSaving(false); }
   }
@@ -367,5 +352,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   }, [saving, dirty, error]);
 
   const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) }]));
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, reorderDispatchers, ...live, leaving: !!pendingLink };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, ...live, leaving: !!pendingLink };
 }

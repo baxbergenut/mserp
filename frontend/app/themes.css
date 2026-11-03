@@ -72,9 +72,17 @@ html[data-theme]:not([data-theme="default"]) .bg-blue-600:hover { background-col
 .status-board-updater { color: rgb(191 219 254 / 0.8); }
 /* Light themes need darker text for semantic labels. Only text is adapted;
    status fills, maps and red/green financial meaning stay unchanged. */
-html:is([data-theme="solarized-light"], [data-theme="default-light"]) {
-  .status-board-updater { color: #006ab1; }
-  :is(.text-blue-200, .text-blue-300, .text-blue-400) { color: #006ab1; }
+html[data-theme]:is([data-theme="solarized-light"], [data-theme="default-light"]) {
+  --ui-link: #075985;
+  .status-board-updater { color: var(--ui-link); }
+  :is(.text-blue-200, .text-blue-300, .text-blue-400) { color: var(--ui-link); }
+  /* Utility variants need their own mapping: a row/group hover can otherwise
+     replace readable text with the dark palette's pale blue. */
+  :is(.hover\:text-blue-300, .hover\:text-blue-400):hover,
+  .enabled\:hover\:text-blue-200:enabled:hover,
+  .group:hover .group-hover\:text-blue-200,
+  .aria-pressed\:text-blue-300[aria-pressed="true"] { color: var(--ui-link); }
+  :is(.hover\:text-red-200, .hover\:text-red-300, .hover\:text-red-400):hover { color: #b42318; }
   :is(.text-red-200, .text-red-300, .text-red-400) { color: #b42318; }
   :is(.text-rose-200, .text-rose-300, .text-rose-400) { color: #be123c; }
   :is(.text-amber-200, .text-amber-300, .text-amber-400, .text-yellow-200, .text-yellow-300, .text-yellow-400, .text-orange-300, .text-orange-400) { color: #8a4b08; }

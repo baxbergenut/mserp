@@ -192,9 +192,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err = applyBoardDriverOrder(ctx, tx, &result); err != nil {
 		return result, err
 	}
-	if err = applyBoardDispatcherOrder(ctx, tx, &result); err != nil {
-		return result, err
-	}
+	applyBoardDispatcherOrder(&result)
 	// Use the same exact load resolution and entered/source precedence as Gross Board.
 	rows, err = tx.Query(ctx, driverBoardCurrentEntries+"SELECT "+grossBoardEntryColumns+` FROM effective
  WHERE service_date >= $1::date AND driver_id IN (SELECT id FROM drivers WHERE active)

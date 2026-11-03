@@ -954,8 +954,12 @@ and requires no schema migration.
   targetRevision for transfers. Both complete rosters are fenced and locked; hidden
   rows remain, inactive destinations and pending hires are rejected. Pointer/touch,
   edge scrolling, Escape, failed-save rollback and Up/Down work; Alt+Up unassigns.
-  Migration 125 stores shared dispatcher-group order; Unassigned cannot be moved.
-  POST /driver-board/dispatcher-order retains driver_board.write and roster fences.
+  Dispatcher-group order is personal browser localStorage, keyed by signed-in user.
+  Read-only users can reorder groups; Unassigned stays first. Live snapshots retain
+  the local preference. Migration 125's shared order is ignored and retained only
+  for compatibility; POST /driver-board/dispatcher-order returns 410 for old clients.
+  Driver ordering and assignments remain shared and require driver_board.write.
+  Browser regression: frontend/scripts/test-dispatcher-order.mjs.
   Migration 168 invalidates the live board on intake changes. Pending hires appear
   under Unassigned as New driver / Needs setup, using existing onboarding task
   visibility and setup permissions; they cannot be dispatched before setup.
