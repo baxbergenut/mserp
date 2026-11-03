@@ -29,6 +29,10 @@ func TestPayrollResourceConcurrencyDatabase(t *testing.T) {
 		const actor = "18200000-0000-0000-0000-000000001500"
 		if _, err := pool.Exec(ctx, `INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date)
  VALUES('18200000-0000-0000-0000-000000001501','Independent payer','independent payer','cpm',0.65,'2026-01-01');
+ INSERT INTO trucks(id,unit_number) VALUES('18200000-0000-0000-0000-000000001502','COMPANY-INDEPENDENT');
+ UPDATE trucks SET owner_id='00000000-0000-0000-0000-000000000001' WHERE id='18200000-0000-0000-0000-000000000002';
+ INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at)
+ VALUES('18200000-0000-0000-0000-000000001502','18200000-0000-0000-0000-000000001501','2026-01-01');
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles)
  VALUES('18200000-0000-0000-0000-000000001501','2026-10-05','INDEPENDENT',200,300,120);
  INSERT INTO app_users(id,username,password_hash) VALUES('18200000-0000-0000-0000-000000001500','Resource concurrency',crypt('test-only',gen_salt('bf')));`); err != nil {
@@ -154,6 +158,42 @@ func TestPayrollResourceConcurrencyDatabase(t *testing.T) {
 					t.Fatal("receipt replay changed")
 				}
 			}
+		}
+		page, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{ID: independent}, true)
+		if err != nil || len(page.Drivers) != 1 || page.Preparation.State != "ready" {
+			t.Fatal("company statement preparation", err, page.Preparation)
+		}
+		peer, err := admin.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer peer.Rollback(ctx)
+		if _, err = peer.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,182736281940))`, "driver:"+projectionDriver); err != nil {
+			t.Fatal(err)
+		}
+		work, cancel := context.WithTimeout(ctx, 3*time.Second)
+		receipt, err := repo.Settle(WithPayrollReceipt(work), week, independent, page.Revision, actor, "", false, true,
+			PayrollSettlementCommand{RequestID: "18200000-0000-0000-0000-000000002299", ExpectedStatementRevision: page.Drivers[0].StatementRevision})
+		cancel()
+		_ = peer.Rollback(ctx)
+		if err != nil || len(receipt.Drivers) != 1 || receipt.Drivers[0].Settlement == nil || !receipt.Drivers[0].Settlement.Finalized {
+			t.Fatal("company finalization waited for an unrelated driver", err)
+		}
+
+		// A legacy investor row makes the company owner a real ledger principal.
+		// Keep its old, conservative relationship component in this case.
+		if _, err := pool.Exec(ctx, `INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits)
+ VALUES('18200000-0000-0000-0000-000000001502','2026-10-05',$1,'{}')`, CompanyOwnerID); err != nil {
+			t.Fatal(err)
+		}
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		resources, err := discoverPayrollResources(ctx, tx, []string{"driver:" + projectionDriver})
+		if err != nil || !payrollSelectionCovers(resources.selection, []string{"driver:" + independent}) {
+			t.Fatal("legacy company ledger lost its shared scope", err)
 		}
 	})
 }

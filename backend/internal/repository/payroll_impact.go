@@ -111,6 +111,13 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		}
 		for _, route := range routes {
 			value := func(k string) string { var v string; _ = json.Unmarshal(route[k], &v); return v }
+			// Editing the company identity or adding/removing a legacy company
+			// ledger can change graph connectivity across all its trucks.
+			if (table == "investors" && value("id") == CompanyOwnerID) ||
+				(value("owner_id") == CompanyOwnerID && (table == "expenses" || table == "truck_settlement_terms" ||
+					table == "investor_pay_weeks" || table == "pay_source_collections")) {
+				safe = false
+			}
 			broker := false
 			if table == "load_split_history" || table == "payroll_load_placements" || table == "payroll_load_placement_history" {
 				field := "load_record_id"

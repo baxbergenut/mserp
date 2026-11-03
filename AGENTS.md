@@ -55,6 +55,11 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
   normal Sheets export receipt. Install the matching deploy helper before
   the quiesced migration.
 
+- Projection schema 8 treats the built-in company owner as an employment label
+  when it has no owner ledger. Company ownership alone no longer connects
+  different trucks' payroll locks. Legacy company expenses, terms, investor
+  statements and collections keep the conservative shared graph.
+
 - Migration 192 excludes reviewed operational feedback, inventory, maintenance,
   export/access and provider bookkeeping from payroll capture and source locks.
   See `docs/PAYROLL_SOURCE_CLASSIFICATION.md` for boundaries and regression checks.
