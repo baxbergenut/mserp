@@ -1444,12 +1444,19 @@ assignment lookup lists.
   is displayed unchanged until explicitly replaced or cleared. Idle board refresh
   pauses while the ETA editor is open. Dispatcher is shown by group/filter rather
   than a repeated table column. Personal view controls follow the status filter
-  on the same row. Source destinations have an explicit
-  manual override. Imported locations display City, ST without ZIP codes; formatting
-  does not alter source values, stop keys or manual destination text. Clicking a
-  source destination switches to the first located stop of the opposite type,
-  with a muted PU/DEL indicator. This uses versioned load-source actions/history
-  without changing status or ETA; specific multi-stop choices remain in Loads. Text edits detach current identity or destination source safely.
+  on the same row. Dispatch destination cells are editable (home statuses retain the home-address display): typing overrides the
+  selected source address; clearing a typed override restores that selected stop.
+  Clicking the destination never changes stops. Imported locations display City,
+  ST without ZIP codes; custom addresses retain their exact text and stop identity.
+  The muted PU/DEL indicator remains. Text edits detach destination source safely.
+  Status labels are centered in the space left of the chevron, in sentence case without changing stored status values,
+  and match trailer text size. Gross columns are centered fixed 110px widths;
+  phone is fixed 124px. Current load, truck, destination, ETA and next load grow
+  to measured content, with horizontal overflow confined to the board. Truck
+  cells show only the unit; restriction validation still applies. Dispatcher group
+  headings, column headings and all driver cells scroll horizontally together;
+  only the table header stays pinned vertically. Expanded sidebar
+  width is 208px. Check scripts/test-status-board-stops-e2e.mjs against review-local.
   Queue mutations lock the driver, check board versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream
   records change. History loadPlan values contain operational snapshots, formatted
@@ -1470,8 +1477,12 @@ assignment lookup lists.
   Status-cell labels advance pickup/delivery; only the chevron opens the neutral
   dropdown. Pickup shows delivery and sets RESERVED when Next is nonempty,
   otherwise ENROUTE; these labels also follow queue changes during reads.
-  Delivery records completed identities in operational load state, promotes the
-  next load to DISPATCHED/pickup, and clears the stale ETA. Without Next, current
+  Multi-delivery progress offers a next-stop chooser. The server records each
+  completed stop under its source load identity in operational load-state JSON;
+  out-of-order choices cannot skip remaining deliveries, including blank addresses.
+  completedStopKeys is returned for the current load and participates in revision
+  fencing and undo. Only the final delivery completes the load and promotes the
+  next load to DISPATCHED/pickup, clearing the stale ETA. Without Next, current
   load/location/status/ETA become blank, never NO LOAD. Other statuses remain
   manual. Version/revision checks and double-click handling prevent double advance.
   Writes return their own undoId. Ctrl+Z/Cmd+Z keeps a page-session stack of
@@ -3208,7 +3219,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Any Work orders Edit user may release an order without Administrator/trucks.edit.
   Effective operatingStatus combines all order holds with manual restrictions;
   assignment changes preserve restrictions. Active/Inactive and crews stay separate.
-- Status Board shows only Shop/OOS/Hold beside Truck, without repair details.
+- Status Board truck cells show only the unit, without condition badges or repair details.
   New board/Gross Board loads check holds under the truck lock; existing/historical
   records remain editable. No external booking integration, automatic date-based
   release or future downtime reservation is implemented.

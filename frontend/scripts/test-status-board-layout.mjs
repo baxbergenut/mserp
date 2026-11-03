@@ -52,7 +52,7 @@ try {
   await expect(page.getByLabel('Scroll Driver 1 · Driver address', { exact: true })).toHaveText('—');
   const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'At PU', 'Health issue', 'At DEL', 'HOME (YARD)', 'NEW DRIVER', '34 RESET', 'ACCIDENT'];
   const status = page.getByLabel('Scroll Driver 0 · Status', { exact: true });
-  expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses]);
+  expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses.map(s => s.toLowerCase().replace(/[a-z]/, c => c.toUpperCase()))]);
   const colors = { READY: [0, 0, 0], REST: [217, 217, 217], COVERED: [255, 255, 0], DISPATCHED: [251, 188, 4], ENROUTE: [61, 133, 198], RESERVED: [183, 225, 205], VACATION: [224, 102, 102], HOME: [255, 0, 0], SHOP: [255, 153, 0], STOP: [153, 0, 0], 'HOME (YARD)': [255, 0, 0] };
   for (const value of sheetStatuses) {
     if(value === "Left") continue; // Termination has its own permission-gated workflow.
@@ -73,7 +73,7 @@ try {
     }
     const cell = status.locator('xpath=ancestor::td');
     await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);
-    await expect(cell).toHaveCSS('color', ['READY', 'DISPATCHED', 'SHOP'].includes(value) ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)');
+    await expect(cell).toHaveCSS('color', ['READY', 'SHOP'].includes(value) ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)');
   }
   await page.reload();
   await expect(status).toHaveValue('ACCIDENT');
@@ -102,7 +102,7 @@ try {
   await page.getByLabel('Truck status reason', { exact: true }).fill('Reported equipment problem');
   await page.getByRole('button', { name: 'Apply status', exact: true }).click();
   await expect.poll(() => entries[0].status).toBe('ACCIDENT');
-  await expect(page.getByLabel('Scroll Driver 0 · Destination from load', { exact: true })).toHaveText('Dallas, TX');
+  await expect(page.getByLabel('Scroll Driver 0 · Destination', { exact: true })).toHaveValue('Dallas, TX');
   loads.destinationSource = false;
   entries[0].destination = 'Manual dispatch destination';
   entries[0].status = 'HOME';
@@ -115,9 +115,9 @@ try {
   await page.reload();
   await page.getByRole('button', { name: 'Status filter', exact: true }).click();
   const statusChoices = page.getByRole('group', { name: 'Status choices', exact: true });
-  expect(await statusChoices.locator('label').allTextContents()).toEqual(['No status', ...sheetStatuses]);
+  expect(await statusChoices.locator('label').allTextContents()).toEqual(['No status', ...sheetStatuses.map(s => s.toLowerCase().replace(/[a-z]/, c => c.toUpperCase()))]);
   await statusChoices.getByRole('button', { name: 'Clear all', exact: true }).click();
-  await statusChoices.getByText('ACCIDENT', { exact: true }).click();
+  await statusChoices.getByText('Accident', { exact: true }).click();
   await expect(page.locator('tr[data-driver-id]')).toHaveCount(1);
   await statusChoices.getByRole('button', { name: 'Select all', exact: true }).click();
   await page.getByRole('button', { name: 'Status filter', exact: true }).click();
@@ -176,6 +176,20 @@ try {
   expect((await positions()).rows).toBe(0);
   await page.mouse.wheel(250, 0);
   await expect.poll(async () => (await positions()).left).toBeGreaterThan(0);
+  // Every row uses the same horizontal coordinates after scrolling, including
+  // dispatcher totals that previously slid underneath the pinned driver cells.
+  const alignment = await page.evaluate(() => {
+    const table = document.querySelector('[data-status-board-grid]');
+    const headings = table.querySelector('thead tr').children;
+    const driver = table.querySelector('tr[data-driver-id]').children;
+    const group = table.querySelector('tr[data-dispatcher-id="dispatch"]').children;
+    return {
+      columns: [...headings].map((heading, i) => Math.abs(heading.getBoundingClientRect().left - driver[i].getBoundingClientRect().left)),
+      groupLeft: Math.abs(group[0].getBoundingClientRect().left - driver[0].getBoundingClientRect().left),
+      totals: [4, 5].map((i, j) => Math.abs(group[j + 1].getBoundingClientRect().left - headings[i].getBoundingClientRect().left)),
+    };
+  });
+  expect(Math.max(...alignment.columns, alignment.groupLeft, ...alignment.totals)).toBeLessThan(1);
   await page.setViewportSize({ width: 1200, height: 650 });
   await main.evaluate(e => { e.scrollTop = e.scrollHeight; });
   await expect.poll(async () => Math.abs((await positions()).header - 9)).toBeLessThan(2);

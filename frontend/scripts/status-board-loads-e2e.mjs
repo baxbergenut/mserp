@@ -57,30 +57,18 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await expect(field('Status')).toHaveValue('DISPATCHED');
   await expect(field('ETA')).toHaveText('—');
-  const destination = page.getByRole('button', { name: 'Board Cpm · Destination from load', exact: true });
-  await expect(destination).toHaveText('Richmond, VADEL');
+  const destination = page.getByLabel('Board Cpm · Destination', { exact: true });
+  await expect(destination).toHaveValue('Richmond, VA');
+  const beforeDestinationClick = await (await page.request.get(base + '/api/driver-board/loads/' + id)).json();
   await destination.click();
-  await expect(destination).toHaveText('Atlanta, GAPU');
+  await expect(destination).toHaveValue('Richmond, VA');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.reload();
-  await expect(destination).toHaveText('Atlanta, GAPU');
-  await destination.click();
-  await expect(destination).toHaveText('Richmond, VADEL');
+  await expect(destination).toHaveValue('Richmond, VA');
+  expect((await (await page.request.get(base + '/api/driver-board/loads/' + id)).json()).stopKey).toBe(beforeDestinationClick.stopKey);
   await expect(field('Status')).toHaveValue('DISPATCHED');
-  await expect(field('ETA')).toHaveText('—');
   await expect(field('Current load')).toHaveValue('SOURCE-A');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
-  await page.screenshot({ path: join(temp, 'status-board-destination-toggle.png'), fullPage: true, animations: 'disabled' });
-  const toggleHistory = await (await page.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).json();
-  expect(toggleHistory.items[0].after.loadPlan).not.toBe(toggleHistory.items[0].before.loadPlan);
-  await page.route(`**/api/driver-board/loads/${id}`, route => route.request().method() === 'POST'
-    ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Destination changed; reload the board.' }) })
-    : route.continue(), { times: 1 });
-  await destination.click();
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('Destination changed');
-  await expect(destination).toHaveText('Richmond, VADEL');
-  await page.getByRole('button', { name: 'Reload board', exact: true }).click();
-  await expect(destination).toHaveText('Richmond, VADEL');
+  await page.screenshot({ path: join(temp, 'status-board-destination-editor.png'), fullPage: true, animations: 'disabled' });
   await expect(page.getByText('$3,000.30', { exact: true })).toHaveCount(2);
   await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   const plan = card('PLAN-101');
@@ -114,7 +102,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Board Cpm · Destination from load', exact: true })).toHaveText('Boston, MADEL');
+  await expect(page.getByLabel('Board Cpm · Destination', { exact: true })).toHaveValue('Boston, MA');
   // Removing the source plan never drops the current load or advances to NEXT-B.
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_entries SET load_number='',load_record_id=NULL WHERE driver_id='${id}' AND service_date='${nextWeek}';`);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
@@ -138,13 +126,13 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await field('Current load').fill('DIRECT-DISPATCH');
   await field('Current load').press('Tab');
   await expect(field('Status')).toHaveValue('DISPATCHED');
-  await expect(destination).toHaveText('Dallas, TXPU');
+  await expect(destination).toHaveValue('Dallas, TX');
   await expect(field('ETA')).toHaveText('PU 13:00 MON');
   await expect(page.getByText('Review driver mismatch', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(field('Notes')).toHaveValue(notesBefore);
   await page.reload();
-  await expect(destination).toHaveText('Dallas, TXPU');
+  await expect(destination).toHaveValue('Dallas, TX');
   await expect(field('ETA')).toHaveText('PU 13:00 MON');
   const etaCell = page.getByRole('button', { name: 'Board Cpm · ETA', exact: true });
   await etaCell.click();

@@ -20,6 +20,7 @@ export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverB
   const number = entry.currentLoad.trim().toLowerCase();
   const aligned = !loads.current || loads.current.number.trim().toLowerCase() === number;
   if (aligned && !entry.resolveCurrentLoad && entry.currentLoad === saved?.currentLoad) {
+    if (entry.destination !== saved?.destination) return { ...loads, automation: undefined, destinationSource: !entry.destination.trim() && !!loads.stopKey };
     if (!entry.statusEdited || entry.status === saved?.status) return loads;
     const kind = entry.status === "DISPATCHED" ? "pickup" : ["ENROUTE", "RESERVED"].includes(entry.status) ? "delivery" : "";
     if (!kind) return loads;
@@ -33,6 +34,16 @@ export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverB
   const current = unique ? chosen : null;
   const stop = current?.stops.find(s => s.type.toLowerCase() === "pickup" && s.location.trim());
   return { ...loads, automation: undefined, resolutionWarning: undefined, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
+}
+
+export function statusLabel(status: string) {
+  return status.toLowerCase().replace(/[a-z]/, letter => letter.toUpperCase());
+}
+
+export function nextDeliveryStops(status: string, loads: BoardLoads) {
+  return (loads.current?.stops ?? []).filter(stop => stop.type.toLowerCase() === "delivery"
+    && !loads.completedStopKeys?.includes(stop.key)
+    && (status === "DISPATCHED" || stop.key !== loads.stopKey));
 }
 
 // Retain legacy history, while the live board shows a single time or mileage.
@@ -68,7 +79,7 @@ export function statusColor(status: string) {
     case "REST": return "bg-[#d9d9d9] text-black";
     case "COVERED": return "bg-[#ffff00] text-black";
     case "ENROUTE": return "bg-[#3d85c6] text-black";
-    case "DISPATCHED": return "bg-[#fbbc04] text-white";
+    case "DISPATCHED": return "bg-[#fbbc04] text-black";
     case "RESERVED": return "bg-[#b7e1cd] text-black";
     case "HOME": case "HOME (YARD)": return "bg-[#ff0000] text-black";
     case "VACATION": return "bg-[#e06666] text-black";

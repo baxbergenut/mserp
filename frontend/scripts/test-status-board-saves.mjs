@@ -58,7 +58,8 @@ try {
   await page.getByRole('button', { name: 'Apply status', exact: true }).click();
   await expect.poll(() => detailReads).toBe(1);
   await saved();
-  await expect(page.locator('tr[data-driver-id="driver"]').getByText('Shop', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save Driver · Advance load', exact: true })).toHaveText('Shop');
+  await expect(page.locator('tr[data-driver-id="driver"]').locator('td').nth(1)).toHaveText('101');
   await notes.fill('Second edit while details are pending');
   await saved();
   expect(writes).toBe(2);

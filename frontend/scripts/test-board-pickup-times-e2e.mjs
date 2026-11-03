@@ -81,7 +81,7 @@ try {
   await expect(pickup).toHaveCount(0);
   await page.reload();
   await expect(eta).toHaveText('PU 04:00 FRI');
-  await page.getByRole('button', { name: 'Pickup Time Driver · Destination from load', exact: true }).click();
+  await page.getByRole('button', { name: 'Pickup Time Driver · Advance load', exact: true }).click();
   await expect(eta).toHaveText('DEL TILL 22:00 FRI');
   await page.screenshot({ path: join(dirname(accessFile), 'status-board-pickup-times.png'), fullPage: true });
   expect(errors).toEqual([]);

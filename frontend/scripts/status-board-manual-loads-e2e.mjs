@@ -61,7 +61,7 @@ export async function runManualNextLoadsE2E({ page, base, sql, schema, temp, id 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(page.getByLabel('Manual Queue Driver · Current load', { exact: true })).toHaveValue('MANUAL-LATE');
-  await expect(page.getByRole('button', { name: 'Manual Queue Driver · Destination from load', exact: true })).toHaveText('Miami, FLPU');
+  await expect(page.getByLabel('Manual Queue Driver · Destination', { exact: true })).toHaveValue('Miami, FL');
   expect(sql(`SET search_path TO ${schema},public; SELECT count(*) FROM gross_board_entries WHERE driver_id='${driver}';`).trim()).toMatch(/\b0\b/);
   await search.fill('');
   console.log('Manual next loads E2E passed: existing details, unknown persistence, duplicate protection, live late import, stable identity, ordering and current-load destination.');

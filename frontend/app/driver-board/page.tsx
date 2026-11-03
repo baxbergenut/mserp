@@ -12,7 +12,6 @@ import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } fro
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 import { MetricCard } from "@/app/components/MetricCard";
-import { FleetStatusBadge } from "@/app/components/FleetStatusBadge";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
 import { controlClass, Modal, Field } from "@/app/components/management/ManagementUI";
 import { IntentLink as Link } from "@/app/components/IntentLink";
@@ -26,10 +25,12 @@ import { LocationCell, formatCoordinates } from "./LocationCell";
 const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog), { loading: () => null });
 import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/driverLeave";
 import { StatusCell } from "./StatusCell";
-import type { BoardStop, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
+import type { BoardLoads as BoardLoadsView, BoardStop, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
 import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
-import { statuses, statusColor, previewCurrentLoad } from "./board";
-import { ETACell } from "./ETACell";
+import { statuses, statusColor, statusLabel, nextDeliveryStops, previewCurrentLoad } from "./board";
+import { NextStopDialog } from "./NextStopDialog";
+import { boardColumns as columns, useBoardColumnWidths } from "./useBoardColumnWidths";
+import { ETACell, appointmentCellText } from "./ETACell";
 import { useDriverBoard } from "./useDriverBoard";
 const BoardHistory = dynamic(() => import("./BoardHistory").then(m => m.BoardHistory), { loading: () => null });
 import { BoardFilter } from "@/app/components/management/BoardFilter";
@@ -41,14 +42,6 @@ import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 import { CellPresence } from "./CellPresence";
 import { useDriverRowDrag } from "./useDriverRowDrag";
 
-const columns = [
-  ["Current load", 90], ["Driver", 160], ["Truck", 50], ["Trailer", 100],
-  ["Total gross", 90], ["Driver gross", 90], ["Phone", 105], ["Status", 95],
-  ["Destination", 110], ["ETA", 180], ["Next load", 180], ["Notes", 130], ["Home time", 120], ["Driver address", 140],
-] as const;
-const columnWeight = columns.reduce((sum, column) => sum + column[1], 0);
-const minimumWidth = columnWeight;
-const driverColumnOffset = `max(${columns[0][1]}px, ${columns[0][1] / columnWeight * 100}%)`;
 const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
 const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80";
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -72,10 +65,11 @@ export default function DriverBoardPage() {
   useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus))).catch(()=>{});return()=>c.abort();},[]);
   const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
   const [pickupEditor, setPickupEditor] = useState<{ id: string; name: string; planId: string; pickup: BoardStop; anchor: HTMLButtonElement } | null>(null);
+  const [nextStop, setNextStop] = useState<{ id: string; name: string; status: string; loads: BoardLoadsView } | null>(null);
   const [leaveEditor, setLeaveEditor] = useState<{ id: string; name: string; status: string; changingStatus: boolean } | null>(null);
  const [today, setToday] = useState(leaveToday);
  useEffect(() => { const timer = setInterval(() => setToday(leaveToday()), 30000); return () => clearInterval(timer); }, []);
- const state = useDriverBoard(etaEditor?.id ?? pickupEditor?.id ?? leaveEditor?.id ?? restriction?.id);
+ const state = useDriverBoard(nextStop?.id ?? etaEditor?.id ?? pickupEditor?.id ?? leaveEditor?.id ?? restriction?.id);
   const { board, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
@@ -104,6 +98,16 @@ export default function DriverBoardPage() {
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
   const rowDrag = useDriverRowDrag(drivers, moveDriver);
   const renderedDrivers = rowDrag.drivers;
+  const { table, minimumWidth, tableWidth, columnWidth } = useBoardColumnWidths(renderedDrivers.map(driver => {
+    const entry = entries[driver.id];
+    const loads = previewCurrentLoad(board?.loads[driver.id], entry, board?.entries.find(e => e.driverId === driver.id));
+    const next = loads?.next[0];
+    const pickup = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
+    return [entry.currentLoad, "", driver.truckUnit, "", "", "", "", "",
+      ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status) ? compactLoadLocation([driver.city, driver.state].filter(Boolean).join(", ")) : loads?.destinationSource ? compactLoadLocation(loads.sourceDestination) : entry.destination,
+      appointmentCellText(entry.eta, loads?.automation).full,
+      [next?.number, pickup?.schedule?.label || (pickup ? "PU —" : "")].filter(Boolean).join("  ")];
+  }));
   const dispatchers: [string, string][] = [["", "Unassigned"], ...Array.from(new Map((board?.drivers ?? []).filter(d => d.dispatcherId).map(d => [d.dispatcherId, d.dispatcherName])).entries())];
   const pendingDrivers = (board?.pendingDrivers ?? []).filter(d => (selectedDispatchers === null || selectedDispatchers.includes("")) && (selectedStatuses === null || selectedStatuses.includes("NEW DRIVER")) && d.fullName.toLowerCase().includes(search.trim().toLowerCase()));
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
@@ -141,14 +145,14 @@ export default function DriverBoardPage() {
   function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
     const group = groups.get(d.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) };
     return <tr data-dispatcher-id={d.dispatcherId} className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
-                <th scope="rowgroup" colSpan={4} className="sm:sticky left-0 z-10 border-b border-r border-zinc-700 bg-zinc-900 px-3 text-left font-medium">
+                <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 bg-zinc-900 px-3 text-left font-medium">
                   <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
                     <span className="min-w-0 truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
                     {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater ml-auto min-w-0 truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
                   </div>
                 </th>
-                <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.original, true)}</td>
-                <td className="border-b border-r border-zinc-700 px-2 text-right font-mono">{decimalDisplay(group.driver, true)}</td>
+                <td className="border-b border-r border-zinc-700 px-2 text-center font-mono">{decimalDisplay(group.original, true)}</td>
+                <td className="border-b border-r border-zinc-700 px-2 text-center font-mono">{decimalDisplay(group.driver, true)}</td>
                 <td colSpan={2} className="border-b border-zinc-700" />
                 <td colSpan={columns.length - 8} className="border-b border-zinc-700 px-3 text-[11px]">
                   <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
@@ -175,7 +179,7 @@ export default function DriverBoardPage() {
 
 
       <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={canEdit ? moveDispatcher : undefined} reorderDisabled={orderDisabled || rowDrag.active || !board?.dispatcherOrderRevision} pinnedFirst="" />
-      <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, s] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
+      <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, statusLabel(s)] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
       <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{loading ? "Loading…" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Saving…" : canEdit ? "Saved" : "Read only"}</span>
@@ -191,7 +195,7 @@ export default function DriverBoardPage() {
     {orderError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{orderError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setOrderError(""); void reload(); }}>Reload board</button></div>}
     <span role="status" aria-live="polite" className="sr-only">{orderNotice}</span>
     <StatusBoardScrollArea loading={loading} headerPinned={headerPinned}>
-      <table {...spreadsheetGridEvents} onContextMenu={event => {
+      <table ref={table} {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
         const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td,th");
         const row = cell?.closest<HTMLTableRowElement>("tr[data-driver-id]");
@@ -200,16 +204,16 @@ export default function DriverBoardPage() {
         const field = cell ? fields[cell.cellIndex] : "";
         if (!driver || !field) return;
         event.preventDefault(); setHistory({ driverId: driver.id, name: driver.fullName + " · Cell history", ids: [driver.id], field });
-      }} data-spreadsheet-grid data-status-board-grid className="w-full table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth }}>
-        <colgroup>{columns.map(([label, width]) => <col key={label} style={{ width: `${width / columnWeight * 100}%` }} />)}</colgroup>
-        <thead className="sticky top-0 z-20"><tr>{columns.map(([label], i) => <th key={label} scope="col" style={i < 2 ? { left: i === 0 ? 0 : driverColumnOffset } : undefined} className={`${i < 2 ? "sm:sticky sm:z-[21]" : ""} h-8 whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 text-left font-medium leading-4 text-zinc-400`}>{label}</th>)}</tr></thead>
+      }} data-spreadsheet-grid data-status-board-grid className="table-fixed border-separate border-spacing-0 text-[11px]" style={{ minWidth: minimumWidth, width: tableWidth }}>
+        <colgroup>{columns.map(([label], i) => <col key={label} style={{ width: columnWidth(i) }} />)}</colgroup>
+        <thead className="sticky top-0 z-20"><tr>{columns.map(([label], i) => <th key={label} scope="col" className={`h-8 whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 ${[4, 5, 7].includes(i) ? "text-center" : "text-left"} font-medium leading-4 text-zinc-400`}>{label}</th>)}</tr></thead>
         <tbody>
           {!loading && (selectedDispatchers === null || selectedDispatchers.includes("")) && groupHeader({ dispatcherId: "", dispatcherName: "Unassigned" })}
           {!loading && pendingDrivers.map(d => <tr key={d.intakeId} data-pending-intake-id={d.intakeId} className="bg-zinc-950/20">
-            <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`} />
-            <th scope="row" style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 h-8 px-1.5 text-left font-medium text-zinc-200`} title={d.fullName}>{d.fullName}</th>
+            <td className={`${cellClass} bg-zinc-950`} />
+            <th scope="row" className={`${cellClass} bg-zinc-950 h-8 px-1.5 text-left font-medium text-zinc-200`} title={d.fullName}>{d.fullName}</th>
             <td colSpan={5} className={cellClass} />
-            <td className={`${cellClass} px-1.5 ${statusColor("NEW DRIVER")}`}>New driver</td>
+            <td className={`${cellClass} px-1.5 text-center ${statusColor("NEW DRIVER")}`}>New driver</td>
             <td colSpan={columns.length - 8} className={`${cellClass} px-3 text-amber-300`}>
               {canCreateDriver(permissions) && permissions.includes("tasks.review") ? <button type="button" onClick={() => setSetupDriver(d)} className="hover:underline">Needs setup</button> : "Needs setup"}
             </td>
@@ -223,8 +227,6 @@ export default function DriverBoardPage() {
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();
             const stopLabel = stopType === "pickup" ? "PU" : stopType === "delivery" ? "DEL" : "";
-            const oppositeType = stopType === "pickup" ? "delivery" : stopType === "delivery" ? "pickup" : "";
-            const otherStop = oppositeType ? loads?.current?.stops.find(s => s.type.toLowerCase() === oppositeType && s.location.trim()) : undefined;
             const destinationBusy = dirty || saving || loading || leaving;
             const next = loads?.next[0];
             const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
@@ -232,8 +234,8 @@ export default function DriverBoardPage() {
             return <Fragment key={d.id}>
               {d.dispatcherId !== "" && (i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && groupHeader(d)}
               <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
-                <td className={`${cellClass} sm:sticky left-0 z-10 bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
-                <th scope="row" title={d.fullName} style={{ left: driverColumnOffset }} className={`${cellClass} sm:sticky z-10 bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
+                <td className={`${cellClass} bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
+                <th scope="row" title={d.fullName} className={`${cellClass} bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
                   {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title="Drag between dispatchers or to Unassigned. Arrow Up / Down moves rows; Alt + Arrow Up unassigns." disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
                     className="flex h-8 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
                     onPointerDown={event => {
@@ -249,28 +251,32 @@ export default function DriverBoardPage() {
                       if (target && revision && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
-                <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}><div className="flex items-center gap-1">{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}<FleetStatusBadge status={d.truckOperatingStatus} /></div></td>
+                <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}><div className="flex items-center gap-1">{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</div></td>
                 <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
-                <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
-                <td className={`${cellClass} bg-blue-500/5 px-1 text-right font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>
+                <td className={`${cellClass} bg-blue-500/5 px-1 text-center font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
+                <td className={`${cellClass} bg-blue-500/5 px-1 text-center font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>
                 <td className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>
                 <td className={`${cellClass} ${statusColor(entry.status)}`}><StatusCell name={d.fullName} value={entry.status} disabled={disabled}
                   canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}
                   choices={statusChoices} onChange={value => {if(["SHOP","STOP","ACCIDENT"].includes(value)){setRestriction({id:d.id,name:d.fullName,status:value});setRestrictionReason("");return;}if(["HOME","HOME (YARD)","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
                     if (!loads || destinationBusy) return;
                     setDestinationError("");
+                    const remaining = nextDeliveryStops(entry.status, loads);
+                    if ((entry.status === "DISPATCHED" && remaining.length > 1) || (entry.status !== "DISPATCHED" && remaining.length > 0)) {
+                      setNextStop({ id: d.id, name: d.fullName, status: entry.status, loads });
+                      return;
+                    }
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>
-                <td className={cellClass}>{atHome ? <span aria-label={`${d.fullName} · Destination from home address`} title={homeAddress || "Home address not set"} className="block truncate px-1.5 text-zinc-200">{homeAddress || "—"}</span> : loads?.destinationSource ? <button type="button" aria-label={`${d.fullName} · Destination from load`} disabled={!canEdit || destinationBusy || !otherStop}
-                  title={`${stopLabel ? `${stopLabel} · ` : ""}${compactLoadLocation(loads.sourceDestination) || "Select a stop"}${!canEdit ? " · Read only" : destinationBusy ? " · Wait for board changes to save" : otherStop ? ` · Click to switch to ${oppositeType}: ${compactLoadLocation(otherStop.location)}` : " · Choose a stop in Loads"}`}
-                  className="flex h-8 w-full items-center gap-1 px-1.5 text-left text-[11px] text-blue-200 enabled:hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:cursor-default"
-                  onClick={async () => {
-                    if (!otherStop || !canEdit || destinationBusy) return;
-                    setDestinationError("");
-                    try { await state.changeLoads(d.id, loads, { action: "source", stopKey: otherStop.key }); }
-                    catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not switch destination. Reload the board and try again."); }
-                  }}><span className="min-w-0 flex-1 truncate">{compactLoadLocation(loads.sourceDestination) || "Select a stop"}</span>{stopLabel && <span className="shrink-0 text-xs font-normal text-zinc-500">{stopLabel}</span>}</button> : textCell(entry, d.fullName, "destination", "Destination", 500)}</td>
+                <td className={cellClass}>{atHome ? <span aria-label={`${d.fullName} · Destination from home address`} title={homeAddress || "Home address not set"} className="block truncate px-1.5 text-zinc-200">{homeAddress || "—"}</span> : <div className="flex h-8 items-center">
+                  <input type="text" aria-label={d.fullName + " · Destination"} maxLength={500} disabled={disabled}
+                    title={loads?.destinationSource ? loads.sourceDestination : entry.destination}
+                    value={loads?.destinationSource ? compactLoadLocation(loads.sourceDestination) : entry.destination}
+                    placeholder="Destination" onChange={event => edit(d.id, "destination", event.target.value)}
+                    className={"h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] outline-none focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + (loads?.destinationSource ? "text-blue-200" : "text-zinc-200")} />
+                  {stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
+                </div>}</td>
                 <td className={cellClass}><ETACell name={d.fullName} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} /></td>
                 <td className={cellClass}><div className="flex h-8 w-full items-center"><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group h-full min-w-0 flex-1 truncate px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <span className={next.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}</span> : "—"}</button>{next && nextStop && <button type="button" data-grid-action aria-label={`${d.fullName} · Next pickup time`} title={canEdit ? "Edit next pickup time" : nextPickup?.detail} disabled={!canEdit || disabled || next.loadId === null} aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id} className="mr-1 max-w-[75%] shrink-0 truncate rounded px-1 py-1 text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500" onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}</div></td>
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
@@ -284,6 +290,8 @@ export default function DriverBoardPage() {
       </table>
     </StatusBoardScrollArea>
     <CellPresence peers={state.peers} />
+    {nextStop && <NextStopDialog name={nextStop.name} status={nextStop.status} loads={nextStop.loads}
+      onClose={() => setNextStop(null)} onApply={stopKey => state.changeLoads(nextStop.id, nextStop.loads, { action: "advance", stopKey })} />}
     {etaEditor && <ETAEditor key={`${etaEditor.id}:${board?.loads[etaEditor.id]?.automation?.context ?? ""}:${board?.loads[etaEditor.id]?.automation?.stopType ?? ""}`} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {pickupEditor && <ETAEditor key={`${pickupEditor.id}:${pickupEditor.planId}:${pickupEditor.pickup.key}`} anchor={pickupEditor.anchor} name={pickupEditor.name} value="" pickup={board?.loads[pickupEditor.id]?.next.find(load => load.planId === pickupEditor.planId)?.stops.find(stop => stop.key === pickupEditor.pickup.key) ?? pickupEditor.pickup} waiting={dirty || saving || loading} onAction={async action => {
       const view = board?.loads[pickupEditor.id];

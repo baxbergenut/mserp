@@ -163,4 +163,51 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM loads WHERE id IN(88121,88122) AND status='Dispatched'`).Scan(&count); err != nil || count != 2 {
 		t.Fatal("progress changed upstream load statuses", err)
 	}
+	// A second delivery must survive the first delivery, including a reviewed
+	// out-of-order choice, a manual address, and a personal undo.
+	exec(`UPDATE loads SET raw_payload='{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Boston","state":"MA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Miami","state":"FL"}},{"ordering":3,"stop_type":"delivery","location":{"city":"Orlando","state":"FL"}}]}' WHERE id=88122`)
+	e.Status, e.StatusEdited = "DISPATCHED", true
+	rows, err = repo.Save(ctx, []DriverBoardEntry{e}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = rows[0]
+	v = view()
+	orlando := v.Current.Stops[2].Key
+	miami := v.Current.Stops[1].Key
+	act(BoardLoadAction{Action: "advance", StopKey: orlando})
+	if view().SourceDestination != "Orlando, FL" || e.CurrentLoad != "PROGRESS-B" {
+		t.Fatal("chosen delivery not retained", view(), e)
+	}
+	e.Destination = "123 Custom Avenue, Orlando, FL"
+	rows, err = repo.Save(ctx, []DriverBoardEntry{e}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = rows[0]
+	if view().DestinationSource || view().StopKey != orlando {
+		t.Fatal("manual address lost stop identity", view())
+	}
+	e.Destination = ""
+	rows, err = repo.Save(ctx, []DriverBoardEntry{e}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = rows[0]
+	if !view().DestinationSource || view().SourceDestination != "Orlando, FL" {
+		t.Fatal("clearing override did not restore selected stop", view())
+	}
+	intermediate := act(BoardLoadAction{Action: "advance", StopKey: miami})
+	if e.CurrentLoad != "PROGRESS-B" || intermediate.Loads.SourceDestination != "Miami, FL" || len(intermediate.Loads.CompletedStopKeys) != 1 {
+		t.Fatal("first delivery completed whole load", intermediate)
+	}
+	undo(intermediate.Entry.UndoID)
+	if view().StopKey != orlando || len(view().CompletedStopKeys) != 0 {
+		t.Fatal("undo did not restore delivery progress", view())
+	}
+	act(BoardLoadAction{Action: "advance", StopKey: miami})
+	act(BoardLoadAction{Action: "advance"})
+	if e.CurrentLoad != "" || view().Current != nil {
+		t.Fatal("final delivery did not finish load", view(), e)
+	}
 }

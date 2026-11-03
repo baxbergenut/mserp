@@ -372,8 +372,8 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			stateChanged = true
 		}
 		if old.Destination != e.Destination && loadStateValue.Current != nil {
-			loadStateValue.DestinationSource = false
-			loadStateValue.DestinationManual = true
+			loadStateValue.DestinationSource = strings.TrimSpace(e.Destination) == "" && loadStateValue.StopKey != ""
+			loadStateValue.DestinationManual = strings.TrimSpace(e.Destination) != ""
 			stateChanged = true
 		}
 		// Normal text autosave resolves against the whole current week, independent
