@@ -97,7 +97,7 @@ export function Sidebar() {
     <aside
       className={`
         flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-zinc-800/60 bg-sidebar-bg
-        ${collapsed ? "w-16" : "w-60"}
+        ${collapsed ? "w-16" : "w-52"}
       `}
     >
       {/* ── Brand ── */}

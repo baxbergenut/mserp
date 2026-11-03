@@ -209,8 +209,15 @@ export function useDriverBoard(lockedDriverId?: string) {
       setBoard(current => {
         if (!current) return current;
         const entries = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
+        const loads = { ...current.loads };
+        for (const entry of committed) {
+          const view = loads[entry.driverId];
+          if (view && entries[entry.driverId]?.destination !== entry.destination) {
+            loads[entry.driverId] = { ...view, automation: undefined, destinationSource: !entry.destination.trim() && !!view.stopKey };
+          }
+        }
         committed.forEach(e => { entries[e.driverId] = e; });
-        return { ...current, entries: Object.values(entries), drivers: applyCommittedFleetStatus(current.drivers, committed) };
+        return { ...current, loads, entries: Object.values(entries), drivers: applyCommittedFleetStatus(current.drivers, committed) };
       });
       if (loadIds.length) void refreshLoads(loadIds);
     } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }

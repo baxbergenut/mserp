@@ -58,6 +58,7 @@ type boardLoadState struct {
 	DestinationManual     bool              `json:"destinationManual,omitempty"`
 	StopKey               string            `json:"stopKey"`
 	Completed             []string          `json:"completed,omitempty"`
+	CompletedStops        map[string]bool   `json:"completedStops,omitempty"`
 }
 
 func boardCompletionKey(p BoardLoad) string {
@@ -116,6 +117,7 @@ func lateBoardStop(s boardLoadState, current BoardLoad, status, destination stri
 }
 
 type BoardLoads struct {
+	CompletedStopKeys []string         `json:"completedStopKeys,omitempty"`
 	DetailsOmitted    bool             `json:"detailsOmitted,omitempty"`
 	ResolutionWarning string           `json:"resolutionWarning,omitempty"`
 	Automation        *BoardAutomation `json:"automation,omitempty"`
@@ -509,6 +511,9 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				view.DestinationSource = false
 			}
 			for _, stop := range current.Stops {
+				if s.CompletedStops[boardCompletionKey(current)+"/"+stop.Key] {
+					view.CompletedStopKeys = append(view.CompletedStopKeys, stop.Key)
+				}
 				if stop.Key == view.StopKey {
 					view.SourceDestination = stop.Location
 				}
@@ -740,9 +745,20 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		case "DISPATCHED":
 			e.Status = boardProgressStatus("ENROUTE", view.Next)
 			s.Current = view.Current
-			useBoardStop(&s, "delivery")
+			if _, err := advanceBoardDelivery(&s, view, a.StopKey, false); err != nil {
+				return result, err
+			}
 			e.Destination = ""
 		case "ENROUTE", "RESERVED":
+			remaining, err := advanceBoardDelivery(&s, view, a.StopKey, true)
+			if err != nil {
+				return result, err
+			}
+			if remaining {
+				e.Status = boardProgressStatus("ENROUTE", view.Next)
+				e.Destination = ""
+				break
+			}
 			if view.Current != nil {
 				s.Completed = append(s.Completed, boardCompletionKey(*view.Current))
 				if view.Current.Manual {
