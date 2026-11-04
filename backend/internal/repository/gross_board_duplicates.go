@@ -61,7 +61,7 @@ func assertGrossBoardLoadClaims(ctx context.Context, tx pgx.Tx, claims []grossBo
  AND NOT (b.load_trip_id IS NOT NULL AND c."loadTripId" IS NOT NULL
    AND b.load_record_id IS NOT NULL AND c."loadRecordId" IS NOT NULL
    AND b.load_record_id=c."loadRecordId" AND b.load_trip_id<>c."loadTripId")
- ORDER BY c.date,c.slot,b.service_date,b.slot,d.full_name LIMIT 1`, body, len(claims)).Scan(&number, &driver, &date, &slot)
+ ORDER BY c.date,c.slot,b.service_date,b.slot,d.full_name LIMIT 1`, string(body), len(claims)).Scan(&number, &driver, &date, &slot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

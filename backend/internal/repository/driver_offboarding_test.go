@@ -153,7 +153,7 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 			if _, err = NewDriverBoardRepository(pool).Save(ctx, []DriverBoardEntry{{DriverID: d.ID, CurrentLoad: "TERMINATED-BLOCKED"}}); err == nil {
 				t.Fatal("Status Board dispatched a retained terminated owner")
 			}
-			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "TERMINATED-PLAN", Slot: 0}}, actor)
+			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "TERMINATED-PLAN-" + route, Slot: 0}}, actor)
 			must(err)
 			// Neither editor may silently discard the retained link on a later save.
 			input.Status = "terminated"
@@ -186,7 +186,7 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 			if _, err = NewDriverBoardRepository(pool).Save(ctx, []DriverBoardEntry{blockedDispatch}); !errors.Is(err, ErrTruckUnavailable) {
 				t.Fatal("Status Board rehire bypassed inactive truck", err)
 			}
-			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "INACTIVE-TRUCK-PLAN", Slot: 0}}, actor)
+			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: d.ID, Date: boardLoadToday(time.Now()), LoadNumber: "INACTIVE-TRUCK-PLAN-" + route, Slot: 0}}, actor)
 			must(err)
 			d, err = terminate(d)
 			must(err)
@@ -256,7 +256,7 @@ func verifyTerminationOffboarding(t *testing.T, ctx context.Context, pool *pgxpo
 			if _, err = NewDriverBoardRepository(pool).Save(ctx, []DriverBoardEntry{{DriverID: owner.ID, CurrentLoad: "HELD-OWNER-BLOCKED"}}); err == nil {
 				t.Fatal("Status Board dispatched a terminated owner on an active held truck")
 			}
-			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: owner.ID, Date: boardLoadToday(time.Now()), LoadNumber: "HELD-OWNER-PLAN", Slot: 0}}, actor)
+			_, err = NewGrossBoardRepository(pool).SaveChanges(ctx, []GrossBoardEntry{{DriverID: owner.ID, Date: boardLoadToday(time.Now()), LoadNumber: fmt.Sprintf("HELD-OWNER-PLAN-%v", continuing), Slot: 0}}, actor)
 			must(err)
 			page, err := NewCustomTaskRepository(pool).List(ctx, Pagination{}, truck.UnitNumber, "open")
 			must(err)
