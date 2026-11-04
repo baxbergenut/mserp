@@ -52,7 +52,7 @@ func TestChargeCountRoundingAndPause(t *testing.T) {
 		last  string
 	}{{"650.00", 6, "-108.35"}, {"1.00", 60, "-0.41"}, {"10.00", 3, "-3.34"}} {
 		c := ChargeCreate{Kind: "installment", DriverIDs: []string{"driver"}, Name: "Advance", Total: test.total, Installments: test.count, Eligibility: "calendar", StartWeek: ChargeCurrentWeek()}
-		if err := validateChargeCreate(&c); err != nil {
+		if err := validateChargeCreate(&c, c.StartWeek); err != nil {
 			t.Fatal(err)
 		}
 		s := ChargeSchedule{Kind: c.Kind, Name: c.Name, Direction: "charge", StartWeek: c.StartWeek, Total: &c.Total, Eligibility: c.Eligibility, InstallmentCount: c.Installments, Phases: []ChargePhase{{WeekStart: c.StartWeek, Amount: c.Amount}}}

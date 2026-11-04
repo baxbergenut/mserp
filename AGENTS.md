@@ -1762,7 +1762,9 @@ assignment lookup lists.
 
 - Recurring fees are truck assignments (migration 081); legacy driver recurring
   writes are rejected by the API/repository and database constraint. Migration
-  033's driver schedules now hold installment plans only. Viewing/autosave never
+  033's driver schedules now hold installment plans only. New plans may start
+  in the last completed New York payroll week if the dated Driver Pay statement
+  is open, or in the current or a future week. Viewing/autosave never
   confirms installments; payroll finalization does. Existing installment principal,
   amounts, explicit overrides, pause/reopen and audit rules remain in effect.
   Truck phases are effective Mondays, use exact amount options and calendar/loads/

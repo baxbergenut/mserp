@@ -4,10 +4,65 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestPriorWeekInstallmentDatabase(t *testing.T) {
+	withTruckChargeDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, actor string) {
+		repo := NewDriverChargeRepository(pool)
+		pay := NewDriverPayRepository(pool)
+		current, _ := chargeWeek(ChargeCurrentWeek())
+		prior := current.AddDate(0, 0, -7)
+		var driver string
+		if err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate)
+ VALUES('Installment Driver','installment driver','cpm',0.75) RETURNING id::text`).Scan(&driver); err != nil {
+			t.Fatal(err)
+		}
+		input := ChargeCreate{DriverIDs: []string{driver}, Kind: "installment", Name: "Advance",
+			Total: "200", Amount: "100", StartWeek: prior.Format(time.DateOnly), Eligibility: "loads"}
+		rows, err := repo.Draft(ctx, input)
+		if err != nil || len(rows) != 2 || rows[0].WeekStart != current.Format(time.DateOnly) {
+			t.Fatalf("load-only preview should skip a completed week without loads: %+v, %v", rows, err)
+		}
+		if _, err = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number)
+ VALUES($1,$2::date,'INSTALLMENT-LOAD')`, driver, input.StartWeek); err != nil {
+			t.Fatal(err)
+		}
+		rows, err = repo.Draft(ctx, input)
+		if err != nil || len(rows) != 2 || rows[0].WeekStart != input.StartWeek || rows[0].Amount != "-100.00" {
+			t.Fatalf("load-only preview should include the prior week with a load: %+v, %v", rows, err)
+		}
+		ids, err := repo.Create(ctx, input, actor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		report, err := pay.GetDriverWeek(ctx, prior, driver)
+		if err != nil || len(report.Drivers) != 1 {
+			t.Fatalf("prior-week Driver Pay: %+v, %v", report, err)
+		}
+		charges := report.Drivers[0].Edits.GeneratedCharges
+		if len(charges) != 1 || charges[0].ScheduleID != ids[0] || charges[0].Amount != "-100.00" || charges[0].ConfirmedAt != nil {
+			t.Fatalf("expected one unconfirmed prior-week installment: %+v", charges)
+		}
+		if _, err = pool.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report)
+ VALUES($1,$2::date,'{}')`, driver, input.StartWeek); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = repo.Draft(ctx, input); err == nil || !strings.Contains(err.Error(), "Reopen the Driver Pay statement") {
+			t.Fatalf("expected finalized week to block preview, got %v", err)
+		}
+		if _, err = repo.Create(ctx, input, actor); err == nil || !strings.Contains(err.Error(), "Reopen the Driver Pay statement") {
+			t.Fatalf("expected finalized week to block creation, got %v", err)
+		}
+		input.StartWeek = prior.AddDate(0, 0, -7).Format(time.DateOnly)
+		if _, err = repo.Create(ctx, input, actor); err == nil || !strings.Contains(err.Error(), "Choose last week") {
+			t.Fatalf("expected older start to be rejected, got %v", err)
+		}
+	})
+}
 
 func TestDriverChargesDatabase(t *testing.T) {
 	withTruckChargeDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, actor string) {

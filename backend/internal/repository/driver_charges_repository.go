@@ -207,7 +207,7 @@ func lockChargeDrivers(ctx context.Context, tx pgx.Tx, ids []string) error {
 	}
 	return nil
 }
-func validateChargeCreate(c *ChargeCreate) error {
+func validateChargeCreate(c *ChargeCreate, currentWeek string) error {
 	if c.Installments < 0 || c.Installments > 5200 || (c.Kind == "recurring" && c.Installments != 0) {
 		return chargeInvalid("Invalid installment count")
 	}
@@ -220,8 +220,9 @@ func validateChargeCreate(c *ChargeCreate) error {
 	if _, err := chargeWeek(c.StartWeek); err != nil {
 		return err
 	}
-	if c.StartWeek < ChargeCurrentWeek() {
-		return chargeInvalid("New schedules must start in the current or a future week")
+	monday, _ := chargeWeek(currentWeek)
+	if c.StartWeek < monday.AddDate(0, 0, -7).Format(time.DateOnly) {
+		return chargeInvalid("Choose last week, this week, or a future week")
 	}
 	if c.EndWeek != nil {
 		if _, err := chargeWeek(*c.EndWeek); err != nil {
@@ -259,11 +260,27 @@ func validateChargeCreate(c *ChargeCreate) error {
 	}
 	return nil
 }
+
+func assertPriorInstallmentWeekOpen(ctx context.Context, q chargeQuery, driver, week string) error {
+	var finalized bool
+	err := q.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM payroll_settlements WHERE week_start=$2::date AND finalized
+ AND driver_id IN ($1::uuid,payroll_driver_at($1::uuid,$2::date)))`, driver, week).Scan(&finalized)
+	if err != nil {
+		return err
+	}
+	if finalized {
+		return chargeInvalid("Reopen the Driver Pay statement for week %s before starting this installment plan", week)
+	}
+	return nil
+}
+
 func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, actor string) ([]string, error) {
 	if c.Kind == "recurring" {
 		return nil, chargeInvalid("Recurring charges are managed on trucks")
 	}
-	if err := validateChargeCreate(&c); err != nil {
+	currentWeek := ChargeCurrentWeek()
+	if err := validateChargeCreate(&c, currentWeek); err != nil {
 		return nil, err
 	}
 	tx, err := beginPayrollMutation(ctx, r.pool)
@@ -300,6 +317,11 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 		}
 		if !active {
 			return nil, chargeInvalid("Reactivate this driver before assigning new charges")
+		}
+		if c.StartWeek < currentWeek {
+			if err = assertPriorInstallmentWeekOpen(ctx, tx, driver, c.StartWeek); err != nil {
+				return nil, err
+			}
 		}
 		if typeID != nil {
 			var overlaps bool
@@ -551,8 +573,31 @@ func (r *DriverChargeRepository) Draft(ctx context.Context, c ChargeCreate) ([]C
 	if c.Kind == "recurring" {
 		return nil, chargeInvalid("Recurring charges are managed on trucks")
 	}
-	if err := validateChargeCreate(&c); err != nil {
+	currentWeek := ChargeCurrentWeek()
+	if err := validateChargeCreate(&c, currentWeek); err != nil {
 		return nil, err
+	}
+	var loads map[string]bool
+	if c.StartWeek < currentWeek {
+		driver := c.DriverIDs[0]
+		if err := assertPriorInstallmentWeekOpen(ctx, r.pool, driver, c.StartWeek); err != nil {
+			return nil, err
+		}
+		if c.Eligibility == "loads" {
+			var hasLoads bool
+			err := r.pool.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM `+payrollBoardEntriesSQL+` e WHERE e.driver_id=$1::uuid
+ AND e.service_date >= $2::date AND e.service_date < $2::date+7
+ AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
+ UNION ALL
+ SELECT 1 FROM `+grossBoardEntriesSQL+` e WHERE e.driver_id=payroll_driver_at($1::uuid,$2::date)
+ AND e.driver_id<>$1::uuid AND e.service_date >= $2::date AND e.service_date < $2::date+7
+ AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>'')`, driver, c.StartWeek).Scan(&hasLoads)
+			if err != nil {
+				return nil, err
+			}
+			loads = map[string]bool{c.StartWeek: hasLoads}
+		}
 	}
 	s := ChargeSchedule{ID: "preview", InstallmentCount: c.Installments, Kind: c.Kind, Name: c.Name, StartWeek: c.StartWeek, EndWeek: c.EndWeek, Eligibility: c.Eligibility, Direction: "charge", Phases: []ChargePhase{{WeekStart: c.StartWeek, Amount: c.Amount}}}
 	if c.Kind == "installment" {
@@ -575,5 +620,5 @@ func (r *DriverChargeRepository) Draft(ctx context.Context, c ChargeCreate) ([]C
 		d, _ := chargeWeek(c.StartWeek)
 		through = d.AddDate(0, 0, 7*11).Format("2006-01-02")
 	}
-	return projectCharges(s, through, nil, true)
+	return projectCharges(s, through, loads, true)
 }

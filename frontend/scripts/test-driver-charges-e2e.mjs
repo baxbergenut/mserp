@@ -82,9 +82,30 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
-  if (process.argv.includes("--payer-corrections-only")) { await runPayerCorrectionsE2E({page,base,temp,sql,schema}); }
+  const priorWeekOnly = process.argv.includes('--prior-week-only');
+  if (priorWeekOnly) {
+    const { currentWeek } = await (await page.request.get(`${base}/api/driver-charges`)).json();
+    const priorWeek = new Date(Date.parse(currentWeek) - 7 * 86400000).toISOString().slice(0, 10);
+    await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
+    await page.getByRole('button', { name: 'New installment plan', exact: true }).click();
+    await page.getByLabel('Driver', { exact: true }).selectOption({ label: 'E2e Driver' });
+    await page.getByLabel('Description', { exact: true }).fill('Prior-week advance');
+    await page.getByLabel('Total charge', { exact: true }).fill('200');
+    await page.getByLabel('Weekly amount', { exact: true }).fill('100');
+    const startWeek = page.getByLabel('Start week (Monday)', { exact: true });
+    await expect(startWeek).toHaveAttribute('min', priorWeek);
+    await startWeek.fill(priorWeek);
+    await page.getByRole('button', { name: 'Preview schedule', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('cell', { name: priorWeek, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Create assignments', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.goto(`${base}/accounting/driver-pay?weekStart=${priorWeek}`);
+    const driver = page.getByRole('button', { name: 'E2e Driver', exact: true });
+    if (await driver.getAttribute('aria-expanded') !== 'true') await driver.click();
+    await expect(page.getByLabel('E2e Driver, Prior-week advance, charge amount', { exact: true })).toHaveValue('-100.00');
+  } else if (process.argv.includes("--payer-corrections-only")) { await runPayerCorrectionsE2E({page,base,temp,sql,schema}); }
   else if (process.argv.includes("--pay-source-only")) { await runPaySourceE2E({page,base,temp,sql,schema}); } else { await runTruckRecurringE2E({page,base,temp}); }
-  if (!process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only") && !process.argv.includes("--payer-corrections-only")) {
+  if (!priorWeekOnly && !process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only") && !process.argv.includes("--payer-corrections-only")) {
   await verifyExpenseSettings(page, base, temp, { sql, schema });
   await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
   await page.getByRole('button', { name: 'New installment plan', exact: true }).click();
@@ -423,7 +444,7 @@ try {
   expect(errors).toEqual([]);
   }
   expect(errors).toEqual([]);
-  console.log(`${process.argv.includes('--payer-corrections-only') ? 'Payer corrections' : process.argv.includes('--pay-source-only') ? 'Shared payroll sources' : process.argv.includes('--truck-recurring-only') ? 'Truck charges' : 'Truck charges and installments'} E2E passed. Screenshots: ${temp}`);
+  console.log(`${priorWeekOnly ? 'Prior-week installment' : process.argv.includes('--payer-corrections-only') ? 'Payer corrections' : process.argv.includes('--pay-source-only') ? 'Shared payroll sources' : process.argv.includes('--truck-recurring-only') ? 'Truck charges' : 'Truck charges and installments'} E2E passed. Screenshots: ${temp}`);
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];
   if (page) { await page.screenshot({ path: join(temp, 'failure.png'), fullPage: true }); console.error('Failure screenshot:', join(temp, 'failure.png')); console.error((await page.locator('body').innerText()).slice(-5000)); }

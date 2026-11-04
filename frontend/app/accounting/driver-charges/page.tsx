@@ -15,7 +15,7 @@ import { Receipt } from "lucide-react";
 import { bulkDriverCharges, createDriverCharges, deleteChargeType, fetchChargeHistory, fetchDriverCharges, fetchDriverOptions, previewDriverCharge, previewNewCharges, saveChargeType } from "@/app/lib/api";
 import type { ChargeBulk, ChargeCreate, ChargeData, ChargeEvent, ChargeOccurrence, ChargeSchedule, ChargeType } from "@/app/lib/types";
 import { controlClass, ErrorBanner, Field, ManagementHeader, ManagementSearch, Modal } from "@/app/components/management/ManagementUI";
-import { decimalDisplay, hundredths } from "@/app/gross-board/board";
+import { addDays, decimalDisplay, hundredths } from "@/app/gross-board/board";
 import { payButtonClass } from "../driver-pay/DriverCard";
 import ChargeNotice, { type ChargeNotification } from "./ChargeNotice";
 import ChargeTypeFields from "./ChargeTypeFields";
@@ -122,7 +122,7 @@ export default function DriverChargesPage() {
         <Field label="Total charge"><input required inputMode="decimal" className={controlClass} value={create.total} onChange={e => setCreateField("total", e.target.value)} /></Field>
         <label className="flex gap-2 text-sm text-zinc-400"><input type="checkbox" checked={countMode} onChange={e => { setCountMode(e.target.checked); setCreateField("installments", e.target.checked ? 6 : 0); }} />Calculate from number of installments</label>
         {countMode ? <Field label="Number of installments"><input required type="number" min={1} max={5200} className={controlClass} value={create.installments} onChange={e => setCreateField("installments", Number(e.target.value))} /></Field> : <Field label="Weekly amount"><input required inputMode="decimal" className={controlClass} value={create.amount} onChange={e => setCreateField("amount", e.target.value)} /></Field>}
-        <Field label="Start week (Monday)"><input required type="date" min={week} className={controlClass} value={create.startWeek} onChange={e => setCreateField("startWeek", e.target.value)} /></Field>
+        <Field label="Start week (Monday)"><input required type="date" min={addDays(week, -7)} className={controlClass} value={create.startWeek} onChange={e => setCreateField("startWeek", e.target.value)} /></Field>
         <Field label="Installment eligibility"><select aria-label="Installment eligibility" className={controlClass} value={create.eligibility} onChange={e => setCreateField("eligibility", e.target.value as ChargeCreate["eligibility"])}><option value="calendar">Every calendar week</option><option value="loads">Only weeks with Gross Board loads</option></select></Field>
       </div>}
     </Modal>}
