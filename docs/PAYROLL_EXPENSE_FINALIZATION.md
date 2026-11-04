@@ -25,6 +25,12 @@ cannot silently collect a new or changed invoice. Exact retries recover their
 original result. Older clients may use a still-exact prepared expense set or the
 complete current input revision; they cannot bypass changed-balance validation.
 
+Commit-driven browser refresh compares `expenseRevision` and page aggregates as
+well as the statement revision. Live balances can change with no new prepared
+generation. Lazy detail requests restart when either review token changes; stale
+responses cannot replace the new row. The prepared-payroll browser regression
+covers changed visible deductions and off-page totals at an unchanged generation.
+
 A native driver-paid expense mutation in resource protocol can avoid payroll publication only after
 every captured event and old/new recipient is proved eligible. Each materialized
 week must already have a compatible statement whose membership exists independently

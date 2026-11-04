@@ -35,7 +35,7 @@ try {
     });
     page.on('pageerror',e=>errors.push(e.message));
     let state='preparing',generation=10,retries=0,commits=0,placements=0,retryRelease,readFailures=1;
-    let includeIndependent=false,independentState='ready';
+    let includeIndependent=false,independentState='ready',offPagePayable;
     const requests=[],receipts=new Map(),readWeeks=[];
     let driver={id,fullName:'Prepared Test',truckUnit:'P1',payType:'gross_percentage',payRate:'80',isOwnerOperator:true,
       dispatcherId:'',dispatcherName:'',fuelTotal:'0.00',tollTotal:'0.00',issues:[],statementRevision:revision(1),
@@ -85,7 +85,8 @@ try {
         const independent={...structuredClone(driver),id:revision(900),fullName:'Independent Test',truckUnit:'P2',truckId:revision(900),statementRevision:revision(901),preparationState:independentState,edits:{...driver.edits,driverId:revision(900),expectedStatementRevision:revision(901)}};
         const rows=path.endsWith(revision(900))?[independent]:[row];
         if(includeIndependent&&!path.includes('/statements/'))rows.push(independent);
-        return route.fulfill({json:{weekStart:week,revision:`inputs:${generation}`,drivers:state==='preparing'?[]:rows,preparation:{state,generation:revision(generation),calculatorVersion:'fixture'}}});
+        return route.fulfill({json:{weekStart:week,revision:`inputs:${generation}`,drivers:state==='preparing'?[]:rows,preparation:{state,generation:revision(generation),calculatorVersion:'fixture'},
+          ...(offPagePayable && {pagination:{page:1,pageSize:25,total:30,totalPages:2,dispatchers:[],finalized:0,statements:30,loads:30,review:0,fee:'24000.00',payable:offPagePayable}})}});
       }
       return route.fulfill({json:path==='/tasks/count'?{count:0}:[]});
     });
@@ -98,6 +99,22 @@ try {
     const expand=page.getByRole('button',{name:kind==='investor'?'Prepared Test P1':'Prepared Test',exact:true});
     await expect(expand).toBeVisible();await expand.click();
     await expect(page.getByRole('region',{name:'Prepared Test weekly loads'})).toBeVisible();
+    // Expense balances change without publishing a new statement/generation.
+    driver.expenseRevision='live-1';
+    driver.edits.expenseDeductions=[{expenseId:'live-expense',name:'Live balance',expenseDate:week,amount:'50.00',total:'100.00',available:'100.00',openingBalance:'100.00',remaining:'50.00',version:1,saved:false,mode:'fixed',liveBalance:true}];
+    await page.evaluate(() => window.__payrollNotify());
+    await expect(page.getByLabel('Prepared Test, expense Live balance, deduction',{exact:true})).toHaveValue('-50.00');
+    driver.expenseRevision='live-2';driver.edits.expenseDeductions[0].amount='25.00';
+    await page.evaluate(() => window.__payrollNotify());
+    await expect(page.getByLabel('Prepared Test, expense Live balance, deduction',{exact:true})).toHaveValue('-25.00');
+    // A balance outside this page still changes the all-filtered total.
+    offPagePayable='15000.00';await page.evaluate(() => window.__payrollNotify());
+    await expect(page.getByText('$15,000.00',{exact:true})).toBeVisible();
+    offPagePayable='14900.00';await page.evaluate(() => window.__payrollNotify());
+    await expect(page.getByText('$14,900.00',{exact:true})).toBeVisible();
+    offPagePayable=undefined;driver.expenseRevision='live-3';driver.edits.expenseDeductions=[];
+    await page.evaluate(() => window.__payrollNotify());
+    await expect(page.getByLabel('Prepared Test, expense Live balance, deduction',{exact:true})).toHaveCount(0);
     await page.waitForTimeout(200);
     const idleReads=readWeeks.length;
     await page.waitForTimeout(1600);
