@@ -21,8 +21,27 @@ also serializes simultaneous claims from different dispatchers.
 
 The guard checks the final batch state to allow atomic moves and cleanup. It
 does not scan for duplicates on ordinary amount/note edits and does not rewrite
-historical duplicates or finalized statements. Direct historical imports must
-still reconcile their source identities before inserting board rows.
+historical duplicates or finalized statements.
+
+## Historical import identity
+
+The November 3, 2026 sheet-to-system conversion joined each displayed number
+to every matching DataTruck ID. Its eligibility check counted tokens and matches
+after joining them together, so duplicate source IDs multiplied both counts and
+incorrectly passed the check. This produced multiple board slots for one sheet
+load and spread the original daily driver gross across those slots. It was a
+one-time import error, not a behavior of the scheduled DataTruck refresh or the
+reviewed reconciliation command. Historical rows need a separately reviewed
+repair; never discard their allocated gross or rewrite finalized statements.
+
+Future imports must resolve each distinct normalized input token separately,
+require exactly one verified current provider ID (or an explicit reviewed trip),
+then allocate amounts only across the resolved business loads. Count candidate
+IDs per token before joining tokens back to the day; never infer uniqueness
+from matching aggregate counts after a many-to-many join. Unresolved/ambiguous
+days stay in review. Use the native Gross Board save path for new entries so
+the duplicate guard, finalization checks and atomic rollback apply; direct SQL
+imports bypass the application guard and are not an approved shortcut.
 
 ## Reviewed reconciliation
 

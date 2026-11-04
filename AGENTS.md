@@ -48,6 +48,10 @@ Distinct selected trips of one parent remain supported. The check runs once on
 the final batch under native source/financial locks, so atomic moves work and
 ordinary financial edits skip it. Existing duplicates remain available for
 guarded cleanup; finalized statements and their source records are not rewritten.
+Historical imports must resolve each normalized token to exactly one verified
+current ID before allocating the day's gross, then use native board saves.
+Never compare token/match counts after a many-to-many join: the November 3
+conversion used that faulty check and created duplicate slots.
 
 1. Run `git status --short`; the worktree may contain user changes. Preserve
    unrelated changes and never discard them to make a task easier.
