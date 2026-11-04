@@ -67,6 +67,7 @@ export interface LoadStop {
 }
 
 export interface Load {
+	SourceMissing?: boolean;
   ID: number;
   LoadID: string;
   DriverID: string | null;
@@ -1103,6 +1104,7 @@ export interface GrossBoardTrip {
 }
 
 export interface GrossBoardEntry {
+  sourceMissing?: boolean;
   splitReview?: LoadSplitReview;
   fields?: string[];
  sourceDate?: string;

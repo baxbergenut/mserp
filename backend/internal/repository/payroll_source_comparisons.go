@@ -41,7 +41,7 @@ func decorateFrozenSourceComparisons(ctx context.Context, tx pgx.Tx, report *Dri
 	}
 	rows, err := tx.Query(ctx, `SELECT e.load_id,e.load_trip_id,coalesce(trip_source.original::text,''),coalesce(trip_source.driver_gross::text,''),coalesce(trip_source.miles::text,'')
  FROM jsonb_to_recordset($1::jsonb) e(load_id integer,load_trip_id integer)
- LEFT JOIN loads l ON l.id=e.load_id `+loadTripSourceSQL, encoded)
+ LEFT JOIN loads l ON l.id=e.load_id `+loadTripSourceSQL, string(encoded))
 	if err != nil {
 		return err
 	}

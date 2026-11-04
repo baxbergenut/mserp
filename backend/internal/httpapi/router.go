@@ -150,8 +150,9 @@ func NewRouter(
 				return
 			}
 			loads, err := loadRepo.GetLoadsPage(r.Context(), repository.LoadPageQuery{
-				Pagination: pagination,
-				Search:     r.URL.Query().Get("search"), Status: r.URL.Query().Get("status"),
+				IncludeMissing: r.URL.Query().Get("includeMissing") == "true",
+				Pagination:     pagination,
+				Search:         r.URL.Query().Get("search"), Status: r.URL.Query().Get("status"),
 				Customer: r.URL.Query().Get("customer"), Dispatcher: r.URL.Query().Get("dispatcher"),
 				Driver: r.URL.Query().Get("driver"), PickupFrom: pickupFrom, PickupTo: pickupTo,
 				Sort: r.URL.Query().Get("sort"), Direction: r.URL.Query().Get("direction"),

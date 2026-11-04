@@ -34,6 +34,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ## Start every task here
 
+Missing DataTruck source records remain historical evidence. Loads hides confirmed
+missing IDs by default (`includeMissing=true` exposes labelled history); new Gross
+Board selections exclude them while existing explicit links remain pinned and show
+a review warning. Never merge by display number alone. `cmd/reconcile-loads`
+previews conservative, provider-verified replacements and applies only an exact
+digest under native financial/finalized guards. It preserves total driver gross,
+publishes affected payroll atomically and records an immutable retry receipt.
+See `docs/integrations/DATATRUCK_LOAD_RECONCILIATION.md` for operator usage.
+
 1. Run `git status --short`; the worktree may contain user changes. Preserve
    unrelated changes and never discard them to make a task easier.
 2. Identify the affected area from the map below and read only those files plus

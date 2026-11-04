@@ -54,7 +54,7 @@ function LoadRow({ load }: { load: Load }) {
       <td className="px-3 py-2">{load.CustomerName}</td>
       <td className="px-3 py-2">{load.DriverName}{load.TeamDriverName && <span className="text-zinc-600"> / {load.TeamDriverName}</span>}</td>
       <td className="px-3 py-2 font-mono text-zinc-400">{load.TruckUnit}</td>
-      <td className="px-3 py-2"><StatusDot status={load.Status} /></td>
+      <td className="px-3 py-2">{load.SourceMissing ? <div><span className="text-amber-400">Missing from DataTruck</span><div className="text-[11px] text-zinc-500">Historical record · last status: {load.Status}</div></div> : <StatusDot status={load.Status} />}</td>
       <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-zinc-400">{formatDate(load.PickupTime)}</td>
       <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-zinc-400">{formatDate(load.DeliveryTime)}</td>
       <td className="px-3 py-2 text-right font-mono tabular-nums text-zinc-400">{formatMiles(load.TotalMiles ?? NaN)}</td>

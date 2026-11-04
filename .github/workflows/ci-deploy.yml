@@ -110,6 +110,7 @@ jobs:
           go build -trimpath -ldflags="-s -w" -o mserp-api ./cmd/server
           go build -trimpath -ldflags="-s -w" -o export-expense-sheet ./cmd/export-expense-sheet
           go build -trimpath -ldflags="-s -w" -o fleet-review ./cmd/fleet-review
+          go build -trimpath -ldflags="-s -w" -o reconcile-loads ./cmd/reconcile-loads
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -282,6 +283,7 @@ jobs:
           install -m 0750 backend/mserp-api release/backend/mserp-api
           install -m 0750 backend/export-expense-sheet release/backend/export-expense-sheet
           install -m 0750 backend/fleet-review release/backend/fleet-review
+          install -m 0750 backend/reconcile-loads release/backend/reconcile-loads
           cp -a frontend/out/. release/frontend/
           cp backend/sql/[0-9][0-9][0-9]_*.sql release/migrations/
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \

@@ -36,7 +36,9 @@ try {
     if (url.pathname === '/api/auth/session') return route.fulfill({ json: { user: { id: 'viewer', username: 'Loads viewer', permissions: ['loads.read'], theme: 'default' }, csrfToken: 'test' } });
     if (url.pathname === '/api/loads') {
       queries.push(url.search);
-      return route.fulfill({ json: { items: mode === 'empty' ? [] : url.searchParams.get('page') === '2' ? [loads[1]] : loads, page: Number(url.searchParams.get('page') || 1), pageSize: 25, total: mode === 'empty' ? 0 : 26, totalPages: mode === 'empty' ? 1 : 2, options: { statuses: ['delivered'], customers: [], drivers: [], dispatchers: [] } } });
+      const historical = { ...makeLoad(4, []), SourceMissing: true, Status: 'dispatched' };
+      const items = url.searchParams.get('includeMissing') === 'true' ? [...loads, historical] : loads;
+      return route.fulfill({ json: { items: mode === 'empty' ? [] : url.searchParams.get('page') === '2' ? [loads[1]] : items, page: Number(url.searchParams.get('page') || 1), pageSize: 25, total: mode === 'empty' ? 0 : 26, totalPages: mode === 'empty' ? 1 : 2, options: { statuses: ['delivered'], customers: [], drivers: [], dispatchers: [] } } });
     }
     return route.fulfill({ json: [] });
   });
@@ -79,6 +81,12 @@ try {
     expect(box.height).toBeLessThan(55);
     await toggles().first().click(); await toggles().nth(2).click();
   }
+  await page.getByRole('checkbox', { name: 'Show missing from DataTruck' }).check();
+  await expect(toggles()).toHaveCount(4);
+  await expect(page.getByText('Missing from DataTruck', { exact: true })).toBeVisible();
+  await expect(page.getByText('Historical record · last status: dispatched')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Show missing from DataTruck' }).uncheck();
+  await expect(toggles()).toHaveCount(3);
   mode = 'empty'; await page.reload();
   await expect(page.getByText('No loads match these filters.')).toBeVisible();
   expect(errors).toEqual([]);

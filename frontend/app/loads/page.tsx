@@ -21,6 +21,7 @@ import { LoadsTable } from "./LoadsTable";
 export default function LoadsPage() {
   const canSync=usePermissions().includes("loads.sync");
   const [loads, setLoads] = useState<Load[]>([]);
+  const [includeMissing, setIncludeMissing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useViewState("page:search", "");
   const [filters, setFilters] = useViewState<Filters>("page:filters", EMPTY_FILTERS);
@@ -45,6 +46,7 @@ export default function LoadsPage() {
     setIsLoading(true);
     try {
       const result = await fetchLoadsPage({
+        includeMissing,
         page,
         pageSize,
         search: debouncedSearch,
@@ -68,7 +70,7 @@ export default function LoadsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [setPage, debouncedSearch, filters, page, pageSize, sortDir, sortKey]);
+  }, [setPage, debouncedSearch, filters, page, pageSize, sortDir, sortKey, includeMissing]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -144,6 +146,7 @@ export default function LoadsPage() {
           placeholder="Search by load, customer, driver, truck…"
         />
         <TableFilters>
+          <label className="flex items-center gap-2 py-2 text-xs text-zinc-400"><input type="checkbox" checked={includeMissing} onChange={event => { setIncludeMissing(event.target.checked); setPage(1); }} />Show missing from DataTruck</label>
           <select aria-label="Customer filter" className={controlClass} value={filters.customer} onChange={e => { setFilters({ ...filters, customer: e.target.value }); setPage(1); }}><option value="">All customers</option>{customerOptions.map(v => <option key={v}>{v}</option>)}</select>
           <select aria-label="Driver filter" className={controlClass} value={filters.driver} onChange={e => { setFilters({ ...filters, driver: e.target.value }); setPage(1); }}><option value="">All drivers</option>{driverOptions.map(v => <option key={v}>{v}</option>)}</select><select aria-label="Dispatcher filter" className={controlClass} value={filters.dispatcher} onChange={e => { setFilters({ ...filters, dispatcher: e.target.value }); setPage(1); }}><option value="">All dispatchers</option>{dispatcherOptions.map(v => <option key={v}>{v}</option>)}</select>
           <select aria-label="Status filter" className={controlClass} value={filters.status} onChange={e => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}><option value="">All statuses</option>{statusOptions.map(v => <option value={v} key={v}>{statusLabel(v)}</option>)}</select>
