@@ -50,7 +50,7 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("initial alphabetical order", b.Drivers)
 	}
 	// Old saved order no longer changes presentation, even for new viewers.
-	if _, err := pool.Exec(ctx, `INSERT INTO driver_board_driver_order(dispatcher_key,dispatcher_id,driver_ids) VALUES($1,$1::uuid,$2)`, dispatcher, []string{ids[2], ids[0], ids[1]}); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO driver_board_driver_order(dispatcher_key,dispatcher_id,driver_ids) VALUES($1::text,($1::text)::uuid,$2)`, dispatcher, []string{ids[2], ids[0], ids[1]}); err != nil {
 		t.Fatal(err)
 	}
 	b = get()

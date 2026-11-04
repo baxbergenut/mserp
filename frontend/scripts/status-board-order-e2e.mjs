@@ -59,7 +59,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   // Filtering retains hidden members in the full saved order.
   await page.getByLabel('Status filter',{exact:true}).click();
   await page.getByRole('button',{name:'Clear all',exact:true}).click();
-  await page.getByRole('checkbox',{name:'ENROUTE',exact:true}).check(); await page.keyboard.press('Escape');
+  await page.getByRole('checkbox',{name:'Enroute',exact:true}).check(); await page.keyboard.press('Escape');
   await drag(row(ids[0]));
   expect(group(await read())).toEqual(ids.slice(0,3));
   await page.getByLabel('Status filter',{exact:true}).click();
