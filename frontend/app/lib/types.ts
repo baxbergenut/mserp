@@ -1,6 +1,7 @@
 export interface PayrollAvailability {
   firstWeek: string;
   currentWeek: string;
+  latestWeek: string;
 }
 
 export interface DispatcherCommissionRules {

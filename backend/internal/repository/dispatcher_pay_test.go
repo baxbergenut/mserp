@@ -218,7 +218,7 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			if upgrade {
 				exec(strings.Replace(strings.Replace(initial, body, "", 1), homeBody, "", 1))
 				exec(string(migration))
-				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('93000000-0000-0000-0000-000000000003','Legacy Home Driver','legacy home driver','cpm',1); INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days) VALUES('2099-01-05','93000000-0000-0000-0000-000000000003',2)`)
+				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('93000000-0000-0000-0000-000000000003','Legacy Home Driver','legacy home driver','cpm',1); INSERT INTO dispatcher_pay_inputs(week_start,driver_id,home_days) VALUES('2026-10-12','93000000-0000-0000-0000-000000000003',2)`)
 				exec(string(homeMigration))
 				var automatic bool
 				var days int
@@ -240,9 +240,9 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			exec(`INSERT INTO app_users(id,username,password_hash) VALUES($1,'Payroll Reviewer','$2test')`, finalizer)
 			exec(`INSERT INTO dispatchers(id,full_name,normalized_name) VALUES($1,'Commission Dispatcher','commission dispatcher')`, dispatcher)
 			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,dispatcher_id) VALUES($1,'Commission Driver','commission driver','cpm',1,$2)`, driver, dispatcher)
-			exec(`UPDATE driver_dispatcher_assignments SET assigned_at='2099-01-05'::date::timestamp AT TIME ZONE 'America/New_York',start_known=true WHERE driver_id=$1`, driver)
+			exec(`UPDATE driver_dispatcher_assignments SET assigned_at='2026-10-12'::date::timestamp AT TIME ZONE 'America/New_York',start_known=true WHERE driver_id=$1`, driver)
 			exec(`INSERT INTO loads(id,load_id,status,total_pay,load_pay,total_miles) VALUES(9301,'COMMISSION-1','delivered',123,123,456)`)
-			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,entered_original_rate,entered_miles,driver_rate) VALUES($1,'2099-01-05','COMMISSION-1',9301,8500,3700,1)`, driver)
+			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,entered_original_rate,entered_miles,driver_rate) VALUES($1,'2026-10-12','COMMISSION-1',9301,8500,3700,1)`, driver)
 			repo := NewDispatcherPayRepository(pool)
 			versions, err := repo.Rules(ctx)
 			if err != nil {
@@ -251,7 +251,7 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			if len(versions) != 1 {
 				t.Fatal("missing workbook defaults", versions)
 			}
-			in := CommissionRuleChange{ExpectedRevision: versions[0].ID, EffectiveWeek: "2099-01-05", Rules: workbookCommissionRules()}
+			in := CommissionRuleChange{ExpectedRevision: versions[0].ID, EffectiveWeek: "2026-10-12", Rules: workbookCommissionRules()}
 			if err = repo.SaveRules(ctx, in, "test"); err != nil {
 				t.Fatal(err)
 			}
@@ -260,7 +260,7 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			}
 			get := func() DispatcherCommissionReport {
 				t.Helper()
-				v, e := repo.Get(ctx, "2099-01-05")
+				v, e := repo.Get(ctx, "2026-10-12")
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -284,16 +284,16 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			if strings.Contains(string(profileJSON), "payPercentage") {
 				t.Fatal("dispatcher profiles must not expose retired commission")
 			}
-			period, _ := dispatcherWeek("2099-01-05")
+			period, _ := dispatcherWeek("2026-10-12")
 			legacy := FinancialDashboard{Dispatchers: []DispatcherFinancialBreakdown{}}
 			if err = NewDashboardRepository(pool).loadDispatcherFinancials(ctx, FinancialDashboardQuery{DateFrom: &period}, &legacy); err != nil || len(legacy.Dispatchers) != 1 || legacy.Dispatchers[0].Pay == nil || *legacy.Dispatchers[0].Pay != 85 {
 				t.Fatal("financial report must share Gross Board commissions", err, legacy.Dispatchers)
 			}
 			input := DispatcherPayInput{DriverID: driver, HomeDays: 1, Note: "Reviewed home day"}
-			if err = repo.SaveInput(ctx, "2099-01-05", input, "test"); err != nil {
+			if err = repo.SaveInput(ctx, "2026-10-12", input, "test"); err != nil {
 				t.Fatal(err)
 			}
-			if err = repo.SaveInput(ctx, "2099-01-05", input, "test"); !errors.Is(err, ErrDispatcherPayConflict) {
+			if err = repo.SaveInput(ctx, "2026-10-12", input, "test"); !errors.Is(err, ErrDispatcherPayConflict) {
 				t.Fatal("stale home days accepted", err)
 			}
 			report = get()
@@ -303,13 +303,13 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			s := report.Statements[0]
 			change := DispatcherStatementChange{DispatcherID: dispatcher, Revision: s.Revision, Version: s.Version}
 			exec(`UPDATE gross_board_entries SET entered_original_rate=10000,entered_miles=4000 WHERE driver_id=$1`, driver)
-			if err = repo.ChangeStatement(ctx, "2099-01-05", change, "test", false); !errors.Is(err, ErrDispatcherPayConflict) {
+			if err = repo.ChangeStatement(ctx, "2026-10-12", change, "test", false); !errors.Is(err, ErrDispatcherPayConflict) {
 				t.Fatal("stale board preview finalized", err)
 			}
 			report = get()
 			s = report.Statements[0]
 			change.Revision = s.Revision
-			if err = repo.ChangeStatement(ctx, "2099-01-05", change, finalizer, false); err != nil {
+			if err = repo.ChangeStatement(ctx, "2026-10-12", change, finalizer, false); err != nil {
 				t.Fatal(err)
 			}
 			frozen := get()
@@ -325,7 +325,7 @@ func TestDispatcherPayDatabase(t *testing.T) {
 				t.Fatal("display-only mileage must not invalidate an older financial snapshot")
 			}
 			input.Version = 1
-			if err = repo.SaveInput(ctx, "2099-01-05", input, "test"); err == nil {
+			if err = repo.SaveInput(ctx, "2026-10-12", input, "test"); err == nil {
 				t.Fatal("finalized home days changed")
 			}
 			exec(`UPDATE gross_board_entries SET entered_original_rate=11000,entered_miles=4400 WHERE driver_id=$1`, driver)
@@ -343,10 +343,10 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			}
 			future := workbookCommissionRules()
 			future.Tiers[2].Brackets[0].Percent = 3
-			if err = repo.SaveRules(ctx, CommissionRuleChange{ExpectedRevision: latest, EffectiveWeek: "2099-01-12", Rules: future}, "test"); err != nil {
+			if err = repo.SaveRules(ctx, CommissionRuleChange{ExpectedRevision: latest, EffectiveWeek: "2026-10-19", Rules: future}, "test"); err != nil {
 				t.Fatal(err)
 			}
-			next, err := repo.Get(ctx, "2099-01-12")
+			next, err := repo.Get(ctx, "2026-10-19")
 			if err != nil || next.Rule == nil || next.Rule.Rules.Tiers[2].Brackets[0].Percent != 3 {
 				t.Fatal("future rules missing", err, next)
 			}
@@ -355,7 +355,7 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			}
 			change.Version = frozen.Statements[0].Version
 			change.Reason = ""
-			if err = repo.ChangeStatement(ctx, "2099-01-05", change, "test", true); err != nil {
+			if err = repo.ChangeStatement(ctx, "2026-10-12", change, "test", true); err != nil {
 				t.Fatal(err)
 			}
 			assertNoPayrollActionHistory(t, ctx, pool)
@@ -366,9 +366,9 @@ func TestDispatcherPayDatabase(t *testing.T) {
 			if reopened.Statements[0].FinalizedBy != "" || reopened.Statements[0].FinalizedAt != nil {
 				t.Fatal("reopened statement retained finalization metadata")
 			}
-			exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,'2099-01-06','HOME')`, driver)
-			exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,day_status) VALUES($1,'2099-01-06',1,'HOME')`, driver)
-			if err = repo.SaveInput(ctx, "2099-01-05", DispatcherPayInput{DriverID: driver, Version: 1, HomeDays: 7, AutoHomeDays: true}, "test"); err != nil {
+			exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,'2026-10-13','HOME')`, driver)
+			exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,day_status) VALUES($1,'2026-10-13',1,'HOME')`, driver)
+			if err = repo.SaveInput(ctx, "2026-10-12", DispatcherPayInput{DriverID: driver, Version: 1, HomeDays: 7, AutoHomeDays: true}, "test"); err != nil {
 				t.Fatal(err)
 			}
 			automaticRow := get().Statements[0].Rows[0]

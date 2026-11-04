@@ -42,7 +42,7 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
  UNION SELECT date_trunc('week',transaction_date)::date FROM weighmytruck_transactions WHERE payroll_driver_at(driver_id,transaction_date)=$1
  UNION SELECT week_start FROM payroll_settlements WHERE driver_id=$1
  UNION SELECT generate_series(start_week,least(coalesce(end_week-7,$2::date),$2::date),'7 days')::date FROM driver_teams WHERE main_driver_id=$1
- `+reimbursementWeeks+`) SELECT week::text FROM weeks WHERE week IS NOT NULL AND week<=$2::date AND payroll_driver_at($1::uuid,week)=$1::uuid ORDER BY week DESC`, driver, ChargeCurrentWeek())
+ `+reimbursementWeeks+`) SELECT week::text FROM weeks WHERE week IS NOT NULL AND week<=$2::date AND payroll_driver_at($1::uuid,week)=$1::uuid ORDER BY week DESC`, driver, PayrollLatestWeek())
 	if err != nil {
 		return Page[DriverPayHistoryRow]{}, err
 	}

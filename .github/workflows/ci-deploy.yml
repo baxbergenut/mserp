@@ -173,6 +173,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-payroll-timing.mjs
 
+      - name: Verify completed payroll week rollover
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-payroll-completed-week.mjs
+
       - name: Verify prepared payroll drafts and command recovery
         if: inputs.full_browser_tests == true
         working-directory: frontend

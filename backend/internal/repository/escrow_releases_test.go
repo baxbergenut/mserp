@@ -146,8 +146,13 @@ func verifyEscrowReleases(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 	}
 	assertCredit(week, "600.00")
 	history, err := pay.History(ctx, driver, Pagination{PageSize: 100})
-	if err != nil || history.Total == 0 {
-		t.Fatalf("release missing from history: %+v %v", history, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range history.Items {
+		if item.WeekStart > PayrollLatestWeek() {
+			t.Fatal("unfinished week exposed in payroll history")
+		}
 	}
 	var events int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_escrow_release_events WHERE release_id IN(SELECT id FROM driver_escrow_releases WHERE escrow_id=$1)`, escrow).Scan(&events); err != nil || events != 5 {

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"mserp/internal/repository"
@@ -26,9 +25,7 @@ func registerDispatcherPayRoutes(r chi.Router, logger *slog.Logger, repo *reposi
 	r.Get("/dispatcher-pay", func(w http.ResponseWriter, r *http.Request) {
 		week := r.URL.Query().Get("weekStart")
 		if week == "" {
-			location, _ := time.LoadLocation("America/New_York")
-			now := time.Now().In(location)
-			week = now.AddDate(0, 0, -(int(now.Weekday())+6)%7).Format(time.DateOnly)
+			week = repository.PayrollLatestWeek()
 		}
 		report, err := repo.Get(r.Context(), week)
 		if err != nil {

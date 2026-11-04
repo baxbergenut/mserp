@@ -492,7 +492,7 @@ func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week ti
 		return out, err
 	}
 	rows, err = tx.Query(ctx, `SELECT DISTINCT date_trunc('week',day)::date::text FROM (
- SELECT service_date AS day FROM `+grossBoardEntriesSQL+` WHERE NOT deleted UNION ALL SELECT dispatch_date FROM gross_board_transfers WHERE active UNION ALL SELECT week_start FROM dispatcher_pay_statements UNION ALL SELECT $1::date) days ORDER BY 1 DESC`, week)
+ SELECT service_date AS day FROM `+grossBoardEntriesSQL+` WHERE NOT deleted UNION ALL SELECT dispatch_date FROM gross_board_transfers WHERE active UNION ALL SELECT week_start FROM dispatcher_pay_statements UNION ALL SELECT $1::date) days WHERE day < $2::date+7 ORDER BY 1 DESC`, week, PayrollLatestWeek())
 	if err != nil {
 		return out, err
 	}
@@ -507,6 +507,9 @@ func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week ti
 	return out, rows.Err()
 }
 func (r *DispatcherPayRepository) Get(ctx context.Context, week string) (DispatcherCommissionReport, error) {
+	if week > PayrollLatestWeek() {
+		return DispatcherCommissionReport{}, chargeInvalid("Payroll weeks are available after the week ends")
+	}
 	w, err := dispatcherWeek(week)
 	if err != nil {
 		return DispatcherCommissionReport{}, err
@@ -523,6 +526,9 @@ func (r *DispatcherPayRepository) Get(ctx context.Context, week string) (Dispatc
 	return out, tx.Commit(ctx)
 }
 func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in DispatcherPayInput, actor string) error {
+	if week > PayrollLatestWeek() {
+		return chargeInvalid("Payroll weeks are available after the week ends")
+	}
 	w, err := dispatcherWeek(week)
 	if err != nil {
 		return err
@@ -581,6 +587,9 @@ func (r *DispatcherPayRepository) SaveInput(ctx context.Context, week string, in
 	return tx.Commit(ctx)
 }
 func (r *DispatcherPayRepository) ChangeStatement(ctx context.Context, week string, in DispatcherStatementChange, actor string, reopen bool) error {
+	if week > PayrollLatestWeek() {
+		return chargeInvalid("Payroll weeks are available after the week ends")
+	}
 	w, err := dispatcherWeek(week)
 	if err != nil {
 		return err

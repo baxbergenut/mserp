@@ -259,7 +259,7 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
  FROM (SELECT week_start FROM payroll_projection_weeks UNION SELECT nullif($1,'')::date WHERE $1<>'') periods
  LEFT JOIN payroll_projection_weeks w ON w.week_start=periods.week_start
  LEFT JOIN payroll_projection_generations g ON g.id=w.generation_id
- WHERE periods.week_start BETWEEN (SELECT coalesce(first_week,'-infinity'::date) FROM payroll_projection_control WHERE singleton) AND $2::date ORDER BY periods.week_start`, week, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion)
+ WHERE periods.week_start BETWEEN (SELECT coalesce(first_week,'-infinity'::date) FROM payroll_projection_control WHERE singleton) AND $5::date ORDER BY periods.week_start`, week, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion, PayrollLatestWeek())
 	if err != nil {
 		return nil, err
 	}

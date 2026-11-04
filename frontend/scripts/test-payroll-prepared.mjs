@@ -164,7 +164,7 @@ try {
     await page.goto(base+'/accounting/'+kind+'-pay?weekStart=2026-11-09');
     await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
     await expect.poll(()=>readWeeks.length).toBeGreaterThan(0);
-    expect(readWeeks.every(w=>w<='2026-10-26')).toBe(true);
+    expect(readWeeks.every(w=>w<='2026-10-19')).toBe(true);
     await page.goto(base+'/accounting/'+kind+'-pay');
     await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
     // Monday midnight in New York opens the next week without a new deployment.
@@ -172,7 +172,7 @@ try {
     await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
     await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeEnabled();
     await page.getByRole('button',{name:'Next week',exact:true}).click();
-    await expect.poll(()=>readWeeks.includes('2026-11-02')).toBe(true);
+    await expect.poll(()=>readWeeks.includes('2026-10-26')).toBe(true);
     await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
     expect(errors).toEqual([]);await page.close();
   }

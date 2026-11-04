@@ -22,7 +22,7 @@ type PayrollRetirement struct {
 func (r *DriverPayRepository) RetirePayrollBefore(ctx context.Context, first string) (PayrollRetirement, error) {
 	result := PayrollRetirement{FirstWeek: first}
 	start, err := chargeWeek(first)
-	if err != nil || first > ChargeCurrentWeek() {
+	if err != nil || first > PayrollLatestWeek() {
 		return result, chargeInvalid("Invalid first payroll week")
 	}
 	tx, closeWrite, err := r.beginPayrollWrite(ctx)

@@ -11,12 +11,12 @@ import (
 	"mserp/internal/repository"
 )
 
-// Payroll statements become available when their New York calendar week starts.
+// Payroll statements become available after their New York calendar week ends.
 // Future schedules and source dates remain valid inputs for that later week.
 func availablePayrollWeek(raw string, first ...string) (time.Time, error) {
 	week, err := grossBoardWeek(raw)
-	if err == nil && week.Format(time.DateOnly) > repository.ChargeCurrentWeek() {
-		return week, errors.New("Payroll weeks are available when the week starts")
+	if err == nil && week.Format(time.DateOnly) > repository.PayrollLatestWeek() {
+		return week, errors.New("Payroll weeks are available after the week ends")
 	}
 	if err == nil && len(first) > 0 && week.Format(time.DateOnly) < first[0] {
 		return week, errors.New("This payroll week has been retired")
@@ -49,7 +49,7 @@ func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
 
 func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.DriverPayRepository, fail func(http.ResponseWriter, error)) {
 	r.Get(path+"/availability", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]string{"firstWeek": repo.FirstPayrollWeek(), "currentWeek": repository.ChargeCurrentWeek()})
+		writeJSON(w, 200, map[string]string{"firstWeek": repo.FirstPayrollWeek(), "currentWeek": repository.ChargeCurrentWeek(), "latestWeek": repository.PayrollLatestWeek()})
 	})
 	writeSourceReceipt := func(w http.ResponseWriter, r *http.Request, actor, requestID string) bool {
 		if requestID == "" {

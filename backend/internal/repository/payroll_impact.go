@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -85,6 +86,12 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	safe := true
 	periodOnly := c != nil && (strings.HasSuffix(c.name, ".finalize") || strings.HasSuffix(c.name, ".reopen"))
 	changedWeeks := map[string]bool{}
+	boardOnly := true
+	boardStart := ""
+	boardDrivers := map[string]bool{}
+	expenseOnly := true
+	expenseStart := ""
+	expenseIDs := map[string]bool{}
 	for rows.Next() {
 		var table, operation string
 		var body []byte
@@ -94,6 +101,12 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			return nil, err
 		}
 		key, known := allowed[table]
+		if table != "expenses" {
+			expenseOnly = false
+		}
+		if table != "gross_board_entries" && table != "gross_board_extra_entries" {
+			boardOnly = false
+		}
 		if table != "payroll_settlements" && table != "payroll_settlement_events" && table != "investor_pay_weeks" && table != "truck_settlement_events" {
 			periodOnly = false
 		}
@@ -109,8 +122,39 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			rows.Close()
 			return nil, err
 		}
+		if len(routes) == 0 {
+			boardOnly = false
+			expenseOnly = false
+		}
 		for _, route := range routes {
 			value := func(k string) string { var v string; _ = json.Unmarshal(route[k], &v); return v }
+			if expenseOnly {
+				day, e := time.Parse(time.DateOnly, value("expense_date"))
+				if e != nil || value("id") == "" || strings.EqualFold(strings.TrimSpace(value("covered_by")), "Broker") {
+					expenseOnly = false
+				} else {
+					// The existing cutoff is week+10, exclusive: Thursday's
+					// invoice belongs to the next payroll; Wednesday's does not.
+					day = day.AddDate(0, 0, -3)
+					start := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
+					if expenseStart == "" || start < expenseStart {
+						expenseStart = start
+					}
+					expenseIDs[value("id")] = true
+				}
+			}
+			if boardOnly {
+				day, e := time.Parse(time.DateOnly, value("service_date"))
+				if e != nil || value("driver_id") == "" {
+					boardOnly = false
+				} else {
+					start := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
+					if boardStart == "" || start < boardStart {
+						boardStart = start
+					}
+					boardDrivers[value("driver_id")] = true
+				}
+			}
 			// Editing the company identity or adding/removing a legacy company
 			// ledger can change graph connectivity across all its trucks.
 			if (table == "investors" && value("id") == CompanyOwnerID) ||
@@ -392,6 +436,55 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	impact := &payrollPublicationImpact{roots: keys(roots), refreshHeader: refreshHeader, loadIDs: changedLoads}
 	if c != nil {
 		impact.snapshot = c.beforeSnapshot
+	}
+	earliest := ""
+	if boardOnly && boardStart != "" {
+		// Board duplicate ranking is chronological and transfers only move a
+		// weekend into the following week. Ordinary board edits therefore cannot
+		// change earlier weeks. Explicit placements can bring that source back
+		// into an earlier statement, including frozen discrepancy evidence.
+		// Include cross-driver placements and retained placement history too:
+		// a removed/reassigned placement can still be shown by a frozen report.
+		err = tx.QueryRow(ctx, `SELECT least($1::date,coalesce(min(week_start),$1::date))::text
+ FROM (
+ SELECT week_start FROM payroll_load_placements WHERE driver_id=ANY($2::uuid[]) OR source_date >= $1::date
+ UNION ALL SELECT (image->>'week_start')::date FROM payroll_load_placement_history h
+ CROSS JOIN LATERAL (VALUES(h.before_value),(h.after_value)) v(image)
+ WHERE image->>'driver_id'=ANY($2::text[]) OR (image->>'source_date')::date >= $1::date
+ ) placements`, boardStart, keys(boardDrivers)).Scan(&earliest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if expenseOnly && expenseStart != "" {
+		// Both old/new dates are captured. Existing allocations remain
+		// authoritative even if a legacy row predates the normal cutoff.
+		err = tx.QueryRow(ctx, `SELECT least($1::date,coalesce(min(week_start),$1::date))::text FROM (
+ SELECT week_start FROM expense_payments WHERE expense_id=ANY($2::uuid[])
+ UNION ALL SELECT week_start FROM expense_reimbursement_payments WHERE expense_id=ANY($2::uuid[])
+ ) allocations`, expenseStart, keys(expenseIDs)).Scan(&earliest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if earliest != "" {
+		periods, e := tx.Query(ctx, `SELECT week_start::text FROM payroll_projection_weeks WHERE week_start >= $1::date`, earliest)
+		if e != nil {
+			return nil, e
+		}
+		impact.weeks = map[string]bool{}
+		for periods.Next() {
+			var week string
+			if e = periods.Scan(&week); e != nil {
+				periods.Close()
+				return nil, e
+			}
+			impact.weeks[week] = true
+		}
+		periods.Close()
+		if e = periods.Err(); e != nil {
+			return nil, e
+		}
 	}
 	if periodOnly && len(changedWeeks) > 0 {
 		// Finalization metadata can affect other weeks through legacy overrides

@@ -157,8 +157,8 @@ func (r *DriverPayRepository) RequestPayrollPreparation(ctx context.Context, wee
 	if _, err := chargeWeek(week.Format(time.DateOnly)); err != nil {
 		return err
 	}
-	if week.Format(time.DateOnly) > ChargeCurrentWeek() {
-		return chargeInvalid("Payroll weeks are available when the week starts")
+	if week.Format(time.DateOnly) > PayrollLatestWeek() {
+		return chargeInvalid("Payroll weeks are available after the week ends")
 	}
 	if week.Format(time.DateOnly) < r.FirstPayrollWeek() {
 		return chargeInvalid("This payroll week has been retired")
@@ -217,18 +217,33 @@ func (r *DriverPayRepository) DispatchPayrollChanges(ctx context.Context) (int, 
 		return 0, err
 	}
 	var roots []string
+	var weeks []string
 	if impact != nil {
-		roots = impact.roots
+		// Empty means a proven unaffected period below. An affected change
+		// without resolved principals must retain the full-calculation fallback.
+		if len(impact.roots) > 0 {
+			roots = impact.roots
+		}
+		if impact.weeks != nil {
+			weeks = []string{}
+			for week := range impact.weeks {
+				weeks = append(weeks, week)
+			}
+		}
 	}
 	// Coalesce old and new principals across every pending batch. An unknown
 	// batch or an initial/full rebuild remains full until that job completes.
-	_, err = tx.Exec(ctx, `UPDATE payroll_projection_jobs SET requested_generation=requested_generation+1,
- impact_roots=CASE WHEN $2::text[] IS NULL THEN NULL WHEN requested_generation=completed_generation THEN $2
- WHEN impact_roots IS NULL THEN NULL ELSE ARRAY(SELECT DISTINCT root FROM unnest(impact_roots||$2) root ORDER BY root) END,
+	_, err = tx.Exec(ctx, `WITH impact AS (
+ SELECT week_start,CASE WHEN $3::text[] IS NOT NULL AND NOT week_start::text=ANY($3) THEN ARRAY[]::text[] ELSE $2::text[] END roots
+ FROM payroll_projection_jobs WHERE week_start<=$1::date
+ ) UPDATE payroll_projection_jobs j SET requested_generation=requested_generation+1,
+ impact_roots=CASE WHEN i.roots IS NULL THEN NULL WHEN requested_generation=completed_generation THEN i.roots
+ WHEN impact_roots IS NULL THEN NULL ELSE ARRAY(SELECT DISTINCT root FROM unnest(impact_roots||i.roots) root ORDER BY root) END,
  requested_at=CASE WHEN requested_generation=completed_generation THEN clock_timestamp() ELSE requested_at END,
  available_at=clock_timestamp(),last_error='',
- priority=greatest(priority,CASE WHEN week_start=$1::date THEN 90
- WHEN week_start BETWEEN $1::date-56 AND $1::date+14 THEN 80-abs((week_start-$1::date)/7) ELSE 10 END)`, ChargeCurrentWeek(), roots)
+ priority=greatest(priority,CASE WHEN j.week_start=$1::date THEN 90
+ WHEN j.week_start BETWEEN $1::date-56 AND $1::date THEN 80-abs((j.week_start-$1::date)/7) ELSE 10 END)
+ FROM impact i WHERE j.week_start=i.week_start`, PayrollLatestWeek(), roots, weeks)
 	if err != nil {
 		return 0, err
 	}
@@ -247,7 +262,7 @@ func (r *DriverPayRepository) claimPayrollProjection(ctx context.Context) (payro
  AND available_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
  ORDER BY greatest(priority,CASE WHEN interactive_until>clock_timestamp() THEN 110 ELSE 0 END) DESC,available_at,week_start DESC LIMIT 1 FOR UPDATE SKIP LOCKED
  ) UPDATE payroll_projection_jobs j SET lease_token=gen_random_uuid(),lease_until=clock_timestamp()+interval '2 minutes',attempts=attempts+1
- FROM candidate c WHERE j.week_start=c.week_start RETURNING j.week_start,j.requested_generation,j.lease_token::text,j.impact_roots`, ChargeCurrentWeek()).Scan(&job.Week, &job.Generation, &job.Token, &job.Roots)
+ FROM candidate c WHERE j.week_start=c.week_start RETURNING j.week_start,j.requested_generation,j.lease_token::text,j.impact_roots`, PayrollLatestWeek()).Scan(&job.Week, &job.Generation, &job.Token, &job.Roots)
 	return job, err
 }
 
@@ -389,6 +404,7 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 	ctx = context.WithValue(ctx, payrollNormalizedFactsKey{}, true)
 	readCtx := context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	readCtx = payrollRoutingFactsContext(readCtx, snapshot)
+	rebaseOnly := false
 	if job.Roots != nil {
 		// An undispatched commit may belong to a different component. Until its
 		// exact events have been included in the job, only full preparation can
@@ -404,16 +420,31 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 			return ErrPayrollProjectionSuperseded
 		}
 		if complete {
-			readCtx, err = selectPayrollContexts(payrollWeekContext(readCtx, job.Week.Format(time.DateOnly)), tx, "", job.Roots)
+			rebaseOnly = len(job.Roots) == 0
+			if rebaseOnly {
+				readCtx = context.WithValue(readCtx, payrollSelectionKey{}, &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}})
+			} else {
+				readCtx, err = selectPayrollContexts(payrollWeekContext(readCtx, job.Week.Format(time.DateOnly)), tx, "", job.Roots)
+			}
 			if err != nil {
 				return err
 			}
 			selection, _ := readCtx.Value(payrollSelectionKey{}).(*payrollSelection)
 			readCtx = context.WithValue(readCtx, payrollPublicationSelectionKey{}, selection)
-			readCtx = context.WithValue(readCtx, payrollPublicationHeaderKey{}, true)
+			readCtx = context.WithValue(readCtx, payrollPublicationHeaderKey{}, !rebaseOnly)
 		}
 	}
-	reports, err := readPayrollProjectionReference(readCtx, tx, job.Week, false)
+	var reports [2]DriverPayWeek
+	if rebaseOnly {
+		for i, kind := range []string{"driver", "investor"} {
+			reports[i].WeekStart = job.Week.Format(time.DateOnly)
+			if err = setPayrollRevision(readCtx, tx, kind, &reports[i]); err != nil {
+				return err
+			}
+		}
+	} else {
+		reports, err = readPayrollProjectionReference(readCtx, tx, job.Week, false)
+	}
 	if err != nil {
 		return err
 	}

@@ -60,7 +60,7 @@ func (r *DriverPayRepository) SeedPayrollPreparation(ctx context.Context) error 
  ), pruned AS (
  DELETE FROM payroll_projection_jobs WHERE week_start IN (SELECT week_start FROM retired)
  ) INSERT INTO payroll_projection_jobs(week_start,priority)
- SELECT week_start,priority FROM wanted ON CONFLICT(week_start) DO NOTHING`, current, r.firstWeek)
+ SELECT week_start,priority FROM wanted ON CONFLICT(week_start) DO NOTHING`, PayrollLatestWeek(), r.firstWeek)
 	if err != nil {
 		return err
 	}

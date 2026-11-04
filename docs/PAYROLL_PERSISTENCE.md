@@ -1,5 +1,41 @@
 # Persistent payroll implementation
 
+## Completed-week preparation
+
+Payroll availability ends at the last completed Monday-Sunday week in America/New_York.
+At Monday 00:00 the completed week becomes eligible; startup/minute seeding gives
+it priority 90 and catches up after downtime. Driver/Investor Pay prepare durably;
+Dispatcher Pay retains its on-read calculation with the same completed-week limit.
+All three pages default to last week, clamp unfinished restored/deep-linked weeks,
+and unlock the next completed week at rollover. Availability returns both the
+actual currentWeek and the latest available latestWeek.
+
+Native publication, job dispatch/claim, seeding and history exclude unfinished
+weeks. Seeding removes their derived pointers/jobs, preserving source data, saved
+drafts, payments, reservations and frozen financial records. No migration or
+financial cutoff change is involved.
+
+Captured board-only changes can rebase weeks before their earliest old/new service
+week without calculators. Explicit placements (including cross-driver placement
+history) conservatively widen the range. Expense-only changes use both old/new
+invoice dates and existing allocations. The unchanged expense cutoff is
+expense_date < week_start + 10: Wednesday is included; Thursday-Sunday invoices
+first enter the next completed payroll. Older unpaid eligible balances carry;
+new eligible invoices and corrections still refresh unfinished affected statements.
+Broker reminders, mixed/unknown changes and missing/stale evidence use the existing
+conservative path. Finalization and shared-balance guards remain authoritative.
+
+Background jobs coalesce affected principals; a proven unaffected completed week
+gets an empty selection and a revision rebase. Initial jobs, undispatched events
+and incompatible snapshots still require full preparation. This preserves freshness
+without repeatedly calculating a current-week draft nobody is using.
+
+Validation: TestPayrollCompletedWeekCalendar and TestPayrollCompletedWeekDatabase
+cover DST, current-week rejection, zero-calculator board/post-cutoff expense saves,
+background rebasing, Wednesday corrections, independent full-report parity and
+canonical-data preservation. frontend/scripts/test-payroll-completed-week.mjs
+covers the three pages and Monday rollover in Chromium.
+
 ## Pay-page action history
 
 Driver, Investor and Dispatcher Pay no longer collect reopening notes or append
@@ -160,8 +196,8 @@ verification reached 638 calculations/75 seconds. A quiesced rollback to global
 protocol with all prepared gates and the worker off restored ordinary saves; live
 expense edits then completed in 201 ms and verification in 32–87 ms.
 
-Preparation now stops at the current New York calendar week. Both pay pages clamp
-future links/restored views, disable Next week at the current week, and unlock it
+Preparation now stops at the last completed New York calendar week. Both pay pages clamp
+future links/restored views, disable Next week at the last completed week, and unlock it
 at the next Monday boundary. Pay-page APIs reject future weeks, and the worker and
 command publication exclude them. Existing future schedules, payments/reservations
 and immutable history remain intact; they are not projected into a future pay page.
@@ -760,7 +796,7 @@ changed inputs are discarded for later preparation. The worker listens for
 notifications and polls at one second as a fallback, and warns about work older
 than 30 seconds. Current/recent/interactive work precedes historical work.
 
-Backfill seeds current week, previous eight weeks, next two, every saved/finalized
+Backfill seeds the last completed week and previous eight weeks, every saved/finalized
 past/current saved week and actual source periods; future weeks wait for their calendar boundary.
 It rechecks the calendar and calculator version each minute. It never creates
 payments, deductions, collections or finalizations. Native commands publish all

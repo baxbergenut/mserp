@@ -99,8 +99,9 @@ try {
  await expect(section.getByText(finalizedStatement.finalizedBy,{exact:true})).toHaveCount(0);
  await section.getByRole('button',{name:'Collapse '+dispatcherName,exact:true}).click();await expect(section.getByRole('table')).toHaveCount(0);
  await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
- await page.getByRole('button',{name:'Next week',exact:true}).click();await expect(section).toHaveCount(0);
- await page.getByRole('button',{name:'Previous week',exact:true}).click();await expect(section).toBeVisible();
+ await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Previous week',exact:true}).click();await expect(section).toHaveCount(0);
+ await page.getByRole('button',{name:'Next week',exact:true}).click();await expect(section).toBeVisible();
  await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
  await section.locator('tbody tr').filter({hasText:driverName}).locator('td').nth(1).click();
  await page.waitForURL(url=>url.pathname==='/gross-board'&&url.searchParams.get('driverId')===driver&&url.searchParams.get('weekStart')===week);
@@ -122,7 +123,7 @@ try {
  await expect(secondRow.locator('td').nth(1)).toHaveText('$4,000.00');await expect(secondRow.locator('td').nth(2)).toHaveText('1,000');await expect(secondRow.locator('td').nth(3)).toHaveText('$4.000');
  await expect(secondRow.locator('[aria-label^="RPM tier 2:"]')).toHaveAttribute('title',/Full-week RPM \$2\.80/);await expect(secondRow.locator('td').nth(8)).toHaveText('$70.00');
  await secondRow.locator('td').nth(1).click();await page.waitForURL(url=>url.pathname==='/gross-board'&&url.searchParams.get('driverId')===driver);await expect(page.locator(`[data-gross-driver="${driver}"][data-gross-field="driver"]`)).toHaveCount(2);await page.goBack();await expect(secondSection.getByRole('table')).toBeVisible();
- await page.getByRole('button',{name:'Next week',exact:true}).click();await expect(section).toHaveCount(0);await page.getByRole('button',{name:'This week',exact:true}).click();await expect(section).toBeVisible();await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
+ await page.getByRole('button',{name:'Previous week',exact:true}).click();await expect(section).toHaveCount(0);await page.getByRole('button',{name:'Last week',exact:true}).click();await expect(section).toBeVisible();await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
  await page.screenshot({path:join(artifacts,'weekly-pay.png'),fullPage:true,animations:'disabled'});
  await page.getByRole('tab',{name:'Commission rules',exact:true}).click();await expect(page.getByRole('heading',{name:'Effective '+next,exact:true})).toBeVisible();await page.screenshot({path:join(artifacts,'commission-rules.png'),fullPage:true});
  const viewerRole=randomUUID(),viewer=randomUUID(),viewerToken=randomBytes(32).toString('base64url'),viewerCSRF=randomBytes(32).toString('base64url');

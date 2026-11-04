@@ -175,3 +175,6 @@ assert.equal(driverTotals(owner,payoutEdits).payable,driverTotals(owner,auto).pa
 assert.equal(normalizedPayEdits(payoutEdits).expenseDeductions[0].apply,true);
 assert.equal(validAdjustments({...payoutEdits,expenseDeductions:[{...payoutEdits.expenseDeductions[0],amount:'100.26'}]}),false);
 console.log('Expense reimbursements add exact positive payouts with ordinary balance limits and autosave.');
+
+const calendar = await import(compile(readFileSync(new URL("../app/accounting/payrollWeek.ts", import.meta.url), "utf8")));
+for (const [now, week] of [["2026-11-02T04:59:59Z", "2026-10-19"], ["2026-11-02T05:00:00Z", "2026-10-26"], ["2026-03-09T04:00:00Z", "2026-03-02"]]) assert.equal(calendar.latestPayrollWeek(new Date(now)), week);

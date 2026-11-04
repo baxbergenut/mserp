@@ -144,7 +144,14 @@ and requires no schema migration.
   Publication snapshots each exact shared dependency set once per post-write phase,
   preserving local statement revisions and cross-period resource fences. Install the
   matching deploy helper before 186; it quiesces writers and fences older binaries.
-  Payroll pages/API/preparation stop at the current New York calendar week. Future
+  Payroll pages/API/preparation stop at the last completed New York calendar week.
+  Monday at 00:00 unlocks the completed week; the minute worker seeds it at priority 90.
+  Source saves and background captures rebase earlier projections without calculators
+  only with complete board-date or expense-cutoff proofs. Old/new dates, placement
+  history, cross-driver placements and existing allocations retain earlier impacts.
+  Unknown/mixed sources retain conservative calculation. Expense eligibility remains
+  before the following Thursday (week+10, exclusive); unpaid carry and finalized
+  guards are unchanged. APIs expose latestWeek alongside the actual currentWeek. Future
   source schedules and existing reservations stay authoritative but do not create
   future statements. Seeding retires future derived pointers/jobs and unused empty
   automatic historical pointers under the source gate; financial records and receipts,

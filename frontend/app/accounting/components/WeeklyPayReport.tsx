@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
 import { addDays, shortDate } from "@/app/gross-board/board";
-import { currentChargeWeek } from "../driver-charges/charges";
+import { latestPayrollWeek } from "../payrollWeek";
+import { useLatestPayrollWeek } from "./useLatestPayrollWeek";
 import { TierMedal } from "./TierMedal";
 import { PageHeader } from "@/app/components/PageHeader";
 import { FinalizationCard } from "./FinalizationCard";
@@ -27,7 +28,9 @@ export function WeeklyPayReport() {
   const router = useRouter();
   const [report, setReport] = useState<DispatcherCommissionReport | null>(null);
   const [rules, setRules] = useState<DispatcherCommissionRuleVersion[]>([]);
-  const [week, setWeek] = useViewState("page:week", () => currentChargeWeek());
+  const latestWeek = useLatestPayrollWeek();
+  const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek());
+  const week = storedWeek > latestWeek ? latestWeek : storedWeek;
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
   const [tab, setTab] = useState("pay");
   const [dispatcher, setDispatcher] = useState("");
@@ -99,8 +102,8 @@ export function WeeklyPayReport() {
         <button role="tab" aria-selected={tab === "pay"} onClick={() => setTab("pay")}>Weekly pay</button>
         <button role="tab" aria-selected={tab === "rules"} onClick={() => setTab("rules")}>Commission rules</button>
       </div>
-      <div className="ml-auto flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={button} aria-label="Previous week" disabled={busy || loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm" title={weekLabel(week)}>{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={button} aria-label="Next week" disabled={busy || loading || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
-      <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={button} disabled={busy || loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
+      <div className="ml-auto flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={button} aria-label="Previous week" disabled={busy || loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm" title={weekLabel(week)}>{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={button} aria-label="Next week" disabled={busy || loading || week >= latestWeek} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
+      <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={button} disabled={busy || loading} onClick={() => switchWeek(latestWeek)}>Last week</button>
       {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} max-w-64`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
     </div>
     {notice && <p role="status" className="text-emerald-400">{notice}</p>}

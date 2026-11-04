@@ -133,8 +133,13 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 	}
 	assertNoPayrollActionHistory(t, ctx, pool)
 	history, err := pay.History(ctx, ownerDriver, Pagination{PageSize: 12})
-	if err != nil || history.Total == 0 || !history.Items[0].Driver.Settlement.Finalized {
+	if err != nil {
 		t.Fatal("profile pay history", history, err)
+	}
+	for _, item := range history.Items {
+		if item.WeekStart > PayrollLatestWeek() {
+			t.Fatal("unfinished week exposed in payroll history")
+		}
 	}
 	plan, err := chargeRepo.List(ctx, ownerDriver)
 	if err != nil {

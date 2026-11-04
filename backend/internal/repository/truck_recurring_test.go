@@ -213,13 +213,13 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	fleet := NewFleetRepository(pool)
 	charges := NewDriverChargeRepository(pool)
 	pay := NewDriverPayRepository(pool)
-	week := ChargeCurrentWeek()
+	week := PayrollLatestWeek()
 	date, _ := chargeWeek(week)
 	driver, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Automatic owner", PayType: "gross_percentage", PayRate: 88, Active: true, AssignmentWeek: week, IsOwnerOperator: true})
 	if err != nil || driver.EmploymentType != "unassigned" || driver.IsOwnerOperator {
 		t.Fatalf("unassigned/manual flag: %+v %v", driver, err)
 	}
-	truck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "AUTO-01", OwnerDriverID: &driver.ID, DriverID: &driver.ID, Active: true, Status: "assigned", AssignmentWeek: week})
+	truck, err := fleet.CreateTruck(ctx, TruckInput{OwnershipEffectiveDate: week, UnitNumber: "AUTO-01", OwnerDriverID: &driver.ID, DriverID: &driver.ID, Active: true, Status: "assigned", AssignmentWeek: week})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err != nil || got.EmploymentType != "owner_operator" || !got.IsOwnerOperator {
 		t.Fatalf("automatic owner: %+v %v", got, err)
 	}
-	second, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "AUTO-02", OwnerDriverID: &driver.ID, Active: true, Status: "available"})
+	second, err := fleet.CreateTruck(ctx, TruckInput{OwnershipEffectiveDate: week, UnitNumber: "AUTO-02", OwnerDriverID: &driver.ID, Active: true, Status: "available"})
 	if err != nil || second.OwnerID != truck.OwnerID {
 		t.Fatal("owner identity not reused", err)
 	}
@@ -331,7 +331,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err = pool.QueryRow(ctx, `INSERT INTO investors(full_name) VALUES('Bulk fee owner') RETURNING id::text`).Scan(&independentBulkOwner); err != nil {
 		t.Fatal(err)
 	}
-	bulkTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "BULK-OK", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
+	bulkTruck, err := fleet.CreateTruck(ctx, TruckInput{OwnershipEffectiveDate: week, UnitNumber: "BULK-OK", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	}
 	// A stale INSERT triggers a database-level no-rows conflict. Its
 	// savepoint must recover so a later valid update can still commit.
-	nextTruck, err := fleet.CreateTruck(ctx, TruckInput{UnitNumber: "BULK-NEXT", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
+	nextTruck, err := fleet.CreateTruck(ctx, TruckInput{OwnershipEffectiveDate: week, UnitNumber: "BULK-NEXT", OwnerID: &independentBulkOwner, Active: true, Status: "available"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +396,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("driver recurring creation accepted")
 	}
 	company := "00000000-0000-0000-0000-000000000001"
-	input := TruckInput{UnitNumber: truck.UnitNumber, OwnerID: &company, DriverID: &driver.ID, Status: "assigned", Active: true, AssignmentWeek: week}
+	input := TruckInput{OwnershipEffectiveDate: week, UnitNumber: truck.UnitNumber, OwnerID: &company, DriverID: &driver.ID, Status: "assigned", Active: true, AssignmentWeek: week}
 	if _, err = fleet.UpdateTruck(ctx, truck.ID, input); err != nil {
 		t.Fatal(err)
 	}
@@ -445,6 +445,9 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err = rows.Err(); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, `UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_unit LIKE 'BULK-FLEET-%'`, week); err != nil {
+		t.Fatal(err)
+	}
 	started := time.Now()
 	results, err = charges.SaveTruckCharges(ctx, updates, actor)
 	if err != nil || len(results) != 250 {
@@ -461,7 +464,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = fleet.CreateTruck(ctx, TruckInput{UnitNumber: truck.UnitNumber, OwnerDriverID: &other.ID, Active: true, Status: "available"}); err == nil {
+	if _, err = fleet.CreateTruck(ctx, TruckInput{OwnershipEffectiveDate: week, UnitNumber: truck.UnitNumber, OwnerDriverID: &other.ID, Active: true, Status: "available"}); err == nil {
 		t.Fatal("duplicate truck accepted")
 	}
 	var count int

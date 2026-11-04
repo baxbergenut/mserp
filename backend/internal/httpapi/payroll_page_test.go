@@ -18,7 +18,7 @@ func TestPayrollWeekAvailability(t *testing.T) {
 	}
 	for _, offset := range []int{-7, 0, 7, 14} {
 		_, err := availablePayrollWeek(current.AddDate(0, 0, offset).Format(time.DateOnly))
-		if (err != nil) != (offset > 0) {
+		if (err != nil) != (offset >= 0) {
 			t.Fatalf("week offset %d: %v", offset, err)
 		}
 	}
@@ -33,7 +33,7 @@ func TestPayrollWeekAvailability(t *testing.T) {
 			r := httptest.NewRequest(method, "/"+kind+"-pay?weekStart="+future, strings.NewReader(body))
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, r)
-			if w.Code != 400 || !strings.Contains(w.Body.String(), "when the week starts") {
+			if w.Code != 400 || !strings.Contains(w.Body.String(), "after the week ends") {
 				t.Fatal(kind, method, w.Code, w.Body.String())
 			}
 		}
