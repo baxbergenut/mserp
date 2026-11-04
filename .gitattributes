@@ -6,3 +6,4 @@ deploy/mserp-deploy text eol=lf
 deploy/mserp-backup text eol=lf
 deploy/mserp-backup.* text eol=lf
 deploy/test-backup* text eol=lf
+deploy/test-backend-ci.sh text eol=lf

@@ -2776,6 +2776,10 @@ local review is already running.
 
 - `.github/workflows/ci-deploy.yml` runs backend/database tests, vet, lint,
   calculation/autosave checks and production builds on pull requests and pushes.
+  Backend tests run in parallel on hosted runners, with a separate PostgreSQL
+  service for each of four repository test shards and one job for other Go
+  packages. Tests stay serial within each shard. Deployment waits for all
+  backend jobs and the production build to pass.
   The four full browser regression suites and Chromium installation are opt-in
   through workflow_dispatch's full_browser_tests input (default false).
   Go and npm dependency/build caches reduce repeat setup time.
