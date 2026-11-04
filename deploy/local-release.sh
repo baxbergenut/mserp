@@ -103,7 +103,7 @@ case "$1" in
         cd "$receipt"
         checksum=$(sha256sum "$archive")
         checksum=${checksum%% *}
-        if [[ $(<"$checksums") != "$checksum  $archive" ]]; then
+        if [[ $(<"$checksums") != "$checksum *$archive" ]]; then
             echo 'The archive no longer matches the locally checked release.' >&2
             exit 1
         fi

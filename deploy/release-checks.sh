@@ -51,7 +51,7 @@ case "${1:-}" in
         cp backend/sql/[0-9][0-9][0-9]_*.sql release/migrations/
         tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
             -czf "artifact/mserp-$sha.tar.gz" -C release .
-        (cd artifact && sha256sum "mserp-$sha.tar.gz" > "mserp-$sha.sha256")
+        (cd artifact && sha256sum --binary "mserp-$sha.tar.gz" > "mserp-$sha.sha256")
         ;;
     *)
         echo 'usage: release-checks.sh {guards|backend|build-backend|frontend|package}' >&2
