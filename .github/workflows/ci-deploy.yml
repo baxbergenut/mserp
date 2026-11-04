@@ -11,24 +11,29 @@ on:
         description: Run all browser regression suites before deployment
         type: boolean
         default: false
+      local_release_sha:
+        description: Exact main commit already checked and staged by deploy/local-release.sh
+        type: string
+      local_release_checksum:
+        description: SHA-256 of the locally checked release archive
+        type: string
 
 permissions:
   contents: read
 
-concurrency:
-  group: mserp-${{ github.ref }}
-  cancel-in-progress: false
-
 env:
   GO_VERSION_FILE: backend/go.mod
   NODE_VERSION: "22"
-  PRODUCTION_API_URL: /api
   DEPLOY_HOST: 137.184.102.22
   DEPLOY_USER: mserp-deploy
 
 jobs:
   build:
     name: Test and build
+    if: github.event_name != 'workflow_dispatch' || (inputs.local_release_sha == '' && inputs.local_release_checksum == '')
+    concurrency:
+      group: mserp-build-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     services:
@@ -62,55 +67,15 @@ jobs:
         run: psql -h 127.0.0.1 -U postgres -d mserp_assignment_history_test -v ON_ERROR_STOP=1 -c 'CREATE ROLE mserp_app; CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public'
 
       - name: Check deployment compatibility guards
-        run: |
-          bash deploy/test-permissions-cutover.sh
-          MSERP_PROTOCOL_REAL_PYTHON=1 bash deploy/test-payroll-protocol.sh
-          python3 deploy/test-payroll-protocol-config.py
-          bash deploy/test-backup-policy.sh
-          python3 deploy/test-backup.py
+        run: bash deploy/release-checks.sh guards
 
       - name: Test backend
-        working-directory: backend
         env:
-          MSERP_FEEDBACK_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_DISPATCHER_PAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_DASHBOARD_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_RELAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_PREPASS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_INVENTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_WMT_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_DRIVER_BOARD_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_ACCESS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_SAMSARA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_DRIVER_CHARGES_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_DRIVER_PAY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_COST_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_PHONE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_FLEETSCOPE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_ASSIGNMENT_HISTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_CUSTOM_TASK_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_GROSS_BOARD_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_RELAY_REVIEW_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_TOLL_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_CUTOVER_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-          MSERP_EXPENSE_SHEET_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
-        run: |
-          go test -p 1 ./... -timeout 30m
-          go vet ./...
+          MSERP_RELEASE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
+        run: bash deploy/release-checks.sh backend
 
       - name: Build Linux backend binaries
-        working-directory: backend
-        env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
-        run: |
-          go build -trimpath -ldflags="-s -w" -o mserp-api ./cmd/server
-          go build -trimpath -ldflags="-s -w" -o export-expense-sheet ./cmd/export-expense-sheet
-          go build -trimpath -ldflags="-s -w" -o fleet-review ./cmd/fleet-review
-          go build -trimpath -ldflags="-s -w" -o reconcile-loads ./cmd/reconcile-loads
+        run: bash deploy/release-checks.sh build-backend
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -119,39 +84,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Lint frontend
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Check gross board calculations and autosave
-        working-directory: frontend
-        run: node scripts/test-gross-board.mjs
-
-      - name: Check driver board autosave
-        working-directory: frontend
-        run: node scripts/test-driver-board.mjs
-
-      - name: Check driver pay calculations and autosave
-        working-directory: frontend
-        run: node scripts/test-driver-pay.mjs
-
-      - name: Check read cancellation and compact board transport
-        working-directory: frontend
-        run: node scripts/test-read-requests.mjs
-
-      - name: Check phone normalization and display
-        working-directory: frontend
-        run: node scripts/test-phone.mjs
-
-      - name: Build static frontend
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_API_URL: ${{ env.PRODUCTION_API_URL }}
-        run: npm run build
+      - name: Check and build static frontend
+        run: bash deploy/release-checks.sh frontend
 
       # Full browser regressions are opt-in for manual runs; regular pushes keep
       # database/migration tests, lint, calculation checks and production builds.
@@ -281,20 +215,7 @@ jobs:
           node scripts/test-board-grid.mjs
 
       - name: Package release
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release/backend release/frontend release/migrations artifact
-          install -m 0750 backend/mserp-api release/backend/mserp-api
-          install -m 0750 backend/export-expense-sheet release/backend/export-expense-sheet
-          install -m 0750 backend/fleet-review release/backend/fleet-review
-          install -m 0750 backend/reconcile-loads release/backend/reconcile-loads
-          cp -a frontend/out/. release/frontend/
-          cp backend/sql/[0-9][0-9][0-9]_*.sql release/migrations/
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-            -czf artifact/mserp-${GITHUB_SHA}.tar.gz -C release .
-          sha256sum artifact/mserp-${GITHUB_SHA}.tar.gz \
-            > artifact/mserp-${GITHUB_SHA}.sha256
+        run: bash deploy/release-checks.sh package
 
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -306,12 +227,33 @@ jobs:
 
   deploy:
     name: Deploy production
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      ${{ !cancelled() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' &&
+          (needs.build.result == 'success' ||
+           (github.event_name == 'workflow_dispatch' && needs.build.result == 'skipped')) }}
     needs: build
+    concurrency:
+      group: mserp-production
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - name: Validate deployment inputs
+        if: needs.build.result == 'skipped'
+        env:
+          LOCAL_SHA: ${{ inputs.local_release_sha }}
+          LOCAL_CHECKSUM: ${{ inputs.local_release_checksum }}
+          FULL_BROWSER_TESTS: ${{ inputs.full_browser_tests }}
+        run: |
+          set -euo pipefail
+          if [[ $LOCAL_SHA != "$GITHUB_SHA" || ! $LOCAL_CHECKSUM =~ ^[0-9a-f]{64}$ || $FULL_BROWSER_TESTS == true ]]; then
+            echo 'Provide the exact main commit and its local archive checksum, with full_browser_tests disabled.' >&2
+            exit 1
+          fi
+
       - name: Download release artifact
+        if: needs.build.result == 'success'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: mserp-${{ github.sha }}
@@ -329,12 +271,13 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 0600 ~/.ssh/mserp_deploy ~/.ssh/known_hosts
 
-      - name: Upload and activate release
+      - name: Activate release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOCAL_CHECKSUM: ${{ inputs.local_release_checksum }}
         run: |
           set -euo pipefail
-          archive="artifact/mserp-${GITHUB_SHA}.tar.gz"
-          checksum=$(cut -d ' ' -f 1 "artifact/mserp-${GITHUB_SHA}.sha256")
           ssh_options=(
             -i ~/.ssh/mserp_deploy
             -o BatchMode=yes
@@ -344,7 +287,25 @@ jobs:
             -o ServerAliveInterval=30
             -o ServerAliveCountMax=10
           )
-          scp "${ssh_options[@]}" "$archive" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:/var/lib/mserp-deploy/incoming/${GITHUB_SHA}.tar.gz"
-          ssh "${ssh_options[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "sudo /usr/local/sbin/mserp-deploy '${GITHUB_SHA}' '${checksum}'"
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          incoming=/var/lib/mserp-deploy/incoming
+          archive="$incoming/$GITHUB_SHA.tar.gz"
+          if [[ -n $LOCAL_CHECKSUM ]]; then
+            checksum=$LOCAL_CHECKSUM
+            staged="$incoming/$GITHUB_SHA.$checksum.local.tar.gz"
+            prepare="mv -T -- '$staged' '$archive' && "
+          else
+            checksum=$(cut -d ' ' -f 1 "artifact/mserp-${GITHUB_SHA}.sha256")
+            [[ $checksum =~ ^[0-9a-f]{64}$ ]]
+            scp "${ssh_options[@]}" "artifact/mserp-$GITHUB_SHA.tar.gz" "$target:$archive"
+            prepare=
+          fi
+          # The production job is serialized. Recheck main immediately before activation
+          # so an older run cannot overwrite a newer deployment.
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ $main_sha != "$GITHUB_SHA" ]]; then
+            echo "Refusing to activate $GITHUB_SHA because main is now $main_sha." >&2
+            exit 1
+          fi
+          ssh "${ssh_options[@]}" "$target" \
+            "${prepare}sudo /usr/local/sbin/mserp-deploy '$GITHUB_SHA' '$checksum'"
