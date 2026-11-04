@@ -3610,3 +3610,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   TestGrossBoardPreemptsPayrollDatabase, TestPayrollWorkPriority,
   TestPayrollResourceSourceScopeSaveDatabase, TestFleetStatusDatabase, TestLoadTripsDatabase.
   The live Gross Board E2E runs with prepared payroll and its worker enabled.
+
+Migration 197 requires the matching deploy helper before installation. It stops
+writers for the routing usage classification and rejects rollback to binaries
+without `-board-routing-usage-capability` support. The SQL classification and Go
+payroll exclusion list must both include `board_route_usage`; fresh/migrated
+Status Board database tests verify the production payroll coverage check.

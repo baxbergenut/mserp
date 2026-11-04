@@ -28,6 +28,7 @@ touch "$test_root/new/migrations/$expense_balance_migration"
 eval "$(sed -n '/^compatible_release() {/,/^activate_release() {/p' "$helper" | sed '$d')"
 payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
+mock_routing_usage=f
 runuser() {
     local result=$mock
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
@@ -47,6 +48,7 @@ runuser() {
     if [[ $* == *"public.payroll_expense_verification_change"* ]]; then result=$mock_verification_metadata; fi
     if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
     if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
+    if [[ $* == *"public.board_route_usage"* ]]; then result=$mock_routing_usage; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -228,3 +230,13 @@ if compatible_release "$test_root/new"; then echo 'Operational classification qu
 mock_unrelated_payroll=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown operational classification allowed rollback' >&2; exit 1; fi
 echo 'Operational payroll compatibility checks passed'
+
+mock_unrelated_payroll=t
+mock_routing_usage=t
+if compatible_release "$test_root/new"; then echo 'Routing usage allowed an incompatible payroll binary' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\nif [[ $1 == -board-routing-usage-capability ]]; then echo board-routing-usage-v1; else echo payroll-resources-v1; fi\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_routing_usage=error
+if compatible_release "$test_root/new"; then echo 'Routing schema query failure allowed rollback' >&2; exit 1; fi
+mock_routing_usage=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown routing schema allowed rollback' >&2; exit 1; fi

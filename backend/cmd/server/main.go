@@ -47,7 +47,12 @@ func main() {
 	payrollEpoch := flag.Int64("payroll-protocol-epoch", 0, "reviewed database protocol epoch required for a quiesced switch")
 	payrollRetire := flag.String("retire-payroll-before", "", "retire explicitly reviewed old draft payroll weeks with writers stopped; retain allocations and verify remaining reports")
 	resetGrossBoardBalances := flag.Bool("initialize-gross-board-rate-balances", false, "reset all driver rate balances to zero once and exit")
+	routingCapability := flag.Bool("board-routing-usage-capability", false, "print routing usage schema support and exit without opening a database")
 	flag.Parse()
+	if *routingCapability {
+		fmt.Println("board-routing-usage-v1")
+		return
+	}
 	if *payrollCapability {
 		fmt.Println(repository.PayrollProtocolCapability)
 		return

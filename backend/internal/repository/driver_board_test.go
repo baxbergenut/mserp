@@ -121,6 +121,16 @@ func TestDriverBoardDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer pool.Close()
+			// Board migrations must also preserve production payroll startup.
+			coverageTx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			coverageErr := payrollProjectionCoverage(ctx, coverageTx)
+			_ = coverageTx.Rollback(ctx)
+			if coverageErr != nil {
+				t.Fatal("board schema broke payroll source coverage", coverageErr)
+			}
 			fleet := NewFleetRepository(pool)
 			repo := NewDriverBoardRepository(pool)
 			testDriverBoardSheetStatuses(t, ctx, repo, fleet)

@@ -279,3 +279,9 @@ driver-confirmed arrivals. Do not exercise mutations against production for test
 Provider references: https://fiveeld.com/api-docs/,
 https://apidocs.datatruck.io/api-reference/endpoint/get_loads_list,
 https://developers.google.com/maps/documentation/routes/lvr.
+
+Migration 197 requires the matching deploy helper before installation. It stops
+writers for the routing usage classification and rejects rollback to binaries
+without `-board-routing-usage-capability` support. The SQL classification and Go
+payroll exclusion list must both include `board_route_usage`; fresh/migrated
+Status Board database tests verify the production payroll coverage check.
