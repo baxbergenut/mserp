@@ -8,10 +8,10 @@ import (
 
 // The count and drilldown share load identity, dated ownership and the exact
 // unresolved predicate. Only Clustie's dated assignments determine the truck.
-const dashboardLoadOwnershipCTE = companyDashboardCTE + `, ownership AS (
+var dashboardLoadOwnershipCTE = companyDashboardCTE + `, ownership AS (
  SELECT c.*,assignment.truck_id,
  assignment.units assigned_units,
- o.owners,i.is_company,i.driver_id owner_driver,term.owner_id term_owner,o.owner_id
+ o.owners,i.is_company,i.driver_id owner_driver,s.owner_id term_owner,o.owner_id
  FROM dated c
  LEFT JOIN LATERAL (
   SELECT (array_agg(DISTINCT a.truck_id))[1] truck_id,array_agg(DISTINCT t.unit_number ORDER BY t.unit_number) units
@@ -26,8 +26,8 @@ const dashboardLoadOwnershipCTE = companyDashboardCTE + `, ownership AS (
   AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=c.service_date)
   AND (h.unassigned_at IS NULL OR c.service_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
  ) o ON true LEFT JOIN investors i ON i.id=o.owner_id
- LEFT JOIN LATERAL (SELECT owner_id FROM truck_settlement_terms s WHERE s.truck_id=assignment.truck_id
- AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1) term ON true
+ LEFT JOIN LATERAL (SELECT * FROM truck_settlement_terms s WHERE s.truck_id=assignment.truck_id
+ AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1) s ON ` + truckTermCoversWeekSQL("date_trunc('week',c.service_date)::date") + `
  WHERE c.inclusion='included'
 ), unresolved_ownership AS (
  SELECT * FROM ownership WHERE owners<>1 OR is_company IS NULL

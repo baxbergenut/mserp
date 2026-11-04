@@ -46,10 +46,12 @@ For an investor truck-week:
    apply explicit credits and adjustments once.
 5. Sum exact rounded amounts into the truck statement and its profile summary.
 
-Owner-driven-only weeks retain the existing Driver Pay route. Mixed owner/hired
-weeks retain one investor truck statement and deduct only hired labor. Saved
-investor truck-weeks keep their destination during corrections. This routing
-does not imply that driver and investor statements should be combined.
+Owner-driven-only weeks use the owner's Driver Pay tariff. When the truck
+changes hands, the previous owner's agreement ends at the start of the transfer
+week. The agreement still applies to earlier weeks, and finalized statements
+retain their saved amounts. The buyer can use their driver tariff when operating
+the truck. Mixed owner/hired weeks with a valid agreement use one investor truck
+statement and deduct only hired labor.
 
 For a truck owned by a linked driver without investor settlement terms, recurring
 fees stay on the recorded owner's Driver Pay. A load attributed to another driver

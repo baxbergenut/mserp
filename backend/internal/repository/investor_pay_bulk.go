@@ -183,7 +183,13 @@ func (v truckPayInputs) deductions(truck string, ownerOnly bool) []ExpenseDeduct
 	return out
 }
 
-var payrollTruckMetadataSQL = `WITH terms AS MATERIALIZED (SELECT DISTINCT ON(truck_id) * FROM truck_settlement_terms WHERE week_start<=$1::date AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[])) ORDER BY truck_id,week_start DESC), conflicts AS (
+var activePayrollTruckTermsSQL = `SELECT s.* FROM (
+ SELECT DISTINCT ON(truck_id) * FROM truck_settlement_terms
+ WHERE week_start<=$1::date AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[]))
+ ORDER BY truck_id,week_start DESC
+ ) s WHERE ` + truckTermCoversWeekSQL("$1::date")
+
+var payrollTruckMetadataSQL = `WITH terms AS MATERIALIZED (` + activePayrollTruckTermsSQL + `), conflicts AS (
  SELECT DISTINCT s.truck_id FROM terms s JOIN truck_ownership_history h ON h.truck_id=s.truck_id AND h.owner_id<>s.owner_id
  WHERE h.assigned_at<(($1::date+7)::timestamp AT TIME ZONE 'America/New_York')
  AND (h.unassigned_at IS NULL OR h.unassigned_at>=(($1::date+1)::timestamp AT TIME ZONE 'America/New_York'))
@@ -206,7 +212,7 @@ var payrollTruckAssignmentsSQL = `SELECT truck_id::text,driver_id::text FROM tru
 
 var payrollTruckEditsSQL = `SELECT w.truck_id::text,w.edits,w.version,w.finalized,w.report,coalesce(w.finalized_at,now()),coalesce(u.username,'') FROM investor_pay_weeks w LEFT JOIN app_users u ON u.id=w.finalized_by WHERE w.week_start=$1::date`
 
-var payrollTruckExpensesSQL = `WITH terms AS (SELECT DISTINCT ON(truck_id) truck_id,owner_id FROM truck_settlement_terms WHERE week_start<=$1::date AND ($2::uuid[] IS NULL OR truck_id=ANY($2::uuid[])) ORDER BY truck_id,week_start DESC), relevant_expenses AS MATERIALIZED (
+var payrollTruckExpensesSQL = `WITH terms AS (` + activePayrollTruckTermsSQL + `), relevant_expenses AS MATERIALIZED (
  SELECT e.*, expense_external_total(e.id) AS external_paid, ` + expenseSettlementTotalSQL + ` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
  WHERE lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0) AND e.amount>=0 AND e.expense_date<$1::date+10
  ), payments AS MATERIALIZED (

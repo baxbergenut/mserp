@@ -142,7 +142,8 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
         void saveCells(updates);
       }} />{scope}{lockedCount > 0 && <span className="text-amber-400" title="Charges affecting finalized statements stay unchanged">({lockedCount} finalized skipped)</span>}</label>}</th>;
     })}</tr></thead><tbody>{visible.map(t => {
-      const applicable = (data.terms ?? []).filter(v => v.truckId === t.id && v.weekStart <= week).at(-1);
+      const latest = (data.terms ?? []).filter(v => v.truckId === t.id && v.weekStart <= week).at(-1);
+      const applicable = latest?.endsBefore && latest.endsBefore <= week ? undefined : latest;
       const exactTerm = (data.terms ?? []).find(v => v.truckId === t.id && v.weekStart === week);
       const ownerId = t.ownerId;
       const termsMismatch = !!applicable && applicable.ownerId !== ownerId;

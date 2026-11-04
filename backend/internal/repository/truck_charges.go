@@ -17,6 +17,7 @@ type TruckTerm struct {
 	OwnerID      string `json:"ownerId"`
 	SharePercent string `json:"sharePercent"`
 	Version      int    `json:"version"`
+	EndsBefore   string `json:"endsBefore,omitempty"`
 }
 type TruckChargePhase struct {
 	TruckID     string `json:"truckId"`
@@ -59,15 +60,36 @@ type TruckChargeBulkResult struct {
 
 const MaxTruckChargeBulkSize = 1000
 
+// The first ownership period belonging to someone else ends the agreement.
+// Ignore periods that closed before the agreement's first Sunday, so a new
+// owner can set terms from the Monday of their acquisition week.
+const truckTermEndSQL = `SELECT min(CASE WHEN h.start_known
+ THEN greatest(s.week_start,date_trunc('week',h.assigned_at AT TIME ZONE 'America/New_York')::date)
+ ELSE s.week_start END)
+ FROM truck_ownership_history h WHERE h.truck_id=s.truck_id AND h.owner_id<>s.owner_id
+ AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>=((s.week_start+7)::timestamp AT TIME ZONE 'America/New_York'))`
+
+// s is the latest agreement on or before week. An expired agreement never
+// revives an older one, including when the truck returns to a previous owner.
+func truckTermCoversWeekSQL(week string) string {
+	return `coalesce((` + truckTermEndSQL + `)>` + week + `,true)`
+}
+
+const latestTruckTermForWeekSQL = `SELECT s.* FROM truck_settlement_terms s
+ WHERE s.truck_id=t.id AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1`
+
 func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
 	d := TruckChargeData{Terms: []TruckTerm{}, Phases: []TruckChargePhase{}}
-	rows, err := q.Query(ctx, `SELECT truck_id::text,week_start::text,owner_id::text,share_percent::text,version FROM truck_settlement_terms WHERE ($1::uuid[] IS NULL OR truck_id=ANY($1::uuid[])) ORDER BY week_start,truck_id`, payrollTruckIDs(ctx))
+	rows, err := q.Query(ctx, `SELECT s.truck_id::text,s.week_start::text,s.owner_id::text,s.share_percent::text,s.version,
+ coalesce((`+truckTermEndSQL+`)::text,'') FROM truck_settlement_terms s
+ WHERE ($1::uuid[] IS NULL OR s.truck_id=ANY($1::uuid[])) ORDER BY s.week_start,s.truck_id`, payrollTruckIDs(ctx))
 	if err != nil {
 		return d, err
 	}
 	for rows.Next() {
 		var v TruckTerm
-		if err = rows.Scan(&v.TruckID, &v.WeekStart, &v.OwnerID, &v.SharePercent, &v.Version); err != nil {
+		if err = rows.Scan(&v.TruckID, &v.WeekStart, &v.OwnerID, &v.SharePercent, &v.Version, &v.EndsBefore); err != nil {
 			rows.Close()
 			return d, err
 		}
@@ -328,12 +350,13 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	if previousOwner {
 		return chargeInvalid("Saved investor statements retain their owner; use a later effective week")
 	}
-	var active bool
-	if err = tx.QueryRow(ctx, `SELECT active AND NOT is_company FROM investors WHERE id=$1`, v.OwnerID).Scan(&active); err != nil {
+	var validOwner bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t `+truckOwnershipForWeekSQL+`
+ WHERE t.id=$2 AND i.id=$3 AND i.active AND NOT i.is_company)`, v.WeekStart, v.TruckID, v.OwnerID).Scan(&validOwner); err != nil {
 		return err
 	}
-	if !active {
-		return chargeInvalid("Choose an active investor")
+	if !validOwner {
+		return chargeInvalid("Choose the truck's active owner for the effective week")
 	}
 	var version int
 	if v.Version == 0 {

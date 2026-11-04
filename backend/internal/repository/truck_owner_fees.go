@@ -12,8 +12,7 @@ import (
 // Without investor terms, dated ownership supplies the recurring fee destination,
 // independently of load attribution. Conflicting loads/assignments require review
 // instead of hiding the fees. Explicit terms retain owner/mixed-week routing.
-func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, config TruckChargeData) error {
-	terms := applicableTruckTerms(config, source.WeekStart)
+func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, config TruckChargeData, terms map[string]TruckTerm) error {
 	needed := false
 	for _, phase := range config.Phases {
 		if _, configured := terms[phase.TruckID]; !configured && phase.Included && phase.WeekStart <= source.WeekStart {
@@ -37,18 +36,10 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
  EXISTS(SELECT 1 FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.driver_id=d.id
  AND (a.assigned_at AT TIME ZONE 'America/New_York')::date<=$1::date
  AND (a.unassigned_at IS NULL OR (a.unassigned_at AT TIME ZONE 'America/New_York')::date>=$1::date+7))
- FROM trucks t
- JOIN LATERAL (SELECT h.owner_id FROM truck_ownership_history h WHERE h.truck_id=t.id
- AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<$1::date+7)
- AND (h.unassigned_at IS NULL OR (h.unassigned_at AT TIME ZONE 'America/New_York')::date>=$1::date+7)
- ORDER BY h.assigned_at DESC LIMIT 1) ownership ON true
- JOIN investors i ON i.id=ownership.owner_id AND NOT i.is_company
+ FROM trucks t `+truckOwnershipForWeekSQL+`
  JOIN drivers d ON d.id=i.driver_id LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
- WHERE NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
- AND NOT EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.truck_id=t.id AND w.week_start=$1::date)
- AND NOT EXISTS(SELECT 1 FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.owner_id<>i.id
- AND (h.assigned_at AT TIME ZONE 'America/New_York')::date<$1::date+7
- AND (h.unassigned_at IS NULL OR (h.unassigned_at AT TIME ZONE 'America/New_York')::date>$1::date))`, source.WeekStart)
+ WHERE NOT i.is_company
+ AND NOT EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.truck_id=t.id AND w.week_start=$1::date AND w.owner_id=i.id)`, source.WeekStart)
 	if err != nil {
 		return err
 	}
@@ -59,7 +50,7 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 		if err = rows.Scan(&d.TruckID, &d.TruckUnit, &d.ID, &d.FullName, &d.PayType, &d.PayRate, &active, &d.DispatcherID, &d.DispatcherName, &fullWeek); err != nil {
 			return err
 		}
-		if !payrollIncludesTruck(ctx, d.TruckID) {
+		if _, configured := terms[d.TruckID]; configured || !payrollIncludesTruck(ctx, d.TruckID) {
 			continue
 		}
 		hasLoads := false

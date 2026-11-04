@@ -1556,7 +1556,7 @@ export interface PayrollSettlement { finalized: boolean; override?: boolean; ver
 export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; weekStart: string; revision: string; driverId?: string; reason?: string; override: boolean }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
 
-export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number }
+export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number; endsBefore?: string }
 export interface TruckChargePhase { truckId: string; typeId: string; weekStart: string; amount: string; included: boolean; version: number; typeVersion: number; moveScheduleId?: string; moveScheduleVersion?: number }
 export interface TruckChargeBulkResult { truckId: string; typeId: string; weekStart: string; error?: string }
 export interface TruckChargeOwner { truckId: string; ownerId: string; ownerName: string }

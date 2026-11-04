@@ -28,7 +28,8 @@ func (r *DriverPayRepository) InvestorHistory(ctx context.Context, owner string,
 		return Page[InvestorStatementWeek]{}, pgx.ErrNoRows
 	}
 	rows, err := tx.Query(ctx, `WITH terms AS (
- SELECT owner_id,week_start,lead(week_start) OVER(PARTITION BY truck_id ORDER BY week_start) AS next_week FROM truck_settlement_terms
+ SELECT s.owner_id,s.week_start,least(lead(s.week_start) OVER(PARTITION BY s.truck_id ORDER BY s.week_start),
+ (`+truckTermEndSQL+`)) AS next_week FROM truck_settlement_terms s
  ), weeks AS (
  SELECT generate_series(week_start,least(coalesce(next_week-7,$2::date),$2::date),'7 days')::date AS week FROM terms WHERE owner_id=$1
  UNION SELECT week_start FROM investor_pay_weeks WHERE owner_id=$1

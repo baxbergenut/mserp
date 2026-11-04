@@ -36,6 +36,11 @@ func applicableTruckTerms(data TruckChargeData, week string) map[string]TruckTer
 			}
 		}
 	}
+	for id, term := range result {
+		if term.EndsBefore != "" && term.EndsBefore <= week {
+			delete(result, id)
+		}
+	}
 	return result
 }
 func truckRecurringCharges(data TruckChargeData, types []ChargeType, truck, week string, hasLoads bool) []PayAutoCharge {
@@ -139,10 +144,10 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 	if err != nil {
 		return source, investor, err
 	}
-	if err = routeOwnerTruckFees(ctx, tx, &source, config); err != nil {
+	terms := applicableTruckTerms(config, source.WeekStart)
+	if err = routeOwnerTruckFees(ctx, tx, &source, config, terms); err != nil {
 		return source, investor, err
 	}
-	terms := applicableTruckTerms(config, source.WeekStart)
 	if len(terms) == 0 {
 		// Cost formatting must not depend on an unrelated truck's agreement
 		// being present in the calculation. Use the same exact-cent conversion
@@ -638,7 +643,8 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
     LEFT JOIN truck_driver_assignments assignment ON assignment.truck_id=t.id AND assignment.unassigned_at IS NULL
     LEFT JOIN drivers operator ON operator.id=assignment.driver_id
     LEFT JOIN dispatchers dispatcher ON dispatcher.id=operator.dispatcher_id
-	WHERE t.active AND `+investorTruckEligibility+` AND NOT coalesce(assignment.driver_id=i.driver_id,false) AND NOT EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=t.id AND s.week_start<=$1::date)
+	WHERE t.active AND `+investorTruckEligibility+` AND NOT coalesce(assignment.driver_id=i.driver_id,false)
+	AND NOT EXISTS(SELECT 1 FROM (`+latestTruckTermForWeekSQL+`) s WHERE `+truckTermCoversWeekSQL("$1::date")+`)
 	ORDER BY coalesce(d.full_name,i.full_name),t.unit_number`, result.WeekStart)
 		if err != nil {
 			return result, err

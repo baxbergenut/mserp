@@ -153,8 +153,8 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 		// A changed crew or investor agreement cannot silently acquire this load.
 		var safe bool
 		err = tx.QueryRow(ctx, `SELECT payroll_driver_at($1::uuid,$2::date)=payroll_driver_at($1::uuid,$3::date) AND
-  (SELECT coalesce(jsonb_agg(jsonb_build_array(owner_id,share_percent)), '[]') FROM (SELECT owner_id,share_percent FROM truck_settlement_terms WHERE truck_id=$4::uuid AND week_start<=$2::date ORDER BY week_start DESC LIMIT 1) x)
-  IS NOT DISTINCT FROM (SELECT coalesce(jsonb_agg(jsonb_build_array(owner_id,share_percent)), '[]') FROM (SELECT owner_id,share_percent FROM truck_settlement_terms WHERE truck_id=$4::uuid AND week_start<=$3::date ORDER BY week_start DESC LIMIT 1) x)`, input.DriverID, week.Format(time.DateOnly), next, truck).Scan(&safe)
+  (SELECT jsonb_build_array(owner_id,share_percent) FROM (SELECT * FROM truck_settlement_terms WHERE truck_id=$4::uuid AND week_start<=$2::date ORDER BY week_start DESC LIMIT 1) s WHERE `+truckTermCoversWeekSQL("$2::date")+`)
+  IS NOT DISTINCT FROM (SELECT jsonb_build_array(owner_id,share_percent) FROM (SELECT * FROM truck_settlement_terms WHERE truck_id=$4::uuid AND week_start<=$3::date ORDER BY week_start DESC LIMIT 1) s WHERE `+truckTermCoversWeekSQL("$3::date")+`)`, input.DriverID, week.Format(time.DateOnly), next, truck).Scan(&safe)
 		if err != nil {
 			return err
 		}

@@ -230,18 +230,17 @@ try {
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:join(tmpdir(),'mserp-truck-charges-narrow.png'),fullPage:true,animations:'disabled'});
   await page.setViewportSize({width:1440,height:1000});
-  // Fleet ownership wins over an older agreement, using the requested week.
+  // The old agreement applies only before the ownership transfer.
   datedOwners = true;
-  truckCharges.terms = [{ truckId: 'truck-a', ownerId: 'owner', weekStart: '2026-09-21', sharePercent: '88', version: 1 }];
+  truckCharges.terms = [{ truckId: 'truck-a', ownerId: 'owner', weekStart: '2026-09-21', endsBefore: week, sharePercent: '88', version: 1 }];
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   const ownerRow = page.locator('tbody tr').filter({ has: page.getByRole('link', { name: '201', exact: true }) });
   await expect(ownerRow.getByRole('link', { name: 'Felix & Den', exact: true })).toHaveAttribute('href', '/investors/detail?id=new-owner');
-  await expect(ownerRow.getByRole('button', { name: 'Review terms', exact: true })).toHaveAttribute('title', /Truck Owner/);
   await page.getByLabel('Search trucks').fill('Felix');
   await expect(page.locator('tbody tr')).toHaveCount(1);
-  await ownerRow.getByRole('button', { name: 'Review terms', exact: true }).click();
+  await ownerRow.getByRole('button', { name: 'Set terms', exact: true }).click();
   await expect(page.getByRole('dialog').locator('select')).toHaveValue('new-owner');
-  await expect(page.getByRole('dialog').getByRole('spinbutton')).toHaveValue('88');
+  await expect(page.getByRole('dialog').getByRole('spinbutton')).toHaveValue('');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByLabel('Search trucks').fill('');
   await page.getByRole('button', { name: 'Previous week', exact: true }).click();

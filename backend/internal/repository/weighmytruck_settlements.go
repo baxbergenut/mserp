@@ -51,7 +51,7 @@ type WMTBilling struct {
 // Resolve every ticket from its dated truck ownership and team relationship.
 // Legacy manual billing preferences are retained as history, never as routing
 // inputs. Missing/conflicting evidence stays in review instead of billing a driver.
-const wmtChargeFrom = ` FROM weighmytruck_transactions t
+var wmtChargeFrom = ` FROM weighmytruck_transactions t
  LEFT JOIN drivers d ON d.id=t.driver_id
  LEFT JOIN LATERAL(SELECT payroll_driver_at(t.driver_id,t.transaction_date) driver_id) pd ON true
  LEFT JOIN LATERAL(SELECT (array_agg(DISTINCT h.owner_id))[1] owner_id FROM truck_ownership_history h
@@ -61,7 +61,8 @@ const wmtChargeFrom = ` FROM weighmytruck_transactions t
  LEFT JOIN investors i ON i.id=ownership.owner_id
  CROSS JOIN LATERAL(SELECT CASE WHEN t.driver_id IS NULL OR i.id IS NULL OR t.match_warning LIKE '%conflicts%' THEN 'review'
  WHEN i.is_company THEN 'company' WHEN i.driver_id=pd.driver_id THEN 'driver' ELSE 'investor' END payer) b
- LEFT JOIN LATERAL(SELECT owner_id FROM truck_settlement_terms s WHERE s.truck_id=t.truck_id AND s.week_start<=date_trunc('week',t.transaction_date)::date ORDER BY s.week_start DESC LIMIT 1) s ON true
+ LEFT JOIN LATERAL(SELECT * FROM truck_settlement_terms s WHERE s.truck_id=t.truck_id AND s.week_start<=date_trunc('week',t.transaction_date)::date ORDER BY s.week_start DESC LIMIT 1) s
+ ON ` + truckTermCoversWeekSQL("date_trunc('week',t.transaction_date)::date") + `
  LEFT JOIN payroll_settlements ps ON ps.driver_id=pd.driver_id AND ps.week_start=date_trunc('week',t.transaction_date)::date AND ps.finalized
  LEFT JOIN investor_pay_weeks pw ON pw.truck_id=t.truck_id AND pw.week_start=date_trunc('week',t.transaction_date)::date AND pw.finalized
  LEFT JOIN LATERAL(SELECT coalesce(bool_or(f.kind<>b.payer OR f.destination<>CASE WHEN b.payer='driver' THEN pd.driver_id ELSE t.truck_id END),false) misplaced

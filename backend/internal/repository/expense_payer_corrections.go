@@ -106,8 +106,8 @@ func prepareExpensePayerCorrection(ctx context.Context, tx pgx.Tx, id string, in
 	if c.Truck != nil {
 		var conflict bool
 		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_payments p
- JOIN LATERAL (SELECT owner_id FROM truck_settlement_terms WHERE truck_id=$2 AND week_start<=p.week_start ORDER BY week_start DESC LIMIT 1) t ON true
- WHERE p.expense_id=$1 AND t.owner_id<>$3::uuid)
+ JOIN LATERAL (SELECT * FROM truck_settlement_terms WHERE truck_id=$2 AND week_start<=p.week_start ORDER BY week_start DESC LIMIT 1) s ON true
+ WHERE p.expense_id=$1 AND s.owner_id<>$3::uuid AND `+truckTermCoversWeekSQL("p.week_start")+`)
  OR EXISTS(SELECT 1 FROM investor_pay_weeks w JOIN expense_payments p ON p.week_start=w.week_start
  WHERE p.expense_id=$1 AND w.truck_id=$2 AND w.owner_id<>$3::uuid)`, id, c.Truck, owner).Scan(&conflict)
 		if err != nil {

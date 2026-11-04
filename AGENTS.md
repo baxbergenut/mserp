@@ -3143,8 +3143,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   GET /truck-charges accepts weekStart (Monday, current week by default) and
   returns owners from fleet ownership history at the selected week's end.
   Owner links, search, sorting and eligibility use that history, independently
-  of settlement terms. An agreement naming another owner shows Review terms;
-  ownership edits do not infer percentages or rewrite accounting agreements.
+  of settlement terms. A recorded transfer ends the prior agreement from that
+  week's Monday and retains it for earlier weeks. The new owner-driver uses
+  their Driver Pay tariff without a truck agreement. A new investor agreement
+  must name the owner for its effective week and specify an explicit share.
   Returning to the browser tab refreshes idle charge views.
   Inclusion is attached to trucks, never to the current driver. Counts open an
   Included trucks filter for the chosen charge; searching and selected week still
