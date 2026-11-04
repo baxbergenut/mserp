@@ -317,7 +317,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 						t.Fatal(kind, "settlement missing", investor, l)
 					}
 				}
-				additional := GrossBoardEntry{DriverID: driver, Date: mondayDay.Format(time.DateOnly), Slot: targetSlot + 1, LoadNumber: "ADDED-LOAD", OriginalRate: "100", DriverRate: "90", Miles: "10"}
+				additional := GrossBoardEntry{DriverID: driver, Date: mondayDay.Format(time.DateOnly), Slot: targetSlot + 1, LoadNumber: fmt.Sprintf("ADDED-LOAD-%d", i), OriginalRate: "100", DriverRate: "90", Miles: "10"}
 				if e = board.Save(ctx, []GrossBoardEntry{additional}); e != nil {
 					t.Fatal(kind, "cannot add beside transfer", e)
 				}
