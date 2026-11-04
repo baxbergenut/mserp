@@ -72,8 +72,9 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			const owner = "93000000-0000-0000-0000-000000000001"
 			const oldDispatcher = "94000000-0000-0000-0000-000000000001"
 			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES($1,'Transfer Driver','transfer driver','gross_percentage',25)`, driver)
-			exec(`INSERT INTO investors(id,full_name) VALUES($1,'Transfer Investor'); INSERT INTO trucks(id,unit_number) VALUES('`+truck+`','MOVE-1')`, owner)
-			exec(`UPDATE trucks SET owner_id=$1 WHERE id=$2; UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_id=$2 AND owner_id=$1`, owner, truck)
+			exec(`INSERT INTO investors(id,full_name) VALUES($1,'Transfer Investor');
+ INSERT INTO trucks(id,unit_number,owner_id) VALUES($2,'MOVE-1',$1);
+ UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_id=$2`, owner, truck)
 			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($1,$2,'2026-01-01');INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES($1,$3,'2026-01-05',90)`, truck, driver, owner)
 			exec(`INSERT INTO dispatchers(id,full_name,normalized_name) VALUES($1,'Original Dispatcher','original dispatcher'),('94000000-0000-0000-0000-000000000002','New Dispatcher','new dispatcher')`, oldDispatcher)
 			exec(`DELETE FROM driver_dispatcher_assignments WHERE driver_id=$1;INSERT INTO driver_dispatcher_assignments(driver_id,dispatcher_id,dispatcher_name,assigned_at,unassigned_at) VALUES($1,$2,'Original Dispatcher','2026-01-01','2026-10-26 00:00-04'),($1,'94000000-0000-0000-0000-000000000002','New Dispatcher','2026-10-26 00:00-04',NULL)`, driver, oldDispatcher)
