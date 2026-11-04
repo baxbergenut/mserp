@@ -130,24 +130,35 @@ load-state JSON and keyed by load and stop; switching stops does not copy a time
 to another stop. The input accepts up to 80 characters on one line so dispatchers
 can enter the local time and day in their own shorthand (for example, `14:00 MON`).
 
-## Opt-in Google car-route estimates
+## Budgeted TomTom and Google car-route estimates
 
-Default off. No Google calls or speed-tracking calls are made until enabled.
-On October 29, 2026, the operator chose traffic-aware car routes for Status Board
-ETA estimates. Requests use DRIVE with TRAFFIC_AWARE_OPTIMAL and request only
-duration and distance. No truck dimensions, weight, restrictions, toll calculation
-or navigation directions are requested. These calls use Compute Routes Pro rather
-than the large-vehicle Enterprise SKU. Actual billing depends on the account's
-usage and pricing. Never put keys in browser variables.
+Default off. No routing or speed-tracking calls are made until enabled.
+The November 4 policy uses TomTom first up to 20,000 monthly attempts, then
+Google Essentials up to 10,000. After both allowances, the explicitly configured
+paid provider continues routing. Production selects TomTom: verified standard
+overage pricing is $1/1,000 versus Google's $5/1,000. Prices are operator-verified,
+not scraped at runtime; recheck account rates before changing the paid provider.
+Sources: https://docs.tomtom.com/pricing and
+https://developers.google.com/maps/billing-and-pricing/pricing.
+
+Google uses DRIVE with TRAFFIC_UNAWARE and duration/distance only. TomTom uses
+Calculate Route with car, traffic=true, departAt=now, fastest, summaryOnly and no
+alternatives. Neither requests truck restrictions or toll prices. Stored travel
+assumptions identify the provider and traffic mode. Never put keys in browser variables.
 
 Server environment:
 
 ```dotenv
 BOARD_ROUTES_ENABLED=false
 BOARD_ROUTES_API_KEY=...
+TOMTOM_ROUTING_API_KEY=...
 BOARD_ROUTES_ACCESS_VERIFIED=true
 BOARD_ROUTES_OPERATIONS_VERIFIED=true
 BOARD_ROUTES_REQUESTS_PER_MINUTE=30
+BOARD_ROUTES_TOMTOM_MONTHLY_FREE=20000
+BOARD_ROUTES_GOOGLE_MONTHLY_FREE=10000
+BOARD_ROUTES_PAID_PROVIDER=tomtom
+BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE=UTC
 FIVE_ELD_SPEED_VERIFIED=true
 FIVE_ELD_SPEED_UNIT=mph
 ```
@@ -160,6 +171,35 @@ BOARD_ROUTES_STANDARD_SEMI and BOARD_ROUTES_PROFILES_FILE settings are ignored;
 car estimates do not require truck profiles. Keep real keys out of commits,
 including tracked development environment files.
 
+Migration 197 adds board_route_usage, keyed by provider and billing month, with
+requests, paid_requests and last_attempt_at. It is unrelated to payroll. A separate
+transaction advisory lock serializes provider selection and commits each attempt
+before HTTP. Restarts, multiple workers, changed destinations and failed/unknown
+responses cannot bypass counting. No refunds or immediate cross-provider retries
+occur. Database failure stops routing. Redirects are disabled; TomTom GETs use
+fresh connections to prevent automatic replay after a reused connection fails.
+
+Google months use America/Los_Angeles. TomTom defaults to UTC; configure its actual
+account billing timezone if different. New month rows start at zero, retaining
+earlier counters. Counters cover this worker only. Before activation, reconcile
+existing same-SKU account usage into the current month rows, or lower the free
+thresholds to reserve that usage. Previous Google traffic-aware Pro calls use a
+different SKU from the new Essentials requests. Failed attempts are conservatively
+counted even when the provider does not bill them.
+
+Free thresholds can be lowered, including zero, but not raised above the published
+allowances. A missing key excludes that provider; a configured paid provider must
+have a key. BOARD_ROUTES_PAID_PROVIDER defaults to off (hard stop after free usage);
+tomtom or google explicitly permits paid continuation. Production uses tomtom per
+operator instruction. Provider-side billing/prepaid balance must permit overage.
+
+Read-only operator usage query:
+
+```sql
+SELECT provider, month_start, requests, paid_requests, last_attempt_at
+FROM board_route_usage ORDER BY month_start DESC, provider;
+```
+
 Disable BOARD_ROUTES_ENABLED and restart to stop routing; cached automatic values
 are disabled by the next worker pass. Manual entry remains usable. Matched
 selections with missing/invalid GPS still report routing as enabled and explain
@@ -167,11 +207,11 @@ why an estimate is unavailable. Valid stale coordinates can bootstrap last-known
 road miles without querying tracking data or inventing movement.
 
 The minute worker retains independent last-success times and route origins for
-each board truck/driver context. Routine routing requires BOTH 30 minutes since
+each board truck/driver context. Routine routing requires BOTH 90 minutes since
 the last successful calculation AND at least one straight-line mile from that
 successful route origin. Skipped polls never reset either baseline. Movement is
 checked against shared cached Five ELD coordinates before any tracking request,
-then checked again against the actual tracking point before calling Google.
+then checked again against the actual tracking point before calling the route provider.
 Unchanged or sub-mile positions reuse the cached distance, even after a long rest.
 
 A changed load, selected stop, destination coordinates, assigned truck/crew/VIN
@@ -185,7 +225,7 @@ baseline once; no database migration is needed.
 
 The worker has a forty-second run budget. Requests remain serial and globally
 paced per active worker (default 30/minute, configurable 1-120), with fifteen-second
-Google timeouts and one-minute error/five-minute 429 cooldowns. Queue capacity and
+provider timeouts and one-minute error/five-minute 429 cooldowns. Queue capacity and
 provider errors can delay a refresh beyond the next minute pass. Five ELD requests
 reuse the client's roster identity cache; source mileage values are never rewritten.
 
@@ -205,14 +245,14 @@ clear the old distance and route to the newly selected stop. A fresh stationary
 point after a long rest does not discard the last stopped state. Unknown fresh
 movement or missing/invalidated routes suppress
 output. Temporary errors retain a prior valid distance with a hover warning;
-live moving ETAs remain valid between 30-minute refreshes while shared GPS is fresh,
+live moving ETAs remain valid between 90-minute refreshes while shared GPS is fresh,
 with a five-minute route-age grace period. Older routes show last-known miles.
 Results are fenced against the selected load/stop/source revision
 and current truck before committing.
 
 When enabled, a blank ETA displays the automatic estimate. Applying a manual
 time or mileage takes precedence; clearing it restores the automatic estimate.
-These are traffic-aware travel
+These are provider-specific travel
 estimates, excluding driver breaks, remaining HOS, planned stops and loading delays;
 there is no explicit weather-forecast adjustment.
 

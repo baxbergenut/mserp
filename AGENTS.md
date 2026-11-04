@@ -814,15 +814,22 @@ and requires no schema migration.
   are removed and legacy mode choices have no effect. Notes are never rewritten. Unique imported loads can
   resolve without Gross Board plans; entering a load is the operational assignment,
   even when DataTruck lists a different driver, without an extra confirmation.
-  A startup/minute cache-only GPS evaluator never advances progress. Google
+  A startup/minute cache-only GPS evaluator never advances progress. Provider
   routing is default off and requires explicit access/operations/speed verification.
-  The operator chose traffic-aware DRIVE/car estimates on October 29, 2026;
-  request only duration/distance, without truck restrictions or toll calculations.
+  Routing uses TomTom traffic-aware car estimates first (20,000/month), then
+  Google DRIVE/TRAFFIC_UNAWARE Essentials (10,000/month). Migration 197 records
+  durable pre-HTTP attempt reservations in board_route_usage, unrelated to payroll.
+  BOARD_ROUTES_PAID_PROVIDER defaults off; production explicitly uses tomtom after
+  both allowances, the cheaper provider at November 4 verified rates.
+  TOMTOM_ROUTING_API_KEY supplies its key. BOARD_ROUTES_TOMTOM_MONTHLY_FREE and
+  BOARD_ROUTES_GOOGLE_MONTHLY_FREE can reduce the allowances. Google months use
+  Pacific time; BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE defaults UTC. Reconcile existing
+  same-SKU account usage before activation. No truck restrictions or toll prices.
   Legacy `BOARD_ROUTES_STANDARD_SEMI`/`BOARD_ROUTES_PROFILES_FILE` are ignored.
-  Each truck context refreshes after 30 minutes AND one straight-line mile from
+  Each truck context refreshes after 90 minutes AND one straight-line mile from
   the last successful route origin. Skipped polls never reset either baseline.
   Cached GPS gates tracking calls; the tracking origin is checked again before
-  Google. Load/stop/destination-coordinate/truck-context changes bypass both gates
+  routing. Load/stop/destination-coordinate/truck-context changes bypass both gates
   on the next minute pass and take queue priority. Failed attempts back off five
   minutes. Old truck-route caches establish a DRIVE baseline once.
   `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
@@ -830,8 +837,8 @@ and requires no schema migration.
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
   Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
-  moving ETAs require GPS within ten minutes and a route within 35 minutes
-  (30-minute refresh plus five-minute queue grace), otherwise show last-known miles.
+  moving ETAs require GPS within ten minutes and a route within 95 minutes
+  (90-minute refresh plus five-minute queue grace), otherwise show last-known miles.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
   proximity/freshness rules and rollout. ETA times round to the nearest 15 minutes;
   cell hover shows only facility-local ETA (offline coordinate timezone lookup).

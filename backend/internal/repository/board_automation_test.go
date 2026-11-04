@@ -373,7 +373,7 @@ func TestBoardTravelETARounding(t *testing.T) {
 func TestBoardTravelRefreshSchedule(t *testing.T) {
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
 	base := BoardTravel{Enabled: true, Context: "load-a", Mode: boardroutes.TravelMode, Source: "five_eld",
-		CalculatedAt: now.Add(-31 * time.Minute), AttemptedAt: now.Add(-31 * time.Minute),
+		CalculatedAt: now.Add(-91 * time.Minute), AttemptedAt: now.Add(-91 * time.Minute),
 		Position: &boardRoutePosition{Latitude: 40, Longitude: -74}}
 	for _, tc := range []struct {
 		name   string
@@ -382,8 +382,8 @@ func TestBoardTravelRefreshSchedule(t *testing.T) {
 		want   bool
 	}{
 		{"moved and due", nil, "load-a", true},
-		{"independent timer not due", func(t *BoardTravel, _ *DriverBoardLocation) { t.CalculatedAt = now.Add(-29 * time.Minute) }, "load-a", false},
-		{"thirty minute boundary", func(t *BoardTravel, _ *DriverBoardLocation) { t.CalculatedAt = now.Add(-30 * time.Minute) }, "load-a", true},
+		{"independent timer not due", func(t *BoardTravel, _ *DriverBoardLocation) { t.CalculatedAt = now.Add(-89 * time.Minute) }, "load-a", false},
+		{"ninety minute boundary", func(t *BoardTravel, _ *DriverBoardLocation) { t.CalculatedAt = now.Add(-90 * time.Minute) }, "load-a", true},
 		{"unchanged fresh GPS", func(_ *BoardTravel, l *DriverBoardLocation) { l.Latitude = 40 }, "load-a", false},
 		{"sub-mile movement", func(_ *BoardTravel, l *DriverBoardLocation) { l.Latitude = 40.01 }, "load-a", false},
 		{"new load bypasses timer and movement", func(t *BoardTravel, l *DriverBoardLocation) {
@@ -428,14 +428,14 @@ func TestBoardTravelRefreshSchedule(t *testing.T) {
 func TestBoardTravelFreshnessBetweenRefreshes(t *testing.T) {
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
 	travel := BoardTravel{Enabled: true, Context: "load", Motion: "moving", Miles: 100,
-		CalculatedAt: now.Add(-25 * time.Minute), ReportedAt: now.Add(-25 * time.Minute), ArrivalAt: now.Add(time.Hour)}
+		CalculatedAt: now.Add(-85 * time.Minute), ReportedAt: now.Add(-85 * time.Minute), ArrivalAt: now.Add(time.Hour)}
 	if got, _ := travel.display("load", now, now); got != "ETA 09:00" || travel.stale(now, now) {
 		t.Fatal("fresh GPS did not retain the ETA between paid route refreshes", got)
 	}
 	if got, _ := travel.display("load", now, now.Add(-11*time.Minute)); got != "100mi" {
 		t.Fatal("stale GPS retained live ETA", got)
 	}
-	travel.CalculatedAt = now.Add(-36 * time.Minute)
+	travel.CalculatedAt = now.Add(-96 * time.Minute)
 	if got, _ := travel.display("load", now, now); got != "100mi" || !travel.stale(now, now) {
 		t.Fatal("expired route retained live ETA", got)
 	}
@@ -594,8 +594,9 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		_, _ = w.Write([]byte(`{"routes":[{"duration":"3600s","distanceMeters":160934,"travelAdvisory":{"routeRestrictionsPartiallyIgnored":false}}]}`))
 	}))
 	defer routeServer.Close()
-	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, SpeedUnit: "mph", RequestsPerMinute: 120})
+	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, APIKey: "fixture", SpeedUnit: "mph", RequestsPerMinute: 120, GoogleMonthlyFree: 10000, TomTomBillingTimezone: "UTC"})
 	routes.URL = routeServer.URL
+	routes.Budget = boardroutes.NewPostgresBudget(pool)
 	// A just-edited destination must settle before any paid provider request.
 	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET route_not_before=$2 WHERE driver_id=$1`, d.ID, now.Add(5*time.Second)); err != nil {
 		t.Fatal(err)
@@ -717,23 +718,23 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if _, err := pool.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{enabled}','false') WHERE driver_id=$1`, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	checkRefresh(31, 40.49211, 40.49211, 0, 0)
+	checkRefresh(91, 40.49211, 40.49211, 0, 0)
 	if err := pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.Enabled {
 		t.Fatal("reenabling stationary routing did not restore the cached estimate", cached, err)
 	}
-	checkRefresh(32, 40.49811, 40.49811, 0, 0)
-	checkRefresh(33, 40.51011, 40.51011, 1, 1)
-	checkRefresh(34, 40.55011, 40.55011, 0, 0)
+	checkRefresh(92, 40.49811, 40.49811, 0, 0)
+	checkRefresh(93, 40.51011, 40.51011, 1, 1)
+	checkRefresh(94, 40.55011, 40.55011, 0, 0)
 	// Updating coordinates on the same selected stop bypasses both gates.
 	if _, err := pool.Exec(ctx, `UPDATE loads SET raw_payload=jsonb_set(raw_payload,'{stops,0,location,latitude}','"40.42"') WHERE id=99115`); err != nil {
 		t.Fatal(err)
 	}
-	checkRefresh(35, 40.51011, 40.51011, 1, 1)
-	checkRefresh(36, 40.54011, 40.54011, 0, 0)
-	checkRefresh(65, 40.54011, 40.54011, 1, 1)
+	checkRefresh(95, 40.51011, 40.51011, 1, 1)
+	checkRefresh(96, 40.54011, 40.54011, 0, 0)
+	checkRefresh(185, 40.54011, 40.54011, 1, 1)
 	// A newer shared GPS position must not reroute an unchanged tracking point.
-	checkRefresh(96, 40.57011, 40.54011, 0, 1)
-	if err := pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.Position == nil || cached.Position.Latitude != 40.54011 || !cached.CalculatedAt.Equal(now.Add(65*time.Minute)) {
+	checkRefresh(276, 40.57011, 40.54011, 0, 1)
+	if err := pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.Position == nil || cached.Position.Latitude != 40.54011 || !cached.CalculatedAt.Equal(now.Add(185*time.Minute)) {
 		t.Fatal("skipped poll changed the successful route baseline or timer", cached, err)
 	}
 	repo.now = originalClock

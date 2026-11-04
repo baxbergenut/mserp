@@ -30,14 +30,14 @@ type BoardTravel struct {
 	Mode              string              `json:"mode,omitempty"`
 }
 
-// Position belongs to the last successful Google route, never to a skipped poll.
+// Position belongs to the last successful provider route, never to a skipped poll.
 type boardRoutePosition struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 }
 
 const (
-	boardRouteInterval       = 30 * time.Minute
+	boardRouteInterval       = 90 * time.Minute
 	boardRouteRetryInterval  = 5 * time.Minute
 	boardRouteMaxAge         = boardRouteInterval + 5*time.Minute
 	boardRouteMovementMeters = 1609.344
@@ -349,7 +349,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 					t.ArrivalAt = point.Date.Add(estimate.Duration)
 				}
 				t.Miles = float64(estimate.Meters) / 1609.344
-				t.Assumptions, t.LastKnownPosition = boardroutes.EstimateAssumptions, job.lastKnown
+				t.Assumptions, t.LastKnownPosition = estimate.Assumptions, job.lastKnown
 			}
 		}
 		if err = r.storeBoardTravel(ctx, job.driver.ID, job.driver.TruckID, job.view.Revision, a.Context, t); err != nil {

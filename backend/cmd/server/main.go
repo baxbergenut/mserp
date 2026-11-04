@@ -427,6 +427,7 @@ func main() {
 		defer close(boardAutomationDone)
 		repo := repository.NewDriverBoardRepository(pool, cfg.FiveELDEnabled || cfg.Samsara.Token != "")
 		routes := boardroutes.NewClient(cfg.BoardRoutes)
+		routes.Budget = boardroutes.NewPostgresBudget(pool)
 		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "board-automation", Interval: time.Minute, Run: func(runCtx context.Context) error {
 			bounded, cancel := context.WithTimeout(runCtx, 40*time.Second)
 			defer cancel()
