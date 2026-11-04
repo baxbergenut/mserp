@@ -82,6 +82,11 @@ func TestDriverPayDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(modifiedMigration), "\r\n", "\n"), "", 1)
+				routeUsageMigration, readErr := os.ReadFile("../../sql/197_board_route_usage.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(routeUsageMigration), "\r\n", "\n"), "", 1)
 				driverGrossMigration, readErr := os.ReadFile("../../sql/195_datatruck_driver_gross.sql")
 				if readErr != nil {
 					t.Fatal(readErr)
@@ -269,7 +274,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
 				applyClustieLoadAssignments(t, ctx, admin)
-				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql", "../../sql/187_load_source_availability.sql", "../../sql/188_status_board_operational.sql", "../../sql/189_payroll_current_storage.sql", "../../sql/191_payroll_pti_classification.sql", "../../sql/192_payroll_unrelated_sources.sql", "../../sql/193_payroll_unassigned_company_expenses.sql", "../../sql/195_datatruck_driver_gross.sql", "../../sql/196_datatruck_modified_sync.sql"} {
+				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql", "../../sql/187_load_source_availability.sql", "../../sql/188_status_board_operational.sql", "../../sql/189_payroll_current_storage.sql", "../../sql/191_payroll_pti_classification.sql", "../../sql/192_payroll_unrelated_sources.sql", "../../sql/193_payroll_unassigned_company_expenses.sql", "../../sql/195_datatruck_driver_gross.sql", "../../sql/196_datatruck_modified_sync.sql", "../../sql/197_board_route_usage.sql"} {
 					migration, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)

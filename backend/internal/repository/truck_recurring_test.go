@@ -73,6 +73,10 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 	if e != nil {
 		t.Fatal(e)
 	}
+	routeUsageMigration, e := os.ReadFile("../../sql/197_board_route_usage.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("truck_recurring_%d", time.Now().UnixNano())
@@ -118,6 +122,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
 				prior = withoutUnrelatedPayrollMigration(t, withoutPTIPayrollMigration(t, prior))
 				prior = strings.Replace(prior, strings.ReplaceAll(string(modifiedSyncMigration), "\r\n", "\n"), "", 1)
+				prior = strings.Replace(prior, strings.ReplaceAll(string(routeUsageMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(sourceMigration), "\r\n", "\n"), "", 1)
 				exec(withoutAccountingCutoverMigration(t, withoutTruckRecurringMigration(t, prior)))
 				exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,active,status) VALUES('81000000-0000-0000-0000-000000000001','Old recurring','old recurring','cpm',0,false,'terminated');
@@ -179,6 +184,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				applyPTIPayrollMigration(t, ctx, admin)
 				applyUnrelatedPayrollMigration(t, ctx, admin)
 				exec(string(modifiedSyncMigration))
+				exec(string(routeUsageMigration))
 			}
 			exec("GRANT USAGE ON SCHEMA " + q + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + q + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + q + " TO mserp_app")
 			app := cfg.Copy()
