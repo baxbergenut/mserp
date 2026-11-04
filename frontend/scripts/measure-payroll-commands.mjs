@@ -11,7 +11,10 @@ const runs = Number(process.env.MSERP_PERF_RUNS || 20);
 assert(Number.isInteger(runs) && runs > 0);
 const kinds = (process.env.MSERP_PERF_KINDS || 'driver,investor').split(',');
 assert(kinds.every(k => ['driver', 'investor'].includes(k)));
+const groups = (process.env.MSERP_PERF_GROUPS || '1,171').split(',').map(Number);
+assert(groups.every(n => Number.isInteger(n) && n >= 1 && n <= 176));
 const weekStart = '2026-10-19', samples = [];
+let phase = 'first';
 const client = await request.newContext({ baseURL: access.base, timeout: 120000 });
 const login = await client.post('/api/auth/login', { data: { email: access.email, password: access.password } });
 assert(login.ok(), `login ${login.status()}`);
@@ -22,7 +25,7 @@ async function call(kind, action, path, method = 'GET', data, record = true) {
   const response = await client.fetch(path, { method, headers, data });
   const body = await response.json(), elapsed = performance.now() - start;
   const timing = response.headers()['server-timing'] || '';
-  if (record) samples.push({ kind, action, status: response.status(), ms: elapsed,
+  if (record) samples.push({ kind, action, phase, status: response.status(), ms: elapsed,
     appMS: metric(timing, 'app'), queries: metric(timing, 'queries'), calculations: metric(timing, 'payroll_calculations') });
   assert(response.ok(), `${kind} ${action}: ${response.status()} ${JSON.stringify(body).slice(0, 300)}`);
   return body;
@@ -41,7 +44,11 @@ async function detail(kind, id, record = true) {
 try {
   for (const kind of kinds) {
     // Group 1 has a large historical assignment component; 171 is independent.
-    for (const group of [1, 171]) {
+    for (const group of groups) {
+      // Every fourth synthetic owner is paid through the driver statement.
+      // There is deliberately no separate investor statement for that truck.
+      if (kind === 'investor' && group % 4 === 0) continue;
+      phase = 'first';
       const id = idFor(`${kind === 'driver' ? 'driver' : 'truck'}${group}`);
       const initial = await detail(kind, id, false);
       const invoice = initial.drivers[0].edits.expenseDeductions?.find(row => row.liveBalance && !row.source && !row.saved);
@@ -57,6 +64,7 @@ try {
         }
       }
       for (let n = 0; n < runs; n++) {
+        phase = n === 0 ? 'first' : 'repeat';
         await call(kind, 'summary', summary(kind));
         let report = await detail(kind, id), card = report.drivers[0];
         assert(!card.settlement?.finalized, 'fixture must begin open');
@@ -80,11 +88,11 @@ try {
   }
 } finally {
   const stats = [];
-  for (const kind of ['expense', ...kinds]) for (const action of ['summary', 'detail', 'save', 'finalize', 'reopen']) {
-    const rows = samples.filter(s => s.kind === kind && s.action === action);
+  for (const kind of ['expense', ...kinds]) for (const action of ['summary', 'detail', 'save', 'finalize', 'reopen']) for (const phase of ['first', 'repeat']) {
+    const rows = samples.filter(s => s.kind === kind && s.action === action && s.phase === phase);
     if (!rows.length) continue;
     const percentile = (key, p) => rows.map(s => s[key]).sort((a, b) => a - b)[Math.ceil(rows.length * p) - 1];
-    stats.push({ kind, action, n: rows.length, failures: rows.filter(s => s.status >= 400).length,
+    stats.push({ kind, action, phase, n: rows.length, failures: rows.filter(s => s.status >= 400).length,
       medianMS: percentile('ms', .5), p95MS: percentile('ms', .95), appP95MS: percentile('appMS', .95),
       medianQueries: percentile('queries', .5), maxCalculations: percentile('calculations', 1) });
   }

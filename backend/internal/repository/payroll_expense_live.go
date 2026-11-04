@@ -43,7 +43,8 @@ func overlayDriverExpenseBalances(ctx context.Context, tx pgx.Tx, report *Driver
  SELECT s.id statement,e.*,expense_collectible_total(e) total,expense_collectible_total(e)-expense_external_total(e.id) collectible
  FROM scopes s JOIN expenses e ON e.charge_driver_id=ANY(s.drivers)
  WHERE lower(btrim(e.covered_by))='driver' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse'
- AND e.amount>=0 AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0)
+ AND e.amount>=0 AND (NOT e.driver_settled OR e.id IN (
+ SELECT expense_id FROM expense_balance_corrections GROUP BY expense_id HAVING sum(remaining-previous)<>0))
  AND accounting_live_source('expense',e.id,e.expense_date)
  ), balances AS (
  SELECT e.*,coalesce(p.paid,0) paid,w.amount posted,

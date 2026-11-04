@@ -40,6 +40,12 @@ the changed statement's generation. It leaves the weekly header and other
 statements' certificates intact. Shadow reconciliation applies the same live
 expense overlay before comparing the independently calculated financial report.
 
+Reopening classifies the exact reversed driver expense events using the same
+membership proof. Metadata-only resource-mode reopening preserves the other payroll
+page. The reopened statement still rebuilds from current sources: frozen values
+cannot establish what today's open statement should contain. Recurring confirmation
+or non-live ledger changes retain normal impact routing.
+
 Statement-local notes, adjustments and ordinary expense choices do not write
 unchanged source/cost ledgers. The comparison uses the locked server card. Explicit
 cost overrides, recurring changes and reimbursement/escrow applications retain
@@ -92,3 +98,72 @@ locking, freshness validation, posting, frozen publication and receipt. They are
 not production latency percentiles or a completed performance acceptance result.
 The optional `MSERP_PAYROLL_SQL_DIAGNOSTIC=1` records SQL only in disposable tests;
 production instrumentation records counts and fingerprints, not argument values.
+
+The 47-call diagnostic breaks down into 18 transaction/resource/receipt setup calls,
+13 current-statement/source checks, five expense-posting and balance/proof calls,
+eight freeze/publication calls, and three receipt/commit calls. Only three calls
+directly lock/post/touch the ordinary invoices. Counts include BEGIN/ROLLBACK/COMMIT
+and do not count SQL executed inside PostgreSQL triggers. Before/after-lock resource
+discovery is deliberate; removing it admits changes between discovery and lock acquisition.
+
+Migration 198 also replaces quadratic resource claim/lock comparisons with set
+differences. All epoch, declared-claim, domain-gate and actual advisory-lock checks
+remain. A rollback-only SQL measurement with 3,803 locked resources reduced the
+expense-payment trigger from 860 ms to 23 ms (complete insert: 905 ms to 60 ms).
+`TestPayrollResourceClaimSetsDatabase` rejects missing claims/locks/gates, obsolete
+epochs, empty sets and NULL keys on fresh and incrementally migrated schemas.
+
+Three days of production HTTP logs ending November 4, 2026, before this deployment
+showed the following mixed-release timings. Errors remain in these distributions;
+SSE connection lifetimes, presence requests and ancillary routes are excluded.
+These are server request durations, not browser interaction latency.
+
+| Route/scenario | Method | Requests | Errors | Median ms | p95 ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Status Board | GET | 11,304 | 18 | 321 | 2,967 |
+| Status Board | PUT | 971 | 49 | 92 | 11,589 |
+| Gross Board | GET | 2,313 | 11 | 1,524 | 6,460 |
+| Gross Board | PUT | 365 | 36 | 362 | 13,756 |
+| Driver Pay summary | GET | 1,787 | 54 | 524 | 4,576 |
+| Driver Pay summary with details | GET | 14,234 | 109 | 942 | 4,847 |
+| Driver Pay save | PUT | 108 | 20 | 2,205 | 13,071 |
+| Driver Pay finalize | POST | 100 | 6 | 975 | 6,664 |
+| Driver Pay reopen | POST | 19 | 1 | 2,125 | 5,534 |
+| Investor Pay summary | GET | 300 | 5 | 220 | 1,161 |
+| Investor Pay summary with details | GET | 107 | 1 | 472 | 1,168 |
+
+There were no Investor Pay PUT/finalize/reopen requests in this captured window.
+Board optimizations already on main are separate from this expense lifecycle change.
+
+### Large local HTTP run, November 4
+
+The isolated fixture has 176 drivers/trucks/investors, 7,392 loads, 6,000 expenses,
+6,000 tolls and 11,449 fuel transactions, with dense historical assignment links.
+It retains the production first-week boundary of October 19. The run exercised
+36 driver statements and 27 eligible investor statements, twice each, through the
+authenticated HTTP API. All 702 recorded requests succeeded. Times below are local
+HTTP wall times; they do not establish production p95 or include WAN latency.
+
+| Action | Samples | Median ms | p95 ms | Median DB calls |
+| --- | ---: | ---: | ---: | ---: |
+| Driver expense PUT | 72 | 20 | 69 | 25 |
+| Driver summary GET, first cycle | 36 | 81 | 108 | 17 |
+| Driver detail GET, first cycle | 36 | 30 | 40 | 19 |
+| Driver notes PUT, first cycle | 36 | 106 | 170 | 48 |
+| Driver first finalize POST | 36 | 991 | 1,193 | 186 |
+| Driver repeat finalize POST | 36 | 202 | 319 | 46 |
+| Driver reopen POST, first cycle | 36 | 530 | 640 | 99 |
+| Investor summary GET, first cycle | 27 | 42 | 46 | 25 |
+| Investor detail GET, first cycle | 27 | 28 | 32 | 26 |
+| Investor notes PUT, first cycle | 27 | 91 | 112 | 37 |
+| Investor finalize POST, first cycle | 27 | 130 | 157 | 43 |
+| Investor reopen POST, first cycle | 27 | 467 | 556 | 110 |
+
+Expense saves, notes saves and repeat finalization performed zero payroll
+calculations. First driver finalization posted other ledgers and performed up to
+four calculations across the two retained weeks. Reopening performed one current
+statement calculation. Repeat reopen p95 was 727 ms for Driver Pay and 595 ms for
+Investor Pay. The 300 ms target is **not achieved for every operation**. The next
+performance work is the non-live cost/escrow posting and prepared projection
+publication path; do not remove financial fences to claim that target. No production
+expense or statement was modified for these measurements.

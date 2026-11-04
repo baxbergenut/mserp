@@ -82,6 +82,11 @@ and requires no schema migration.
   expense events avoid cross-period publication only when independent statement
   membership is retained. Unknown routing/membership uses full publication. Notes,
   adjustments and ordinary expense choices do not post unchanged displayed costs.
+  Resource claim validation uses set differences for both declared keys and actual
+  advisory locks; preserve the epoch, domain-gate and missing-lock rejection checks.
+  A proven driver expense reversal is live too. Metadata-only resource-mode reopening
+  preserves the other payroll page, while rebuilding the reopened statement from
+  current sources. Detail reads scope the live overlay to the requested statement.
   Install the matching deploy helper before 198: it stops writers and rejects older
   binaries after the cutover. Only allocations proven to belong to open current
   statements are converted; finalized and unreferenced payments remain untouched.

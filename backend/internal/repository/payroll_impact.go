@@ -17,7 +17,7 @@ type payrollPublicationImpact struct {
 	weeks         map[string]bool // nil means every materialized week may be affected.
 	refreshHeader bool
 	loadIDs       []int64 // Changed sources need new immutable facts before publication.
-	finalizedKind string  // Metadata-only freezing preserves the other page's values.
+	finalizedKind string  // Metadata-only freeze/reopen preserves the other page's values.
 	changeIDs     []int64 // Complete captured events for source/command revision proofs.
 	liveOnly      bool    // Base membership is certified; only dynamic expense balances changed.
 }
@@ -508,8 +508,8 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		}
 		if !legacy {
 			impact.weeks = changedWeeks
-			if strings.HasSuffix(c.name, ".finalize") {
-				impact.finalizedKind = strings.TrimSuffix(c.name, ".finalize")
+			if strings.HasSuffix(c.name, ".finalize") || (payrollConcurrent(tx) && strings.HasSuffix(c.name, ".reopen")) {
+				impact.finalizedKind = strings.TrimSuffix(strings.TrimSuffix(c.name, ".finalize"), ".reopen")
 			}
 		}
 	}

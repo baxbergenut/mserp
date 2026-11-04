@@ -149,8 +149,9 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	}
 	// Shared maps are evaluated once per source baseline, not once per row.
 	rows, err := tx.Query(ctx, payrollStatementFreshnessSQL+
-		`SELECT id::text,summary,resources_current,sources_current FROM freshness ORDER BY summary->>'fullName',statement_id`,
-		week, kind, query.StatementRevision, proofs)
+		`SELECT id::text,summary,resources_current,sources_current FROM freshness
+ WHERE ($5='' OR statement_id=nullif($5,'')::uuid) ORDER BY summary->>'fullName',statement_id`,
+		week, kind, query.StatementRevision, proofs, query.ID)
 	if err != nil {
 		return result, err
 	}
@@ -248,7 +249,7 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	if query.ID != "" && len(result.Report.Drivers) == 1 && result.Statements[query.ID].State == "ready" {
 		result.State = "ready"
 	}
-	if kind == "driver" {
+	if kind == "driver" && len(details) != 0 {
 		if err = overlayDriverExpenseBalances(ctx, tx, &result.Report); err != nil {
 			return result, err
 		}

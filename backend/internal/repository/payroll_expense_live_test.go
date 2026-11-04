@@ -109,9 +109,18 @@ func TestPayrollLiveDriverExpenseDatabase(t *testing.T) {
 			}
 		}
 		frozen := read(false)
-		if _, err = repo.Settle(WithPayrollReceipt(ctx), week, projectionDriver, frozen.Revision, actor, "Review choice", true, false,
+		var investorRevision string
+		if err = pool.QueryRow(ctx, `SELECT version_id::text FROM payroll_statement_state WHERE kind='investor' AND week_start=$1 LIMIT 1`, week).Scan(&investorRevision); err != nil {
+			t.Fatal(err)
+		}
+		reopenCtx, reopenMetrics := db.WithMetrics(WithPayrollReceipt(ctx))
+		if _, err = repo.Settle(reopenCtx, week, projectionDriver, frozen.Revision, actor, "Review choice", true, false,
 			PayrollSettlementCommand{RequestID: "19800000-0000-0000-0000-000000000003", ExpectedStatementRevision: frozen.Drivers[0].StatementRevision}); err != nil {
 			t.Fatal("reopen for choice", err)
+		}
+		var preserved bool
+		if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_statement_state WHERE kind='investor' AND version_id::text=$1)`, investorRevision).Scan(&preserved); err != nil || !preserved || reopenMetrics.Events()["payroll_calculation"] != 1 {
+			t.Fatal("expense reopen rebuilt unrelated statements", preserved, err, reopenMetrics.Events())
 		}
 		open := read(false)
 		edit := open.Drivers[0].Edits

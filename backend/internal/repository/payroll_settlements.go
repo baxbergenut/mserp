@@ -354,6 +354,14 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		if err = reversePayrollExpenses(ctx, tx, "driver", report.WeekStart, payrollReceipt(report, selectedIDs).Drivers); err != nil {
 			return empty, err
 		}
+		if prepared && payrollConcurrent(tx) {
+			// Reversing an ordinary driver expense changes the live balance, just
+			// like posting it. Certify those exact events before impact discovery;
+			// settlement and all non-expense events retain their normal routing.
+			if _, err = preparedPostingUnchanged(ctx, tx, true); err != nil {
+				return empty, err
+			}
+		}
 	}
 	// All selected financial writes are complete under the exclusive payroll
 	// lock. Calculate the resulting fleet once, then freeze those exact rows.

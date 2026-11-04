@@ -9474,6 +9474,38 @@ COMMIT;
 -- Apply with writers stopped. Older binaries must not resume after this change.
 BEGIN;
 SELECT pg_advisory_xact_lock(736281940);
+-- Validate the same claims and actual advisory locks using set differences.
+-- Array containment and a correlated scan of thousands of historical claims
+-- made a single invoice posting quadratic in the driver's assignment history.
+CREATE OR REPLACE FUNCTION payroll_assert_resources(required_keys text[]) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE claimed text[]; epoch bigint; protocol text;
+BEGIN
+ SELECT protocol_epoch,protocol_mode INTO STRICT epoch,protocol FROM payroll_projection_control WHERE singleton;
+ IF coalesce(current_setting('mserp.payroll.protocol_epoch',true),'')<>epoch::text THEN
+  RAISE EXCEPTION 'Payroll protocol epoch changed' USING ERRCODE='40001';
+ END IF;
+ SELECT array_agg(value) INTO claimed FROM jsonb_array_elements_text(coalesce(nullif(current_setting('mserp.payroll.resources',true),''),'[]')::jsonb);
+ IF coalesce(cardinality(required_keys),0)=0 OR EXISTS(
+  SELECT unnest(required_keys) EXCEPT SELECT unnest(claimed)
+ ) THEN
+  RAISE EXCEPTION 'Payroll resource claim is incomplete' USING ERRCODE='40001';
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid()
+  AND database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND classid=0 AND objid=736281940
+  AND objsubid=1 AND (mode='ExclusiveLock' OR (protocol='resources' AND mode='ShareLock')) AND granted) THEN
+  RAISE EXCEPTION 'Payroll domain gate is missing' USING ERRCODE='40001';
+ END IF;
+ IF EXISTS(
+  SELECT ((id>>32)&4294967295)::oid,(id&4294967295)::oid
+  FROM (SELECT hashtextextended(resource,182736281940) id FROM unnest(required_keys) resource) required
+  EXCEPT
+  SELECT classid,objid FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid()
+  AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+  AND objsubid=1 AND mode='ExclusiveLock' AND granted
+ ) THEN
+  RAISE EXCEPTION 'Payroll resource lock is missing' USING ERRCODE='40001';
+ END IF;
+END $$;
 ALTER TABLE payroll_projection_changes ADD COLUMN live_expense boolean NOT NULL DEFAULT false;
 -- Capture the payment direction with both routing images. Later source proofs
 -- must not infer an old reimbursement's direction from its current record.

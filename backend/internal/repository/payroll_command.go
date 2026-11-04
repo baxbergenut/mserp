@@ -437,8 +437,8 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 				}
 			}
 		} else if finalizedKind == "driver" || finalizedKind == "investor" {
-			// Actual captured events prove that freezing changed no allocation or
-			// source value, and no legacy cost depends on the newly frozen base.
+			// Captured events prove that freeze/reopen changed no non-live
+			// allocation or source, and no legacy cost depends on the frozen base.
 			// Preserve the other page's immutable versions and resource epochs.
 			index := 0
 			if finalizedKind == "investor" {
