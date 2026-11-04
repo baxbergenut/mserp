@@ -166,8 +166,8 @@ assert.equal(decimalInputValue('-1', true), null);
 assert.equal(decimalInputValue('-', true), null);
 assert.equal(decimalInputValue('0.25', true), '0.25');
 const autoGross = editAmount(blank, "originalRate", "1200");
-assert.equal(autoGross.driverRate, "1200");
-assert.equal(editAmount(autoGross, "originalRate", "1500").driverRate, "1500");
+assert.equal(autoGross.driverRate, "");
+assert.equal(editAmount(autoGross, "originalRate", "1500").driverRate, "");
 assert.equal(editAmount({ ...autoGross, driverRate: "1100" }, "originalRate", "1500").driverRate, "1100");
 assert.equal(editAmount({ ...autoGross, driverRate: "0" }, "originalRate", "1500").driverRate, "0");
 assert.equal(editAmount(match, "miles", "0").enteredMiles, "0");
@@ -189,17 +189,17 @@ assert.deepEqual(applyDailyDraft(dailySaved, dailyBase, { ...dailyBase, driverRa
 const replacing = { ...dailyBase, loadNumber: 'REPLACEMENT', loadRecordId: null, originalRate: '', miles: '' };
 assert.deepEqual(applyDailyDraft(dailySaved, dailyBase, replacing), { ...replacing, version: 1 });
 assert.equal(applyDailyDraft({ ...removed, version: 8 }, undefined, { ...extra, version: 0 }).version, 8);
-assert.equal(matchLoad(blank, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).driverRate, "900");
+assert.equal(matchLoad(blank, { id: 1, loadNumber: "L1", originalRate: "900", driverRate: "750", miles: "500" }).driverRate, "750");
 assert.equal(matchLoad({ ...blank, originalRate: "0", miles: "0" }, { id: 1, loadNumber: "L1", originalRate: "900", miles: "500" }).originalRate, "0");
 const newerGross = editAmount(match, "originalRate", "1400");
 assert.equal(reconcileAutosave({[key]:newerGross}, {[key]:match}, [{...match,version:3}])[key].originalRate, "1400");
 // Server-side matching may finish while a note/amount is edited. Adopt its
 // driver-gross default unless the dispatcher has since changed that field.
 const pendingMatch = {...blank, loadNumber: 'L1'};
-const serverMatch = {...matchLoad(pendingMatch, {id: 1, loadNumber: 'L1', originalRate: '900.00', miles: '500.00'}), version: 1};
-assert.equal(reconcileAutosave({[key]: {...pendingMatch, note: 'New note'}}, {[key]: pendingMatch}, [serverMatch])[key].driverRate, '900.00');
+const serverMatch = {...matchLoad(pendingMatch, {id: 1, loadNumber: 'L1', originalRate: '900.00', driverRate: '700.00', miles: '500.00'}), version: 1};
+assert.equal(reconcileAutosave({[key]: {...pendingMatch, note: 'New note'}}, {[key]: pendingMatch}, [serverMatch])[key].driverRate, '700.00');
 assert.equal(reconcileAutosave({[key]: {...pendingMatch, driverRate: '800'}}, {[key]: pendingMatch}, [serverMatch])[key].driverRate, '800');
-console.log("Entered values and original-to-driver gross defaults passed.");
+console.log("Independent DataTruck driver gross defaults and manual preservation passed.");
 
 const annotated = {...plan, note: 'Call receiver'};
 assert.equal(matchLoad(annotated, {id: 1, loadNumber: 'PLAN', originalRate: '100', miles: '1'}).note, 'Call receiver');
@@ -270,8 +270,18 @@ const recovery = restoreGrossDrafts({ [key]: patchNew }, { [key]: patchBase }, [
 assert.equal(recovery.changes[key].driverRate, '875');
 assert.equal(recovery.changes[key].note, 'Other page note');
 assert.deepEqual(restoreGrossDrafts({ [key]: patchSent }, { [key]: patchBase }, [patchCommitted]).changes, {});
-assert.equal(reconcileGrossPatches({ [key]: { ...pendingMatch, note: 'Queued note' } }, { [key]: pendingMatch }, [serverMatch])[key].driverRate, '900.00');
+assert.equal(reconcileGrossPatches({ [key]: { ...pendingMatch, note: 'Queued note' } }, { [key]: pendingMatch }, [serverMatch])[key].driverRate, '700.00');
 const nativeInserted = { ...liveEmpty, loadNumber: 'NEW', version: 1 };
 const nativeBoard = { ...liveBoard([nativeInserted]), drivers: [{ id: nativeInserted.driverId }] };
 assert.equal(mergeGrossLive(nativeBoard, { ...nativeBoard, entries: [] }, new Set(), new Set()).entries[0].loadNumber, 'NEW');
 console.log('Gross Board field patches passed: independent edits, lost acknowledgements, reload recovery, queued source matching and stale inserts.');
+
+// DataTruck gross has no revenue fallback; explicit zero and manual values survive.
+for (const sourceGross of ['2300', '2000', '0', '']) {
+ const source = {id:95,loadNumber:'SOURCE',originalRate:'2800',driverRate:sourceGross,miles:'541'};
+ assert.equal(matchLoad(blank,source).driverRate,sourceGross);
+ for (const manual of ['0','2100']) assert.equal(matchLoad({...blank,driverRate:manual},source).driverRate,manual);
+}
+assert.equal(matchLoad(blank,{id:95,loadNumber:'MISSING',originalRate:'2800',miles:'541'}).driverRate,'');
+assert.equal(editAmount({...blank,originalRate:'2800',driverRate:'2800'},'originalRate','3000').driverRate,'2800');
+assert.deepEqual(grossDraftFields({...annotated,acceptDriverGross:true,driverRate:'2300'},annotated),['driverRate','acceptDriverGross']);

@@ -381,7 +381,18 @@ and requires no schema migration.
   `repository/load_trips.go` projects trip original gross and loaded+empty miles
   consistently for Gross Board, payroll and dashboard. Allocations must reconcile
   to parent totals; missing/invalid trips remain in review, never full-order
-  fallback. Driver gross is preserved, not inferred from `total_load_pay`.
+  fallback. Migration 195 defaults new blank driver gross from the selected trip's
+  `total_load_pay` (or the sole identified nonsplit trip). Historical/manual gross,
+  including zero, is preserved; missing/ambiguous source stays blank. New pending
+  blanks fill once during normal import/refresh under finalized guards. Partial
+  indexes restrict this to pending rows and refreshed IDs; identical refreshes do
+  not change board versions or financial revisions. Board and Driver/Investor Pay
+  expose current driver-gross comparisons and independent versioned acceptance.
+  Frozen amounts stay frozen while display-only source comparisons refresh in one
+  bounded read. Projection schema 9 and the driver_base source-card fingerprint
+  refresh the API contract without invalidating unrelated reusable facts.
+  Install the matching deploy helper before 195; it pauses writers while adding
+  the pending-default columns and triggers. Migration alone changes no amounts.
   Identity is parent record plus trip ID; repeated display numbers never merge.
   Clustie's dated truck assignments drive investor attribution, including selected trips. Selection/financial
   edits honor finalized driver/investor statements and optimistic versions.

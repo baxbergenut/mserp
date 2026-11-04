@@ -67,6 +67,10 @@ const loadTripValidationSQL = `WITH trips AS (
 const loadTripSourceSQL = `
  LEFT JOIN LATERAL (` + loadTripValidationSQL + `
  SELECT coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL AS split,
+   CASE WHEN stats.identities_valid THEN
+     CASE WHEN e.load_trip_id IS NOT NULL THEN selected.gross
+       WHEN stats.n=1 AND NOT coalesce(l.split_expected,false) THEN (SELECT gross FROM trips LIMIT 1) END
+   END AS driver_gross,
    (coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL) AND (NOT checked.valid OR selected.id IS NULL) AS review,
    CASE WHEN coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL THEN CASE WHEN checked.valid THEN coalesce((allocation.v->>'originalRate')::numeric,selected.gross) END ELSE l.total_pay END original,
    CASE WHEN coalesce(l.split_expected,false) OR stats.n>1 OR e.load_trip_id IS NOT NULL THEN CASE WHEN checked.valid THEN selected.loaded+selected.empty END ELSE l.total_miles END miles,

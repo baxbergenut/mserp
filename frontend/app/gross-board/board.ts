@@ -127,25 +127,24 @@ export function totals(entries: GrossBoardEntry[]) {
 export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBoardEntry {
   if (load.split) return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
     loadTripId: null, split: true, tripReview: true, tripReviewReason: load.tripReviewReason ?? "", trips: load.trips ?? [],
-    originalRate: "", miles: "", systemOriginalRate: "", systemMiles: "", acceptSystemValues: false };
+    originalRate: "", miles: "", systemOriginalRate: "", systemMiles: "", systemDriverRate: "", acceptDriverGross: false, acceptSystemValues: false };
   const original = entry.enteredOriginalRate || entry.originalRate || load.originalRate;
   const miles = entry.enteredMiles || entry.miles || load.miles;
   return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: load.trips ?? [],
     note: entry.loadNumber.trim().toLowerCase() === load.loadNumber.trim().toLowerCase() && (entry.loadRecordId === null || entry.loadRecordId === load.id) ? entry.note : "",
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,
-    originalRate: original, miles, systemOriginalRate: load.originalRate, systemMiles: load.miles,
-    driverRate: entry.driverRate === "" ? original : entry.driverRate, acceptSystemValues: false };
+    originalRate: original, miles, systemOriginalRate: load.originalRate, systemMiles: load.miles, systemDriverRate: load.driverRate ?? "",
+    driverRate: entry.driverRate === "" ? load.driverRate ?? "" : entry.driverRate, acceptSystemValues: false };
 }
 
-// Follow original pay until the dispatcher has entered a different driver gross.
+// Original revenue and driver gross are independent financial inputs.
 export function editAmount(entry: GrossBoardEntry, field: "originalRate" | "driverRate" | "miles", value: string): GrossBoardEntry {
   const effective = value === "" && entry.loadRecordId !== null && !entry.tripReview
     ? field === "originalRate" ? entry.systemOriginalRate ?? "" : field === "miles" ? entry.systemMiles ?? "" : value
     : value;
-  return { ...entry, [field]: effective, acceptSystemValues: false,
+  return { ...entry, [field]: effective, acceptSystemValues: false, acceptDriverGross: false,
     ...(field === "originalRate" ? { enteredOriginalRate: value,
-      driverRate: !entry.split && (entry.driverRate === "" || (validDecimal(entry.driverRate) && validDecimal(entry.originalRate) && hundredths(entry.driverRate) === hundredths(entry.originalRate))) ? value : entry.driverRate,
     } : field === "miles" ? { enteredMiles: value } : {}),
   };
 }
@@ -208,11 +207,12 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
         originalRate: draft.originalRate === snapshot[key].originalRate ? entry.originalRate : draft.originalRate,
         driverRate: draft.driverRate === snapshot[key].driverRate ? entry.driverRate : draft.driverRate,
         miles: draft.miles === snapshot[key].miles ? entry.miles : draft.miles,
-        systemOriginalRate: entry.systemOriginalRate, systemMiles: entry.systemMiles,
+        systemOriginalRate: entry.systemOriginalRate, systemMiles: entry.systemMiles, ...(entry.systemDriverRate === undefined ? {} : { systemDriverRate: entry.systemDriverRate }),
         enteredOriginalRate: draft.enteredOriginalRate === snapshot[key].enteredOriginalRate ? entry.enteredOriginalRate : draft.enteredOriginalRate,
         enteredMiles: draft.enteredMiles === snapshot[key].enteredMiles ? entry.enteredMiles : draft.enteredMiles,
         duplicate: entry.duplicate,
         acceptSystemValues: draft.acceptSystemValues === snapshot[key].acceptSystemValues ? false : draft.acceptSystemValues,
+        ...(draft.acceptDriverGross === undefined ? {} : { acceptDriverGross: draft.acceptDriverGross === snapshot[key].acceptDriverGross ? false : draft.acceptDriverGross }),
       } : {}),
     };
   }

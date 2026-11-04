@@ -85,6 +85,11 @@ func payrollRoutingFactsContext(ctx context.Context, snapshot string) context.Co
 
 func payrollRoutingFingerprint(s *payrollRoutingFactsState, kind string) (string, error) {
 	parts := []string{payrollCalculatorVersion, kind}
+	// Only source-card shape changed. Retain unrelated normalized load, cost,
+	// routing and balance facts instead of invalidating every calculator cache.
+	if kind == "driver_base" {
+		parts = append(parts, "datatruck-driver-gross-v1")
+	}
 	// Untracked legacy availability applies only from the current calendar week.
 	// Its meaning can change at rollover even without a canonical source write.
 	if kind == "vacations" {

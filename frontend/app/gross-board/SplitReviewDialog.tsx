@@ -46,7 +46,7 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
     const current = workspace.entries.find(item => key(item.entry) === key(entry))!.entry;
     const allocation = workspace.allocations.find(a => a.tripId === current.loadTripId)!;
     const trip = workspace.trips.find(t => t.id === current.loadTripId)!;
-    onApply({ ...entry, loadTripId: current.loadTripId, driverRate: current.driverRate,
+    onApply({ ...entry, loadTripId: current.loadTripId, driverRate: current.driverRate, systemDriverRate: trip.originalRate,
       originalRate: allocation.originalRate, enteredOriginalRate: allocation.originalRate, systemOriginalRate: allocation.originalRate,
       miles: trip.miles, enteredMiles: trip.miles, systemMiles: trip.miles, tripReview: false, tripReviewReason: "",
       acceptSystemValues: true, splitReview: { loadId: workspace.loadId, version: workspace.version, sourceHash: workspace.sourceHash,
@@ -57,9 +57,9 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
     {error && <p role="alert" className="mb-3 text-red-300">{error}<button type="button" className="ml-3 underline" onClick={() => { setError(""); setRetry(n => n + 1); }}>Retry</button></p>}
     {!workspace && !error && <p role="status">Loading split…</p>}
     {workspace && <div onKeyDown={event => { if (event.key === "Enter" && event.target instanceof HTMLInputElement) event.preventDefault(); }}>
-      <p className="mb-4 text-zinc-400">Allocate the order&apos;s {amountDisplay(workspace.total, true)} original gross across its trips. Driver gross is entered separately. DataTruck amounts are references.</p>
+      <p className="mb-4 text-zinc-400">Allocate the order&apos;s {amountDisplay(workspace.total, true)} original gross across its trips. Original gross is allocated separately. DataTruck supplies driver gross for each selected trip.</p>
       {workspace.reviewReason && <p role="status" className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300">{workspace.reviewReason}</p>}
-      <table className="w-full text-left text-sm"><thead className="text-zinc-400"><tr><th className="py-2">Trip</th><th className="px-2 text-right">DataTruck amount</th><th className="w-36 pl-2">Original gross</th></tr></thead>
+      <table className="w-full text-left text-sm"><thead className="text-zinc-400"><tr><th className="py-2">Trip</th><th className="px-2 text-right">DataTruck driver gross</th><th className="w-36 pl-2">Original gross</th></tr></thead>
         <tbody>{workspace.trips.map((trip, index) => <tr key={`${trip.id}:${index}`} className="border-t border-zinc-800">
           <td className="py-3"><div>{trip.number || "Unknown trip"}</div><div className="text-xs text-zinc-400">{trip.driverName} · {trip.miles || "—"} mi</div></td>
           <td className="px-2 text-right font-mono">{amountDisplay(trip.originalRate, true) || "—"}</td>
@@ -71,11 +71,11 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
         <tbody>{workspace.entries.map((item, index) => <tr key={key(item.entry)} className="border-t border-zinc-800">
           <td className="py-3">{item.driverName}<div className="text-xs text-zinc-400">{item.entry.date} · Load {item.entry.slot + 1}</div></td>
           <td className="px-2"><select aria-label={`Trip for ${item.driverName}, ${item.entry.date}, ${item.entry.slot}`} className={inputClass} disabled={disabled} value={item.entry.loadTripId ?? ""}
-            onChange={event => setWorkspace({ ...workspace, entries: workspace.entries.map((row, i) => i === index ? { ...row, entry: { ...row.entry, loadTripId: Number(event.target.value) || null } } : row) })}>
+            onChange={event => setWorkspace({ ...workspace, entries: workspace.entries.map((row, i) => i === index ? { ...row, entry: { ...row.entry, loadTripId: Number(event.target.value) || null, driverRate: row.entry.driverRate === "" ? workspace.trips.find(t => t.id === Number(event.target.value))?.originalRate ?? "" : row.entry.driverRate } } : row) })}>
             <option value="">Select trip</option>{workspace.trips.map(t => <option key={t.id} value={t.id}>{t.number} · {t.driverName}</option>)}
           </select></td>
-          <td className="pl-2"><input aria-label={`Driver gross for ${item.driverName}, ${item.entry.date}, ${item.entry.slot}`} className={inputClass} inputMode="decimal" disabled={disabled} value={item.entry.driverRate}
-            onChange={event => setWorkspace({ ...workspace, entries: workspace.entries.map((row, i) => i === index ? { ...row, entry: { ...row.entry, driverRate: event.target.value } } : row) })} /></td>
+          <td className="pl-2"><input aria-label={`Driver gross for ${item.driverName}, ${item.entry.date}, ${item.entry.slot}`} className={inputClass} inputMode="decimal" disabled={disabled} value={item.entry.driverRate} title={`DataTruck: ${amountDisplay(workspace.trips.find(t => t.id === item.entry.loadTripId)?.originalRate ?? "", true) || "Not available"}`}
+            onChange={event => setWorkspace({ ...workspace, entries: workspace.entries.map((row, i) => i === index ? { ...row, entry: { ...row.entry, driverRate: event.target.value, acceptDriverGross: false } } : row) })} />{item.entry.loadTripId && <button type="button" disabled={disabled || !workspace.trips.find(t => t.id === item.entry.loadTripId)?.originalRate} className="mt-1 text-xs text-blue-300 disabled:opacity-50" onClick={() => setWorkspace({ ...workspace, entries: workspace.entries.map((row, i) => i === index ? { ...row, entry: { ...row.entry, driverRate: workspace.trips.find(t => t.id === row.entry.loadTripId)?.originalRate ?? "", acceptDriverGross: true } } : row) })}>Accept DataTruck driver gross</button>}</td>
         </tr>)}</tbody></table>
       <p className="mt-2 text-xs text-zinc-400">Driver gross does not have to equal order revenue. Existing mileage is verified against DataTruck. All linked entries save together.</p>
       <label className="mt-5 block text-zinc-400">Review note<input aria-label="Split review note" className={`${inputClass} mt-2`} maxLength={2000} disabled={disabled} value={workspace.reason} onChange={event => setWorkspace({ ...workspace, reason: event.target.value })} placeholder="For example: confirmed against the weekly sheet" /></label>

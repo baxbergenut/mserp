@@ -19,7 +19,7 @@ const browser = await chromium.launch();
 const week = '2026-10-19', secondDay = '2026-10-20', driverId = 'daily-driver';
 const entry = (date, slot = 0) => ({ driverId, date, slot, deleted: false, dayStatus: '', note: '', loadNumber: `LOAD-${date}-${slot}`,
   loadRecordId: 100 + slot, loadTripId: null, split: false, tripReview: false, trips: [], originalRate: '900.00', driverRate: '800.00', miles: '450.00',
-  enteredOriginalRate: '900.00', enteredMiles: '450.00', systemOriginalRate: '1000.00', systemMiles: '500.00', version: 3, duplicate: false, acceptSystemValues: false });
+  enteredOriginalRate: '900.00', enteredMiles: '450.00', systemOriginalRate: '1000.00', systemDriverRate: '750.00', systemMiles: '500.00', version: 3, duplicate: false, acceptSystemValues: false });
 const removed = slot => ({ ...entry(secondDay, slot), deleted: true, loadNumber: '', loadRecordId: null,
   originalRate: '', driverRate: '', miles: '', enteredOriginalRate: '', enteredMiles: '', version: slot === 1 ? 5 : 10 });
 let entries = [entry(week), entry(week, 1), entry(secondDay), removed(1), removed(2)];
@@ -132,12 +132,23 @@ try {
   expect(saved(week).note).toBe('Remote note');
   expect(conflicts).toEqual([]);
 
+  // Accepting driver gross is separate and never submits the enclosing editor.
+  await open();
+  await daily.getByRole('button', { name: `Review rate and miles for Daily Driver, ${week}`, exact: true }).first().click();
+  await expect(review).toContainText('$750.00');
+  const priorWrites = writes.length;
+  await review.getByRole('button', {name:'Accept DataTruck driver gross',exact:true}).click();
+  expect(writes.length).toBe(priorWrites); await expect(daily).toBeVisible();
+  await expect(field(week,'driver rate')).toHaveValue('$750.00');
+  await apply(); await expect.poll(()=>saved(week).driverRate).toBe('750.00');
+  expect(saved(week).originalRate).toBe('1000.00'); expect(saved(week).miles).toBe('500.00');
   saved(week).originalRate = '900.00'; saved(week).enteredOriginalRate = '900.00';
   readOnly = true; await page.reload(); await open();
   await expect(field(week, 'driver rate')).toBeDisabled();
   await daily.getByRole('button', { name: `Review rate and miles for Daily Driver, ${week}`, exact: true }).first().click();
   await expect(review).toBeVisible();
   await expect(review.getByRole('button', { name: 'Accept system values', exact: true })).toHaveCount(0);
+  await expect(review.getByRole('button', {name:'Accept DataTruck driver gross',exact:true})).toHaveCount(0);
   expect(errors).toEqual([]);
   console.log('Daily loads passed: review dialogs, clear-to-system fallback, second/third-load persistence during autosave, reload, last-write field merging and read-only guards.');
 } finally { releaseSave?.(); await browser.close(); await new Promise(resolve => server.close(resolve)); }

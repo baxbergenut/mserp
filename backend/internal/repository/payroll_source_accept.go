@@ -12,6 +12,7 @@ import (
 
 type PaySourceAcceptance struct {
 	PayrollCommandMetadata
+	DriverGross  string `json:"driverGross"`
 	Field        string `json:"field,omitempty"`
 	DriverID     string `json:"driverId"`
 	Date         string `json:"date"`
@@ -73,6 +74,7 @@ func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor strin
  entered_original_rate=CASE WHEN $5::jsonb ? 'original' THEN ($5::jsonb->>'enteredOriginal')::numeric ELSE entered_original_rate END,
  miles=CASE WHEN $5::jsonb ? 'miles' THEN ($5::jsonb->>'miles')::numeric ELSE miles END,
  entered_miles=CASE WHEN $5::jsonb ? 'miles' THEN ($5::jsonb->>'enteredMiles')::numeric ELSE entered_miles END,
+ driver_rate=CASE WHEN $5::jsonb ? 'driverGross' THEN ($5::jsonb->>'driverGross')::numeric ELSE driver_rate END,
  version=version+1,updated_at=now()
  WHERE driver_id=$1 AND service_date=$2::date AND `+slot+`=$3 AND version=$4`, input.DriverID, input.Date, input.Slot, input.Version, json.RawMessage(before))
 	if err != nil {
@@ -95,14 +97,14 @@ func (r *DriverPayRepository) UndoPaySource(ctx context.Context, id, actor strin
 }
 
 // Change only the selected financial input (both for legacy callers). A concurrent board edit or
-// source refresh rejects the action; driver gross and plan identity are untouched.
+// source refresh rejects the action; unselected amounts and plan identity are untouched.
 func (r *DriverPayRepository) AcceptPaySource(ctx context.Context, input PaySourceAcceptance) error {
 	_, err := r.AcceptPaySourceWithUndo(ctx, input, "")
 	return err
 }
 
 func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input PaySourceAcceptance, actor string) (string, error) {
-	if input.Field != "" && input.Field != "originalRate" && input.Field != "totalMiles" {
+	if input.Field != "" && input.Field != "originalRate" && input.Field != "totalMiles" && input.Field != "driverGross" {
 		return "", chargeInvalid("Invalid source field")
 	}
 	if input.Field == "originalRate" {
@@ -110,6 +112,11 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 	}
 	if input.Field == "totalMiles" {
 		input.OriginalRate = ""
+	}
+	if input.Field == "driverGross" {
+		input.OriginalRate, input.Miles = "", ""
+	} else {
+		input.DriverGross = ""
 	}
 	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
@@ -135,19 +142,22 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 	if err = assertPaySourceOpen(ctx, tx, input); err != nil {
 		return "", err
 	}
-	var source, miles string
+	var source, miles, driverGross string
 	if _, err = tx.Exec(ctx, `SELECT id FROM loads WHERE id=$1 FOR SHARE`, input.LoadRecordID); err != nil {
 		return "", err
 	}
-	err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,'') FROM `+grossBoardEntriesSQL+` e JOIN loads l ON l.id=$1 `+loadTripSourceSQL+` WHERE e.driver_id=$2 AND e.service_date=$3::date AND e.slot=$4 AND e.version=$5 AND NOT trip_source.review`, input.LoadRecordID, input.DriverID, input.Date, input.Slot, input.Version).Scan(&source, &miles)
+	err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),coalesce(trip_source.driver_gross::text,'') FROM `+grossBoardEntriesSQL+` e JOIN loads l ON l.id=$1 `+loadTripSourceSQL+` WHERE e.driver_id=$2 AND e.service_date=$3::date AND e.slot=$4 AND e.version=$5 AND NOT trip_source.review`, input.LoadRecordID, input.DriverID, input.Date, input.Slot, input.Version).Scan(&source, &miles, &driverGross)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrDriverPayConflict
 	}
 	if err != nil {
 		return "", err
 	}
+	if input.Field == "driverGross" && driverGross == "" {
+		return "", chargeInvalid("DataTruck driver gross is not available")
+	}
 	var same bool
-	if err = tx.QueryRow(ctx, `SELECT ($5='totalMiles' OR $1::numeric IS NOT DISTINCT FROM nullif($2,'')::numeric) AND ($5='originalRate' OR nullif($3,'')::numeric IS NOT DISTINCT FROM nullif($4,'')::numeric)`, source, input.OriginalRate, miles, input.Miles, input.Field).Scan(&same); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT ($5 IN ('totalMiles','driverGross') OR nullif($1,'')::numeric IS NOT DISTINCT FROM nullif($2,'')::numeric) AND ($5 IN ('originalRate','driverGross') OR nullif($3,'')::numeric IS NOT DISTINCT FROM nullif($4,'')::numeric) AND ($5<>'driverGross' OR nullif($6,'')::numeric IS NOT DISTINCT FROM nullif($7,'')::numeric)`, source, input.OriginalRate, miles, input.Miles, input.Field, driverGross, input.DriverGross).Scan(&same); err != nil {
 		return "", err
 	}
 	if !same {
@@ -160,7 +170,7 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 		table, slot, deleted = "gross_board_extra_entries", "slot", "NOT deleted"
 	}
 	var before []byte
-	err = tx.QueryRow(ctx, "SELECT jsonb_build_object('original',original_rate,'enteredOriginal',entered_original_rate,'miles',miles,'enteredMiles',entered_miles) FROM "+table+" WHERE driver_id=$1 AND service_date=$2::date AND "+slot+"=$3 AND version=$4 FOR UPDATE", input.DriverID, input.Date, input.Slot, input.Version).Scan(&before)
+	err = tx.QueryRow(ctx, "SELECT jsonb_build_object('original',original_rate,'enteredOriginal',entered_original_rate,'miles',miles,'enteredMiles',entered_miles,'driverGross',driver_rate) FROM "+table+" WHERE driver_id=$1 AND service_date=$2::date AND "+slot+"=$3 AND version=$4 FOR UPDATE", input.DriverID, input.Date, input.Slot, input.Version).Scan(&before)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrDriverPayConflict
 	}
@@ -179,20 +189,28 @@ func (r *DriverPayRepository) AcceptPaySourceWithUndo(ctx context.Context, input
 		delete(prior, "original")
 		delete(prior, "enteredOriginal")
 	}
+	if input.Field == "driverGross" {
+		delete(prior, "original")
+		delete(prior, "enteredOriginal")
+		delete(prior, "miles")
+		delete(prior, "enteredMiles")
+	} else {
+		delete(prior, "driverGross")
+	}
 	before, err = json.Marshal(prior)
 	if err != nil {
 		return "", err
 	}
 	// A linked entry can resolve dynamically before load_record_id is persisted.
 	command, err := tx.Exec(ctx, `UPDATE `+table+` e SET
- original_rate=CASE WHEN $8='totalMiles' THEN original_rate ELSE $5::numeric END,
- entered_original_rate=CASE WHEN $8='totalMiles' THEN entered_original_rate ELSE $5::numeric END,
- miles=CASE WHEN $8='originalRate' THEN miles ELSE nullif($6,'')::numeric END,
- entered_miles=CASE WHEN $8='originalRate' THEN entered_miles ELSE nullif($6,'')::numeric END,version=version+1,updated_at=now()
+ original_rate=CASE WHEN $8 IN ('totalMiles','driverGross') THEN original_rate ELSE $5::numeric END,
+ entered_original_rate=CASE WHEN $8 IN ('totalMiles','driverGross') THEN entered_original_rate ELSE $5::numeric END,
+ miles=CASE WHEN $8 IN ('originalRate','driverGross') THEN miles ELSE nullif($6,'')::numeric END,
+ entered_miles=CASE WHEN $8 IN ('originalRate','driverGross') THEN entered_miles ELSE nullif($6,'')::numeric END,driver_rate=CASE WHEN $8='driverGross' THEN nullif($9,'')::numeric ELSE driver_rate END,version=version+1,updated_at=now()
  WHERE driver_id=$1 AND service_date=$2::date AND `+slot+`=$3 AND version=$4
  AND day_status='' AND `+deleted+`
  AND EXISTS (SELECT 1 FROM loads l WHERE l.id=$7 AND lower(btrim(l.load_id))=lower(btrim(e.load_number))
- AND (e.load_record_id=l.id OR (e.load_record_id IS NULL AND (SELECT count(*) FROM loads x WHERE lower(btrim(x.load_id))=lower(btrim(e.load_number)))=1)))`, input.DriverID, input.Date, input.Slot, input.Version, source, miles, input.LoadRecordID, input.Field)
+ AND (e.load_record_id=l.id OR (e.load_record_id IS NULL AND (SELECT count(*) FROM loads x WHERE lower(btrim(x.load_id))=lower(btrim(e.load_number)))=1)))`, input.DriverID, input.Date, input.Slot, input.Version, source, miles, input.LoadRecordID, input.Field, driverGross)
 	if err != nil {
 		return "", err
 	}

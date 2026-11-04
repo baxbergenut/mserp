@@ -96,6 +96,9 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 		return err
 	}
 	if !payrollSummaryOnly(ctx) {
+		if err := decorateFrozenSourceComparisons(ctx, tx, report); err != nil {
+			return err
+		}
 		if err := decoratePayDayStatuses(ctx, tx, kind, report); err != nil {
 			return err
 		}

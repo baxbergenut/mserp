@@ -2,13 +2,13 @@ import type { GrossBoardEntry } from "@/app/lib/types";
 import { emptyEntry, entryKey, hundredths, validDecimal } from "./board";
 
 export type GrossDrafts = Record<string, GrossBoardEntry>;
-const fields = ["loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted", "originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles", "note", "acceptSystemValues"] as const;
+const fields = ["loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted", "originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles", "note", "acceptSystemValues", "acceptDriverGross"] as const;
 const amounts = new Set<string>(["originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles"]);
 const identity = ["loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted"] as const;
 function equal(a: GrossBoardEntry, b: GrossBoardEntry, field: typeof fields[number]) {
   const left = a[field], right = b[field];
   if (amounts.has(field) && typeof left === "string" && typeof right === "string" && left && right && validDecimal(left) && validDecimal(right)) return hundredths(left) === hundredths(right);
-  const fallback = field === "loadRecordId" || field === "loadTripId" ? null : field === "deleted" || field === "acceptSystemValues" ? false : "";
+  const fallback = field === "loadRecordId" || field === "loadTripId" ? null : field === "deleted" || (field === "acceptSystemValues" || field === "acceptDriverGross") ? false : "";
   return (left ?? fallback) === (right ?? fallback);
 }
 

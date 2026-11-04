@@ -423,12 +423,12 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to finalize settlement"); }
     finally { settlementPending.current.delete(driverId); setSettling(new Set(settlementPending.current)); }
   }
-  async function acceptSource(load: DriverPayLoad, sourceDriverId: string, field: "originalRate" | "totalMiles") {
+  async function acceptSource(load: DriverPayLoad, sourceDriverId: string, field: "originalRate" | "totalMiles" | "driverGross") {
  if(!canEdit)return;
     if (dirty || saving || loading || refreshing || !load.loadRecordId || !load.boardVersion) return;
     setRefreshing(true); setError("");
     try {
-      const receipt = await acceptPaySystemValues(investor, { ...commandMetadata(sourceDriverId), field, driverId: load.sourceDriverId ?? sourceDriverId, date: load.sourceDate || load.date, slot: load.sourceSlot ?? load.slot, version: load.boardVersion, loadRecordId: load.loadRecordId, originalRate: field === "originalRate" ? load.systemOriginalRate ?? "" : "", miles: field === "totalMiles" ? load.systemMiles ?? "" : "" });
+      const receipt = await acceptPaySystemValues(investor, { ...commandMetadata(sourceDriverId), field, driverGross: field === "driverGross" ? load.systemDriverGross ?? "" : "", driverId: load.sourceDriverId ?? sourceDriverId, date: load.sourceDate || load.date, slot: load.sourceSlot ?? load.slot, version: load.boardVersion, loadRecordId: load.loadRecordId, originalRate: field === "originalRate" ? load.systemOriginalRate ?? "" : "", miles: field === "totalMiles" ? load.systemMiles ?? "" : "" });
       undoStack.current.push({ kind: "source", id: receipt.undoId, statementId: sourceDriverId });
       await refreshStatement(sourceDriverId); setMessage("System values accepted");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to accept system values"); }

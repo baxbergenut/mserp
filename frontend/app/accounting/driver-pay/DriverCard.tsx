@@ -46,7 +46,7 @@ export type DriverCardProps = {
   onRetryDetails?: () => void;
   onOpenExpense?: (id: string) => void;
   expenseOpenDisabled?: boolean;
-  onAcceptSource?: (load: DriverPayLoad, field: "originalRate" | "totalMiles") => Promise<void>;
+  onAcceptSource?: (load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => Promise<void>;
   sourceActionDisabled?: boolean;
   returnToPay?: boolean;
  onSettlement?: (reopen: boolean) => void;
@@ -216,7 +216,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.pickupLocation}>{load.pickupLocation || "—"}</div></td>
                 <td className={`${cell} text-zinc-400`}><div className="truncate" title={load.deliveryLocation}>{load.deliveryLocation || "—"}</div></td>
                 <PaySourceCell load={load} field="originalRate" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />
-                <td className={`${numeric} text-zinc-300`}>{load.payrollSupplement && onPlacement ? <input key={`${load.commentKey}:${load.payrollPlacementVersion}`} data-grid-ignore aria-label={`${load.loadNumber}, driver gross`} defaultValue={load.driverGross} inputMode="decimal" disabled={placementDisabled || placing} className="w-full bg-transparent text-right outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60" placeholder="Enter gross" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { event.currentTarget.value = load.driverGross; event.currentTarget.blur(); } }} onBlur={event => { if (event.currentTarget.value !== load.driverGross) void changeLoad("gross", load, event.currentTarget.value); }} /> : amount(load.driverGross, true)}</td>
+                {load.payrollSupplement && onPlacement ? <PaySourceCell load={load} field="driverGross" className={numeric} disabled> <input key={`${load.commentKey}:${load.payrollPlacementVersion}`} data-grid-ignore aria-label={`${load.loadNumber}, driver gross`} defaultValue={load.driverGross} inputMode="decimal" disabled={placementDisabled || placing} className="w-full bg-transparent text-right outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60" placeholder="Enter gross" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } if (event.key === "Escape") { event.currentTarget.value = load.driverGross; event.currentTarget.blur(); } }} onBlur={event => { if (event.currentTarget.value !== load.driverGross) void changeLoad("gross", load, event.currentTarget.value); }} /></PaySourceCell> : <PaySourceCell load={load} field="driverGross" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />}
                 <PaySourceCell load={load} field="totalMiles" className={numeric} disabled={!!sourceActionDisabled} onAccept={onAcceptSource} />
                 <td className={`${numeric} text-zinc-400`}>{amount(load.loadedMiles)}</td>
                 <td className={`${numeric} text-zinc-400`}>{amount(load.deadheadMiles)}</td>

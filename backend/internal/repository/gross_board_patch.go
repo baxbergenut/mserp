@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var GrossBoardEditableFields = []string{"loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted", "originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles", "note", "acceptSystemValues"}
+var GrossBoardEditableFields = []string{"loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted", "originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles", "note", "acceptSystemValues", "acceptDriverGross"}
 
 // SaveChanges is the interactive Gross Board contract. There is no caller
 // version precondition or statement history. Under the financial write lock,
@@ -44,6 +44,9 @@ func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry)
 		return current, false, err
 	}
 	before := current
+	if patch.AcceptDriverGross && (current.Version != patch.Version || !reflect.DeepEqual(current.LoadRecordID, patch.LoadRecordID) || !reflect.DeepEqual(current.LoadTripID, patch.LoadTripID)) {
+		return current, false, ErrGrossBoardConflict
+	}
 	for _, field := range patch.Fields {
 		switch field {
 		case "loadNumber":
@@ -70,6 +73,8 @@ func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry)
 			current.Note = patch.Note
 		case "acceptSystemValues":
 			current.AcceptSystemValues = patch.AcceptSystemValues
+		case "acceptDriverGross":
+			current.AcceptDriverGross = patch.AcceptDriverGross
 		default:
 			return current, false, chargeInvalid("Unknown Gross Board field: %s", field)
 		}

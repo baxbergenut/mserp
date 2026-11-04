@@ -76,6 +76,9 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return err
+	}
 	batch := &pgx.Batch{}
 	for _, l := range records {
 		var driverID, dispatcherID *string
@@ -132,6 +135,9 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 		ids = append(ids, record.ID)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE load_source_availability SET present=true,checked_at=now() WHERE load_id=ANY($1::int[]) AND NOT present`, ids); err != nil {
+		return err
+	}
+	if err = fillPendingDriverGross(ctx, tx, ids); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
