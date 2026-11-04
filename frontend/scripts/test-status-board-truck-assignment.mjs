@@ -44,7 +44,8 @@ try {
    expect(responseBoard.ok(), await responseBoard.text()).toBe(true);
    const board = await responseBoard.json();
    const entry = board.entries.find(row => row.driverId === id) || { driverId: id, version: 0, status: '' };
-   const { fleetStatus, ...fields } = entry;
+   const fields = { ...entry };
+   delete fields.fleetStatus;
    const response = await page.request.put(`${base}/api/driver-board`, { headers, data: { entries: [{ ...fields, currentLoad }] } });
    expect(response.ok(), await response.text()).toBe(true);
  };
