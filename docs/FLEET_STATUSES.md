@@ -32,8 +32,16 @@ Driver employment/availability dispatch checks continue separately.
 Precedence is Terminated, OOS, Shop, then assignment-derived In use/Ready.
 Manual and independent work-order restrictions remain authoritative until each
 is explicitly released. Completing/paying a work order does not release it.
-Shop/OOS retain current crew, but new operating assignments require returning
-the truck to service. Existing assignments can be ended or moved elsewhere.
+Shop/OOS retain current crew. Migration 199 allows recording driver and team
+assignments to Shop trucks without releasing Shop or work-order restrictions.
+OOS and Terminated trucks still reject new assignments. Existing assignments can
+be ended or moved elsewhere. Dispatch rules remain separate and unchanged.
+
+Status Board's quick truck assignment blocks taking another driver's truck while
+their Current load is nonblank, including unlinked/manual load numbers. Future
+plans alone do not block. The native dropdown labels disabled choices with the
+driver and active load; the server rechecks under the same fleet lock used by
+board saves, load actions and undo before committing the dated assignment.
 
 Truck profile changes and returns require a nonblank reason (maximum 1000
 characters) and current status version. Any signed-in user may change truck

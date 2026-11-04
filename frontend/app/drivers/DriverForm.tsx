@@ -299,9 +299,10 @@ export function DriverForm({
           >
             {canCreateTruck && !isTeam && <option value="__new__">New truck</option>}
             <option value="">{isTeam ? choices?.week === teamWeek ? "Select truck" : "Loading trucks…" : "Unassigned"}</option>
-            {isTeam ? teamChoices.map(row => <option key={row.truckId} value={row.truckId}>{row.unitNumber} — {row.mainDriverName}</option>) : trucks.filter((truck) => (truck.active && ["ready","in_use"].includes(truck.operatingStatus ?? (truck.status==="available"||truck.status==="assigned"?"ready":"shop"))) || truck.id === value.truckId).map((truck) => (
+            {isTeam ? teamChoices.map(row => <option key={row.truckId} value={row.truckId}>{row.unitNumber} — {row.mainDriverName}</option>) : trucks.filter((truck) => (truck.active && ["ready","in_use","shop"].includes(truck.operatingStatus ?? (truck.status==="available"||truck.status==="assigned"?"ready":"shop"))) || truck.id === value.truckId).map((truck) => (
               <option key={truck.id} value={truck.id}>
                 {truck.unitNumber}
+                {truck.operatingStatus === "shop" ? " · Shop" : ""}
                 {truck.driverName ? ` — currently ${truck.driverName}` : ""}
               </option>
             ))}

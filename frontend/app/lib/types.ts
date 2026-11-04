@@ -1,3 +1,11 @@
+export interface TruckAssignmentChoice {
+  id: string; unit: string; status: string; active: boolean; driverId: string;
+  driverName: string; assignmentId: string; updatedAt: string; activeLoad: string;
+}
+export interface DriverTruckAssignment {
+  driverId: string; driverName: string; active: boolean; teamVersion: number; teamId: string;
+  effectiveDate: string; truckId: string; choices: TruckAssignmentChoice[]; revision: string;
+}
 export interface PayrollAvailability {
   firstWeek: string;
   currentWeek: string;

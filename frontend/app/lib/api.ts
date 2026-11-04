@@ -1,4 +1,7 @@
 import { expensePayload } from "./expenseCosts";
+export const fetchTruckAssignmentChoices = () => apiRequest<import("./types").TruckAssignmentChoice[]>("/drivers/truck-assignment-choices");
+export const fetchDriverTruckAssignment = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DriverTruckAssignment>(`/drivers/${id}/truck-assignment`, { signal });
+export const assignDriverTruckToday = (id: string, input: { truckId: string; revision: string; confirmReassign: boolean }) => apiRequest<void>(`/drivers/${id}/truck-assignment`, { method: "PUT", body: JSON.stringify(input) });
 export const fetchFleetStatusCatalog = (signal?:AbortSignal) => apiRequest<{enabled:boolean;rules:import("./types").FleetStatusRule[]}>("/fleet-status/catalog",{signal});
 export const fetchFleetStatusHistory = (kind:"drivers"|"trucks",id:string,query:Record<string,string>,signal?:AbortSignal) => apiRequest<import("./types").FleetStatusHistory>(`/${kind}/${id}/status-history?${new URLSearchParams(query)}`,{signal});
 export const changeDriverAvailability = (id:string,input:import("./types").FleetStatusChange) => apiRequest<Driver>(`/drivers/${id}/availability`,{method:"PATCH",body:JSON.stringify(input)});
