@@ -34,6 +34,9 @@ func TestAuthSessionTTL(t *testing.T) {
 			if cfg.AuthSessionTTL != tc.want {
 				t.Fatalf("AuthSessionTTL = %v, want %v", cfg.AuthSessionTTL, tc.want)
 			}
+			if cfg.DataTruckModifiedInterval != 30*time.Second || cfg.DataTruckOperationalInterval != 15*time.Minute {
+				t.Fatal("unexpected load sync defaults", cfg.DataTruckModifiedInterval, cfg.DataTruckOperationalInterval)
+			}
 		})
 	}
 }
@@ -51,6 +54,12 @@ func TestParseDailySyncTime(t *testing.T) {
 }
 
 func TestDataTruckIntervals(t *testing.T) {
+	for _, value := range []string{"0", "29s", "-1m", "bad", "25h"} {
+		t.Setenv("TEST_MODIFIED_INTERVAL", value)
+		if _, err := parseDurationRange("TEST_MODIFIED_INTERVAL", "30s", 30*time.Second, 24*time.Hour); err == nil {
+			t.Errorf("accepted modified interval %s", value)
+		}
+	}
 	for _, value := range []string{"0", "30s", "-1m", "bad", "25h"} {
 		t.Setenv("TEST_DATATRUCK_INTERVAL", value)
 		if _, err := parseDataTruckInterval("TEST_DATATRUCK_INTERVAL", "1m"); err == nil {

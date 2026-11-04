@@ -58,6 +58,7 @@ type Load struct {
 	PickupTime              *time.Time            `json:"pickup_time"`
 	DeliveryTime            *time.Time            `json:"delivery_time"`
 	CreatedDatetime         *time.Time            `json:"created_datetime"`
+	ModifiedDatetime        *time.Time            `json:"-"`
 	Trip                    *Trip                 `json:"trip"`
 	Trips                   []Trip                `json:"trips,omitempty"`
 	AssignedDriverNTruck    *AssignedDriverNTruck `json:"assigned_driver_n_truck"`

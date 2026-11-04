@@ -43,6 +43,7 @@ type LoadRecord struct {
 	PickupAppointmentTime   *time.Time
 	DeliveryAppointmentTime *time.Time
 	CreatedDatetime         *time.Time
+	ModifiedDatetime        *time.Time
 	SyncedAt                time.Time
 	RawPayload              []byte
 	Stops                   []LoadStop
@@ -92,6 +93,7 @@ func LoadToRecord(load datatruck.Load, payload []byte, syncedAt time.Time) (Load
 		PickupAppointmentTime:   load.PickupAppointmentTime,
 		DeliveryAppointmentTime: load.DeliveryAppointmentTime,
 		CreatedDatetime:         load.CreatedDatetime,
+		ModifiedDatetime:        load.ModifiedDatetime,
 		SyncedAt:                syncedAt.UTC(),
 		RawPayload:              payload,
 	}
@@ -152,7 +154,12 @@ ON CONFLICT (id) DO UPDATE SET
 	delivery_appointment_time = EXCLUDED.delivery_appointment_time,
 	created_datetime = EXCLUDED.created_datetime,
 	synced_at = EXCLUDED.synced_at,
-	raw_payload = EXCLUDED.raw_payload`
+	raw_payload = EXCLUDED.raw_payload
+WHERE ROW(loads.load_id,loads.driver_id,loads.dispatcher_id,loads.shipment_id,loads.status,loads.load_pay,loads.total_other_pay,loads.total_pay,loads.total_miles,loads.per_mile_revenue,
+ loads.dispatcher_name,loads.driver_name,loads.team_driver_name,loads.truck_unit,loads.customer_name,loads.pickup_time,loads.delivery_time,loads.pickup_appointment_time,loads.delivery_appointment_time,loads.created_datetime,loads.raw_payload)
+ IS DISTINCT FROM ROW(EXCLUDED.load_id,EXCLUDED.driver_id,EXCLUDED.dispatcher_id,EXCLUDED.shipment_id,EXCLUDED.status,EXCLUDED.load_pay,EXCLUDED.total_other_pay,EXCLUDED.total_pay,EXCLUDED.total_miles,EXCLUDED.per_mile_revenue,
+ EXCLUDED.dispatcher_name,EXCLUDED.driver_name,EXCLUDED.team_driver_name,EXCLUDED.truck_unit,EXCLUDED.customer_name,EXCLUDED.pickup_time,EXCLUDED.delivery_time,EXCLUDED.pickup_appointment_time,EXCLUDED.delivery_appointment_time,EXCLUDED.created_datetime,EXCLUDED.raw_payload)
+ OR loads.synced_at < EXCLUDED.synced_at - interval '15 minutes'`
 
 func nullableString(value *string) any {
 	if value == nil {

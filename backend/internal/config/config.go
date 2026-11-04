@@ -33,6 +33,7 @@ type Config struct {
 	DataTruckMCID                int
 	DataTruckNewLoadsInterval    time.Duration
 	DataTruckOperationalInterval time.Duration
+	DataTruckModifiedInterval    time.Duration
 	GroqAPIKey                   string
 	GroqModel                    string
 	OpenAIAPIKey                 string
@@ -88,7 +89,11 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	operationalInterval, err := parseDataTruckInterval("DATATRUCK_OPERATIONAL_SYNC_INTERVAL", "5m")
+	operationalInterval, err := parseDataTruckInterval("DATATRUCK_OPERATIONAL_SYNC_INTERVAL", "15m")
+	if err != nil {
+		return Config{}, err
+	}
+	modifiedInterval, err := parseDurationRange("DATATRUCK_MODIFIED_SYNC_INTERVAL", "30s", 30*time.Second, 24*time.Hour)
 	if err != nil {
 		return Config{}, err
 	}
@@ -267,6 +272,7 @@ func Load() (Config, error) {
 		ScheduledLoadsSyncTime:       scheduledLoadsSyncTime,
 		DataTruckNewLoadsInterval:    newLoadsInterval,
 		DataTruckOperationalInterval: operationalInterval,
+		DataTruckModifiedInterval:    modifiedInterval,
 		ScheduledFuelSyncTime:        scheduledFuelSyncTime,
 		ScheduledTollsSyncTime:       scheduledTollsSyncTime,
 		FiveELDEnabled:               fiveELDEnabled,

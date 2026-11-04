@@ -492,6 +492,10 @@ func main() {
 				)
 			}()
 			for _, loadSync := range []jobs.IntervalJob{
+				{Name: "modified-loads", Interval: cfg.DataTruckModifiedInterval, Run: func(runCtx context.Context) error {
+					_, err := loadJob.RunModified(runCtx)
+					return err
+				}},
 				{Name: "new-loads", Interval: cfg.DataTruckNewLoadsInterval, Run: func(runCtx context.Context) error {
 					_, err := loadJob.RunNew(runCtx)
 					return err

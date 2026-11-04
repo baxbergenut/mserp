@@ -37,11 +37,12 @@ type loadSyncRepository interface {
 }
 
 type SyncLoadsJob struct {
-	client      loadSyncClient
-	repo        loadSyncRepository
-	logger      *slog.Logger
-	newGate     chan struct{}
-	refreshGate chan struct{}
+	client       loadSyncClient
+	repo         loadSyncRepository
+	logger       *slog.Logger
+	newGate      chan struct{}
+	refreshGate  chan struct{}
+	modifiedGate chan struct{}
 }
 
 type SyncLoadsResult struct {
@@ -51,7 +52,7 @@ type SyncLoadsResult struct {
 }
 
 func NewSyncLoadsJob(client loadSyncClient, repo loadSyncRepository, logger *slog.Logger) *SyncLoadsJob {
-	return &SyncLoadsJob{client: client, repo: repo, logger: logger, newGate: make(chan struct{}, 1), refreshGate: make(chan struct{}, 1)}
+	return &SyncLoadsJob{client: client, repo: repo, logger: logger, newGate: make(chan struct{}, 1), refreshGate: make(chan struct{}, 1), modifiedGate: make(chan struct{}, 1)}
 }
 
 func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
@@ -65,10 +66,8 @@ func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
 		return SyncLoadsResult{}, err
 	}
 
-	// DataTruck does not expose a last-modified timestamp for orders. Fetch
-	// every new upstream ID, then re-fetch a service-date window so status,
-	// pay, mileage, driver, and appointment changes on older-created loads
-	// are reconciled after dispatch and invoicing.
+	// Slow reconciliation supplements the modified feed: recover missing
+	// historical IDs and changes that do not advance the parent's timestamp.
 	since := time.Now().UTC().AddDate(0, 0, -loadReconciliationLookbackDays)
 	loadsByID := make(map[int]datatruck.Load)
 
@@ -223,6 +222,10 @@ func (j *SyncLoadsJob) save(ctx context.Context, loadsByID map[int]datatruck.Loa
 
 func addLoadsByID(target map[int]datatruck.Load, loads []datatruck.Load) {
 	for _, load := range loads {
+		if old, ok := target[load.ID]; ok && old.ModifiedDatetime != nil &&
+			(load.ModifiedDatetime == nil || load.ModifiedDatetime.Before(*old.ModifiedDatetime)) {
+			continue
+		}
 		target[load.ID] = load
 	}
 }

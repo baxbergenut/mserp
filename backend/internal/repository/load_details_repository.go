@@ -8,6 +8,16 @@ func (r *LoadRepository) UpdateLoadDetails(ctx context.Context, l LoadRecord) er
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err = lockTruckAccounting(ctx, tx); err != nil {
+		return err
+	}
+	current, err := currentLoadSourceRecords(ctx, tx, []LoadRecord{l})
+	if err != nil {
+		return err
+	}
+	if len(current) == 0 {
+		return nil
+	}
 	result, err := tx.Exec(ctx, `UPDATE loads SET status=$2,load_pay=$3,total_other_pay=$4,total_pay=$5,
  total_miles=$6,per_mile_revenue=$7,pickup_time=$8,delivery_time=$9,pickup_appointment_time=$10,
  delivery_appointment_time=$11,raw_payload=$12,synced_at=$13 WHERE id=$1`,
@@ -18,6 +28,9 @@ func (r *LoadRepository) UpdateLoadDetails(ctx context.Context, l LoadRecord) er
 	}
 	if result.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	if err := saveLoadSourceVersions(ctx, tx, current); err != nil {
+		return err
 	}
 	return commitPayrollMutation(ctx, tx)
 }

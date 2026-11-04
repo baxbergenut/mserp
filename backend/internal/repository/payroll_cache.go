@@ -47,6 +47,7 @@ var payrollUnrelatedTables = []string{
 	"weekly_pti_weeks", "weekly_pti_rows", "weekly_pti_events",
 	"weekly_pti_layout_state", "weekly_pti_layout", "weekly_pti_layout_events",
 	"load_source_availability",
+	"datatruck_load_versions", "datatruck_load_sync_state",
 	"driver_board", "driver_board_history", "driver_board_load_state",
 	"payroll_projection_control", "payroll_projection_sources", "payroll_projection_changes",
 	"payroll_protocol_events",

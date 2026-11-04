@@ -2101,15 +2101,14 @@ assignment lookup lists.
   repeatedly. The upstream page-size limit is 25. Loads without a business
   `load_id` retain their upstream identity and display as `DataTruck #<id>` until
   a subsequent sync supplies the number; they must not block the whole import.
-  DataTruck does not expose an
-  order last-modified timestamp. The server write timeout is fifteen minutes to
+  The server write timeout is fifteen minutes to
   permit pagination, rate-limit retry, and an initial Relay historical backfill.
   Additional interval jobs run immediately at startup: new-load discovery every
-  minute, operational refresh every five minutes. Both interval environment
+  minute, operational refresh every fifteen minutes. Both interval environment
   settings accept 1m–24h and obey SCHEDULED_SYNCS_ENABLED. Discovery has no date
   cutoff and saves before reconciliation, so refresh failures do not hide new
   loads. Discovery serializes separately from full/operational/payroll refreshes;
-  the shared HTTP gate prioritizes discovery between pages, with four-second
+  the shared HTTP gate prioritizes discovery and modified pages, with four-second
   request spacing and a shared Retry-After cooldown (including waits over 60s).
   Without Retry-After, a 429 pauses the client for at least a minute. The gate is
   process-local: run only one scheduled API instance and avoid concurrent operator
@@ -2130,6 +2129,22 @@ assignment lookup lists.
   after an exact unique import, according to its existing dispatch status. Reads
   do not write history or advance loads. Explicit manual destinations (including
   a saved manual blank), changed identities and ambiguous matches stay protected.
+- Migration 196 adds a 30-second modified-load worker using verified
+  `modified_datetime` filtering, ascending ID keyset pages and a durable per-provider
+  checkpoint. Checkpoints advance only after all pages commit, to sweep start with
+  a two-minute overlap. First activation starts 24 hours back; restart/outage recovery
+  retains the durable cursor. Modified refresh cannot advance discovery or infer
+  missing sources from filtered omissions. Operational ID reconciliation defaults to
+  15 minutes; daily 21-day reconciliation and reviewed duplicate resolution remain.
+  `DATATRUCK_MODIFIED_SYNC_INTERVAL` accepts 30s–24h. All calls share the existing
+  15/minute gate; modified/discovery pages take priority over slow reconciliation.
+  `datatruck_load_versions` fences older in-flight responses across every source
+  writer; its timestamp stays out of canonical payloads. Both metadata tables are
+  unrelated to payroll. Identical source replay skips load writes, except renewing
+  freshness after 15 minutes; it does not recalculate payroll. Manual values and
+  finalized financial snapshots remain protected. Install the matching deploy helper
+  before migration 196. See `docs/integrations/DATATRUCK_LOAD_SYNC.md` and run
+  `TestModifiedLoadsDatabase` with `MSERP_GROSS_BOARD_TEST_DATABASE_URL`.
 - New DataTruck imports never create managed `drivers` or `trucks`. They retain the
   upstream driver name and truck unit on the load, link only to an existing
   unambiguous fleet record for provenance only. Imports never create or update

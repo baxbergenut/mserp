@@ -79,6 +79,13 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
 	}
+	records, err = currentLoadSourceRecords(ctx, tx, records)
+	if err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return nil
+	}
 	batch := &pgx.Batch{}
 	for _, l := range records {
 		var driverID, dispatcherID *string
@@ -111,7 +118,12 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
  load_pay=$7,total_other_pay=$8,total_pay=$9,total_miles=$10,per_mile_revenue=$11,
  dispatcher_name=$12,driver_name=$13,team_driver_name=$14,truck_unit=$15,customer_name=$16,
  pickup_time=$17,delivery_time=$18,pickup_appointment_time=$19,delivery_appointment_time=$20,
- created_datetime=$21,synced_at=$22,raw_payload=$23 WHERE id=$1`
+ created_datetime=$21,synced_at=$22,raw_payload=$23 WHERE id=$1 AND (
+ ROW(load_id,driver_id,dispatcher_id,shipment_id,status,load_pay,total_other_pay,total_pay,total_miles,per_mile_revenue,
+ dispatcher_name,driver_name,team_driver_name,truck_unit,customer_name,pickup_time,delivery_time,pickup_appointment_time,delivery_appointment_time,created_datetime,raw_payload)
+ IS DISTINCT FROM ROW($2::text,$3::uuid,$4::uuid,$5::text,$6::text,$7::numeric(10,2),$8::numeric(10,2),$9::numeric(10,2),$10::numeric(10,2),$11::numeric(10,4),
+ $12::text,$13::text,$14::text,$15::text,$16::text,$17::timestamptz,$18::timestamptz,$19::timestamptz,$20::timestamptz,$21::timestamptz,$23::jsonb)
+ OR synced_at < $22::timestamptz - interval '15 minutes')`
 		if recoverMissing {
 			query = upsertLoadSQL
 		}
@@ -128,6 +140,9 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 		}
 	}
 	if err := results.Close(); err != nil {
+		return err
+	}
+	if err := saveLoadSourceVersions(ctx, tx, records); err != nil {
 		return err
 	}
 	ids := make([]int, 0, len(records))

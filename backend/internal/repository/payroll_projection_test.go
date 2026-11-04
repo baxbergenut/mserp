@@ -72,6 +72,10 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	modifiedSyncMigration, err := os.ReadFile("../../sql/196_datatruck_modified_sync.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "incremental"} {
 		t.Run(mode, func(t *testing.T) {
 			name := fmt.Sprintf("payroll_projection_%d", time.Now().UnixNano())
@@ -102,6 +106,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				}
 				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
 				prior = withoutUnrelatedPayrollMigration(t, withoutPTIPayrollMigration(t, prior))
+				prior = strings.Replace(prior, strings.ReplaceAll(string(modifiedSyncMigration), "\r\n", "\n"), "", 1)
 				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
 				exec(string(telemetryMigration))
@@ -113,6 +118,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(storageMigration))
 				applyPTIPayrollMigration(t, ctx, admin)
 				applyUnrelatedPayrollMigration(t, ctx, admin)
+				exec(string(modifiedSyncMigration))
 			} else {
 				exec(body)
 			}
