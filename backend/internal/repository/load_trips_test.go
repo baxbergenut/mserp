@@ -184,12 +184,8 @@ func TestLoadTripsDatabase(t *testing.T) {
 			repeat.AcceptSystemValues = true
 			// Use an earlier second date in the same historical week to avoid dispatch availability rules.
 			repeat.Date = "2026-10-21"
-			repeated, err := repo.SaveEntries(ctx, []GrossBoardEntry{repeat})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !repeated[0].Duplicate {
-				t.Fatal("same trip was counted twice")
+			if _, err = repo.SaveEntries(ctx, []GrossBoardEntry{repeat}); err == nil || !strings.Contains(err.Error(), "already on Gross Board") {
+				t.Fatal("same trip was not rejected", err)
 			}
 			var total string
 			var loads int

@@ -20,6 +20,7 @@ const context = await browser.newContext({ viewport: { width: 1800, height: 1000
 const week = '2026-11-02', driverId = 'a1000000-0000-0000-0000-000000000001';
 const blank = (date = week) => ({ driverId, date, slot: 0, deleted: false, dayStatus: '', loadNumber: '', loadRecordId: null, loadTripId: null, originalRate: '', driverRate: '', miles: '', enteredOriginalRate: '', enteredMiles: '', note: '', version: 0, duplicate: false, trips: [] });
 let entries = [], writes = [], reads = 0, fail = false, gate = null, committedSignal = null;
+let duplicateError = '';
 const errors = [];
 const board = () => ({ weekStart: week, drivers: [{ id: driverId, fullName: 'Reliable Driver', dispatcherId: '', dispatcherName: 'Unassigned', active: true }], entries: structuredClone(entries), balances: [] });
 const push = async value => Promise.all(context.pages().map(page => page.evaluate(value => window.emitGross?.(value), value).catch(() => {})));
@@ -36,6 +37,7 @@ await context.route('**/api/**', async route => {
   if (path === '/gross-board' && req.method() === 'PUT') {
     const edits = req.postDataJSON().entries;
     writes.push(structuredClone(edits));
+    if (duplicateError) return route.fulfill({ status: 409, json: { error: duplicateError } });
     if (fail) return route.fulfill({ status: 503, json: { error: 'Temporary fixture outage' } });
     const committed = edits.map(edit => {
       const current = entries.find(e => e.date === edit.date && e.slot === edit.slot) ?? blank(edit.date);
@@ -136,6 +138,24 @@ try {
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await saved(page); expect(stored().driverRate).toBe('1400'); expect(stored().note).toBe('Other dispatcher note');
   await page.reload(); await expect(field(page, 'driver rate')).toHaveValue('$1,400.00');
+
+  // The server's duplicate guard names the existing assignment, retains the
+  // draft for correction, and does not cause an autosave retry loop.
+  const secondDay = '2026-11-03';
+  duplicateError = 'Load PLAN-123456 is already on Gross Board for Reliable Driver on 2026-11-02 (load 1). Edit or move the existing entry instead of adding it again.';
+  await fill(field(page, 'load number or status', secondDay), 'PLAN-123456');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText(duplicateError);
+  await expect(field(page, 'load number or status', secondDay)).toHaveValue('PLAN-123456');
+  expect(stored(secondDay)).toBeUndefined();
+  const rejectedWrites = writes.length;
+  await page.waitForTimeout(700);
+  expect(writes.length).toBe(rejectedWrites);
+  duplicateError = '';
+  await fill(field(page, 'load number or status', secondDay), 'DIFFERENT-LOAD');
+  await page.getByRole('button', { name: 'Retry save', exact: true }).click();
+  await saved(page);
+  expect(stored(secondDay).loadNumber).toBe('DIFFERENT-LOAD');
+  expect(stored().driverRate).toBe('1400');
   expect(errors).toEqual([]);
-  console.log('Gross Board reliability passed: batched typing, stale snapshots, version continuity, same-user live tabs, queued typing, reload recovery, last-write field saves and independent-field merges.');
+  console.log('Gross Board reliability passed: batched typing, stale snapshots, version continuity, same-user live tabs, queued typing, reload recovery, last-write field saves, independent-field merges and duplicate rejection/recovery.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -11,6 +11,19 @@ records. Gross Board suggestions and new selections exclude missing IDs. Existin
 explicit links remain pinned, editable and visibly marked for review. Reappearance
 restores visibility. Payroll/frozen source calculations do not discard evidence.
 
+Gross Board rejects a new claim for a load number already present in another
+active slot, even under another driver, date or DataTruck record ID. Matching is
+case-insensitive and ignores surrounding whitespace. Distinct selected trips
+of the same parent are allowed; the same trip cannot be added twice. The error
+identifies the existing driver, date and slot. All entries in a rejected save
+roll back, including other edits in that batch. The native source/financial lock
+also serializes simultaneous claims from different dispatchers.
+
+The guard checks the final batch state to allow atomic moves and cleanup. It
+does not scan for duplicates on ordinary amount/note edits and does not rewrite
+historical duplicates or finalized statements. Direct historical imports must
+still reconcile their source identities before inserting board rows.
+
 ## Reviewed reconciliation
 
 The release includes `backend/reconcile-loads`. Run as the service user from

@@ -484,8 +484,12 @@ func TestGrossBoardDatabase(t *testing.T) {
 	// Repeating the same system load on another day never creates more balance.
 	duplicate := GrossBoardEntry{DriverID: carryDriver, Date: "2026-09-30", LoadNumber: "LATER-100", DriverRate: "100"}
 	saved, err = repo.SaveEntries(ctx, []GrossBoardEntry{duplicate})
-	if err != nil || !saved[0].Duplicate {
-		t.Fatal("repeated load was not identified", err)
+	if err == nil || !strings.Contains(err.Error(), "already on Gross Board") {
+		t.Fatal("repeated load was not rejected", err)
+	}
+	// Historical duplicates still render without creating more balance.
+	if _, err = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate) VALUES($1,'2026-09-30','LATER-100',100)`, carryDriver); err != nil {
+		t.Fatal(err)
 	}
 	history, err = repo.BalanceHistory(ctx, carryDriver, week)
 	if err != nil || history[len(history)-1].Balance != "-249.50" || history[len(history)-1].Change != "" {
@@ -591,7 +595,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		edit = rows[0]
-		edit.LoadNumber = "REPLACEMENT"
+		edit.LoadNumber = fmt.Sprintf("REPLACEMENT-%d", slot)
 		edit.Note = nil
 		rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edit})
 		if err != nil || rows[0].Note == nil || *rows[0].Note != "" {
@@ -641,6 +645,10 @@ func TestGrossBoardDatabase(t *testing.T) {
 			rows, err = repo.SaveEntries(ctx, []GrossBoardEntry{edited})
 			if err != nil || rows[0].DriverRate != "" {
 				t.Fatal("linked driver gross edit was replaced by a default", err, rows)
+			}
+			// Release the claim before testing another independent default case.
+			if _, err = pool.Exec(ctx, "DELETE FROM "+table+" WHERE driver_id=$1 AND service_date=$2::date", carryDriver, day); err != nil {
+				t.Fatal(err)
 			}
 		}
 	}

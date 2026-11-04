@@ -42,6 +42,12 @@ previews conservative, provider-verified replacements and applies only an exact
 digest under native financial/finalized guards. It preserves total driver gross,
 publishes affected payroll atomically and records an immutable retry receipt.
 See `docs/integrations/DATATRUCK_LOAD_RECONCILIATION.md` for operator usage.
+Gross Board saves reject new duplicate load-number claims across drivers, dates
+and slots, including different DataTruck IDs with the same normalized number.
+Distinct selected trips of one parent remain supported. The check runs once on
+the final batch under native source/financial locks, so atomic moves work and
+ordinary financial edits skip it. Existing duplicates remain available for
+guarded cleanup; finalized statements and their source records are not rewritten.
 
 1. Run `git status --short`; the worktree may contain user changes. Preserve
    unrelated changes and never discard them to make a task easier.

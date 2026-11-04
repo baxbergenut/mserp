@@ -443,6 +443,7 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		}
 		return a.DriverID+a.Date < b.DriverID+b.Date
 	})
+	var newClaims []grossBoardLoadClaim
 	for index, e := range entries {
 		var transferred bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND active AND ((source_date=$2::date AND source_slot=$3) OR (dispatch_date=$2::date AND dispatch_slot=$3)))`, e.DriverID, e.Date, e.Slot).Scan(&transferred); err != nil {
@@ -474,7 +475,13 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		// Preserve an existing selection for older clients that omit the field.
 		var previousTrip *int
 		var oldTrip *int
-		if err = tx.QueryRow(ctx, `SELECT (SELECT load_trip_id FROM `+grossBoardEntriesSQL+` p WHERE p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3 AND NOT p.deleted)`, e.DriverID, e.Date, e.Slot).Scan(&oldTrip); err != nil {
+		var oldID *int
+		var oldNumber string
+		var oldActive bool
+		if err = tx.QueryRow(ctx, `SELECT CASE WHEN NOT p.deleted THEN p.load_trip_id END,p.load_record_id,coalesce(p.load_number,''),
+ coalesce(NOT p.deleted AND p.day_status='' AND btrim(p.load_number)<>'',false)
+ FROM (SELECT 1) seed LEFT JOIN `+grossBoardEntriesSQL+` p
+ ON p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3`, e.DriverID, e.Date, e.Slot).Scan(&oldTrip, &oldID, &oldNumber, &oldActive); err != nil {
 			return nil, err
 		}
 		if oldTrip != nil {
@@ -604,6 +611,9 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 			return nil, err
 		}
 		e.LoadRecordID = loadID
+		if newGrossBoardLoadClaim(e, oldNumber, oldID, oldTrip, oldActive) {
+			newClaims = append(newClaims, grossBoardLoadClaim{e.DriverID, e.Date, e.Slot, e.LoadNumber, e.LoadRecordID, e.LoadTripID})
+		}
 		e.OriginalRate = original
 		e.Miles = miles
 		e.Version = version
@@ -612,6 +622,9 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		entries[index] = e
 	}
 
+	if err = assertGrossBoardLoadClaims(ctx, tx, newClaims); err != nil {
+		return nil, err
+	}
 	progressIDs := []string{}
 	for _, entry := range entries {
 		progressIDs = append(progressIDs, entry.DriverID)
