@@ -39,7 +39,8 @@ bash deploy/local-release.sh publish "$sha"
 Run `prepare` as a regular user with Go, Node.js 22, Python 3, GNU tar, and
 the PostgreSQL 16 server tools on PATH (typically add
 `/usr/lib/postgresql/16/bin`). It checks the specified commit in a detached
-checkout and starts a disposable PostgreSQL cluster on loopback. It runs the
+checkout and starts a disposable PostgreSQL cluster on loopback. If using WSL2,
+keep `TMPDIR` on the Linux filesystem (the default `/tmp` works). It runs the
 same deployment guard tests, backend tests, lint, frontend checks and production
 builds as the automatic workflow. The optional full Chromium suite still uses a
 regular Actions run. The script saves the checksummed archive in

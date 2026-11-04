@@ -37,8 +37,8 @@ case "$1" in
             exit 1
         fi
 
-        # The clean checkout has no .env. Disable inherited live test opt-ins
-        # and libpq defaults before creating the disposable database.
+        # The checkout excludes local .env edits. Disable inherited live test
+        # opt-ins and libpq defaults before creating the disposable database.
         while IFS= read -r variable; do
             case "$variable" in
                 MSERP_*|PG*|*_DATABASE_URL|PREPASS_INTEGRATION_*) unset "$variable" ;;
@@ -48,9 +48,11 @@ case "$1" in
         unset NEXT_PUBLIC_API_URL NODE_OPTIONS
 
         mkdir -p "$store"
-        scratch=$(mktemp -d "$store/.prepare-$sha.XXXXXX")
+        temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
+        scratch=$(mktemp -d "$temp_root/mserp-prepare-$sha.XXXXXX")
         checkout="$scratch/source"
         cluster="$scratch/pgdata"
+        receipt_staging=
         cleanup() {
             local status=$?
             cd "$repo_root"
@@ -63,8 +65,12 @@ case "$1" in
                 return 1
             fi
             case "$scratch" in
-                "$store/.prepare-$sha."*) rm -rf -- "$scratch" ;;
+                "$temp_root/mserp-prepare-$sha."*) rm -rf -- "$scratch" ;;
             esac
+            if [[ -n $receipt_staging && -d $receipt_staging ]]; then
+                rm -f -- "$receipt_staging/$archive" "$receipt_staging/$checksums"
+                rmdir -- "$receipt_staging"
+            fi
             return "$status"
         }
         trap cleanup EXIT
@@ -79,15 +85,20 @@ case "$1" in
         # Only the new cluster is reachable through this generated loopback port.
         # No persistent PostgreSQL service or operator credentials are needed.
         port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-        initdb -D "$cluster" -U postgres --no-locale -E UTF8 --auth=trust
+        initdb -D "$cluster" -U postgres --locale=C.UTF-8 -E UTF8 --auth=trust
         pg_ctl -D "$cluster" -l "$scratch/postgres.log" -o "-h 127.0.0.1 -p $port -c unix_socket_directories=" -w start
         db="postgresql://postgres@127.0.0.1:$port/mserp_assignment_history_test?sslmode=disable"
         createdb -h 127.0.0.1 -p "$port" -U postgres mserp_assignment_history_test
         psql -X -v ON_ERROR_STOP=1 "$db" -c 'CREATE ROLE mserp_app; CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public'
         MSERP_RELEASE_TEST_DATABASE_URL="$db" bash deploy/release-checks.sh backend
-        git diff --exit-code HEAD --
+        if ! git diff --quiet HEAD --; then
+            echo 'The checks modified tracked source files. No release was prepared.' >&2
+            exit 1
+        fi
         bash deploy/release-checks.sh package
-        mv -T -- "$checkout/artifact" "$receipt"
+        receipt_staging=$(mktemp -d "$store/.ready-$sha.XXXXXX")
+        cp -- "artifact/$archive" "artifact/$checksums" "$receipt_staging/"
+        mv -T -- "$receipt_staging" "$receipt"
         printf 'Local checks passed for %s. Release is ready in %s\n' "$sha" "$receipt"
         ;;
     publish)
