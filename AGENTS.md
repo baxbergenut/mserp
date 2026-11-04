@@ -972,12 +972,15 @@ and requires no schema migration.
   separately from load/Gross Board day statuses. Migration 122 adds the sheet
   choices; legacy saved statuses and undo history remain valid without inferred
   replacements, but are not offered for new selection. ACCIDENT is trimmed.
-  Migration 118 stores a shared driver order per dispatcher (including Unassigned).
+  Driver row order is personal browser localStorage, keyed by user and dispatcher
+  (including Unassigned). Read-only users can reorder within groups. Migration 118's
+  legacy sequences/versions remain only for assignment concurrency; reads no longer
+  use them to sort rows. Default rows are alphabetical; personal moves retain hidden rows.
   Unassigned is pinned first, uses the same group heading and remains a drop
   target when empty. Dragging between dispatcher groups assigns/unassigns the
   native driver immediately at the database clock, with actor-attributed assignment
   history; no week backdating or provider assignment calls. POST /driver-board/order
-  retains within-group reorder and accepts explicit targetDispatcherId plus
+  rejects retired within-group reorder with 410 and accepts explicit targetDispatcherId plus
   targetRevision for transfers. Both complete rosters are fenced and locked; hidden
   rows remain, inactive destinations and pending hires are rejected. Pointer/touch,
   edge scrolling, Escape, failed-save rollback and Up/Down work; Alt+Up unassigns.
@@ -985,8 +988,10 @@ and requires no schema migration.
   Read-only users can reorder groups; Unassigned stays first. Live snapshots retain
   the local preference. Migration 125's shared order is ignored and retained only
   for compatibility; POST /driver-board/dispatcher-order returns 410 for old clients.
-  Driver ordering and assignments remain shared and require driver_board.write.
-  Browser regression: frontend/scripts/test-dispatcher-order.mjs.
+  Cross-group assignments remain shared and require driver_board.write; successful
+  transfers save the destination placement only in the mover's browser.
+  Browser regressions: frontend/scripts/test-dispatcher-order.mjs and
+  frontend/scripts/test-driver-order.mjs.
   Migration 168 invalidates the live board on intake changes. Pending hires appear
   under Unassigned as New driver / Needs setup, using existing onboarding task
   visibility and setup permissions; they cannot be dispatched before setup.

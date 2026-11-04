@@ -130,35 +130,25 @@ export function useDriverBoard(lockedDriverId?: string) {
     const target = board?.drivers.find(d => d.id === targetDriverId);
     const targetDispatcherId = destination ?? target?.dispatcherId;
     if (!driver || targetDispatcherId === undefined || driverId === targetDriverId) throw new Error("The driver list changed. Reload the board and try again.");
-    const transfer = driver.dispatcherId !== targetDispatcherId;
+    if (driver.dispatcherId === targetDispatcherId) throw new Error("Driver ordering is saved locally in this browser.");
     orderSavingRef.current = true;
     setOrderSaving(true);
     try {
       const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId, after, revision,
-        ...(transfer ? { targetDispatcherId, targetRevision: board?.driverOrderRevisions[targetDispatcherId] } : {}) });
-      if (transfer) {
-        setBoard(current => {
-          // A newer SSE snapshot wins over this response. Otherwise apply the
-          // committed placement immediately, without a second blocking request.
-          if (!current || current.driverOrderRevisions[driver.dispatcherId] !== revision ||
-              current.driverOrderRevisions[targetDispatcherId] !== board?.driverOrderRevisions[targetDispatcherId]) return current;
-          return { ...current,
-            drivers: transferDriverRows(current.drivers, driverId, targetDispatcherId, targetDriverId, after),
-            dispatcherOrderRevision: "",
-            driverOrderRevisions: { ...current.driverOrderRevisions,
-              [driver.dispatcherId]: result.sourceRevision ?? "", [targetDispatcherId]: result.revision },
-          };
-        });
-        refreshWanted.current();
-        return;
-      }
+        targetDispatcherId, targetRevision: board?.driverOrderRevisions[targetDispatcherId] });
       setBoard(current => {
-        if (!current || current.driverOrderRevisions?.[result.dispatcherId] !== revision) return current;
-        const ranks = new Map(result.driverIds.map((id, i) => [id, i]));
-        const group = current.drivers.filter(d => d.dispatcherId === result.dispatcherId).sort((a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity));
-        let index = 0;
-        return { ...current, drivers: current.drivers.map(d => d.dispatcherId === result.dispatcherId ? group[index++] : d), driverOrderRevisions: { ...current.driverOrderRevisions, [result.dispatcherId]: result.revision } };
+        // A newer SSE snapshot wins over this response. Otherwise apply the
+        // committed placement immediately, without a second blocking request.
+        if (!current || current.driverOrderRevisions[driver.dispatcherId] !== revision ||
+            current.driverOrderRevisions[targetDispatcherId] !== board?.driverOrderRevisions[targetDispatcherId]) return current;
+        return { ...current,
+          drivers: transferDriverRows(current.drivers, driverId, targetDispatcherId, targetDriverId, after),
+          dispatcherOrderRevision: "",
+          driverOrderRevisions: { ...current.driverOrderRevisions,
+            [driver.dispatcherId]: result.sourceRevision ?? "", [targetDispatcherId]: result.revision },
+        };
       });
+      refreshWanted.current();
     } finally { orderSavingRef.current = false; setOrderSaving(false); }
   }
 

@@ -23,6 +23,19 @@ func TestSharedDispatcherOrderRetired(t *testing.T) {
 	}
 }
 
+func TestSharedDriverOrderRetired(t *testing.T) {
+	router := chi.NewRouter()
+	registerDriverBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	for _, destination := range []string{"", `,"targetDispatcherId":""`} {
+		body := `{"dispatcherId":"","driverId":"00000000-0000-0000-0000-000000000001","targetDriverId":"00000000-0000-0000-0000-000000000002","revision":"` + strings.Repeat("a", 64) + `"` + destination + `}`
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/driver-board/order", strings.NewReader(body)))
+		if response.Code != http.StatusGone {
+			t.Fatalf("retired driver ordering returned %d: %s", response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestDriverBoardValidation(t *testing.T) {
 	good := repository.DriverBoardEntry{DriverID: "00000000-0000-0000-0000-000000000001", Status: "ENROUTE"}
 	for _, tc := range []struct {

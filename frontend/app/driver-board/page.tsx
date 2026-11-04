@@ -40,6 +40,7 @@ import { CurrentLoadInput } from "./CurrentLoadInput";
 const ETAEditor = dynamic(() => import("./ETAEditor").then(m => m.ETAEditor), { loading: () => null });
 import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 import { CellPresence } from "./CellPresence";
+import { useDriverOrder } from "./useDriverOrder";
 import { useDispatcherOrder } from "./useDispatcherOrder";
 import { useDriverRowDrag } from "./useDriverRowDrag";
 
@@ -72,7 +73,8 @@ export default function DriverBoardPage() {
  useEffect(() => { const timer = setInterval(() => setToday(leaveToday()), 30000); return () => clearInterval(timer); }, []);
  const state = useDriverBoard(nextStop?.id ?? etaEditor?.id ?? pickupEditor?.id ?? leaveEditor?.id ?? restriction?.id);
   const { board: sourceBoard, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
-  const dispatcherOrder = useDispatcherOrder(sourceBoard?.drivers ?? []);
+  const driverOrder = useDriverOrder(sourceBoard?.drivers ?? []);
+  const dispatcherOrder = useDispatcherOrder(driverOrder.drivers);
   const board = useMemo(() => sourceBoard ? { ...sourceBoard, drivers: dispatcherOrder.drivers } : null, [sourceBoard, dispatcherOrder.drivers]);
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
@@ -99,7 +101,7 @@ export default function DriverBoardPage() {
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
     (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
-  const rowDrag = useDriverRowDrag(drivers, moveDriver);
+  const rowDrag = useDriverRowDrag(drivers, moveDriver, canEdit);
   const renderedDrivers = rowDrag.drivers;
   const { table, minimumWidth, tableWidth, columnWidth } = useBoardColumnWidths(renderedDrivers.map(driver => {
     const entry = entries[driver.id];
@@ -124,12 +126,19 @@ export default function DriverBoardPage() {
     groups.set(d.dispatcherId, group);
   }
   const disabled = !canEdit || loading || leaving || state.actionBusy;
-  const orderDisabled = disabled || saving || dirty;
+  const orderDisabled = loading || leaving || state.actionBusy || saving || dirty;
   async function moveDriver(id: string, target: string, after: boolean, revision: string, dispatcher?: string) {
     setOrderError(""); setOrderNotice("");
     try {
-      await state.reorderDrivers(id, target, after, revision, dispatcher);
-      setOrderNotice("Saved.");
+      const source = board?.drivers.find(driver => driver.id === id);
+      const destination = dispatcher ?? board?.drivers.find(driver => driver.id === target)?.dispatcherId;
+      if (!source || destination === undefined) throw new Error("The driver list changed. Try again.");
+      if (source.dispatcherId !== destination) {
+        if (!canEdit) throw new Error("You do not have permission to change dispatcher assignments.");
+        await state.reorderDrivers(id, target, after, revision, destination);
+      }
+      const persisted = driverOrder.reorder(id, target, after, destination);
+      setOrderNotice(persisted ? "Your driver order is saved in this browser." : "Order changed for this tab. Browser storage is unavailable.");
       return true;
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Driver order could not be saved. Try again."); return false; }
   }
@@ -239,20 +248,20 @@ export default function DriverBoardPage() {
               <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 <td className={`${cellClass} bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
                 <th scope="row" title={d.fullName} className={`${cellClass} bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
-                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title="Drag between dispatchers or to Unassigned. Arrow Up / Down moves rows; Alt + Arrow Up unassigns." disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
+                  <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title={canEdit ? "Drag to reorder for yourself. Moving between dispatchers changes the shared assignment; Alt + Arrow Up unassigns." : "Drag or use Arrow Up / Down to reorder drivers for yourself."} disabled={orderDisabled}
                     className="flex h-8 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
                     onPointerDown={event => {
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (!orderDisabled && revision) { rowDrag.start(event, d, revision); setOrderNotice(""); }
+                      if (!orderDisabled) { rowDrag.start(event, d, revision ?? ""); setOrderNotice(""); }
                     }}
                     onKeyDown={event => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                       event.preventDefault(); event.stopPropagation();
-                      if (event.altKey && event.key === "ArrowUp" && d.dispatcherId && !orderDisabled && !rowDrag.active) { void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], ""); return; }
+                      if (canEdit && event.altKey && event.key === "ArrowUp" && d.dispatcherId && !orderDisabled && !rowDrag.active) { void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], ""); return; }
                       const target = drivers[i + (event.key === "ArrowUp" ? -1 : 1)];
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (target && revision && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
-                    }}><GripVertical className="h-4 w-4" /></button>}
+                      if (target && (canEdit || target.dispatcherId === d.dispatcherId) && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision ?? "");
+                    }}><GripVertical className="h-4 w-4" /></button>
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}><div className="flex items-center gap-1">{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</div></td>
                 <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
