@@ -84,7 +84,9 @@ and requires no schema migration.
 
 - Migration 198 makes ordinary expense deductions statement-local draft choices
   (`expense_choices`: auto/fixed/skip). Draft saves do not reserve or post the
-  expense balance; finalization posts once and reopening reverses that statement's
+  expense balance. The UI shows only the editable deduction amount, defaulting to
+  unpaid balance; zero skips it. Preserve existing saved amounts without a selector.
+  Finalization posts once and reopening reverses that statement's
   exact postings. All unpaid ordinary expenses are visible irrespective of invoice
   date. Reimbursements, escrow, recurring charges and Fuel/Toll keep their distinct
   ledgers. Prepared Driver Pay overlays current driver-paid balances and submits an

@@ -141,25 +141,20 @@ try {
 
     const choice = region.getByRole('combobox', {name:'Grid Test, expense Equipment, deduction choice'});
     const deduction = region.getByRole('textbox', {name:'Grid Test, expense Equipment, deduction'});
-    await expect(choice).toHaveValue('fixed');
-    const choose = async (mode, amount) => {
+    await expect(choice).toHaveCount(0);
+    const enterDeduction = async amount => {
       const [saved] = await Promise.all([
         page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/' + (investor ? 'investor-pay' : 'driver-pay')),
-        choice.selectOption(mode),
+        (async () => { await deduction.fill(amount); await deduction.press('Tab'); })(),
       ]);
       const input = saved.request().postDataJSON().expenseDeductions.find(row => row.expenseId === 'expense');
-      expect(input.mode).toBe(mode); expect(input.apply).toBe(true); expect(input.amount).toBe(amount);
-      await expect(choice).toHaveValue(mode);
+      expect(input.mode).toBe('fixed'); expect(input.apply).toBe(true); expect(input.amount).toBe(amount.replace(/^-/, ''));
       expect(expense.amount).toBe('100.00');
     };
-    await choose('skip', '0.00');
-    await choose('auto', '100.00');
-    const [fixedSave] = await Promise.all([
-      page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/' + (investor ? 'investor-pay' : 'driver-pay')),
-      (async () => { await deduction.fill('-25.00'); await deduction.press('Tab'); })(),
-    ]);
-    expect(fixedSave.request().postDataJSON().expenseDeductions[0].mode).toBe('fixed');
-    await expect(choice).toHaveValue('fixed');
+    await enterDeduction('0.00');
+    await expect(deduction).toHaveValue('0.00');
+    await enterDeduction('-100.00');
+    await enterDeduction('-25.00');
 
     if (!investor) {
       const reimbursementRow = region.getByRole('row').filter({ has: page.getByRole('button', { name: 'Open expense Parking refund', exact: true }) });

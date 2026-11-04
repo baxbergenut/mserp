@@ -2,6 +2,9 @@
 
 Ordinary unpaid expenses appear on open statements independently of invoice date.
 The statement stores an automatic, fixed-amount or skipped deduction choice.
+The UI exposes only the amount: a new deduction defaults to the unpaid balance,
+typing replaces that amount, and zero skips it. Existing saved amounts remain.
+Automatic/fixed/skip modes are internal compatibility details, not a dropdown.
 Saving a choice does not reserve or collect the expense. Only finalization reduces
 the central unpaid balance. Reopening reverses that statement's exact collection
 and preserves its choice for the next review. External settlements and balance
