@@ -24,6 +24,9 @@ try {
  const get = async path => {const response=await context.request.get(access.base+'/api'+path);assert.equal(response.status(),200,await response.text());return response.json();};
  const initial = await get('/dispatcher-pay');
  const week = initial.weekStart;
+ // The fresh database seeds rules for the current calendar week. Give this
+ // completed-week fixture its own immutable copy of those default rules.
+ sql(`INSERT INTO dispatcher_commission_rules(effective_week,rules,actor_id) SELECT '${week}',rules,'completed-week-browser-fixture' FROM dispatcher_commission_rules ORDER BY effective_week,id LIMIT 1;`);
  const nextDate=new Date(week+'T12:00:00Z');nextDate.setUTCDate(nextDate.getUTCDate()+7);const next=nextDate.toISOString().slice(0,10);
  sql(`INSERT INTO dispatchers(id,full_name,normalized_name) VALUES('${dispatcher}','${dispatcherName}','${dispatcherName.toLowerCase()}');
  INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,dispatcher_id,roster_start_week) VALUES('${driver}','${driverName}','${driverName.toLowerCase()}','cpm',1,'${dispatcher}','${week}');
@@ -73,8 +76,10 @@ try {
  await dialog.getByRole('button',{name:'Save revision',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.getByRole('heading',{name:'Effective '+next,exact:true})).toBeVisible();
- const future=await get('/dispatcher-pay?weekStart='+next);
- assert.equal(future.rule.rules.tiers[0].brackets[0].percent,2);
+ const futureRules=await get('/dispatcher-pay/rules');
+ assert.equal(futureRules.find(rule=>rule.effectiveWeek===next).rules.tiers[0].brackets[0].percent,2);
+ const unfinished=await context.request.get(access.base+'/api/dispatcher-pay?weekStart='+next);
+ assert.equal(unfinished.status(),400);assert.match(await unfinished.text(),/after the week ends/);
  report=await get('/dispatcher-pay?weekStart='+week);assert.equal(report.rule.rules.tiers[0].brackets[0].percent,1);
  await page.getByRole('tab',{name:'Weekly pay',exact:true}).click();
  await section.getByRole('button',{name:`Edit home days for ${driverName}`}).click();
