@@ -255,6 +255,10 @@ if [[ -f $extract_dir/backend/export-expense-sheet ]]; then
     chown root:mserp "$extract_dir/backend/export-expense-sheet"
     chmod 0750 "$extract_dir/backend/export-expense-sheet"
 fi
+if [[ -f $extract_dir/backend/reconcile-loads ]]; then
+    chown root:mserp "$extract_dir/backend/reconcile-loads"
+    chmod 0750 "$extract_dir/backend/reconcile-loads"
+fi
 mv "$extract_dir" "$release_dir"
 extract_dir=
 
