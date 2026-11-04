@@ -22,6 +22,7 @@ const payrollProjectionSchemaVersion = 11
 
 var ErrPayrollProjectionCoverage = errors.New("payroll projection source capture is incomplete")
 var ErrPayrollProjectionSuperseded = errors.New("payroll projection inputs or lease changed")
+var errPayrollProjectionNeedsFullClaims = fmt.Errorf("%w: queued resource claims are incomplete", ErrPayrollProjectionSuperseded)
 
 type payrollProjectionJob struct {
 	Week       time.Time
@@ -277,15 +278,17 @@ func (r *DriverPayRepository) failPayrollProjection(ctx context.Context, job pay
 	if errors.As(cause, &pgerr) && (pgerr.Code == "40001" || pgerr.Code == "40P01") {
 		message = ""
 	}
+	fullClaims := errors.Is(cause, errPayrollProjectionNeedsFullClaims)
 	// With event-driven pages, a real failure transition must be visible too.
 	// Lease churn and superseded attempts must not generate periodic refreshes.
 	_, err := r.pool.Exec(ctx, `WITH previous AS MATERIALIZED (
  SELECT last_error FROM payroll_projection_jobs WHERE week_start=$1 AND lease_token=$2::uuid
  ), failed AS (
  UPDATE payroll_projection_jobs SET lease_token=NULL,lease_until=NULL,last_error=$3,
+ impact_roots=CASE WHEN $4 AND requested_generation=$5 THEN NULL ELSE impact_roots END,
  available_at=clock_timestamp()+make_interval(secs=>CASE WHEN $3='' THEN 0 ELSE least(30,power(2,least(attempts,5))::int) END)
  WHERE week_start=$1 AND lease_token=$2::uuid RETURNING week_start
- ) SELECT pg_notify('payroll_projection_visible','') FROM failed,previous WHERE previous.last_error IS DISTINCT FROM $3`, job.Week, job.Token, message)
+ ) SELECT pg_notify('payroll_projection_visible','') FROM failed,previous WHERE previous.last_error IS DISTINCT FROM $3`, job.Week, job.Token, message, fullClaims, job.Generation)
 	return err
 }
 
@@ -415,9 +418,9 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 		}
 	}
 	if selectedResources && (impact == nil || !payrollSelectionCovers(lockedSelection, impact.roots)) {
-		// A new source can widen a leased job. Retry discovery, never upgrade
-		// claims or calculate unrelated statements under incomplete locks.
-		return ErrPayrollProjectionSuperseded
+		// The combined proof can be broader than the union of dispatched
+		// batches. Release these locks and retry with full claims.
+		return errPayrollProjectionNeedsFullClaims
 	}
 	if impact != nil {
 		rebaseOnly = len(impact.roots) == 0 || (impact.weeks != nil && !impact.weeks[job.Week.Format(time.DateOnly)])
@@ -784,7 +787,7 @@ func (r *DriverPayRepository) PrepareNextPayrollWeek(ctx context.Context) (bool,
 	workCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	if err = r.preparePayrollProjection(workCtx, job); err != nil {
-		if errors.Is(context.Cause(workCtx), errPayrollWorkYielded) {
+		if errors.Is(context.Cause(workCtx), errPayrollWorkYielded) && !errors.Is(err, errPayrollProjectionNeedsFullClaims) {
 			err = ErrPayrollProjectionSuperseded
 		}
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)

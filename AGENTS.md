@@ -228,6 +228,8 @@ and requires no schema migration.
   Ordinary preparation requests must not rewrite existing jobs, even with identical
   values. Interactive priority renewal skips leased jobs: either write can invalidate
   the worker's repeatable-read snapshot and make an open page starve preparation.
+  When a worker's source proof exceeds its queued resource claims, it releases
+  the lease and retries that generation with full claims.
   Investor inputs retain separate dated scopes in post-write batches. Financial epochs must be reread
   after writes. Schema/protocol changes require quiesced writers.
   `PAYROLL_PROJECTION_MODE` defaults to `off`;
