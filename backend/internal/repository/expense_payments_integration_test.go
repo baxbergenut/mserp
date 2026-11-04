@@ -167,6 +167,9 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					exec(string(body))
 				}
 			}
+			if mode == "migration" {
+				exec("ALTER TABLE driver_pay_weeks ADD COLUMN expense_choices jsonb NOT NULL DEFAULT '{}'; ALTER TABLE investor_pay_weeks ADD COLUMN expense_choices jsonb NOT NULL DEFAULT '{}'; ALTER TABLE expense_payments ADD COLUMN statement_kind text, ADD COLUMN statement_id uuid;")
+			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
 				t.Fatal(err)
@@ -181,6 +184,20 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			expenses := NewExpenseRepository(pool)
 			pay := NewDriverPayRepository(pool)
 			week, _ := time.Parse(time.DateOnly, "2026-09-28")
+			var actor string
+			if err := admin.QueryRow(ctx, "INSERT INTO app_users(username,password_hash) VALUES('expense-finalizer',crypt('test-only',gen_salt('bf'))) RETURNING id::text").Scan(&actor); err != nil {
+				t.Fatal(err)
+			}
+			settle := func(w time.Time, reopen bool) {
+				t.Helper()
+				report, err := pay.Get(ctx, w)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = pay.Settle(ctx, w, driver, report.Revision, actor, "Expense lifecycle", reopen, true); err != nil {
+					t.Fatal(err)
+				}
+			}
 			var penaltyCategory string
 			if err = admin.QueryRow(ctx, `SELECT id::text FROM expense_settings WHERE kind='category' AND name='Penalties'`).Scan(&penaltyCategory); err != nil {
 				t.Fatal(err)
@@ -242,11 +259,14 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			balance("0", "100.25")
 			stale := read(week.AddDate(0, 0, 7))
 			first.ExpenseDeductions[0].Amount = "30.10"
+			first.ExpenseDeductions[0].Mode = "fixed"
 			first.ExpenseDeductions[0].Apply = true
 			first, err = pay.Save(ctx, first)
 			if err != nil {
 				t.Fatal(err)
 			}
+			balance("0", "100.25")
+			settle(week, false)
 			balance("30.10", "70.15")
 			stale.ExpenseDeductions[0].Apply = true
 			if _, err = pay.Save(ctx, stale); !errors.Is(err, ErrDriverPayConflict) {
@@ -257,6 +277,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				t.Fatal(next)
 			}
 			next.ExpenseDeductions[0].Amount = "80"
+			next.ExpenseDeductions[0].Mode = "fixed"
 			next.ExpenseDeductions[0].Apply = true
 			if _, err = pay.Save(ctx, next); err == nil {
 				t.Fatal("overpayment accepted")
@@ -277,6 +298,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			settle(week.AddDate(0, 0, 14), false)
 			balance("100.25", "0.00")
 			if len(read(week.AddDate(0, 0, 21)).ExpenseDeductions) != 0 {
 				t.Fatal("paid expense carried forward")
@@ -302,7 +324,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			old.ExpenseDeductions[0].Amount = "0"
 			old.ExpenseDeductions[0].Apply = true
 			old.Version = 0
-			if _, err = pay.Save(ctx, old); !errors.Is(err, ErrDriverPayConflict) {
+			if _, err = pay.Save(ctx, old); err == nil {
 				t.Fatal(err)
 			}
 			balance("100.25", "0.00")
@@ -334,9 +356,28 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal("concurrent principal missing")
 				}
 			}
-			start, results := make(chan struct{}), make(chan error, 2)
 			for _, draft := range drafts {
-				go func(draft DriverPayEdits) { <-start; _, err := pay.Save(ctx, draft); results <- err }(draft)
+				if _, err = pay.Save(ctx, draft); err != nil {
+					t.Fatal("independent draft save", err)
+				}
+			}
+			reviews := []DriverPayWeek{}
+			for _, draft := range drafts {
+				w, _ := chargeWeek(draft.WeekStart)
+				review, err := pay.Get(ctx, w)
+				if err != nil {
+					t.Fatal(err)
+				}
+				reviews = append(reviews, review)
+			}
+			start, results := make(chan struct{}), make(chan error, 2)
+			for _, review := range reviews {
+				go func(review DriverPayWeek) {
+					<-start
+					w, _ := chargeWeek(review.WeekStart)
+					_, err := pay.Settle(ctx, w, driver, review.Revision, actor, "", false, true)
+					results <- err
+				}(review)
 			}
 			close(start)
 			successes, conflicts := 0, 0
@@ -357,6 +398,8 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			if err := pool.QueryRow(ctx, `SELECT sum(amount)::text FROM expense_payments WHERE expense_id=$1`, concurrentExpense.ID).Scan(&collected); err != nil || collected != "125.50" {
 				t.Fatalf("concurrent principal collected %s: %v", collected, err)
 			}
+			settle(week, true)
+			settle(week.AddDate(0, 0, 14), true)
 			if err = expenses.DeleteExpense(ctx, e.ID); err != nil {
 				t.Fatal("open statement must allow expense deletion", err)
 			}

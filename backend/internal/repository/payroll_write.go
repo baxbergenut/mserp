@@ -26,6 +26,10 @@ type payrollResourceTransaction struct {
 	// Proven before canonical writes, while the source gate is held. Publication
 	// must not reinterpret this command's own new events as intervening sources.
 	periodSources map[string]bool
+	// The session receipt lock stays held through commit and cleanup. A missing
+	// receipt observed under that lock cannot appear before this command stores it.
+	missingReceiptActor, missingReceiptRequest string
+	selectionPlanConfigured                    bool
 }
 
 func payrollConcurrent(tx pgx.Tx) bool {
@@ -149,6 +153,10 @@ func (r *DriverPayRepository) beginPayrollWriteProtocol(ctx context.Context, con
 		cleanup()
 		return nil, nil, err
 	}
+	if concurrent && !replay {
+		tx = &payrollResourceTransaction{Tx: tx, resources: resources, single: len(roots) == 1,
+			missingReceiptActor: actor, missingReceiptRequest: request}
+	}
 	if resources != nil {
 		if err = revalidatePayrollResources(ctx, tx, roots, resources); err != nil {
 			_ = tx.Rollback(ctx)
@@ -165,9 +173,6 @@ func (r *DriverPayRepository) beginPayrollWriteProtocol(ctx context.Context, con
 			cleanup()
 			return nil, nil, e
 		}
-	}
-	if concurrent && !replay {
-		tx = &payrollResourceTransaction{Tx: tx, resources: resources, single: len(roots) == 1}
 	}
 	return tx, func() { _ = tx.Rollback(context.Background()); cleanup() }, nil
 }

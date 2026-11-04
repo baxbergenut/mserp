@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
+	"mserp/internal/db"
 )
 
-// Whole-week finalization already calculated these balances uncached under the
-// financial lock. Lock and fence every principal once, then retain the ordinary
+// Finalization has validated these balances under the financial source fence.
+// Lock and fence every principal once, then retain the ordinary
 // payment/audit triggers with set-based writes. Any error rolls back the week.
 func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor string, cards []DriverPayDriver) error {
+	defer db.Phase(ctx, "expense_posting")()
 	type allocation struct {
 		item             ExpenseDeduction
 		statement, owner string
@@ -67,28 +69,36 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 	if err != nil {
 		return err
 	}
-	rows, err = tx.Query(ctx, `SELECT id::text,driver_id::text,balance_version FROM driver_escrows WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, ids)
-	if err != nil {
-		return err
+	escrowIDs := []string{}
+	for _, id := range ids {
+		if selected[id].item.Source == "escrow" {
+			escrowIDs = append(escrowIDs, id)
+		}
 	}
-	for rows.Next() {
-		var id, driver string
-		var version int
-		if err = rows.Scan(&id, &driver, &version); err != nil {
-			rows.Close()
+	if len(escrowIDs) > 0 {
+		rows, err = tx.Query(ctx, `SELECT id::text,driver_id::text,balance_version FROM driver_escrows WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, escrowIDs)
+		if err != nil {
 			return err
 		}
-		a := selected[id]
-		if found[id] || kind != "driver" || a.item.Source != "escrow" || version != a.item.Version || driver != a.statement {
-			rows.Close()
-			return ErrDriverPayConflict
+		for rows.Next() {
+			var id, driver string
+			var version int
+			if err = rows.Scan(&id, &driver, &version); err != nil {
+				rows.Close()
+				return err
+			}
+			a := selected[id]
+			if found[id] || kind != "driver" || a.item.Source != "escrow" || version != a.item.Version || driver != a.statement {
+				rows.Close()
+				return ErrDriverPayConflict
+			}
+			found[id] = true
 		}
-		found[id] = true
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
 	}
 	if len(found) != len(selected) {
 		return ErrDriverPayConflict
@@ -109,10 +119,18 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 		}
 		var resultCount int64
 		if source == "" && kind == "investor" {
-			tag, e := tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,investor_truck_id)
- SELECT id,$2::date,amount::numeric,nullif($4,'')::uuid,truck FROM unnest($1::uuid[],$3::text[],$5::uuid[]) v(id,amount,truck) ORDER BY id
+			tag, e := tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,investor_truck_id,statement_kind,statement_id)
+ SELECT id,$2::date,amount::numeric,nullif($4,'')::uuid,truck,'investor',truck FROM unnest($1::uuid[],$3::text[],$5::uuid[]) v(id,amount,truck) ORDER BY id
  ON CONFLICT(expense_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now()
  WHERE expense_payments.investor_truck_id=excluded.investor_truck_id`, keys, week, amounts, actor, trucks)
+			if e != nil {
+				return e
+			}
+			resultCount = tag.RowsAffected()
+		} else if source == "" {
+			tag, e := tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,statement_kind,statement_id)
+ SELECT id,$2::date,amount::numeric,nullif($4,'')::uuid,'driver',statement FROM unnest($1::uuid[],$3::text[],$5::uuid[]) v(id,amount,statement) ORDER BY id
+ ON CONFLICT(expense_id,week_start) DO NOTHING`, keys, week, amounts, actor, trucks)
 			if e != nil {
 				return e
 			}

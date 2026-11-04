@@ -188,8 +188,8 @@ func selectPayDriver(report DriverPayWeek, id string) DriverPayWeek {
 // Source baseline for projection headers and source-only facts. Resource commands
 // advance their exact epochs instead; this value deliberately excludes those.
 func payrollCacheSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
-	if resource, ok := tx.(*payrollResourceTransaction); ok && resource.sourceFence != nil {
-		return *resource.sourceFence, nil
+	if _, ok := tx.(*payrollResourceTransaction); ok {
+		return payrollProjectionFence(ctx, tx)
 	}
 	if memo, ok := ctx.Value(payrollSnapshotKey{}).(payrollSnapshot); ok && memo.tx == tx {
 		return memo.value, nil
@@ -235,9 +235,11 @@ func payrollFinancialSnapshot(ctx context.Context, tx pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var installed bool
-	if err = tx.QueryRow(ctx, `SELECT to_regclass(quote_ident(current_schema())||'.payroll_projection_control') IS NOT NULL`).Scan(&installed); err != nil || !installed {
-		return snapshot, err
+	if !payrollConcurrent(tx) {
+		var installed bool
+		if err = tx.QueryRow(ctx, `SELECT to_regclass(quote_ident(current_schema())||'.payroll_projection_control') IS NOT NULL`).Scan(&installed); err != nil || !installed {
+			return snapshot, err
+		}
 	}
 	var resources string
 	err = tx.QueryRow(ctx, `SELECT payroll_financial_snapshot($1)`, snapshot).Scan(&resources)

@@ -48,7 +48,12 @@ func main() {
 	payrollRetire := flag.String("retire-payroll-before", "", "retire explicitly reviewed old draft payroll weeks with writers stopped; retain allocations and verify remaining reports")
 	resetGrossBoardBalances := flag.Bool("initialize-gross-board-rate-balances", false, "reset all driver rate balances to zero once and exit")
 	routingCapability := flag.Bool("board-routing-usage-capability", false, "print routing usage schema support and exit without opening a database")
+	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
 	flag.Parse()
+	if *expenseDraftCapability {
+		fmt.Println("payroll-expense-drafts-v1")
+		return
+	}
 	if *routingCapability {
 		fmt.Println("board-routing-usage-v1")
 		return

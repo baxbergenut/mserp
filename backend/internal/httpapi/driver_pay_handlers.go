@@ -192,7 +192,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			if r.URL.Query().Get("receipt") == "1" {
 				ctx = repository.WithPayrollReceipt(ctx)
 			}
-			result, err := repo.Settle(ctx, week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override, repository.PayrollSettlementCommand{RequestID: input.RequestID, ExpectedStatementRevision: input.ExpectedStatementRevision})
+			result, err := repo.Settle(ctx, week, input.DriverID, input.Revision, session.User.ID, input.Reason, reopen, input.Override, repository.PayrollSettlementCommand{RequestID: input.RequestID, ExpectedStatementRevision: input.ExpectedStatementRevision, ExpenseRevision: input.ExpenseRevision})
 			if err != nil {
 				fail(w, err)
 				return

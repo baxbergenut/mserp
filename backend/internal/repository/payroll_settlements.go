@@ -23,6 +23,7 @@ type PayrollSettlement struct {
 }
 
 type PayrollSettlementInput struct {
+	ExpenseRevision           string `json:"expenseRevision,omitempty"`
 	RequestID                 string `json:"requestId,omitempty"`
 	ExpectedStatementRevision string `json:"expectedStatementRevision,omitempty"`
 	WeekStart                 string `json:"weekStart"`
@@ -203,6 +204,28 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	if !prepared && (revision == "" || revision != report.Revision) {
 		return empty, ErrDriverPayConflict
 	}
+	if prepared && !reopen {
+		expenseRevision := ""
+		if len(commands) > 0 {
+			expenseRevision = commands[0].ExpenseRevision
+		}
+		if driver != "" && expenseRevision != "" {
+			if len(report.Drivers) != 1 || report.Drivers[0].ExpenseRevision != expenseRevision {
+				return empty, ErrDriverPayConflict
+			}
+		} else if driver == "" || len(report.Drivers) != 1 || command.reviewedExpenseRevision == "" || command.reviewedExpenseRevision != report.Drivers[0].ExpenseRevision {
+			// Older clients use their complete input revision as the review
+			// fence when the live balance differs from their prepared version.
+			// The statement revision itself suffices if that balance is unchanged.
+			current := DriverPayWeek{WeekStart: report.WeekStart}
+			if err = setPayrollRevision(ctx, tx, "driver", &current); err != nil {
+				return empty, err
+			}
+			if current.Revision != revision {
+				return empty, ErrDriverPayConflict
+			}
+		}
+	}
 	bulkExpenses := driver == "" && !reopen
 	if bulkExpenses {
 		ctx, err = preparePayrollFinalization(ctx, tx, "driver", report)
@@ -275,7 +298,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				deductions[i].Apply = !deductions[i].Saved
 			}
 			if !bulkExpenses && (!prepared || payrollExpensesNeedPosting(deductions)) {
-				if _, err = saveTeamExpenses(ctx, tx, d.ID, report.WeekStart, actor, deductions); err != nil {
+				if err = finalizePayrollExpenses(ctx, tx, "driver", report.WeekStart, actor, []DriverPayDriver{d}); err != nil {
 					return empty, err
 				}
 			}
@@ -327,6 +350,11 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			return empty, err
 		}
 	}
+	if reopen {
+		if err = reversePayrollExpenses(ctx, tx, "driver", report.WeekStart, payrollReceipt(report, selectedIDs).Drivers); err != nil {
+			return empty, err
+		}
+	}
 	// All selected financial writes are complete under the exclusive payroll
 	// lock. Calculate the resulting fleet once, then freeze those exact rows.
 	if len(pending) > 0 {
@@ -337,6 +365,8 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		updated := report
 		if !unchanged {
 			updated, e = readDriverPayWeek(ctx, tx, week, "")
+		} else {
+			e = overlayDriverExpenseBalances(ctx, tx, &updated)
 		}
 		if e != nil {
 			return empty, e

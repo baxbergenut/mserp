@@ -57,6 +57,9 @@ func payrollBalanceBatchContext(ctx context.Context, tx pgx.Tx, scopes []payroll
 				d.Name = "Escrow"
 			}
 			targets = append(targets, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved)
+			if part.source == "" {
+				targets = append(targets, &d.LiveBalance)
+			}
 			if err = rows.Scan(targets...); err != nil {
 				rows.Close()
 				return ctx, err
@@ -78,10 +81,15 @@ func payrollExpenseBalanceBatchSQL(reimburse bool) string {
 	driver, total, ledger := "charge_driver_id", "expense_collectible_total(e)", "expense_payments"
 	eligible := "lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND (NOT driver_settled OR expense_balance_adjustment(e.id)<>0)"
 	destination := "w.investor_truck_id IS NULL AND "
+	invoiceWindow, periodWindow := "", ""
+	liveColumn := ",lower(btrim(e.covered_by))='driver'"
 	if reimburse {
 		driver, total, ledger = "driver_id", "e.amount", "expense_reimbursement_payments"
 		eligible = "lower(btrim(payment_type))='reimburse'"
 		destination = ""
+		liveColumn = ""
+		invoiceWindow = " AND e.expense_date<(SELECT max(week)+10 FROM scopes)"
+		periodWindow = " AND e.expense_date<s.week+10"
 	}
 	return `WITH scopes AS MATERIALIZED (
  SELECT * FROM jsonb_to_recordset($1::jsonb) s(week date,drivers uuid[])
@@ -89,19 +97,19 @@ func payrollExpenseBalanceBatchSQL(reimburse bool) string {
  SELECT e.*,e.` + driver + ` AS payer,` + total + ` AS collectible,expense_external_total(e.id) AS external_paid
  FROM expenses e WHERE e.` + driver + ` IN (SELECT unnest(drivers) FROM scopes)
  AND ` + eligible + ` AND accounting_live_source('expense',e.id,e.expense_date)
- AND e.expense_date<(SELECT max(week)+10 FROM scopes) AND e.amount>=0
+ ` + invoiceWindow + ` AND e.amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.* FROM ` + ledger + ` p JOIN relevant e ON e.id=p.expense_id
  ), period_payments AS MATERIALIZED (
  SELECT e.id,s.week,coalesce(sum(p.amount) FILTER(WHERE p.week_start<>s.week),0) other,
  coalesce(sum(p.amount) FILTER(WHERE p.week_start<s.week),0) prior
- FROM relevant e JOIN scopes s ON e.payer=ANY(s.drivers) AND e.expense_date<s.week+10
+ FROM relevant e JOIN scopes s ON e.payer=ANY(s.drivers)` + periodWindow + `
  LEFT JOIN payments p ON p.expense_id=e.id GROUP BY e.id,s.week
  ) SELECT p.week::text,e.payer::text,e.id,coalesce(nullif(btrim(e.expense_type),''),e.category),e.category,
  e.expense_date::text,e.collectible::text,(e.collectible-e.external_paid-p.other)::text,
  coalesce(w.amount,e.collectible-e.external_paid-p.other)::text,
  (e.collectible-e.external_paid-p.prior-coalesce(w.amount,0))::text,
- (e.collectible-e.external_paid-p.prior)::text,e.balance_version,w.expense_id IS NOT NULL
+ (e.collectible-e.external_paid-p.prior)::text,e.balance_version,w.expense_id IS NOT NULL` + liveColumn + `
  FROM period_payments p JOIN relevant e ON e.id=p.id
  LEFT JOIN payments w ON w.expense_id=e.id AND w.week_start=p.week
  WHERE ` + destination + `(w.expense_id IS NOT NULL OR e.collectible-e.external_paid>p.other)

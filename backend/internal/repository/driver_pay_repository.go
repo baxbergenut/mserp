@@ -127,6 +127,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	ExpenseRevision        string                        `json:"expenseRevision,omitempty"`
 	PreparationState       string                        `json:"preparationState,omitempty"`
 	StatementRevision      string                        `json:"statementRevision,omitempty"`
 	BrokerReimbursements   []BrokerReimbursementReminder `json:"brokerReimbursements,omitempty"`
@@ -573,11 +574,20 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	// Retired exclusions are read-only compatibility data, including for old clients.
 	edits.LayoverExcludedDates = costDriver.Edits.LayoverExcludedDates
-	defer db.Phase(ctx, "writes_and_commit")()
-	unchangedEffects, err := unchangedPreparedPayEffects(ctx, tx, command, "driver", edits)
+	choiceRows, err := readPayrollExpenseChoices(ctx, tx, "driver", edits.WeekStart, []string{edits.DriverID})
 	if err != nil {
 		return edits, err
 	}
+	choices, err := mergePayrollExpenseChoices(choiceRows[edits.DriverID], costDriver.Edits.ExpenseDeductions, edits.ExpenseDeductions)
+	if err != nil {
+		return edits, err
+	}
+	choiceBody, err := json.Marshal(choices)
+	if err != nil {
+		return edits, err
+	}
+	defer db.Phase(ctx, "writes_and_commit")()
+	unchangedEffects := payrollStatementLocalSave(costDriver.Edits, edits)
 	if !unchangedEffects {
 		if command != nil && command.expected != "" {
 			// The prepared card supplies validation, but canonical balance guards
@@ -612,7 +622,7 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 					return edits, ErrDriverPayConflict
 				}
 			}
-			edits.ExpenseDeductions, err = saveTeamExpenses(ctx, tx, edits.DriverID, edits.WeekStart, actor, edits.ExpenseDeductions)
+			edits.ExpenseDeductions, err = saveTeamExpenses(ctx, tx, edits.DriverID, edits.WeekStart, actor, nonExpenseDeductions(edits.ExpenseDeductions))
 			if err != nil {
 				return edits, err
 			}
@@ -625,6 +635,9 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 			edits.ExpenseDeductions = filtered
 		}
 	}
+	if unchangedEffects {
+		edits.ExpenseDeductions = append([]ExpenseDeduction{}, costDriver.Edits.ExpenseDeductions...)
+	}
 	comments, err := json.Marshal(edits.Comments)
 	if err != nil {
 		return edits, err
@@ -635,17 +648,20 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	var version int
 	if edits.Version == 0 {
-		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override)
- VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override,expense_choices)
+ VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric,$8) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride, choiceBody).Scan(&version)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,version=version+1,updated_at=now()
- WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride).Scan(&version)
+		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,expense_choices=$9,version=version+1,updated_at=now()
+ WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride, choiceBody).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return edits, ErrDriverPayConflict
 	}
 	edits.Version = version
 	if err != nil {
+		return edits, err
+	}
+	if err = applyPayrollExpenseChoices(edits.ExpenseDeductions, choices); err != nil {
 		return edits, err
 	}
 	refreshed := DriverPayWeek{WeekStart: edits.WeekStart, Drivers: []DriverPayDriver{costDriver}}

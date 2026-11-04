@@ -110,13 +110,14 @@ func testOwnerSettlements(t *testing.T, ctx context.Context, admin *pgx.Conn, po
 		t.Fatal("reopening did not reverse finalization's confirmation")
 	}
 	d.Edits.ExpenseDeductions[0].Amount = "10.25"
+	d.Edits.ExpenseDeductions[0].Mode = "fixed"
 	d.Edits.ExpenseDeductions[0].Apply = true
 	if _, err = pay.Save(ctx, d.Edits, actor); err != nil {
 		t.Fatal(err)
 	}
 	expense, err = expenses.GetExpense(ctx, expense.ID)
-	if err != nil || *expense.RemainingAmount != "40.00" {
-		t.Fatal("correction did not restore expense balance", err)
+	if err != nil || *expense.RemainingAmount != "50.25" {
+		t.Fatal("draft choice changed expense balance before finalization", err)
 	}
 	current, err = pay.Get(ctx, week)
 	if err != nil {

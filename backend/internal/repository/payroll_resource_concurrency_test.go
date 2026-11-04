@@ -266,6 +266,7 @@ func TestPayrollResourceSharedBalanceDatabase(t *testing.T) {
 		}
 		repo := NewDriverPayRepository(pool)
 		repo.resourceConcurrency = true
+		repo.ConfigurePreparedFinalization(true)
 		if err := repo.EnablePayrollShadow(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -273,6 +274,7 @@ func TestPayrollResourceSharedBalanceDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		inputs := []DriverPayEdits{}
+		revisions := []string{}
 		for i, date := range []string{"2026-10-05", "2026-10-12"} {
 			week, _ := chargeWeek(date)
 			if err := repo.RequestPayrollPreparation(ctx, week, false); err != nil {
@@ -294,6 +296,7 @@ func TestPayrollResourceSharedBalanceDatabase(t *testing.T) {
 			}
 			e.ExpenseDeductions[0].Apply = true
 			inputs = append(inputs, e)
+			revisions = append(revisions, page.Revision)
 		}
 		if _, err := admin.Exec(ctx, `CREATE FUNCTION test_shared_payroll_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
  BEGIN IF NEW.week_start='2026-10-05' THEN PERFORM pg_advisory_xact_lock_shared(1822400); END IF; RETURN NEW; END $$;
@@ -311,7 +314,14 @@ func TestPayrollResourceSharedBalanceDatabase(t *testing.T) {
 		work, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		first, second := make(chan error, 1), make(chan error, 1)
-		go func() { _, e := repo.SaveInvestorPay(WithPayrollReceipt(work), inputs[0], actor); first <- e }()
+		settle := func(index int) error {
+			e := inputs[index]
+			week, _ := chargeWeek(e.WeekStart)
+			_, err := repo.SettleInvestor(WithPayrollReceipt(work), week, e.DriverID, revisions[index], actor, "", false, true,
+				PayrollSettlementCommand{RequestID: e.RequestID, ExpectedStatementRevision: e.ExpectedStatementRevision})
+			return err
+		}
+		go func() { first <- settle(0) }()
 		waitFor := func(query string) {
 			t.Helper()
 			deadline := time.Now().Add(3 * time.Second)
@@ -328,7 +338,7 @@ func TestPayrollResourceSharedBalanceDatabase(t *testing.T) {
 			t.Fatal("command did not reach expected lock", query)
 		}
 		waitFor(`SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=1822400 AND NOT granted)`)
-		go func() { _, e := repo.SaveInvestorPay(WithPayrollReceipt(work), inputs[1], actor); second <- e }()
+		go func() { second <- settle(1) }()
 		waitFor(`SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND classid<>0 AND mode='ExclusiveLock' AND NOT granted)`)
 		_ = hold.Rollback(ctx)
 		if err = <-first; err != nil {

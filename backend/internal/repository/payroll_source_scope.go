@@ -9,6 +9,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type payrollSourceImpactMemoKey struct{}
+type payrollSourceImpactMemo struct {
+	tx     pgx.Tx
+	proofs map[[2]string]*payrollPublicationImpact
+}
+
 // A table revision can change without touching this command's complete locked
 // component. Prove that from every intervening captured revision, including old
 // routing images. Missing history, unknown impact and shared resources fail closed.
@@ -89,6 +95,21 @@ func payrollChangedSourceRoots(ctx context.Context, tx pgx.Tx, before, current s
 // Keep the period proof with the principal proof. Discarding it makes a
 // current-week board edit look like a change to the same driver's past payroll.
 func payrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, current string) (*payrollPublicationImpact, error) {
+	if memo, ok := ctx.Value(payrollSourceImpactMemoKey{}).(*payrollSourceImpactMemo); ok && memo.tx == tx {
+		key := [2]string{before, current}
+		if proof, found := memo.proofs[key]; found {
+			return proof, nil
+		}
+		proof, err := readPayrollChangedSourceImpact(ctx, tx, before, current)
+		if err == nil {
+			memo.proofs[key] = proof
+		}
+		return proof, err
+	}
+	return readPayrollChangedSourceImpact(ctx, tx, before, current)
+}
+
+func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, current string) (*payrollPublicationImpact, error) {
 	if before == "" || current == "" {
 		return nil, nil
 	}

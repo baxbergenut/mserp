@@ -29,7 +29,7 @@ try {
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
       edits: { driverId: 'statement', weekStart: week, version: 0, notes: '', comments: {}, adjustments: [], fuelOverride: null, tollOverride: null,
         expenseDeductions: [
-          { expenseId: 'expense', name: 'Equipment', expenseDate: week, amount: '25.00', total: '100.00', available: '100.00', openingBalance: '100.00', remaining: '75.00', version: 1, saved: true },
+          { expenseId: 'expense', name: 'Equipment', expenseDate: week, amount: '25.00', total: '100.00', available: '100.00', openingBalance: '100.00', remaining: '75.00', version: 1, saved: false, mode: 'fixed' },
           { source: 'escrow', expenseId: 'escrow', name: 'Escrow', expenseDate: '2026-09-01', amount: '100.00', total: '2500.00', available: '2500.00', openingBalance: '2500.00', remaining: '2400.00', version: 1, saved: true },
         ],
         generatedCharges: [{ scheduleId: 'schedule', kind: 'recurring', name: 'Insurance', amount: '-50.00', scheduledAmount: '-50.00', overridden: false, version: 1, scheduleVersion: 1, typeVersion: 1 }],
@@ -138,6 +138,28 @@ try {
     await escrowRow.getByText('Escrow', {exact:true}).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(expenseReads).toEqual([]);
+
+    const choice = region.getByRole('combobox', {name:'Grid Test, expense Equipment, deduction choice'});
+    const deduction = region.getByRole('textbox', {name:'Grid Test, expense Equipment, deduction'});
+    await expect(choice).toHaveValue('fixed');
+    const choose = async (mode, amount) => {
+      const [saved] = await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/' + (investor ? 'investor-pay' : 'driver-pay')),
+        choice.selectOption(mode),
+      ]);
+      const input = saved.request().postDataJSON().expenseDeductions.find(row => row.expenseId === 'expense');
+      expect(input.mode).toBe(mode); expect(input.apply).toBe(true); expect(input.amount).toBe(amount);
+      await expect(choice).toHaveValue(mode);
+      expect(expense.amount).toBe('100.00');
+    };
+    await choose('skip', '0.00');
+    await choose('auto', '100.00');
+    const [fixedSave] = await Promise.all([
+      page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/' + (investor ? 'investor-pay' : 'driver-pay')),
+      (async () => { await deduction.fill('-25.00'); await deduction.press('Tab'); })(),
+    ]);
+    expect(fixedSave.request().postDataJSON().expenseDeductions[0].mode).toBe('fixed');
+    await expect(choice).toHaveValue('fixed');
 
     if (!investor) {
       const reimbursementRow = region.getByRole('row').filter({ has: page.getByRole('button', { name: 'Open expense Parking refund', exact: true }) });

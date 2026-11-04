@@ -1231,6 +1231,8 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface ExpenseDeduction {
+	mode?: "auto" | "fixed" | "skip";
+	liveBalance?: boolean;
   source?: "escrow" | "reimburse";
   category?: ExpenseCategory;
   expenseId: string;
@@ -1353,6 +1355,7 @@ export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
+	expenseRevision?: string;
 	preparationState?: "ready" | "preparing" | "updating" | "failed";
 	statementRevision?: string;
   brokerReimbursements?: { expenseId: string; loadNumber: string; expenseType: string; expenseDate: string; amount: string }[];
@@ -1553,7 +1556,7 @@ export interface ChargeBulk {
 export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }
 
 export interface PayrollSettlement { finalized: boolean; override?: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
-export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; weekStart: string; revision: string; driverId?: string; reason?: string; override: boolean }
+export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; expenseRevision?: string; weekStart: string; revision: string; driverId?: string; reason?: string; override: boolean }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
 
 export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number; endsBefore?: string }

@@ -29,6 +29,7 @@ eval "$(sed -n '/^compatible_release() {/,/^activate_release() {/p' "$helper" | 
 payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
 mock_routing_usage=f
+mock_expense_drafts=f
 runuser() {
     local result=$mock
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
@@ -49,6 +50,7 @@ runuser() {
     if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
     if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
     if [[ $* == *"public.board_route_usage"* ]]; then result=$mock_routing_usage; fi
+    if [[ $* == *"column_name='expense_choices'"* ]]; then result=$mock_expense_drafts; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -240,3 +242,13 @@ mock_routing_usage=error
 if compatible_release "$test_root/new"; then echo 'Routing schema query failure allowed rollback' >&2; exit 1; fi
 mock_routing_usage=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown routing schema allowed rollback' >&2; exit 1; fi
+
+mock_routing_usage=t
+mock_expense_drafts=t
+if compatible_release "$test_root/new"; then echo 'Expense drafts allowed a binary that posts on draft save' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\ncase "$1" in -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_expense_drafts=error
+if compatible_release "$test_root/new"; then echo 'Expense draft schema query failure allowed rollback' >&2; exit 1; fi
+mock_expense_drafts=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown expense draft schema allowed rollback' >&2; exit 1; fi

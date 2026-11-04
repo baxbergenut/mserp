@@ -10,6 +10,24 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func TestPhaseCountsIncludeNestedAndBatchedQueries(t *testing.T) {
+	ctx, m := WithMetrics(context.Background())
+	outer := Phase(ctx, "publication")
+	q := Tracer{}.TraceQueryStart(ctx, nil, pgx.TraceQueryStartData{SQL: "SELECT 1"})
+	Tracer{}.TraceQueryEnd(q, nil, pgx.TraceQueryEndData{})
+	inner := Phase(ctx, "posting")
+	batch := Tracer{}.TraceBatchStart(ctx, nil, pgx.TraceBatchStartData{})
+	for range 2 {
+		Tracer{}.TraceBatchQuery(batch, nil, pgx.TraceBatchQueryData{SQL: "SELECT 1"})
+	}
+	Tracer{}.TraceBatchEnd(batch, nil, pgx.TraceBatchEndData{})
+	inner()
+	outer()
+	if got := m.Events(); got["publication_queries"] != 3 || got["posting_queries"] != 2 {
+		t.Fatalf("incorrect inclusive phase counts: %v", got)
+	}
+}
+
 func TestBatchMetricsCountStatements(t *testing.T) {
 	ctx, m := WithQueryMetrics(context.Background())
 	ctx = Tracer{}.TraceBatchStart(ctx, nil, pgx.TraceBatchStartData{})

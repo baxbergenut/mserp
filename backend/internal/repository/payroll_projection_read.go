@@ -181,6 +181,29 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	if err = rows.Err(); err != nil {
 		return result, err
 	}
+	if kind == "driver" {
+		if err = overlayDriverExpenseBalances(ctx, tx, &result.Report); err != nil {
+			return result, err
+		}
+	}
+	if result.State == "updating" && compatible && snapshot != current {
+		impact, e := payrollChangedSourceImpact(ctx, tx, snapshot, current)
+		if e != nil {
+			return result, e
+		}
+		if impact != nil && impact.liveOnly {
+			ready := true
+			for _, statement := range result.Statements {
+				ready = ready && statement.State == "ready"
+			}
+			if ready {
+				result.State = "ready"
+			}
+		}
+	}
+	if result.State == "ready" {
+		result.Report.Revision = payrollInputRevision(kind, week.Format(time.DateOnly), calendar, financialSnapshot)
+	}
 	pageQuery := query
 	pageQuery.Summary, pageQuery.DetailIDs = true, nil
 	result.Report = PaginatePay(result.Report, pageQuery)
@@ -224,6 +247,11 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	}
 	if query.ID != "" && len(result.Report.Drivers) == 1 && result.Statements[query.ID].State == "ready" {
 		result.State = "ready"
+	}
+	if kind == "driver" {
+		if err = overlayDriverExpenseBalances(ctx, tx, &result.Report); err != nil {
+			return result, err
+		}
 	}
 	if err = decorateFrozenSourceComparisons(ctx, tx, &result.Report); err != nil {
 		return result, err

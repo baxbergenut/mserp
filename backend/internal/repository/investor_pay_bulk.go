@@ -166,6 +166,9 @@ func (v truckPayInputs) applyEdits(d *DriverPayDriver) error {
 		return nil
 	}
 	expenses := d.Edits.ExpenseDeductions
+	// Decoding into the populated struct can reuse the live deduction slice and
+	// overwrite it with the previously frozen amounts stored in edits JSON.
+	d.Edits = DriverPayEdits{}
 	if e := json.Unmarshal(w.edits, &d.Edits); e != nil {
 		return e
 	}
@@ -214,7 +217,7 @@ var payrollTruckEditsSQL = `SELECT w.truck_id::text,w.edits,w.version,w.finalize
 
 var payrollTruckExpensesSQL = `WITH terms AS (` + activePayrollTruckTermsSQL + `), relevant_expenses AS MATERIALIZED (
  SELECT e.*, expense_external_total(e.id) AS external_paid, ` + expenseSettlementTotalSQL + ` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
- WHERE lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0) AND e.amount>=0 AND e.expense_date<$1::date+10
+ WHERE lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0) AND e.amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$1::date) other,sum(p.amount) FILTER(WHERE p.week_start<$1::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id)

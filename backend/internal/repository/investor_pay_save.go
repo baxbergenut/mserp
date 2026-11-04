@@ -78,11 +78,20 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if len(edits.GeneratedCharges) > 0 {
 		return edits, chargeInvalid("Manage recurring truck fees on Charges")
 	}
-	defer db.Phase(ctx, "writes_and_commit")()
-	unchangedEffects, err := unchangedPreparedPayEffects(ctx, tx, command, "investor", edits)
+	choiceRows, err := readPayrollExpenseChoices(ctx, tx, "investor", edits.WeekStart, []string{edits.DriverID})
 	if err != nil {
 		return edits, err
 	}
+	choices, err := mergePayrollExpenseChoices(choiceRows[edits.DriverID], card.Edits.ExpenseDeductions, edits.ExpenseDeductions)
+	if err != nil {
+		return edits, err
+	}
+	choiceBody, err := json.Marshal(choices)
+	if err != nil {
+		return edits, err
+	}
+	defer db.Phase(ctx, "writes_and_commit")()
+	unchangedEffects := payrollStatementLocalSave(card.Edits, edits)
 	if !unchangedEffects {
 		if command != nil && command.expected != "" {
 			ctx, err = selectPayrollContext(ctx, tx, "truck", edits.DriverID)
@@ -97,7 +106,7 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 		if err = validateInvestorCostEdits(*card, edits); err != nil {
 			return edits, err
 		}
-		if err = saveInvestorExpenses(ctx, tx, *card, actor, edits.ExpenseDeductions); err != nil {
+		if err = saveInvestorExpenses(ctx, tx, *card, actor, nonExpenseDeductions(edits.ExpenseDeductions)); err != nil {
 			return edits, err
 		}
 	}
@@ -108,9 +117,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	}
 	var version int
 	if edits.Version == 0 {
-		err = tx.QueryRow(ctx, `INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits) VALUES($1,$2::date,$3,$4) ON CONFLICT DO NOTHING RETURNING version`, card.ID, edits.WeekStart, card.InvestorID, body).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,expense_choices) VALUES($1,$2::date,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING version`, card.ID, edits.WeekStart, card.InvestorID, body, choiceBody).Scan(&version)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE investor_pay_weeks SET edits=$3,version=version+1,owner_id=$5 WHERE truck_id=$1 AND week_start=$2::date AND version=$4 AND NOT finalized RETURNING version`, card.ID, edits.WeekStart, body, edits.Version, card.InvestorID).Scan(&version)
+		err = tx.QueryRow(ctx, `UPDATE investor_pay_weeks SET edits=$3,expense_choices=$6,version=version+1,owner_id=$5 WHERE truck_id=$1 AND week_start=$2::date AND version=$4 AND NOT finalized RETURNING version`, card.ID, edits.WeekStart, body, edits.Version, card.InvestorID, choiceBody).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return edits, ErrDriverPayConflict
@@ -126,6 +135,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 		if err != nil {
 			return edits, err
 		}
+	}
+	if err = applyPayrollExpenseChoices(edits.ExpenseDeductions, choices); err != nil {
+		return edits, err
 	}
 	if err = setPaySaveRevision(ctx, tx, "investor", &edits); err != nil {
 		return edits, err
@@ -291,7 +303,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			}
 			postExpenses := !prepared || payrollExpensesNeedPosting(expenses)
 			if !bulkExpenses && postExpenses {
-				if err = saveInvestorExpenses(ctx, tx, d, actor, expenses); err != nil {
+				if err = finalizePayrollExpenses(ctx, tx, "investor", report.WeekStart, actor, []DriverPayDriver{d}); err != nil {
 					return empty, err
 				}
 			}
@@ -349,6 +361,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	}
 	if err = tx.SendBatch(ctx, writeBatch).Close(); err != nil {
 		return empty, err
+	}
+	if reopen {
+		if err = reversePayrollExpenses(ctx, tx, "investor", report.WeekStart, payrollReceipt(report, selectedIDs).Drivers); err != nil {
+			return empty, err
+		}
 	}
 	if payrollReceiptRequested(ctx) && !reopen && strings.HasPrefix(report.Revision, "inputs:") {
 		if err = setPayrollRevision(ctx, tx, "investor", &committed); err != nil {

@@ -104,6 +104,7 @@ type payrollCommand struct {
 	actor, requestID, name, hash, expected string
 	before                                 *DriverPayDriver
 	beforeSnapshot                         string
+	reviewedExpenseRevision                string
 }
 
 // Called after authentication/authorization and before version validation. A
@@ -132,6 +133,18 @@ func beginPayrollCommand(ctx context.Context, tx pgx.Tx, actor, requestID, name,
 	}
 	digest := sha256.Sum256(body)
 	c := &payrollCommand{actor: actor, requestID: requestID, name: name, hash: hex.EncodeToString(digest[:]), expected: expected}
+	// Resource setup already checked absence under its session receipt lock.
+	// Reuse only that exact actor/request proof; source commands and replays retain
+	// the transaction lock and receipt lookup below.
+	if resource, ok := tx.(*payrollResourceTransaction); ok &&
+		resource.missingReceiptActor == actor && resource.missingReceiptRequest == requestID {
+		if expected != "" {
+			if _, err = tx.Exec(ctx, `SELECT payroll_retain_statement_reference($1::uuid)`, expected); err != nil {
+				return nil, nil, err
+			}
+		}
+		return c, nil, nil
+	}
 	// These commands currently hold the financial lock. This independent receipt
 	// lock also establishes uniqueness when resource concurrency is enabled later.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,182))`, actor+":"+requestID); err != nil {
@@ -598,6 +611,13 @@ func commitPayrollMutation(ctx context.Context, tx pgx.Tx) error {
 			return err
 		}
 		if changed {
+			handled, err := publishLiveDriverExpenses(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if handled {
+				return tx.Commit(ctx)
+			}
 			var impact *payrollPublicationImpact
 			if mutation, ok := tx.(*payrollMutationTransaction); ok {
 				var err error
@@ -637,6 +657,13 @@ func preparedSaveCard(ctx context.Context, tx pgx.Tx, kind, id, week string, c *
 		return d, err
 	}
 	err = json.Unmarshal(body, &d)
+	if err == nil && kind == "driver" {
+		report := DriverPayWeek{WeekStart: week, Drivers: []DriverPayDriver{d}}
+		err = overlayDriverExpenseBalances(ctx, tx, &report)
+		if err == nil {
+			d = report.Drivers[0]
+		}
+	}
 	if err == nil {
 		c.before = &d
 	}
@@ -647,6 +674,11 @@ func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, we
 	if expected == "" {
 		return nil
 	}
+	// Share capture proofs only during this read-only validation phase. The
+	// context never escapes into posting, so own writes cannot reuse an old proof.
+	ctx = context.WithValue(ctx, payrollSourceImpactMemoKey{}, &payrollSourceImpactMemo{
+		tx: tx, proofs: map[[2]string]*payrollPublicationImpact{},
+	})
 	if err := payrollProjectionCoverage(ctx, tx); err != nil {
 		return err
 	}
@@ -714,7 +746,7 @@ func finishPaySaveCommand(ctx context.Context, tx pgx.Tx, c *payrollCommand, kin
 	return c.store(ctx, tx, edits, edits.AffectedStatements)
 }
 
-type PayrollSettlementCommand struct{ RequestID, ExpectedStatementRevision string }
+type PayrollSettlementCommand struct{ RequestID, ExpectedStatementRevision, ExpenseRevision string }
 
 func beginPayrollSettlement(ctx context.Context, tx pgx.Tx, kind string, week time.Time, id, revision, actor, reason string, reopen, override bool, options []PayrollSettlementCommand) (*payrollCommand, []byte, error) {
 	if len(options) == 0 {
@@ -725,7 +757,7 @@ func beginPayrollSettlement(ctx context.Context, tx pgx.Tx, kind string, week ti
 	if reopen {
 		name = kind + ".reopen"
 	}
-	input := PayrollSettlementInput{RequestID: opt.RequestID, ExpectedStatementRevision: opt.ExpectedStatementRevision, WeekStart: week.Format(time.DateOnly), DriverID: id, Revision: revision, Reason: reason, Override: override}
+	input := PayrollSettlementInput{RequestID: opt.RequestID, ExpectedStatementRevision: opt.ExpectedStatementRevision, ExpenseRevision: opt.ExpenseRevision, WeekStart: week.Format(time.DateOnly), DriverID: id, Revision: revision, Reason: reason, Override: override}
 	c, replay, err := beginPayrollCommand(ctx, tx, actor, opt.RequestID, name, opt.ExpectedStatementRevision, input)
 	if err != nil || replay != nil {
 		return c, replay, err

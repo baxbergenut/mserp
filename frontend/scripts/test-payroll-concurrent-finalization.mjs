@@ -27,6 +27,7 @@ try {
       ...(kind === 'investor' ? { investorId: `owner-${i}` } : {}),
       payType:'cpm', payRate:'0.75', fuelTotal:'0.00', tollTotal:'0.00', issues:[], loads:[],
       statementRevision: `18200000-0000-4000-8000-00000000100${i+1}`,
+      expenseRevision: `reviewed-expenses-${i+1}`,
       edits: { driverId: `18200000-0000-4000-8000-00000000000${i+1}`, weekStart:week, version:1, notes:'', comments:{}, adjustments:[], fuelOverride:null, tollOverride:null }
     }));
     const snapshot = () => ({ weekStart:week, revision:'inputs:fixture', drivers:structuredClone(rows), preparation:{ state:preparationState, generation:'generation-1' } });
@@ -44,6 +45,7 @@ try {
         const input=req.postDataJSON(); requests.push(input);
         const row=rows.find(row=>row.id===input.driverId);
         expect(input.expectedStatementRevision).toBe(row.statementRevision);
+        expect(input.expenseRevision).toBe(row.expenseRevision);
         await new Promise(resolve=>release.set(input.driverId, resolve));
         if (blockFinalization) return route.fulfill({status:400,json:{error:`Review ${row.fullName}`,code:'finalization_blocked'}});
         row.settlement={finalized:true,version:1,finalizedBy:'Reviewer',finalizedAt:new Date().toISOString()};

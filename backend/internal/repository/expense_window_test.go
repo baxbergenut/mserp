@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -99,10 +98,10 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			for _, offset := range []int{7, 8, 9} {
 				create(offset)
 			}
-			thursday := create(10)
+			create(10)
 			initial := card(read(week))
-			if len(initial.Edits.ExpenseDeductions) != 3 {
-				t.Fatalf("Monday–Wednesday must appear without loads: %+v", initial.Edits)
+			if len(initial.Edits.ExpenseDeductions) != 4 {
+				t.Fatalf("All unpaid expenses must appear without loads or a date cutoff: %+v", initial.Edits)
 			}
 			if route != "investor" {
 				history, err := pay.History(ctx, driver, Pagination{PageSize: 100})
@@ -111,7 +110,7 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 				}
 				found := false
 				for _, row := range history.Items {
-					found = found || row.WeekStart == week.Format(time.DateOnly) && len(row.Driver.Edits.ExpenseDeductions) == 3
+					found = found || row.WeekStart == week.Format(time.DateOnly) && len(row.Driver.Edits.ExpenseDeductions) == 4
 				}
 				if !found {
 					t.Fatal("history omitted the earlier eligible statement")
@@ -121,22 +120,22 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 				create(offset)
 			}
 			first := card(read(week)).Edits
-			if len(first.ExpenseDeductions) != 6 {
-				t.Fatalf("older balances and Monday–Wednesday window: %+v", first)
+			if len(first.ExpenseDeductions) != 7 {
+				t.Fatalf("all older and future unpaid balances: %+v", first)
 			}
 			var payments int
 			if err := pool.QueryRow(ctx, `SELECT count(*) FROM expense_payments p JOIN expenses e ON e.id=p.expense_id WHERE e.driver_id=$1`, driver).Scan(&payments); err != nil || payments != 0 {
 				t.Fatal("reads collected payments", payments, err)
 			}
 			forged := first
-			forged.ExpenseDeductions = []ExpenseDeduction{{ExpenseID: thursday.ID, Version: 1, Amount: "100.25", Apply: true}}
+			forged.ExpenseDeductions = []ExpenseDeduction{{ExpenseID: "19800000-0000-0000-0000-000000000099", Version: 1, Amount: "100.25", Apply: true}}
 			if _, err := save(forged); err == nil {
-				t.Fatal("Thursday collection accepted before its eligible week")
+				t.Fatal("unknown expense choice accepted")
 			}
 			stale := card(read(week.AddDate(0, 0, 7))).Edits
 			for i := range first.ExpenseDeductions {
 				x := &first.ExpenseDeductions[i]
-				x.Apply = true
+				x.Apply, x.Mode = true, "fixed"
 				if x.ExpenseDate == "2026-10-06" {
 					x.Amount = "30.10"
 				} else if x.ExpenseDate == "2026-10-07" {
@@ -149,17 +148,12 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			for i := range stale.ExpenseDeductions {
 				stale.ExpenseDeductions[i].Apply = true
 			}
-			if _, err := save(stale); !errors.Is(err, ErrDriverPayConflict) {
-				t.Fatal("stale overlapping collection was not rejected", err)
+
+			if _, err := save(stale); err != nil {
+				t.Fatal("independent draft choice was blocked", err)
 			}
-			next := card(read(week.AddDate(0, 0, 7))).Edits
-			if len(next.ExpenseDeductions) != 3 {
-				t.Fatalf("paid expenses repeated: %+v", next)
-			}
-			for i, want := range []string{"70.15", "100.25", "100.25"} {
-				if next.ExpenseDeductions[i].Amount != want {
-					t.Fatalf("partial/zero/new balance: %+v", next)
-				}
+			if len(card(read(week.AddDate(0, 0, 7))).Edits.ExpenseDeductions) != 7 {
+				t.Fatal("draft choices reserved another statement's balance")
 			}
 			kind := "driver"
 			if route == "investor" {
@@ -170,22 +164,31 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(card(frozen).Edits.ExpenseDeductions) != 6 {
-				t.Fatal("finalization lost the extended window")
+			if len(card(frozen).Edits.ExpenseDeductions) != 7 {
+				t.Fatal("finalization lost unpaid expense rows")
+			}
+			next := card(read(week.AddDate(0, 0, 7))).Edits
+			if len(next.ExpenseDeductions) != 2 {
+				t.Fatalf("finalization did not collect balances: %+v", next)
+			}
+			for i, want := range []string{"70.15", "100.25"} {
+				if next.ExpenseDeductions[i].Available != want {
+					t.Fatalf("partial/zero balance: %+v", next)
+				}
 			}
 			create(9) // Late source changes must not rewrite a finalized statement.
-			if len(card(read(week)).Edits.ExpenseDeductions) != 6 {
+			if len(card(read(week)).Edits.ExpenseDeductions) != 7 {
 				t.Fatal("finalized snapshot changed")
 			}
 			reopened, err := settlePayrollFixture(t, ctx, pay, kind, week, statement, read(week).Revision, actor, "Review late expense", true, false, preparedSettlement)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(card(reopened).Edits.ExpenseDeductions) != 7 || len(card(read(week.AddDate(0, 0, 7))).Edits.ExpenseDeductions) != 4 {
-				t.Fatal("reopening did not preserve payments and expose the new expense")
+			if len(card(reopened).Edits.ExpenseDeductions) != 8 || len(card(read(week.AddDate(0, 0, 7))).Edits.ExpenseDeductions) != 8 {
+				t.Fatal("reopening did not reverse payments and expose the new expense")
 			}
 			t.Run("efs", func(t *testing.T) {
-				feeWeek := week.AddDate(0, 0, 28)
+				feeWeek := week.AddDate(0, 0, 14)
 				otherCategory := id(`SELECT id FROM expense_settings WHERE kind='category' AND name='Other'`)
 				createFee := func(amount, method string, base *string, fee string, penalty bool) Expense {
 					t.Helper()
@@ -243,7 +246,7 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 					edits := card(read(w)).Edits
 					for _, row := range edits.ExpenseDeductions {
 						if row.ExpenseID == target.ID {
-							row.Amount, row.Apply = amount, true
+							row.Amount, row.Apply, row.Mode = amount, true, "fixed"
 							edits.ExpenseDeductions = []ExpenseDeduction{row}
 							return edits
 						}
@@ -257,6 +260,9 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 				if _, err := save(selectTarget(feeWeek, "500.01")); err != nil {
 					t.Fatal("partial EFS collection", err)
 				}
+				if _, err := settlePayrollFixture(t, ctx, pay, kind, feeWeek, statement, read(feeWeek).Revision, actor, "", false, false, preparedSettlement); err != nil {
+					t.Fatal("finalize partial EFS collection", err)
+				}
 				// Paying the original principal must leave the fee available next
 				// week. The fee is charged once, not again on each partial payment.
 				nextWeek := feeWeek.AddDate(0, 0, 7)
@@ -267,13 +273,18 @@ func testExpenseCollectionWindow(t *testing.T, ctx context.Context, admin *pgx.C
 				if _, err := save(nextEdits); err != nil {
 					t.Fatal("fee collection", err)
 				}
+				if _, err := settlePayrollFixture(t, ctx, pay, kind, nextWeek, statement, read(nextWeek).Revision, actor, "", false, false, preparedSettlement); err != nil {
+					t.Fatal("finalize EFS remainder", err)
+				}
 				x, err := expenses.GetExpense(ctx, target.ID)
 				if err != nil || *x.Amount != "500.01" || x.BaseAmount != nil || x.PaymentFee != "0.00" || *x.PaidAmount != "506.01" || *x.RemainingAmount != "0.00" {
 					t.Fatalf("source changed or fee not collected once: %+v %v", x, err)
 				}
-				for _, row := range card(read(nextWeek.AddDate(0, 0, 7))).Edits.ExpenseDeductions {
-					if row.ExpenseID == target.ID {
-						t.Fatal("fully paid EFS fee repeated")
+				for _, later := range read(nextWeek.AddDate(0, 0, 7)).Drivers {
+					for _, row := range later.Edits.ExpenseDeductions {
+						if row.ExpenseID == target.ID {
+							t.Fatal("fully paid EFS fee repeated")
+						}
 					}
 				}
 				if _, err := pool.Exec(ctx, `UPDATE expenses SET payment_type='Cash' WHERE id=$1`, target.ID); err == nil {

@@ -35,7 +35,7 @@ export function SettlementDialog({ report, driverId, reopen, blockedIssue, onClo
       event.preventDefault();
       if (busy || (!reopen && !blockedIssue)) return;
       setBusy(true); setError("");
-      void (investor ? settleInvestorPay : settleDriverPay)(report.weekStart, report.revision, driverId, reopen, !reopen, true, driverId ? selected[0]?.statementRevision : report.preparation?.generation)
+      void (investor ? settleInvestorPay : settleDriverPay)(report.weekStart, report.revision, driverId, reopen, !reopen, true, driverId ? selected[0]?.statementRevision : report.preparation?.generation, selected[0]?.expenseRevision)
         .then(onSaved).catch(e => setError(e.message)).finally(() => setBusy(false));
     }}
   >

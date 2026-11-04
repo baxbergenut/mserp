@@ -330,6 +330,7 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool, pr
 	for i := range edits.ExpenseDeductions {
 		if edits.ExpenseDeductions[i].ExpenseID == expense {
 			edits.ExpenseDeductions[i].Apply = true
+			edits.ExpenseDeductions[i].Mode = "fixed"
 			edits.ExpenseDeductions[i].Amount = "20.00"
 		}
 	}
@@ -338,8 +339,9 @@ func verifyDriverTeams(t *testing.T, ctx context.Context, pool *pgxpool.Pool, pr
 	if err != nil {
 		t.Fatal("main save", err)
 	}
-	if id(`SELECT amount::text FROM expense_payments WHERE expense_id=$1 AND week_start='2026-09-28'`, expense) != "20.00" {
-		t.Fatal("expense not saved on its original ledger")
+	if id(`SELECT expense_choices->$2::text->>'amount' FROM driver_pay_weeks WHERE driver_id=$1 AND week_start='2026-09-28'`, main.ID, expense) != "20.00" ||
+		id(`SELECT count(*)::text FROM expense_payments WHERE expense_id=$1 AND week_start='2026-09-28'`, expense) != "0" {
+		t.Fatal("team expense choice was not saved independently of payments")
 	}
 	if id(`SELECT count(*)::text FROM driver_escrow_payments p JOIN driver_escrows e ON e.id=p.escrow_id WHERE e.driver_id=$1`, team.ID) != "0" {
 		t.Fatal("team escrow collected")

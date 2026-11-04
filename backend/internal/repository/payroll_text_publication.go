@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
-	"strings"
 )
 
 func payrollFinancialEdits(e DriverPayEdits) []byte {
@@ -18,104 +17,32 @@ func payrollFinancialEdits(e DriverPayEdits) []byte {
 	return b
 }
 
-// Prove that the ordinary financial save would perform no ledger writes. This
-// requires identical submitted financial fields, no applied expense rows, no
-// charge reset/first carry capture, and exact existing canonical cost/source
-// allocations. In particular an unsaved first comment never skips collection.
-func unchangedPreparedPayEffects(ctx context.Context, tx pgx.Tx, c *payrollCommand, kind string, edits DriverPayEdits) (bool, error) {
-	if c == nil || c.before == nil || !bytes.Equal(payrollFinancialEdits(c.before.Edits), payrollFinancialEdits(edits)) {
-		return false, nil
-	}
-	d := *c.before
-	for _, row := range edits.ExpenseDeductions {
-		if row.Apply {
-			return false, nil
+// Notes, adjustments and ordinary expense choices belong to this statement.
+// Merely saving them must not post unrelated displayed source/cost balances.
+// Compare the remaining submitted financial fields against the locked server
+// card; explicit reimbursement/escrow applications still take the ledger path.
+func payrollStatementLocalSave(before, after DriverPayEdits) bool {
+	for _, row := range after.ExpenseDeductions {
+		if row.Source != "" && row.Apply {
+			return false
 		}
 	}
-	for _, row := range edits.GeneratedCharges {
-		if row.Reset || (row.Version == 0 && row.CarryForward != "0.00" && row.CarryForward != "") {
-			return false, nil
+	for _, row := range after.GeneratedCharges {
+		if row.Reset {
+			return false
 		}
 	}
-	type expectedSource struct {
-		Source string `json:"source"`
-		Owner  string `json:"owner"`
-		Base   string `json:"base"`
-		Amount string `json:"amount"`
+	normalize := func(e DriverPayEdits) []byte {
+		e.Adjustments, e.ExpenseDeductions, e.Costs = nil, nil, nil
+		return payrollFinancialEdits(e)
 	}
-	sources := []expectedSource{}
-	for _, row := range d.Edits.SourceCharges {
-		amount := row.Amount
-		if kind == "investor" && strings.HasPrefix(row.Source, "investor_cost:") {
-			amount = row.Due
-			override := edits.FuelOverride
-			if strings.HasSuffix(row.Source, ":toll") {
-				override = edits.TollOverride
-			}
-			if override != nil {
-				amount = *override
-			}
-		}
-		due, err := chargeCents(row.Due)
-		if err != nil {
-			return false, err
-		}
-		if err = validatePaySourceAmount(row.Name, amount, due); err != nil {
-			return false, err
-		}
-		if !row.Saved && row.Base == "0.00" && row.Due == "0.00" && amount == "0.00" {
-			continue
-		}
-		sources = append(sources, expectedSource{row.Source, row.OwnerID, row.Base, amount})
-	}
-	fuel, toll, fuelAmount, tollAmount := "0.00", "0.00", "0.00", "0.00"
-	if kind == "driver" {
-		state := d.Edits.Costs
-		if state == nil {
-			return false, nil
-		}
-		f, t := driverCostBase(d)
-		fuel, toll = chargeMoney(f), chargeMoney(t)
-		fd, err := chargeCents(state.FuelDue)
-		if err != nil {
-			return false, err
-		}
-		td, err := chargeCents(state.TollDue)
-		if err != nil {
-			return false, err
-		}
-		if edits.FuelOverride != nil {
-			if err = validatePaySourceAmount("Fuel", *edits.FuelOverride, -fd); err != nil {
-				return false, err
-			}
-		}
-		if edits.TollOverride != nil {
-			if err = validatePaySourceAmount("Toll", *edits.TollOverride, -td); err != nil {
-				return false, err
-			}
-		}
-		fuelAmount = chargeMoney(payrollCostAmount(edits.FuelOverride, fd, d.PayType == "cpm" && state.FuelCarry == "0.00"))
-		tollAmount = chargeMoney(payrollCostAmount(edits.TollOverride, td, d.PayType == "cpm" && state.TollCarry == "0.00"))
-	}
-	body, err := json.Marshal(sources)
-	if err != nil {
-		return false, err
-	}
-	var unchanged bool
-	err = tx.QueryRow(ctx, `SELECT ($1<>'driver' OR EXISTS(SELECT 1 FROM driver_pay_cost_collections WHERE driver_id=$2::uuid AND week_start=$3::date
- AND fuel_base=$4::numeric AND toll_base=$5::numeric AND fuel_amount=$6::numeric AND toll_amount=$7::numeric))
- AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($8::jsonb) expected(source text,owner uuid,base numeric,amount numeric)
- WHERE NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.source=expected.source AND c.owner_id=expected.owner AND c.week_start=$3::date
- AND c.kind=$1 AND c.statement_id=$2::uuid AND c.base=expected.base AND c.amount=expected.amount))`, kind, d.ID, edits.WeekStart, fuel, toll, fuelAmount, tollAmount, body).Scan(&unchanged)
-	return unchanged, err
+	return bytes.Equal(normalize(before), normalize(after))
 }
 
-// Run the ordinary financial save first. This optimization is permitted only
-// after both the resulting financial fields and the transaction's actual source
-// events prove no collection/reservation/balance change. First comment saves
-// that create deductions necessarily take the normal financial publication path.
+// Publish the locally changed statement after canonical fields and captured
+// events prove that no shared collection, source or cost allocation changed.
 func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, kind string, edits DriverPayEdits) ([]PayrollStatementIdentity, bool, error) {
-	if c == nil || c.before == nil || c.beforeSnapshot == "" || !bytes.Equal(payrollFinancialEdits(c.before.Edits), payrollFinancialEdits(edits)) {
+	if c == nil || c.before == nil || c.beforeSnapshot == "" || !payrollStatementLocalSave(c.before.Edits, edits) {
 		return nil, false, nil
 	}
 	canonical, key := "driver_pay_weeks", "driver_id"
@@ -170,7 +97,8 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
 	if err != nil {
 		return nil, false, err
 	}
-	summary, err := json.Marshal(summarizePayStatement(d))
+	calculated := summarizePayStatement(d)
+	summary, err := json.Marshal(calculated)
 	if err != nil {
 		return nil, false, err
 	}
@@ -187,7 +115,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
  RETURNING id
  ), version AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
- SELECT g.id,v.kind,v.statement_id,v.week_start,$9,$10,v.fee_cents,v.payable_cents,v.finalized,$11,v.settlement_version,v.cost_evidence,
+ SELECT g.id,v.kind,v.statement_id,v.week_start,$9,$10,(($10::jsonb#>>'{summary,fee}')::numeric*100)::bigint,(($10::jsonb#>>'{summary,payable}')::numeric*100)::bigint,v.finalized,$11,v.settlement_version,v.cost_evidence,
  payroll_pack_resource_snapshot(ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(v.resource_dependencies))), 'statement:'||v.kind||':'||v.statement_id::text||':'||v.week_start::text)
  FROM payroll_statement_versions v CROSS JOIN generation g
  WHERE v.id=$8::uuid AND v.kind=$5 AND v.statement_id=$6::uuid AND v.week_start=$7::date RETURNING id
@@ -211,7 +139,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
  FROM eligible RETURNING id,week_start
  ), version AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)
- SELECT g.id,v.kind,v.statement_id,v.week_start,$10,$11,v.fee_cents,v.payable_cents,v.finalized,$12,v.settlement_version,v.cost_evidence,
+ SELECT g.id,v.kind,v.statement_id,v.week_start,$10,$11,(($11::jsonb#>>'{summary,fee}')::numeric*100)::bigint,(($11::jsonb#>>'{summary,payable}')::numeric*100)::bigint,v.finalized,$12,v.settlement_version,v.cost_evidence,
  payroll_pack_resource_snapshot(ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(v.resource_dependencies))), 'statement:'||v.kind||':'||v.statement_id::text||':'||v.week_start::text)
  FROM payroll_statement_versions v JOIN generations g ON g.week_start=v.week_start
  WHERE v.id=$7::uuid AND v.kind=$8 AND v.statement_id=$9::uuid

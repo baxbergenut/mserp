@@ -322,8 +322,8 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if successes != 1 || conflicts != 1 {
 				t.Fatalf("concurrent investor saves: successes=%d conflicts=%d", successes, conflicts)
 			}
-			if len(saved.ExpenseDeductions) != 1 || !saved.ExpenseDeductions[0].Saved {
-				t.Fatal("expense payment not saved")
+			if len(saved.ExpenseDeductions) != 1 || saved.ExpenseDeductions[0].Saved {
+				t.Fatal("draft expense choice posted a payment")
 			}
 			if saved.Version != 1 {
 				t.Fatal("missing saved version")

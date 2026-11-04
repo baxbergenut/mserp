@@ -72,6 +72,21 @@ and requires no schema migration.
 
 ### Backend
 
+- Migration 198 makes ordinary expense deductions statement-local draft choices
+  (`expense_choices`: auto/fixed/skip). Draft saves do not reserve or post the
+  expense balance; finalization posts once and reopening reverses that statement's
+  exact postings. All unpaid ordinary expenses are visible irrespective of invoice
+  date. Reimbursements, escrow, recurring charges and Fuel/Toll keep their distinct
+  ledgers. Prepared Driver Pay overlays current driver-paid balances and submits an
+  `expenseRevision` review hash; frozen statements remain unchanged. Proven live
+  expense events avoid cross-period publication only when independent statement
+  membership is retained. Unknown routing/membership uses full publication. Notes,
+  adjustments and ordinary expense choices do not post unchanged displayed costs.
+  Install the matching deploy helper before 198: it stops writers and rejects older
+  binaries after the cutover. Only allocations proven to belong to open current
+  statements are converted; finalized and unreferenced payments remain untouched.
+  See `docs/PAYROLL_EXPENSE_FINALIZATION.md` for invariants and validation.
+
 - Ready payroll finalizations reuse fenced saved expense allocations and exact
   canonical cost receipts. A first all-zero Fuel/Toll statement with no override
   or existing cost collection omits the zero posting; existing collections still

@@ -16,12 +16,13 @@ type PayPageQuery struct {
 }
 
 type PayStatementSummary struct {
-	SearchText  string `json:"searchText,omitempty"`
-	Loads       int    `json:"loads"`
-	MissingFees int    `json:"missingFees"`
-	Review      int    `json:"review"`
-	Fee         string `json:"fee"`
-	Payable     string `json:"payable"`
+	LiveExpenseTotal string `json:"liveExpenseTotal,omitempty"`
+	SearchText       string `json:"searchText,omitempty"`
+	Loads            int    `json:"loads"`
+	MissingFees      int    `json:"missingFees"`
+	Review           int    `json:"review"`
+	Fee              string `json:"fee"`
+	Payable          string `json:"payable"`
 }
 
 // Summaries come from the same routed, frozen report as expanded statements.
@@ -41,6 +42,14 @@ func summarizePayStatement(d DriverPayDriver) DriverPayDriver {
 		searchText += " " + p.Name
 	}
 	summary := &PayStatementSummary{SearchText: searchText, Loads: len(d.Loads), Review: page.Pagination.Review, Fee: page.Pagination.Fee, Payable: page.Pagination.Payable}
+	var liveExpenses int64
+	for _, row := range d.Edits.ExpenseDeductions {
+		if row.LiveBalance {
+			n, _ := chargeCents(row.Amount)
+			liveExpenses += n
+		}
+	}
+	summary.LiveExpenseTotal = chargeMoney(liveExpenses)
 	for _, load := range d.Loads {
 		if load.Fee == "" {
 			summary.MissingFees++

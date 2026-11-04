@@ -183,9 +183,9 @@ export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {
   delete payload.committedStatement;
   delete payload.affectedStatements;
   return { ...payload,
-    // Include displayed expense deductions in a normal payroll save. Reading a
-    // week remains read-only; saved rows only change when their amount is edited.
-    ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => row.saved ? row : { ...row, apply: true }) }),
+    // Ordinary expenses persist only explicit draft choices. Credits and escrow
+    // retain their existing save behavior.
+    ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => !row.source || row.saved ? row : { ...row, apply: true }) }),
     adjustments: edits.adjustments.filter(item => item.name.trim() !== "" || item.amount.trim() !== "" || item.kind === "deduction"),
   };
 }

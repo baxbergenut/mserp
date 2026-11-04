@@ -62,7 +62,9 @@ func publishPayrollFrozen(ctx context.Context, tx pgx.Tx, c *payrollCommand, imp
  FROM jsonb_to_recordset($7::jsonb) r(id uuid,detail jsonb,summary jsonb,fee bigint,payable bigint,edit_version int,settlement_version int)
  JOIN payroll_statement_state s ON s.kind=$6 AND s.statement_id=r.id AND s.week_start=$1::date
  JOIN payroll_statement_versions v ON v.id=s.version_id CROSS JOIN generation g
- WHERE v.fee_cents=r.fee AND v.payable_cents=r.payable
+ WHERE v.fee_cents=r.fee
+ AND v.payable_cents+coalesce((v.summary#>>'{summary,liveExpenseTotal}')::numeric*100,0)
+ =r.payable+coalesce((r.summary#>>'{summary,liveExpenseTotal}')::numeric*100,0)
  AND v.detail->'fuelTotal' IS NOT DISTINCT FROM r.detail->'fuelTotal'
  AND v.detail->'tollTotal' IS NOT DISTINCT FROM r.detail->'tollTotal'
  AND v.detail#>'{edits,costs}' IS NOT DISTINCT FROM r.detail#>'{edits,costs}'

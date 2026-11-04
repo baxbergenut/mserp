@@ -215,7 +215,7 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
  EXISTS(SELECT 1 FROM pay_source_collections WHERE source='truck_charge:18200000-0000-0000-0000-000000000002:18200000-0000-0000-0000-000000001006' AND week_start='2026-10-05' AND amount=-20)`
 								}
 								if err = pool.QueryRow(ctx, check).Scan(&posted); err != nil || !posted {
-									t.Fatal("expected financial postings or future reservation limits missing", kind, posted, err)
+									t.Fatal("expected financial postings or legacy balance limits missing", kind, posted, err, actual)
 								}
 							}
 						}

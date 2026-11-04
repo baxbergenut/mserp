@@ -10,10 +10,10 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 	if rows, ok := payrollBatchedDeductions(ctx, tx, drivers, week, "all"); ok {
 		return rows, nil
 	}
-	// Expenses are eligible through the following Wednesday (Thursday is
-	// exclusive). Older unpaid balances still carry; other weeks reserve payments.
+	// Open statements show all unpaid expenses, independently of invoice date.
+	// Only posted payments reduce the central balance; choices are overlaid later.
 	rows, err := tx.Query(ctx, `WITH relevant_expenses AS MATERIALIZED (
- SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT driver_settled OR expense_balance_adjustment(id)<>0) AND expense_date<$2::date+10 AND amount>=0
+ SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT driver_settled OR expense_balance_adjustment(id)<>0) AND amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$2::date) other,sum(p.amount) FILTER(WHERE p.week_start<$2::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id
@@ -23,7 +23,7 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
  coalesce(w.amount,e.settlement_total-e.external_paid-coalesce(p.other,0))::text,
  (e.settlement_total-e.external_paid-coalesce(p.prior,0)-coalesce(w.amount,0))::text,
  (e.settlement_total-e.external_paid-coalesce(p.prior,0))::text,
- e.balance_version,w.expense_id IS NOT NULL
+ e.balance_version,w.expense_id IS NOT NULL,lower(btrim(e.covered_by))='driver'
  FROM relevant_expenses e
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$2::date
  LEFT JOIN payments p ON p.expense_id=e.id
@@ -38,7 +38,7 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 	for rows.Next() {
 		var driver string
 		var d ExpenseDeduction
-		if err := rows.Scan(&driver, &d.ExpenseID, &d.Name, &d.Category, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved); err != nil {
+		if err := rows.Scan(&driver, &d.ExpenseID, &d.Name, &d.Category, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved, &d.LiveBalance); err != nil {
 			return nil, err
 		}
 		result[driver] = append(result[driver], d)

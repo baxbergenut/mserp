@@ -73,7 +73,17 @@ func preparedPostingUnchanged(ctx context.Context, tx pgx.Tx, prepared bool) (bo
 		return false, nil
 	}
 	var unchanged bool
-	err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM payroll_projection_changes WHERE source_xid=pg_current_xact_id())`).Scan(&unchanged)
+	err := tx.QueryRow(ctx, `WITH live AS (
+ UPDATE payroll_projection_changes e SET live_expense=true WHERE source_xid=pg_current_xact_id()
+ AND payroll_live_expense_event(table_name,operation,old_routes,new_routes,revision_only)
+ AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(e.old_routes||e.new_routes) r
+ CROSS JOIN payroll_projection_weeks w WHERE NOT EXISTS(
+ SELECT 1 FROM payroll_statement_current c JOIN payroll_projection_generations g ON g.id=c.generation_id
+ WHERE c.kind='driver' AND c.week_start=w.week_start AND c.statement_id=payroll_driver_at((r->>'charge_driver_id')::uuid,w.week_start)
+ AND g.calculator_version=$1 AND (c.finalized OR c.edit_version>0 OR jsonb_array_length(coalesce(c.detail->'loads','[]'))>0)))
+ RETURNING id
+ ) SELECT NOT EXISTS(SELECT 1 FROM payroll_projection_changes WHERE source_xid=pg_current_xact_id()
+ AND NOT live_expense AND id NOT IN (SELECT id FROM live))`, payrollCalculatorVersion).Scan(&unchanged)
 	return unchanged, err
 }
 
@@ -166,7 +176,11 @@ func preparedSettlementReport(ctx context.Context, tx pgx.Tx, c *payrollCommand,
 		if id == "" || c.expected == "" {
 			return report, ErrDriverPayConflict
 		}
-		valid, e := preparedPayrollStatementCurrent(ctx, tx, kind, id, week.Format(time.DateOnly), c.expected, c.beforeSnapshot)
+		current, e := payrollCacheSnapshot(ctx, tx)
+		if e != nil {
+			return report, e
+		}
+		valid, e := preparedPayrollStatementCurrent(ctx, tx, kind, id, week.Format(time.DateOnly), c.expected, current)
 		if e != nil {
 			return report, e
 		}
@@ -179,6 +193,14 @@ func preparedSettlementReport(ctx context.Context, tx pgx.Tx, c *payrollCommand,
 	}
 	if err = json.Unmarshal(body, &report.Drivers); err != nil {
 		return report, err
+	}
+	if kind == "driver" {
+		if id != "" && len(report.Drivers) == 1 {
+			c.reviewedExpenseRevision = report.Drivers[0].ExpenseRevision
+		}
+		if err = overlayDriverExpenseBalances(ctx, tx, &report); err != nil {
+			return report, err
+		}
 	}
 	// Match the authoritative allocator's order, independently of database collation.
 	sort.SliceStable(report.Drivers, func(i, j int) bool {

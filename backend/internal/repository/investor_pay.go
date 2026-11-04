@@ -528,6 +528,7 @@ func readInvestorEdits(ctx context.Context, tx pgx.Tx, d *DriverPayDriver) error
 		return nil
 	}
 	expenses := d.Edits.ExpenseDeductions
+	d.Edits = DriverPayEdits{}
 	if err = json.Unmarshal(body, &d.Edits); err != nil {
 		return err
 	}

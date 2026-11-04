@@ -19,6 +19,7 @@ type payrollPublicationImpact struct {
 	loadIDs       []int64 // Changed sources need new immutable facts before publication.
 	finalizedKind string  // Metadata-only freezing preserves the other page's values.
 	changeIDs     []int64 // Complete captured events for source/command revision proofs.
+	liveOnly      bool    // Base membership is certified; only dynamic expense balances changed.
 }
 type payrollPublicationSelectionKey struct{}
 type payrollPublicationHeaderKey struct{}
@@ -66,7 +67,8 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		"truck_charge_phases":              {"truck_id"},
 		"driver_termination_truck_actions": {"driver_id", "truck_id"},
 	}
-	rows, err := tx.Query(ctx, `SELECT id,table_name,operation,old_routes||new_routes,revision_only FROM payroll_projection_changes
+	rows, err := tx.Query(ctx, `SELECT id,table_name,operation,old_routes||new_routes,revision_only,
+ live_expense FROM payroll_projection_changes
  WHERE CASE WHEN $1::bigint[] IS NULL THEN source_xid=pg_current_xact_id() ELSE id=ANY($1::bigint[]) END`, changeIDs)
 	if err != nil {
 		return nil, err
@@ -91,26 +93,26 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	boardOnly := true
 	boardStart := ""
 	boardDrivers := map[string]bool{}
-	expenseOnly := true
-	expenseStart := ""
-	expenseIDs := map[string]bool{}
 	loadsOnly := true
 	capturedIDs := []int64{}
+	nonLiveEvents := 0
 	for rows.Next() {
 		var changeID int64
 		var table, operation string
 		var body []byte
 		var revisionOnly bool
-		if err = rows.Scan(&changeID, &table, &operation, &body, &revisionOnly); err != nil {
+		var liveExpense bool
+		if err = rows.Scan(&changeID, &table, &operation, &body, &revisionOnly, &liveExpense); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		capturedIDs = append(capturedIDs, changeID)
+		if liveExpense {
+			continue
+		}
+		nonLiveEvents++
 		key, known := allowed[table]
 		loadsOnly = loadsOnly && table == "loads"
-		if table != "expenses" {
-			expenseOnly = false
-		}
 		if table != "gross_board_entries" && table != "gross_board_extra_entries" {
 			boardOnly = false
 		}
@@ -131,25 +133,9 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		}
 		if len(routes) == 0 {
 			boardOnly = false
-			expenseOnly = false
 		}
 		for _, route := range routes {
 			value := func(k string) string { var v string; _ = json.Unmarshal(route[k], &v); return v }
-			if expenseOnly {
-				day, e := time.Parse(time.DateOnly, value("expense_date"))
-				if e != nil || value("id") == "" || strings.EqualFold(strings.TrimSpace(value("covered_by")), "Broker") {
-					expenseOnly = false
-				} else {
-					// The existing cutoff is week+10, exclusive: Thursday's
-					// invoice belongs to the next payroll; Wednesday's does not.
-					day = day.AddDate(0, 0, -3)
-					start := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
-					if expenseStart == "" || start < expenseStart {
-						expenseStart = start
-					}
-					expenseIDs[value("id")] = true
-				}
-			}
 			if boardOnly {
 				day, e := time.Parse(time.DateOnly, value("service_date"))
 				if e != nil || value("driver_id") == "" {
@@ -302,6 +288,9 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			}
 			if statement := value("statement_id"); statement != "" {
 				prefix := value("kind")
+				if prefix == "" {
+					prefix = value("statement_kind")
+				}
 				if prefix == "investor" {
 					prefix = "truck"
 				}
@@ -323,6 +312,9 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	if !safe {
 		return nil, nil
 	}
+	if nonLiveEvents == 0 && len(capturedIDs) > 0 {
+		return &payrollPublicationImpact{roots: []string{}, weeks: map[string]bool{}, changeIDs: capturedIDs, liveOnly: true}, nil
+	}
 	keys := func(m map[string]bool) []string {
 		s := make([]string, 0, len(m))
 		for k := range m {
@@ -333,32 +325,34 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	}
 	// Resolve principal references in one query. A missing parent is never silently
 	// ignored: deletion belongs to the conservative source-change path.
-	rows, err = tx.Query(ctx, `SELECT 'expense_id',id::text,ARRAY['driver:'||driver_id,'driver:'||charge_driver_id,
+	if len(refs["expense_id"])+len(refs["escrow_id"])+len(refs["schedule_id"]) > 0 {
+		rows, err = tx.Query(ctx, `SELECT 'expense_id',id::text,ARRAY['driver:'||driver_id,'driver:'||charge_driver_id,
  CASE WHEN lower(btrim(covered_by))='truck owner' THEN 'truck:'||truck_id END,
  CASE WHEN lower(btrim(covered_by))='truck owner' THEN 'owner:'||owner_id END] FROM expenses WHERE id=ANY($1::uuid[])
  UNION ALL SELECT 'expense_id',expense_id::text,ARRAY['truck:'||investor_truck_id] FROM expense_payments WHERE expense_id=ANY($1::uuid[]) AND investor_truck_id IS NOT NULL
  UNION ALL SELECT 'escrow_id',id::text,ARRAY['driver:'||driver_id] FROM driver_escrows WHERE id=ANY($2::uuid[])
  UNION ALL SELECT 'schedule_id',id::text,ARRAY['driver:'||driver_id] FROM driver_charge_schedules WHERE id=ANY($3::uuid[])`, keys(refs["expense_id"]), keys(refs["escrow_id"]), keys(refs["schedule_id"]))
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var key, id string
-		var nodes []*string
-		if err = rows.Scan(&key, &id, &nodes); err != nil {
-			rows.Close()
+		if err != nil {
 			return nil, err
 		}
-		delete(refs[key], id)
-		for _, node := range nodes {
-			if node != nil {
-				roots[*node] = true
+		for rows.Next() {
+			var key, id string
+			var nodes []*string
+			if err = rows.Scan(&key, &id, &nodes); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			delete(refs[key], id)
+			for _, node := range nodes {
+				if node != nil {
+					roots[*node] = true
+				}
 			}
 		}
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return nil, err
+		rows.Close()
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	for key, set := range refs {
 		if key == "fuel_transaction_id" {
@@ -472,17 +466,6 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
  CROSS JOIN LATERAL (VALUES(h.before_value),(h.after_value)) v(image)
  WHERE image->>'driver_id'=ANY($2::text[]) OR (image->>'source_date')::date >= $1::date
  ) placements`, boardStart, keys(boardDrivers)).Scan(&earliest)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if expenseOnly && expenseStart != "" {
-		// Both old/new dates are captured. Existing allocations remain
-		// authoritative even if a legacy row predates the normal cutoff.
-		err = tx.QueryRow(ctx, `SELECT least($1::date,coalesce(min(week_start),$1::date))::text FROM (
- SELECT week_start FROM expense_payments WHERE expense_id=ANY($2::uuid[])
- UNION ALL SELECT week_start FROM expense_reimbursement_payments WHERE expense_id=ANY($2::uuid[])
- ) allocations`, expenseStart, keys(expenseIDs)).Scan(&earliest)
 		if err != nil {
 			return nil, err
 		}

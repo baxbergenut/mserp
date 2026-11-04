@@ -17,7 +17,7 @@ import (
 
 func withoutUnrelatedPayrollMigration(t *testing.T, source string) string {
 	t.Helper()
-	for _, name := range []string{"192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql"} {
+	for _, name := range []string{"192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql", "198_payroll_expense_drafts.sql"} {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -29,7 +29,7 @@ func withoutUnrelatedPayrollMigration(t *testing.T, source string) string {
 
 func applyUnrelatedPayrollMigration(t *testing.T, ctx context.Context, c *pgx.Conn) {
 	t.Helper()
-	for _, name := range []string{"192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql"} {
+	for _, name := range []string{"192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql", "198_payroll_expense_drafts.sql"} {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
 			t.Fatal(err)

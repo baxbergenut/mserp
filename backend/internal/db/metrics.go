@@ -64,6 +64,7 @@ func Phase(ctx context.Context, name string) func() {
 		return func() {}
 	}
 	start := time.Now()
+	queries := m.Queries.Load()
 	return func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -71,6 +72,11 @@ func Phase(ctx context.Context, name string) func() {
 			m.phases = map[string]int64{}
 		}
 		m.phases[name] += time.Since(start).Nanoseconds()
+		if m.events == nil {
+			m.events = map[string]int64{}
+		}
+		// Inclusive counts match inclusive phase durations. Nested phases overlap.
+		m.events[name+"_queries"] += m.Queries.Load() - queries
 	}
 }
 func (m *Metrics) Details() (map[string]float64, map[string]QueryMetric) {
