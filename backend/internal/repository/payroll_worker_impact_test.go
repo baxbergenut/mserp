@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"mserp/internal/db"
 	"slices"
 	"testing"
@@ -9,6 +10,64 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestPayrollWorkerRecoversFromIncompleteClaimsDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		const otherDriver = "18200000-0000-0000-0000-000000001600"
+		exec := func(sql string, args ...any) {
+			t.Helper()
+			if _, err := pool.Exec(ctx, sql, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date)
+ VALUES($1,'Other driver','other driver','cpm',0.65,'2026-01-01')`, otherDriver)
+		repo := NewDriverPayRepository(pool)
+		repo.ConfigurePreparedReads(true)
+		repo.ConfigurePreparedCommands(true)
+		if err := repo.EnablePayrollShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		exec(`UPDATE payroll_projection_control SET protocol_mode='resources' WHERE singleton`)
+		week, _ := chargeWeek("2026-10-05")
+		if err := repo.RequestPayrollPreparation(ctx, week, false); err != nil {
+			t.Fatal(err)
+		}
+		if worked, err := repo.PrepareNextPayrollWeek(ctx); err != nil || !worked {
+			t.Fatal("initial preparation", worked, err)
+		}
+		dispatch := func() {
+			t.Helper()
+			if n, err := repo.DispatchPayrollChanges(ctx); err != nil || n == 0 {
+				t.Fatal("dispatch", n, err)
+			}
+		}
+		// Dispatch these separately, as happens when provider sync and the
+		// board save commit at different times. The later board-only batch
+		// excludes this week, while the combined source proof can widen it.
+		exec(`UPDATE loads SET total_miles=450 WHERE id=18201`)
+		dispatch()
+		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles)
+ VALUES($1,'2026-10-12','NEWER-BOARD',1000,1200,400)`, otherDriver)
+		dispatch()
+		if worked, err := repo.PrepareNextPayrollWeek(ctx); !worked || !errors.Is(err, ErrPayrollProjectionSuperseded) {
+			t.Fatal("incomplete claims must stop the first attempt", worked, err)
+		}
+		if worked, err := repo.PrepareNextPayrollWeek(ctx); err != nil || !worked {
+			t.Fatal("next attempt must prepare with full claims", worked, err)
+		}
+		page, err := repo.ReadPreparedPayrollPage(ctx, "driver", week, PayPageQuery{})
+		if err != nil || page.State != "ready" || page.Statements[projectionDriver].State != "ready" {
+			t.Fatal("recovered payroll is not current", page.State, err)
+		}
+		var completed bool
+		if err = pool.QueryRow(ctx, `SELECT completed_generation=requested_generation AND lease_token IS NULL AND last_error=''
+ FROM payroll_projection_jobs WHERE week_start=$1`, week).Scan(&completed); err != nil || !completed {
+			t.Fatal("recovered job did not complete", completed, err)
+		}
+	})
+}
 
 func TestPayrollWorkerImpactDatabase(t *testing.T) {
 	for _, mode := range []string{"global", "resources"} {
