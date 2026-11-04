@@ -93,7 +93,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
-  && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
+  && previous.entry.sourceMissing === next.entry.sourceMissing && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
   && JSON.stringify(previous.entry.splitReview) === JSON.stringify(next.entry.splitReview)
   && previous.entry.note === next.entry.note
   && previous.entry.slot === next.entry.slot && previous.entry.deleted === next.entry.deleted

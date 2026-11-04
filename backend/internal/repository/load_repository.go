@@ -46,6 +46,7 @@ type LoadRecord struct {
 	SyncedAt                time.Time
 	RawPayload              []byte
 	Stops                   []LoadStop
+	SourceMissing           bool
 }
 
 // Discovery, reconciliation and refresh only maintain imported load records.
@@ -208,7 +209,7 @@ func stringOrDefault(value *string, fallback string) string {
 	return trimmed
 }
 func (r *LoadRepository) GetLoads(ctx context.Context) ([]LoadRecord, error) {
-	rows, err := r.pool.Query(ctx, selectLoadsSQL+" ORDER BY id")
+	rows, err := r.pool.Query(ctx, selectLoadsSQL+" WHERE "+boardAvailableSourceSQL+" ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -231,16 +232,17 @@ func (r *LoadRepository) GetLoads(ctx context.Context) ([]LoadRecord, error) {
 }
 
 type LoadPageQuery struct {
-	Pagination Pagination
-	Search     string
-	Status     string
-	Customer   string
-	Dispatcher string
-	Driver     string
-	PickupFrom *time.Time
-	PickupTo   *time.Time
-	Sort       string
-	Direction  string
+	IncludeMissing bool
+	Pagination     Pagination
+	Search         string
+	Status         string
+	Customer       string
+	Dispatcher     string
+	Driver         string
+	PickupFrom     *time.Time
+	PickupTo       *time.Time
+	Sort           string
+	Direction      string
 }
 
 type LoadFilterOptions struct {
@@ -264,13 +266,14 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 	AND ($4 = '' OR dispatcher_name = $4)
 	AND ($5 = '' OR driver_name = $5)
 	AND ($6::date IS NULL OR pickup_time >= $6)
-	AND ($7::date IS NULL OR pickup_time < $7 + interval '1 day')`
+	AND ($7::date IS NULL OR pickup_time < $7 + interval '1 day')
+	AND ($8 OR ` + boardAvailableSourceSQL + `)`
 	args := []any{
 		query.Search, query.Status, query.Customer, query.Dispatcher, query.Driver,
-		query.PickupFrom, query.PickupTo,
+		query.PickupFrom, query.PickupTo, query.IncludeMissing,
 	}
 	var total int
-	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM clustie_loads "+where, args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM clustie_loads l "+where, args...).Scan(&total); err != nil {
 		return LoadPage{}, err
 	}
 	query.Pagination = query.Pagination.Normalize(total)
@@ -290,7 +293,7 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 		direction = "ASC"
 	}
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
-	rows, err := r.pool.Query(ctx, selectLoadsSQL+where+" ORDER BY "+orderColumn+" "+direction+" NULLS LAST, id DESC LIMIT $8 OFFSET $9", pageArgs...)
+	rows, err := r.pool.Query(ctx, selectLoadsSQL+where+" ORDER BY "+orderColumn+" "+direction+" NULLS LAST, id DESC LIMIT $9 OFFSET $10", pageArgs...)
 	if err != nil {
 		return LoadPage{}, err
 	}
@@ -314,7 +317,7 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 			COALESCE(array_agg(DISTINCT customer_name ORDER BY customer_name) FILTER (WHERE customer_name IS NOT NULL AND customer_name <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT dispatcher_name ORDER BY dispatcher_name) FILTER (WHERE dispatcher_name IS NOT NULL AND dispatcher_name <> ''), '{}'),
 			COALESCE(array_agg(DISTINCT driver_name ORDER BY driver_name) FILTER (WHERE driver_name IS NOT NULL AND driver_name <> ''), '{}')
-		FROM clustie_loads`).Scan(&options.Statuses, &options.Customers, &options.Dispatchers, &options.Drivers)
+		FROM clustie_loads l WHERE ($1 OR `+boardAvailableSourceSQL+`)`, query.IncludeMissing).Scan(&options.Statuses, &options.Customers, &options.Dispatchers, &options.Drivers)
 	if err != nil {
 		return LoadPage{}, err
 	}
@@ -330,7 +333,7 @@ func scanLoad(row rowScanner) (LoadRecord, error) {
 		&rec.TotalMiles, &rec.PerMileRevenue, &rec.DispatcherName, &rec.DriverName,
 		&rec.TeamDriverName, &rec.TruckUnit, &rec.CustomerName, &rec.PickupTime,
 		&rec.DeliveryTime, &rec.PickupAppointmentTime, &rec.DeliveryAppointmentTime,
-		&rec.CreatedDatetime, &rec.SyncedAt, &stops,
+		&rec.CreatedDatetime, &rec.SyncedAt, &stops, &rec.SourceMissing,
 	)
 	rec.Stops = loadStops(stops)
 	rec.DispatcherName = formatPersonNamePtr(rec.DispatcherName)
@@ -346,8 +349,8 @@ SELECT
 	load_pay, total_other_pay, total_pay, total_miles, per_mile_revenue,
 	dispatcher_name, driver_name, team_driver_name, truck_unit, customer_name,
 	pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time,
-	created_datetime, synced_at, raw_payload->'stops'
-FROM clustie_loads
+	created_datetime, synced_at, raw_payload->'stops', NOT (` + boardAvailableSourceSQL + `)
+FROM clustie_loads l
 `
 
 var ErrMissingLoadRecordID = errors.New("datatruck load is missing a positive record id")

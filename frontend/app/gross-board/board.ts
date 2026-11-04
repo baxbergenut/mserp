@@ -125,12 +125,12 @@ export function totals(entries: GrossBoardEntry[]) {
 }
 
 export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBoardEntry {
-  if (load.split) return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
+  if (load.split) return { ...entry, sourceMissing: false, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id,
     loadTripId: null, split: true, tripReview: true, tripReviewReason: load.tripReviewReason ?? "", trips: load.trips ?? [],
     originalRate: "", miles: "", systemOriginalRate: "", systemMiles: "", acceptSystemValues: false };
   const original = entry.enteredOriginalRate || entry.originalRate || load.originalRate;
   const miles = entry.enteredMiles || entry.miles || load.miles;
-  return { ...entry, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: load.trips ?? [],
+  return { ...entry, sourceMissing: false, dayStatus: "", loadNumber: load.loadNumber, loadRecordId: load.id, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: load.trips ?? [],
     note: entry.loadNumber.trim().toLowerCase() === load.loadNumber.trim().toLowerCase() && (entry.loadRecordId === null || entry.loadRecordId === load.id) ? entry.note : "",
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,

@@ -57,6 +57,7 @@ func TestGrossBoardDatabase(t *testing.T) {
  CREATE TEMP TABLE trucks(id uuid PRIMARY KEY,unit_number text);
  CREATE TEMP TABLE truck_driver_assignments(driver_id uuid,truck_id uuid,assigned_at timestamptz,unassigned_at timestamptz);
  CREATE TEMP TABLE driver_dispatcher_assignments(driver_id uuid,dispatcher_id uuid,dispatcher_name text,assigned_at timestamptz,unassigned_at timestamptz,start_known boolean);
+ CREATE TEMP TABLE load_source_availability(load_id integer PRIMARY KEY,present boolean NOT NULL,checked_at timestamptz DEFAULT now());
  CREATE TEMP TABLE loads(id integer PRIMARY KEY,load_id text,total_pay numeric(10,2),total_miles numeric(10,2),driver_name text,pickup_time timestamptz,pickup_appointment_time timestamptz);
  CREATE TEMP TABLE gross_board_entries(driver_id uuid REFERENCES pg_temp.drivers(id),service_date date,load_number text,load_record_id integer REFERENCES pg_temp.loads(id),original_rate numeric(12,2),driver_rate numeric(12,2),miles numeric(12,2),version integer DEFAULT 1,updated_at timestamptz DEFAULT now(),PRIMARY KEY(driver_id,service_date));
  INSERT INTO dispatchers VALUES('00000000-0000-0000-0000-000000000010','Dispatch A');

@@ -28,6 +28,7 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
+	SourceMissing          bool             `json:"sourceMissing,omitempty"`
 	Fields                 []string         `json:"fields,omitempty"`
 	SplitReview            *LoadSplitReview `json:"splitReview,omitempty"`
 	SourceDate             string           `json:"sourceDate,omitempty"`
@@ -163,14 +164,15 @@ const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
  coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted,
- coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trip_review_reason,trips,source_date::text,source_slot,transfer_version,credited_dispatcher_id,credited_dispatcher_name`
+	coalesce(system_original::text,''), coalesce(system_miles::text,''), note,load_trip_id,split,trip_review,trip_review_reason,trips,source_date::text,source_slot,transfer_version,credited_dispatcher_id,credited_dispatcher_name,
+ EXISTS(SELECT 1 FROM load_source_availability a WHERE a.load_id=matched_id AND NOT a.present)`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	var trips []byte
 	err := row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
 		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted,
-		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &e.TripReviewReason, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName)
+		&e.SystemOriginalRate, &e.SystemMiles, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &e.TripReviewReason, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName, &e.SourceMissing)
 	if err != nil {
 		return err
 	}
@@ -342,7 +344,7 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
  coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason
- FROM (SELECT c.*,to_jsonb(source)->'split_allocation' split_allocation FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0
+ FROM (SELECT c.*,to_jsonb(source)->'split_allocation' split_allocation FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0 AND `+boardAvailableSourceSQL+`
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
 		return nil, err
@@ -378,6 +380,20 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	entries, err = r.saveEntriesTx(ctx, tx, entries, actors...)
+	if err != nil {
+		return nil, err
+	}
+	if err = commitPayrollMutation(ctx, tx); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// Shared by native edits and the fenced duplicate reconciliation command.
+// The caller owns the transaction, publication and immutable receipt.
+func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, entries []GrossBoardEntry, actors ...string) ([]GrossBoardEntry, error) {
+	var err error
 	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
 		return nil, err
 	}
@@ -389,7 +405,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return nil, err
 	}
 	// Preserve the existing fleet-status then financial lock order.
-	finishLockWait = db.Phase(ctx, "gross_financial_lock_wait")
+	finishLockWait := db.Phase(ctx, "gross_financial_lock_wait")
 	err = lockTruckAccounting(ctx, tx)
 	finishLockWait()
 	if err != nil {
@@ -411,7 +427,7 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 	// Retrying an acknowledged value does not invalidate payroll or rewrite the
 	// row. This also handles an acknowledgement lost during a browser reload.
 	if allUnchanged {
-		return entries, tx.Commit(ctx)
+		return entries, nil
 	}
 	entries, err = prepareSplitReviews(ctx, tx, entries)
 	if err != nil {
@@ -440,22 +456,9 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		}
 		// Gross Board records financial plans regardless of fleet availability.
 		// Operational dispatch checks belong to Status Board, not this editor.
-		var loadID *int
-		if e.LoadRecordID != nil {
-			var id int
-			err = tx.QueryRow(ctx, `SELECT id FROM loads WHERE id=$1 AND lower(btrim(load_id))=lower(btrim($2))`, e.LoadRecordID, e.LoadNumber).Scan(&id)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, ErrGrossBoardLoad
-			}
-			if err != nil {
-				return nil, err
-			}
-			loadID = &id
-		} else if e.LoadNumber != "" {
-			err = tx.QueryRow(ctx, `SELECT CASE WHEN count(*)=1 THEN min(id) END FROM loads WHERE lower(btrim(load_id))=lower(btrim($1))`, e.LoadNumber).Scan(&loadID)
-			if err != nil {
-				return nil, err
-			}
+		loadID, err := resolveAvailableBoardLoad(ctx, tx, e)
+		if err != nil {
+			return nil, err
 		}
 
 		enteredOriginal, enteredMiles := e.EnteredOriginalRate, e.EnteredMiles
@@ -612,9 +615,6 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		if err != nil {
 			return nil, err
 		}
-	}
-	if err := commitPayrollMutation(ctx, tx); err != nil {
-		return nil, err
 	}
 	return entries, nil
 }

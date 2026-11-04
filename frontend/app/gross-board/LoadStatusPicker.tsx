@@ -26,7 +26,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const [position, setPosition] = useState({ left: 0, top: 0, height: 320, width: 288 });
   const query = entry.loadNumber.trim();
   const status = dayStatuses.find((item) => item.value === entry.dayStatus);
-  const confirmed = entry.loadRecordId !== null;
+  const confirmed = entry.loadRecordId !== null && !entry.sourceMissing;
   const unmatched = !status && !confirmed && query !== "";
   const statusOptions = suggestedDayStatuses(browse || status ? "" : query);
   const loads = results.query === query && !status ? results.loads : [];
@@ -102,7 +102,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           setActive(0); setBrowse(false); setFocused(true); setSearchError("");
           if (exact && !hasAmounts(entry)) setFocused(false);
           onChange(entry.driverId, entry.date, (current) => exact && !hasAmounts(current) ? setDayStatus(current, exact.value) :
-            ({ ...current, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: [],
+            ({ ...current, sourceMissing: false, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: [],
               note: loadNumber.trim().toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
               miles: current.loadRecordId !== null ? "" : current.miles,
@@ -121,6 +121,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
         }}
         className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
         placeholder="Load # / status" />
+      {entry.sourceMissing && <span role="status" title="This historical record is no longer returned by DataTruck. Reconcile its link before finalizing payroll." className="block px-1 text-[10px] text-amber-400">Missing from DataTruck · review link</span>}
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
         <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
