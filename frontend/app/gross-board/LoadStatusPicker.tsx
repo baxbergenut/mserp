@@ -108,7 +108,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
               miles: current.loadRecordId !== null ? "" : current.miles,
               enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate,
               enteredMiles: current.loadRecordId !== null ? "" : current.enteredMiles,
-              duplicate: false, acceptSystemValues: false }));
+              duplicate: false, systemDriverRate: "", acceptDriverGross: false, acceptSystemValues: false }));
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape") { setFocused(false); return; }

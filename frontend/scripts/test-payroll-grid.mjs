@@ -26,7 +26,7 @@ try {
       dayStatuses: [{ date: '2026-09-28', status: 'SHOP' }, { date: '2026-09-29', status: 'HOME' }, { date: '2026-09-30', status: 'IN TRANSIT' }, { date: '2026-10-01', status: 'RESET' }, { date: '2026-10-01', status: 'STUCK' }],
       ...(investor ? { investorId: 'owner', truckId: 'statement', autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
-        originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
+        originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', systemDriverGross: '330.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
       edits: { driverId: 'statement', weekStart: week, version: 0, notes: '', comments: {}, adjustments: [], fuelOverride: null, tollOverride: null,
         expenseDeductions: [{ expenseId: 'expense', name: 'Equipment', expenseDate: week, amount: '25.00', total: '100.00', available: '100.00', openingBalance: '100.00', remaining: '75.00', version: 1, saved: true }],
         generatedCharges: [{ scheduleId: 'schedule', kind: 'recurring', name: 'Insurance', amount: '-50.00', scheduledAmount: '-50.00', overridden: false, version: 1, scheduleVersion: 1, typeVersion: 1 }],
@@ -47,7 +47,7 @@ try {
       }
       if (path.endsWith('/accept-system')) {
         beforeSource = structuredClone(driver.loads);
-        const field = request.postDataJSON().field; expect(['originalRate','totalMiles']).toContain(field); driver.loads[0] = { ...driver.loads[0], [field]: field === 'originalRate' ? '401.00' : '91.00', boardVersion: 2 };
+        const field = request.postDataJSON().field; expect(['originalRate','totalMiles','driverGross']).toContain(field); driver.loads[0] = { ...driver.loads[0], [field]: field === 'originalRate' ? '401.00' : field === 'driverGross' ? '330.00' : '91.00', boardVersion: 2 };
         return route.fulfill({ json: { undoId: 'receipt' } });
       }
       if (path.endsWith('/undo-system')) { driver.loads = beforeSource; return route.fulfill({ status: 204 }); }
@@ -137,13 +137,13 @@ try {
     await page.keyboard.press('Control+c');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('$400.00');
     await page.keyboard.press('ArrowRight');
-    const driverGross = loads.getByRole('cell', { name: '$350.00', exact: true }).first();
+    const driverGross = loads.getByRole('cell', { name: /^Driver gross differs/ }).first();
     await expect(driverGross).toBeFocused();
     await page.evaluate(() => navigator.clipboard.writeText('999'));
     await page.keyboard.press('Control+v'); await expect(driverGross).toHaveText('$350.00');
     await page.keyboard.type('123'); await expect(driverGross).toHaveText('$350.00');
     await page.keyboard.press('ArrowDown');
-    await expect(loads.getByRole('cell', { name: '$350.00', exact: true }).nth(1)).toBeFocused();
+    await expect(loads.getByRole('cell', { name: /^Driver gross differs/ }).nth(1)).toBeFocused();
     await page.keyboard.press('ArrowLeft');
     await expect(page.getByRole('cell', { name: /^Total gross differs/ }).nth(1)).toBeFocused();
     await region.locator('tr').first().locator('td').first().click();
@@ -151,6 +151,16 @@ try {
     await expect(loads.getByRole('cell', { name: '$280.00', exact: true }).first()).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(region.locator('tr').first().locator('td').first()).toBeFocused();
+    // Accept driver gross independently, then restore it through the normal undo flow.
+    await driverGross.click({button:'right'});
+    await expect(page.getByRole('menu')).toContainText('$350.00 → $330.00');
+    await page.getByRole('menuitem',{name:'Accept DataTruck driver gross',exact:true}).click();
+    await expect.poll(()=>driver.loads[0].driverGross).toBe('330.00');
+    expect(driver.loads[0].originalRate).toBe('400.00'); expect(driver.loads[0].totalMiles).toBe('90.00');
+    await expect(page.getByRole('status').filter({hasText:'System values accepted'})).toBeVisible();
+    await page.keyboard.press('Control+z');
+    await expect.poll(()=>driver.loads[0].driverGross).toBe('350.00');
+    await expect(driverGross).toHaveText('$350.00');
     // The menu previews only the selected value, and changes only that value.
     const gross = page.getByRole('cell', { name: /^Total gross differs/ }).first();
     await gross.click({ button: 'right' });

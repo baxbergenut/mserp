@@ -5,7 +5,7 @@ import { useLoadNotes } from "./useLoadNotes";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
-import { amountDisplay, compactDecimal, editAmount, emptyEntry, hundredths, mismatch, validDecimal } from "./board";
+import { amountDisplay, editAmount, emptyEntry, mismatch, validDecimal } from "./board";
 import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 import { SplitReviewDialog } from "./SplitReviewDialog";
@@ -32,13 +32,11 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   }, [highlighted]);
   const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
-  // Mirror the active text into a following Driver gross, including a trailing
-  // decimal point or zero, without exposing the autosave's formatting mid-edit.
-  const [originalTyping, setOriginalTyping] = useState<string | null>(null);
   const confirmed = entry.loadRecordId !== null;
   const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
   const milesMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredMiles, entry.systemMiles ?? "");
-  const needsReview = !!entry.tripReview || rateMismatch || milesMismatch;
+  const driverMismatch = confirmed && !entry.acceptDriverGross && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate));
+  const needsReview = !!entry.tripReview || rateMismatch || milesMismatch || driverMismatch;
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   const addButton = onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>;
@@ -54,20 +52,16 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
       <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} /></div>{notes.popup}
       {!entry.dayStatus && (["originalRate", "driverRate", "miles"] as const).map((field) => {
         const valid = validDecimal(entry[field], field === "miles");
-        const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : false;
-        const entered = field === "originalRate" ? entry.enteredOriginalRate : entry.enteredMiles;
-        const system = field === "originalRate" ? entry.systemOriginalRate : entry.systemMiles;
+        const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : driverMismatch;
+        const entered = field === "originalRate" ? entry.enteredOriginalRate : field === "driverRate" ? entry.driverRate : entry.enteredMiles;
+        const system = field === "originalRate" ? entry.systemOriginalRate : field === "driverRate" ? entry.systemDriverRate : entry.systemMiles;
         return <div key={field} data-grid-cell data-gross-field={field}><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "total gross" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal"
-          value={entry[field]} displayValue={field === "driverRate" && originalTyping !== null && entry.driverRate !== ""
-            && hundredths(entry.driverRate) === hundredths(entry.originalRate) ? originalTyping : amountDisplay(entry[field], field !== "miles")} disabled={disabled || (entry.split && field === "originalRate")}
+          value={entry[field]} displayValue={amountDisplay(entry[field], field !== "miles")} disabled={disabled || (entry.split && field === "originalRate")}
           nonnegative={field === "miles"}
           title={different ? `Entered: ${amountDisplay(entered, field !== "miles")}; system: ${amountDisplay(system ?? "", field !== "miles") || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder="0"
-          onFocus={field === "originalRate" ? () => setOriginalTyping(compactDecimal(entry.originalRate)) : undefined}
-          onBlur={field === "originalRate" ? () => setOriginalTyping(null) : undefined}
-          onValueChange={(value, text) => {
-            if (field === "originalRate") setOriginalTyping(text);
+          onValueChange={(value) => {
             onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value));
           }}
           className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : "text-zinc-300"}`}
@@ -78,9 +72,12 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use your entered values. Current system values are shown for comparison.</p>
         <table className="w-full text-left text-sm">
           <thead className="text-zinc-500"><tr><th className="p-2">Field</th><th>Entered</th><th>System</th></tr></thead>
-          <tbody>{[["Total gross", entry.enteredOriginalRate, entry.systemOriginalRate, rateMismatch], ["Miles", entry.enteredMiles, entry.systemMiles, milesMismatch]].map(([name, entered, actual, different]) =>
-            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name === "Total gross") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name === "Total gross") || "—"}</td></tr>)}</tbody>
+          <tbody>{[["Total gross", entry.enteredOriginalRate, entry.systemOriginalRate, rateMismatch], ["Driver gross", entry.driverRate, entry.systemDriverRate, driverMismatch], ["Miles", entry.enteredMiles, entry.systemMiles, milesMismatch]].map(([name, entered, actual, different]) =>
+            <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name !== "Miles") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name !== "Miles") || "—"}</td></tr>)}</tbody>
         </table>
+        <button type="button" hidden={disabled || !driverMismatch || entry.tripReview} disabled={!entry.systemDriverRate} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={() => {
+          onChange(entry.driverId, entry.date, entry.slot, current => ({ ...current, driverRate: current.systemDriverRate ?? "", acceptDriverGross: true })); setReviewing(false);
+        }}>Accept DataTruck driver gross</button>
         <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the total gross and miles with the values shown here.</p>
         <button type="button" hidden={disabled || entry.tripReview} disabled={disabled || entry.tripReview} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
           onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
@@ -104,4 +101,5 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   && previous.entry.driverRate === next.entry.driverRate && previous.entry.miles === next.entry.miles
   && previous.entry.enteredOriginalRate === next.entry.enteredOriginalRate && previous.entry.enteredMiles === next.entry.enteredMiles
   && previous.entry.systemOriginalRate === next.entry.systemOriginalRate && previous.entry.systemMiles === next.entry.systemMiles
+  && previous.entry.systemDriverRate === next.entry.systemDriverRate && previous.entry.acceptDriverGross === next.entry.acceptDriverGross
   && previous.entry.acceptSystemValues === next.entry.acceptSystemValues && previous.entry.duplicate === next.entry.duplicate);

@@ -612,13 +612,13 @@ func TestGrossBoardDatabase(t *testing.T) {
 	}
 	// Autosave may resolve the load before the browser lookup returns. Both
 	// primary and extra slots must persist the same initial driver-gross default.
-	if _, err = pool.Exec(ctx, `INSERT INTO pg_temp.loads(id,load_id,total_pay,total_miles) VALUES(99,'DEFAULT-GROSS',1234.56,300)`); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO pg_temp.loads(id,load_id,total_pay,total_miles,raw_payload) VALUES(99,'DEFAULT-GROSS',1234.56,300,'{"trips":[{"id":99,"driver__full_name":"Driver","total_load_pay":1000,"mile":300,"empty_mile":0}]}')`); err != nil {
 		t.Fatal(err)
 	}
 	for _, slot := range []int{0, 1} {
 		for i, tc := range []struct{ original, driver, want string }{
-			{"", "", "1234.56"},
-			{"900", "", "900.00"},
+			{"", "", "1000.00"},
+			{"900", "", "1000.00"},
 			{"", "0", "0.00"},
 			{"", "750", "750.00"},
 		} {

@@ -254,5 +254,8 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	if query.ID != "" && len(result.Report.Drivers) == 1 && result.Statements[query.ID].State == "ready" {
 		result.State = "ready"
 	}
+	if err = decorateFrozenSourceComparisons(ctx, tx, &result.Report); err != nil {
+		return result, err
+	}
 	return result, tx.Commit(ctx)
 }

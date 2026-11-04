@@ -75,7 +75,8 @@ const payrollPrepareLoadFactsSQL = `WITH revision AS MATERIALIZED (
  WHERE $2::bigint[] IS NULL AND NOT (SELECT yes FROM complete) ON CONFLICT DO NOTHING`
 
 var payrollPreparedEntriesCTE = payrollLoadMatchCTE + `, pay_loaded AS MATERIALIZED (
- SELECT l.*,facts.trip_count,facts.trips_valid,facts.trip_allocation,facts.trip_values
+ SELECT l.*,facts.trip_count,facts.trips_valid,facts.trip_allocation,facts.trip_values,
+ coalesce((SELECT count(*)=facts.trip_count AND bool_and(btrim(coalesce(v->'v'->>'driver__full_name',''))<>'') FROM jsonb_each(facts.trip_values) t(k,v)),false) trip_identities_valid
  FROM loads l JOIN (SELECT DISTINCT coalesce(e.load_record_id,n.id) id
  FROM pay_entries e LEFT JOIN pay_load_numbers n ON n.number=lower(btrim(e.load_number)) WHERE e.day_status='') ids ON ids.id=l.id
  JOIN payroll_load_facts facts ON facts.load_id=l.id AND facts.source_hash=` + payrollLoadFactHashSQL + `

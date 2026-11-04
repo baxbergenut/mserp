@@ -48,7 +48,8 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
   const sum = totals(displayed);
   const confirmed = displayed.every(entry => entry.loadRecordId !== null);
   const unmatched = displayed.some(entry => !entry.dayStatus && entry.loadRecordId === null && entry.loadNumber.trim() !== "");
-  const needsReview = displayed.some(entry => entry.tripReview || entry.loadRecordId !== null && !entry.acceptSystemValues && (mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "") || mismatch(entry.enteredMiles, entry.systemMiles ?? "")));
+  const driverNeedsReview = displayed.some(entry => entry.loadRecordId !== null && !entry.acceptDriverGross && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate)));
+  const needsReview = driverNeedsReview || displayed.some(entry => entry.tripReview || entry.loadRecordId !== null && !entry.acceptSystemValues && (mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "") || mismatch(entry.enteredMiles, entry.systemMiles ?? "")));
   const label = `${driverName}, ${date}`;
   const selected = displayed.find(entry => entry.slot === focusSlot);
   const openEditor = (add = false) => {
@@ -101,7 +102,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
         onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? "bg-emerald-500/15 !text-emerald-300" : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
         <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? entry.loadRecordId === null ? "font-semibold text-red-300" : "text-emerald-300" : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${entry.loadRecordId === null ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber || "Empty"}</span>)}</span>
       </button></div>
-      {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${needsReview && name !== "driver rate" ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
+      {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${(name === "driver rate" ? driverNeedsReview : needsReview) ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
     </td>}
     {displayed.length > 1 && notes.popup}
     {hover && createPortal(<div id={tooltipId} role="tooltip" style={hover} className="pointer-events-none fixed z-50 w-[480px] rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 ui-popover">

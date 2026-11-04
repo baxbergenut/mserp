@@ -214,7 +214,7 @@ func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.Dri
 			writeAPIError(w, 400, "Invalid source acceptance")
 			return
 		}
-		if !isUUID(input.DriverID) || input.Version < 1 || input.Slot < 0 || input.Slot > 99 || input.LoadRecordID < 1 || (input.Field != "" && input.Field != "originalRate" && input.Field != "totalMiles") || (input.Field != "totalMiles" && !grossBoardDecimal.MatchString(input.OriginalRate)) || (input.Field != "originalRate" && input.Miles != "" && (!grossBoardDecimal.MatchString(input.Miles) || strings.HasPrefix(input.Miles, "-"))) {
+		if !isUUID(input.DriverID) || input.Version < 1 || input.Slot < 0 || input.Slot > 99 || input.LoadRecordID < 1 || (input.Field != "" && input.Field != "originalRate" && input.Field != "totalMiles" && input.Field != "driverGross") || ((input.Field == "" || input.Field == "originalRate") && !grossBoardDecimal.MatchString(input.OriginalRate)) || ((input.Field == "" || input.Field == "totalMiles") && input.Miles != "" && (!grossBoardDecimal.MatchString(input.Miles) || strings.HasPrefix(input.Miles, "-"))) || (input.Field == "driverGross" && !grossBoardDecimal.MatchString(input.DriverGross)) {
 			writeAPIError(w, 400, "Invalid source acceptance")
 			return
 		}

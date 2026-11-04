@@ -15,7 +15,10 @@ all linked Clustie board entries. Provider names never establish local identity.
 
 Original allocations must sum exactly to the parent order total. Driver gross
 is independent, including zero or blank; it need not sum to order revenue.
-Neither value is inferred from total_load_pay. Prior entered original amounts
+Original revenue is not inferred from total_load_pay. New blank driver gross
+defaults from that field on the explicitly selected trip (or the sole identified
+trip of a nonsplit order). Existing driver gross, including zero, is preserved.
+Missing or ambiguous driver gross remains blank. Prior entered original amounts
 prefill the review when linked to a specific trip. Otherwise allocations remain
 blank until entered. Existing unreviewed splits retain their legacy projection
 only while provider trip amounts and miles reconcile; this is compatibility,
@@ -82,8 +85,36 @@ trip 65805 with $500 original gross and $700 driver gross, zero loaded plus
 plus 40 empty miles. Original revenue totals $1,813; driver gross totals $2,013.
 On October 30, 2026, the live order/list APIs returned $700/$1,313 as trip
 amounts and $1,813 as order total, with no separate original allocation field.
-An earlier response had $500 for Daniel. This does not establish universal
-provider trip-pay semantics and must not drive automatic driver gross updates.
+An earlier response had $500 for Daniel. Subsequent November 4 verification of
+Frank's loads 4010835104 and 80C4995 confirmed trip driver gross $2,300/$2,000,
+separately from parent total gross $2,800/$2,299. This establishes the driver-gross
+default; it does not establish a revenue-allocation rule.
+
+## Driver gross defaults and refresh
+
+Migration 195 marks only newly created blank plans as pending an initial driver
+gross. Install the matching deployment helper first to pause writers for the
+transactional schema change. Normal import/refresh fills those blanks once, under the existing financial
+and source guards. Historical blanks, explicit amounts, zero, transferred plans
+and finalized statements are preserved. Clearing an existing amount is manual.
+Pending candidates use partial indexes and only the refreshed load IDs. A repeated
+identical sync does not change board versions or payroll financial revisions.
+
+The typed trips already persist in loads.raw_payload; no extra vendor request,
+polling loop or duplicate driver-gross storage is needed. Board lookup, normal
+payroll and prepared source facts share the trip amount. Projection schema 9
+refreshes statement contracts, with only the driver_base source-card fingerprint
+changed; unrelated reusable facts keep their existing cache keys.
+
+DataTruck total gross, driver gross and miles comparisons refresh through the
+existing operational/reconciliation sync. Source-backed total gross/miles retain
+their existing live behavior; explicit manual overrides stay visible as differences.
+Driver gross defaults once and then stays saved until explicitly changed. Board
+and Driver/Investor Pay show independent driver-gross discrepancies and acceptance.
+Acceptance validates current source and board versions, preserves other fields,
+honors finalized guards, and payroll acceptance retains its undo receipt. Frozen
+cards read current comparison evidence in one bounded batch without changing paid
+amounts, frozen JSON or running a calculator.
 
 The nine previously repeated numbers were read from DataTruck on October 27,
 2026. Seven had one trip only; 8YX4487 had distinct orders/dates; 4010921488 had
@@ -93,6 +124,9 @@ converted using this confirmed example's pattern.
 ## Validation
 
 `TestLoadTripsSerialization` checks that sync serialization retains allocations.
+`TestDataTruckDriverGrossDatabase` covers fresh/migrated defaults, historical and
+manual preservation, late arrivals, zero/missing amounts, changed/identical syncs,
+normal/prepared parity, independent acceptance/undo and finalized guards.
 `TestLoadTripsDatabase` uses a disposable local `_test` database and isolated
 schemas, in fresh and additive-migration modes, exercising selected values,
 source acceptance, stale versions, duplicate trip assignment, repetitions,

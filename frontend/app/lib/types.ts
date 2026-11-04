@@ -1133,9 +1133,11 @@ export interface GrossBoardEntry {
   enteredOriginalRate: string;
   enteredMiles: string;
   systemOriginalRate?: string;
+  systemDriverRate?: string;
   systemMiles?: string;
   duplicate: boolean;
   acceptSystemValues?: boolean;
+  acceptDriverGross?: boolean;
 }
 
 export interface GrossBoardDriver {
@@ -1176,6 +1178,7 @@ export interface GrossBoardBalanceLine {
 }
 
 export interface GrossBoardLoad {
+  driverRate?: string;
   tripReviewReason?: string;
   trips?: GrossBoardTrip[];
   split?: boolean;
@@ -1305,6 +1308,7 @@ export interface DriverPayLoad {
   tripReview?: boolean;
   boardVersion?: number;
   systemOriginalRate?: string;
+  systemDriverGross?: string;
   systemMiles?: string;
   sourceDriverId?: string;
   driverFee?: string;
@@ -1388,7 +1392,8 @@ export interface PayrollSourceCommandReceipt {
 }
 export interface PaySourceReceipt extends Partial<PayrollSourceCommandReceipt> { undoId: string }
 export interface PaySourceAcceptance extends PayrollCommandMetadata {
-  field?: "originalRate" | "totalMiles";
+  field?: "originalRate" | "totalMiles" | "driverGross";
+  driverGross?: string;
   driverId: string;
   date: string;
   slot: number;

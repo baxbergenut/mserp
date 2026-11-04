@@ -16,12 +16,12 @@ var payrollLoadMatchCTE = `pay_entries AS MATERIALIZED (
 )`
 
 var payrollEntriesCTE = payrollLoadMatchCTE + `, pay_loaded AS MATERIALIZED (
- SELECT l.*,facts.n trip_count,facts.valid trips_valid,facts.saved trip_allocation,facts.trips trip_values
+ SELECT l.*,facts.n trip_count,facts.valid trips_valid,facts.identities_valid trip_identities_valid,facts.saved trip_allocation,facts.trips trip_values
  FROM loads l JOIN (SELECT DISTINCT coalesce(e.load_record_id,n.id) id
  FROM pay_entries e LEFT JOIN pay_load_numbers n ON n.number=lower(btrim(e.load_number)) WHERE e.day_status='') ids ON ids.id=l.id
  LEFT JOIN LATERAL (
  ` + loadTripValidationSQL + `
- SELECT stats.n,checked.valid,checked.saved,
+ SELECT stats.n,checked.valid,stats.identities_valid,checked.saved,
  (SELECT jsonb_object_agg(id::text,jsonb_build_object('v',v,'gross',gross,'loaded',loaded,'empty',empty)) FROM trips WHERE id IS NOT NULL) trips
  FROM stats,checked
  ) facts ON true
@@ -32,6 +32,8 @@ const payrollResolvedLoad = `
  LEFT JOIN pay_loaded l ON l.id=coalesce(e.load_record_id,matched.id) AND NOT e.deleted AND e.day_status=''
  LEFT JOIN LATERAL (
  SELECT coalesce(l.split_expected,false) OR l.trip_count>1 OR e.load_trip_id IS NOT NULL AS split,
+ CASE WHEN l.trip_identities_valid THEN CASE WHEN e.load_trip_id IS NOT NULL THEN (selected.v->>'gross')::numeric
+ WHEN l.trip_count=1 AND NOT coalesce(l.split_expected,false) THEN (SELECT (v->>'gross')::numeric FROM jsonb_each(l.trip_values) t(k,v) LIMIT 1) END END driver_gross,
  (coalesce(l.split_expected,false) OR l.trip_count>1 OR e.load_trip_id IS NOT NULL) AND (NOT l.trips_valid OR selected.v IS NULL) AS review,
  CASE WHEN coalesce(l.split_expected,false) OR l.trip_count>1 OR e.load_trip_id IS NOT NULL THEN
   CASE WHEN l.trips_valid THEN coalesce((allocation.v->>'originalRate')::numeric,(selected.v->>'gross')::numeric) END ELSE l.total_pay END original,
