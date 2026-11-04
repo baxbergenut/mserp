@@ -47,8 +47,11 @@ func assertGrossBoardLoadClaims(ctx context.Context, tx pgx.Tx, claims []grossBo
 	}
 	var number, driver, date string
 	var slot int
-	err = tx.QueryRow(ctx, `WITH claims AS (
+	// Decode the compact batch once and expose its actual size to the planner;
+	// the default JSON row estimate otherwise favors repeated scans/parallelism.
+	err = tx.QueryRow(ctx, `WITH claims AS MATERIALIZED (
  SELECT * FROM jsonb_to_recordset($1::jsonb) AS c("driverId" uuid,date date,slot integer,"loadNumber" text,"loadRecordId" integer,"loadTripId" integer)
+ LIMIT $2
  ) SELECT c."loadNumber",d.full_name,b.service_date::text,b.slot
  FROM claims c JOIN `+grossBoardEntriesSQL+` b
  ON (lower(btrim(b.load_number))=lower(btrim(c."loadNumber")) OR b.load_record_id=c."loadRecordId")
@@ -58,7 +61,7 @@ func assertGrossBoardLoadClaims(ctx context.Context, tx pgx.Tx, claims []grossBo
  AND NOT (b.load_trip_id IS NOT NULL AND c."loadTripId" IS NOT NULL
    AND b.load_record_id IS NOT NULL AND c."loadRecordId" IS NOT NULL
    AND b.load_record_id=c."loadRecordId" AND b.load_trip_id<>c."loadTripId")
- ORDER BY c.date,c.slot,b.service_date,b.slot,d.full_name LIMIT 1`, body).Scan(&number, &driver, &date, &slot)
+ ORDER BY c.date,c.slot,b.service_date,b.slot,d.full_name LIMIT 1`, body, len(claims)).Scan(&number, &driver, &date, &slot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
