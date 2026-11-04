@@ -27,6 +27,9 @@ func newGrossBoardLoadClaim(e GrossBoardEntry, oldNumber string, oldID, oldTrip 
 	if !oldActive || !strings.EqualFold(strings.TrimSpace(e.LoadNumber), strings.TrimSpace(oldNumber)) {
 		return true
 	}
+	if oldID != nil && e.LoadRecordID != nil && *oldID != *e.LoadRecordID {
+		return true
+	}
 	if e.LoadTripID == nil || oldTrip == nil {
 		return e.LoadTripID != nil || oldTrip != nil
 	}

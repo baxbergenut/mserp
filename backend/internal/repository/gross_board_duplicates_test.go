@@ -78,6 +78,14 @@ func TestGrossBoardDuplicateClaimsDatabase(t *testing.T) {
 		if _, err = repo.SaveEntries(ctx, []GrossBoardEntry{legacy}); err != nil {
 			t.Fatal("legacy edit blocked", err)
 		}
+		// Relinking a historical duplicate cannot silently claim the surviving
+		// provider ID while its existing board row remains active.
+		if _, err = pool.Exec(ctx, `UPDATE gross_board_extra_entries SET load_record_id=$2 WHERE driver_id=$1 AND service_date='2026-10-04' AND slot=1`, projectionDriver, old); err != nil {
+			t.Fatal(err)
+		}
+		legacy.Version = 2
+		legacy.LoadRecordID = &current
+		reject("relink historical duplicate", []GrossBoardEntry{legacy})
 		// A freed slot does not reserve the old number forever.
 		legacy.Deleted = true
 		legacy.Version = 2

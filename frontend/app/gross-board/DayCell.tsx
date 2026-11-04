@@ -32,7 +32,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   }, [highlighted]);
   const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
-  const confirmed = entry.loadRecordId !== null;
+  const confirmed = entry.loadRecordId !== null && !entry.sourceMissing;
   const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
   const milesMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredMiles, entry.systemMiles ?? "");
   const driverMismatch = confirmed && !entry.acceptDriverGross && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate));
@@ -79,7 +79,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           onChange(entry.driverId, entry.date, entry.slot, current => ({ ...current, driverRate: current.systemDriverRate ?? "", acceptDriverGross: true })); setReviewing(false);
         }}>Accept DataTruck driver gross</button>
         <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the total gross and miles with the values shown here.</p>
-        <button type="button" hidden={disabled || entry.tripReview} disabled={disabled || entry.tripReview} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
+        <button type="button" hidden={disabled || entry.tripReview || entry.sourceMissing} disabled={disabled || entry.tripReview || entry.sourceMissing} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
           onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
             originalRate: current.systemOriginalRate ?? "", miles: current.systemMiles ?? "",
             enteredOriginalRate: current.systemOriginalRate ?? "", enteredMiles: current.systemMiles ?? "" }));

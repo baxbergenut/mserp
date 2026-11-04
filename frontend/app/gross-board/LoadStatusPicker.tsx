@@ -50,13 +50,13 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
         const exact = matches.filter((load) => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
         // Status words are never mistaken for loads. An explicit load selection
         // still supports the rare real load whose number is also a status word.
-        if (exact.length === 1 && !exactDayStatus(query)) {
+        if (exact.length === 1 && !exactDayStatus(query) && !entry.sourceMissing) {
           onChange(entry.driverId, entry.date, (current) => !current.dayStatus && current.loadNumber.trim() === query ? matchLoad(current, exact[0]) : current);
         }
       }).catch(() => { if (!cancelled) { setResults({ query, loads: [] }); setSearchError(query); } });
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, confirmed, status, disabled, focused, browse, onChange, entry.driverId, entry.date]);
+  }, [query, confirmed, status, disabled, focused, browse, onChange, entry.driverId, entry.date, entry.sourceMissing]);
 
   useEffect(() => {
     if (!open) return;
@@ -121,7 +121,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
         }}
         className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
         placeholder="Load # / status" />
-      {entry.sourceMissing && <span role="status" title="This historical record is no longer returned by DataTruck. Reconcile its link before finalizing payroll." className="block px-1 text-[10px] text-amber-400">Missing from DataTruck · review link</span>}
+      {entry.sourceMissing && <span role="status" title="The linked DataTruck record is no longer available. Reconciliation reconnects a unique replacement; entered values and finalized statements are preserved." className="block px-1 text-[10px] text-amber-400">Not found in system</span>}
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
         <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}

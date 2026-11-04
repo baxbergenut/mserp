@@ -86,6 +86,9 @@ func (j *SyncLoadsJob) Run(ctx context.Context) (SyncLoadsResult, error) {
 	if err != nil {
 		return SyncLoadsResult{}, err
 	}
+	if err = j.replaceMissingBoardLoads(ctx, nil, nil); err != nil {
+		return SyncLoadsResult{}, err
+	}
 	result := SyncLoadsResult{Fetched: discovery.Fetched + len(loadsByID), Saved: discovery.Saved + saved, Since: since}
 	j.logger.Info("sync loads complete", "after_id", maxLoadID, "reconciliation_since", since, "fetched", result.Fetched, "saved", result.Saved)
 	return result, nil
@@ -162,6 +165,8 @@ func (j *SyncLoadsJob) RunOperational(ctx context.Context) (SyncLoadsResult, err
 		return SyncLoadsResult{}, err
 	}
 	result := SyncLoadsResult{Since: from}
+	checked := make(map[int]bool, len(ids))
+	live := make(map[int]datatruck.Load, len(ids))
 	for start := 0; start < len(ids); start += 25 {
 		requested := ids[start:min(start+25, len(ids))]
 		loads, err := client.FetchLoadsByIDs(ctx, requested)
@@ -181,8 +186,15 @@ func (j *SyncLoadsJob) RunOperational(ctx context.Context) (SyncLoadsResult, err
 		if err := j.repo.RecordLoadSourceLookup(ctx, requested, returned); err != nil {
 			return result, err
 		}
+		for _, id := range requested {
+			checked[id] = true
+		}
+		addLoadsByID(live, loads)
 		result.Fetched += len(byID)
 		result.Saved += saved
+	}
+	if err = j.replaceMissingBoardLoads(ctx, checked, live); err != nil {
+		return result, err
 	}
 	j.logger.Info("operational load refresh complete", "selected", len(ids), "saved", result.Saved, "from", from, "until", until)
 	return result, nil

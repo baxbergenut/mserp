@@ -21,6 +21,7 @@ const week = '2026-11-02', driverId = 'a1000000-0000-0000-0000-000000000001';
 const blank = (date = week) => ({ driverId, date, slot: 0, deleted: false, dayStatus: '', loadNumber: '', loadRecordId: null, loadTripId: null, originalRate: '', driverRate: '', miles: '', enteredOriginalRate: '', enteredMiles: '', note: '', version: 0, duplicate: false, trips: [] });
 let entries = [], writes = [], reads = 0, fail = false, gate = null, committedSignal = null;
 let duplicateError = '';
+let loadChoices = [];
 const errors = [];
 const board = () => ({ weekStart: week, drivers: [{ id: driverId, fullName: 'Reliable Driver', dispatcherId: '', dispatcherName: 'Unassigned', active: true }], entries: structuredClone(entries), balances: [] });
 const push = async value => Promise.all(context.pages().map(page => page.evaluate(value => window.emitGross?.(value), value).catch(() => {})));
@@ -54,6 +55,7 @@ await context.route('**/api/**', async route => {
     return;
   }
   if (path === '/gross-board') { reads++; return route.fulfill({ json: board() }); }
+  if (path === '/gross-board/loads') return route.fulfill({ json: loadChoices });
   const fixtures = {
     '/auth/session': { user: { id: 'reliability-user', username: 'Reliable', permissions: ['board.read', 'board.write'] }, csrfToken: 'fixture' },
     '/tasks/count': { count: 0 }, '/sidebar-counts': {},
@@ -155,6 +157,18 @@ try {
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await saved(page);
   expect(stored(secondDay).loadNumber).toBe('DIFFERENT-LOAD');
+  expect(stored().driverRate).toBe('1400');
+  // Missing source identity is explicit, and focusing the field cannot silently
+  // replace a pinned historical link or overwrite the entered driver gross.
+  entries = entries.map(e => e.date === week ? { ...e, loadRecordId: 101, sourceMissing: true, version: e.version + 1 } : e);
+  loadChoices = [{ id: 102, loadNumber: 'PLAN-123456', originalRate: '1000.00', driverRate: '900.00', miles: '300.00', driverName: 'Reliable Driver', pickupDate: week }];
+  await push(board());
+  await expect(page.getByText('Not found in system', { exact: true })).toBeVisible();
+  const writesBeforeMissingFocus = writes.length;
+  await field(page).focus();
+  await page.waitForTimeout(500);
+  expect(writes.length).toBe(writesBeforeMissingFocus);
+  expect(stored().loadRecordId).toBe(101);
   expect(stored().driverRate).toBe('1400');
   expect(errors).toEqual([]);
   console.log('Gross Board reliability passed: batched typing, stale snapshots, version continuity, same-user live tabs, queued typing, reload recovery, last-write field saves, independent-field merges and duplicate rejection/recovery.');

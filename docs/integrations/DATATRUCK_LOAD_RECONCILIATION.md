@@ -8,7 +8,7 @@ not authority to delete financial history or silently substitute an identity.
 Loads excludes confirmed missing records from rows, counts and filter options by
 default. The **Show missing from DataTruck** checkbox includes labelled historical
 records. Gross Board suggestions and new selections exclude missing IDs. Existing
-explicit links remain pinned, editable and visibly marked for review. Reappearance
+links show **Not found in system** until safely replaced or reviewed. Reappearance
 restores visibility. Payroll/frozen source calculations do not discard evidence.
 
 Gross Board rejects a new claim for a load number already present in another
@@ -31,8 +31,8 @@ after joining them together, so duplicate source IDs multiplied both counts and
 incorrectly passed the check. This produced multiple board slots for one sheet
 load and spread the original daily driver gross across those slots. It was a
 one-time import error, not a behavior of the scheduled DataTruck refresh or the
-reviewed reconciliation command. Historical rows need a separately reviewed
-repair; never discard their allocated gross or rewrite finalized statements.
+reviewed reconciliation command. Historical rows use the guarded replacement
+rules below; never discard allocated gross or rewrite finalized statements.
 
 Future imports must resolve each distinct normalized input token separately,
 require exactly one verified current provider ID (or an explicit reviewed trip),
@@ -42,6 +42,42 @@ from matching aggregate counts after a many-to-many join. Unresolved/ambiguous
 days stay in review. Use the native Gross Board save path for new entries so
 the duplicate guard, finalization checks and atomic rollback apply; direct SQL
 imports bypass the application guard and are not an approved shortcut.
+
+## Automatic missing-link replacement
+
+The 15-minute operational pass reuses its complete ID lookup results to replace
+missing links with the unique current record sharing the normalized business
+load number. The daily pass provides the same fallback. Only candidate IDs not
+already checked need extra provider requests, in batches of 25 through the shared
+request gate. The 30-second modified feed is unchanged and cannot prove absence.
+Finalized driver weeks and numbers with no possible replacement skip extra calls.
+
+A single open entry retains its entered driver gross, manual total gross/miles
+and note. Source-driven total gross/miles follow the replacement; discrepancies
+remain visible. Multiple same-driver/day entries with distinct predecessor IDs
+can consolidate into the current record's slot, preserving every driver-gross
+cent. Unknown amounts, manual total/mileage edits or notes across multiple rows,
+multiple current IDs, trips, cross-driver/date usage, transfers, placements and
+finalized driver/investor statements hold the group for review. Dates or revenue
+may differ on the unique replacement; they are not copied into manual overrides.
+
+No replacement keeps the entered number and values with **Not found in system**.
+Focusing that field never silently changes its historical identity. Presence
+changes notify the board once; unchanged presence checks do not trigger a refresh.
+Old source records remain historical evidence, excluded from ordinary selection.
+
+The repair rechecks source evidence, availability, candidate identities, versions
+and financial guards under native locks, saves through the duplicate guard, and
+publishes affected payroll atomically. Immutable `gross_board_trip_history` rows
+record typed before/after board entries with actor `datatruck_replacement`.
+Publication failure rolls back changes and audit together. Successful repairs
+stop being candidates; replay does not consolidate twice. Unchanged/held groups
+do not publish or calculate payroll.
+
+Validation includes `TestMissingBoardReplacementDatabase` (fresh/migrated schema,
+manual-value retention, finalized driver/investor guards, source reappearance,
+publication rollback, exact gross preservation and replay), the job request-reuse
+tests and `frontend/scripts/test-gross-board-reliability.mjs`.
 
 ## Reviewed reconciliation
 

@@ -80,6 +80,10 @@ func (r *GrossBoardRepository) PreviewLoadReconciliation(ctx context.Context, si
 }
 
 func buildLoadReconciliation(ctx context.Context, tx pgx.Tx, since string, ids []int, live []datatruck.Load) (LoadReconciliationPlan, error) {
+	return buildLoadReconciliationPolicy(ctx, tx, since, ids, live, false)
+}
+
+func buildLoadReconciliationPolicy(ctx context.Context, tx pgx.Tx, since string, ids []int, live []datatruck.Load, replaceMissing bool) (LoadReconciliationPlan, error) {
 	plan := LoadReconciliationPlan{Since: since, Groups: []LoadReconciliationGroup{}}
 	present := map[int]datatruck.Load{}
 	for _, l := range live {
@@ -170,7 +174,11 @@ func buildLoadReconciliation(ctx context.Context, tx pgx.Tx, since string, ids [
 		if err = json.Unmarshal(body, &g.Before); err != nil {
 			return plan, err
 		}
-		prepareLoadReconciliation(g)
+		if replaceMissing {
+			prepareMissingLoadReplacement(g)
+		} else {
+			prepareLoadReconciliation(g)
+		}
 		if g.Hold == "" && len(g.After) > 0 {
 			for _, e := range g.Before {
 				var protected bool

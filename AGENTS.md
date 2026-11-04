@@ -36,8 +36,12 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 Missing DataTruck source records remain historical evidence. Loads hides confirmed
 missing IDs by default (`includeMissing=true` exposes labelled history); new Gross
-Board selections exclude them while existing explicit links remain pinned and show
-a review warning. Never merge by display number alone. `cmd/reconcile-loads`
+Board selections exclude them. The slow 15-minute/daily reconciliation replaces
+open missing links only after complete ID lookups prove a unique same-number
+survivor. It preserves entered driver gross/manual corrections, holds ambiguous
+or protected groups, and leaves finalized driver/investor weeks untouched.
+Absent or held links show Not found in system; source history is retained.
+`cmd/reconcile-loads`
 previews conservative, provider-verified replacements and applies only an exact
 digest under native financial/finalized guards. It preserves total driver gross,
 publishes affected payroll atomically and records an immutable retry receipt.
