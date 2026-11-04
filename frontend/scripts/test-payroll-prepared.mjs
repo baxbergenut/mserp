@@ -35,6 +35,7 @@ try {
     });
     page.on('pageerror',e=>errors.push(e.message));
     let state='preparing',generation=10,retries=0,commits=0,placements=0,retryRelease,readFailures=1;
+    let includeIndependent=false,independentState='ready';
     const requests=[],receipts=new Map(),readWeeks=[];
     let driver={id,fullName:'Prepared Test',truckUnit:'P1',payType:'gross_percentage',payRate:'80',isOwnerOperator:true,
       dispatcherId:'',dispatcherName:'',fuelTotal:'0.00',tollTotal:'0.00',issues:[],statementRevision:revision(1),
@@ -72,16 +73,19 @@ try {
         return route.fulfill({json:receipt});
       }
       if(path===`/${kind}-pay/${id}/cost-transactions`){expect(url.searchParams.get('revision')).toBe(driver.statementRevision);return route.fulfill({json:{sourceTotal:'0.00',carry:'0.00',due:'0.00',transactions:[],preparation:{state:'ready'}}});}
-      if(path===`/${kind}-pay`||path===`/${kind}-pay/statements/${id}`){
+      if(path===`/${kind}-pay`||path===`/${kind}-pay/statements/${id}`||path===`/${kind}-pay/statements/${revision(900)}`){
         if(path===`/${kind}-pay`&&readFailures>0){readFailures--;return route.fulfill({status:502,body:'Bad Gateway'});}
         readWeeks.push(url.searchParams.get('weekStart'));
         if(path.includes('/statements/')){
-          if(url.searchParams.has('revision'))expect(url.searchParams.get('revision')).toBe(driver.statementRevision);
+          if(url.searchParams.has('revision'))expect(url.searchParams.get('revision')).toBe(path.endsWith(revision(900))?revision(901):driver.statementRevision);
           else expect(placements).toBe(1); // Explicit latest detail after committed source action.
         }
         const row=structuredClone(driver),summary=url.searchParams.get('summary')==='1',expanded=url.searchParams.get('detailIds')?.split(',').includes(id);
         if(summary&&!expanded){row.summary={loads:driver.loads.length,missingFees:0,review:0,fee:(800*driver.loads.length).toFixed(2),payable:(800*driver.loads.length).toFixed(2)};row.loads=[];row.edits={driverId:id,weekStart:week,version:driver.edits.version,notes:'',comments:{},adjustments:[],expectedStatementRevision:driver.statementRevision};}
-        return route.fulfill({json:{weekStart:week,revision:`inputs:${generation}`,drivers:state==='preparing'?[]:[row],preparation:{state,generation:revision(generation),calculatorVersion:'fixture'}}});
+        const independent={...structuredClone(driver),id:revision(900),fullName:'Independent Test',truckUnit:'P2',truckId:revision(900),statementRevision:revision(901),preparationState:independentState,edits:{...driver.edits,driverId:revision(900),expectedStatementRevision:revision(901)}};
+        const rows=path.endsWith(revision(900))?[independent]:[row];
+        if(includeIndependent&&!path.includes('/statements/'))rows.push(independent);
+        return route.fulfill({json:{weekStart:week,revision:`inputs:${generation}`,drivers:state==='preparing'?[]:rows,preparation:{state,generation:revision(generation),calculatorVersion:'fixture'}}});
       }
       return route.fulfill({json:path==='/tasks/count'?{count:0}:[]});
     });
@@ -111,6 +115,20 @@ try {
     await expect(page.getByRole('button',{name:kind==='investor'?'Finalize Prepared Test P1':'Finalize Prepared Test',exact:true})).toBeEnabled();
     driver.preparationState='updating'; await page.evaluate(() => window.__payrollNotify());
     await expect(page.getByRole('button',{name:'Prepared Test, weekly comment',exact:true})).toBeDisabled();
+    includeIndependent=true;await page.evaluate(() => window.__payrollNotify());
+    await page.getByRole('button',{name:kind==='investor'?'Independent Test P2':'Independent Test',exact:true}).click();
+    const independentComment=page.getByRole('button',{name:'Independent Test, weekly comment',exact:true});
+    await expect(independentComment).toBeEnabled();
+    await expect(page.getByText('Updating…',{exact:true})).toHaveCount(1);
+    await expect(page.getByRole('button',{name:kind==='investor'?'Finalize Independent Test P2':'Finalize Independent Test',exact:true})).toBeEnabled();
+    // A genuinely shared balance can affect both; unchanged generation must
+    // still apply each row's new readiness without resetting retained details.
+    independentState='updating';await page.evaluate(() => window.__payrollNotify());
+    await expect(independentComment).toBeDisabled();await expect(page.getByText('Updating…',{exact:true})).toHaveCount(2);
+    independentState='ready';driver.preparationState='ready';await page.evaluate(() => window.__payrollNotify());
+    await expect(independentComment).toBeEnabled();await expect(page.getByText('Updating…',{exact:true})).toHaveCount(0);
+    includeIndependent=false;driver.preparationState='updating';await page.evaluate(() => window.__payrollNotify());
+    await expect(independentComment).toHaveCount(0);
     delete driver.preparationState;
     await expect(page.getByText('Updating statements. The last complete values are shown.',{exact:true})).toHaveCount(0);
     await expect(page.getByText('Updating…',{exact:true})).toHaveCount(1);

@@ -687,5 +687,8 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	if err = finishPayrollRead(ctx, tx, "investor", &result); err != nil {
 		return result, err
 	}
+	for range result.Drivers {
+		db.Event(ctx, "payroll_investor_statements_calculated")
+	}
 	return result, nil
 }

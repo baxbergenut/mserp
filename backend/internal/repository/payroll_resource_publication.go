@@ -108,13 +108,10 @@ func payrollPublicationResourceLinks(ctx context.Context, tx pgx.Tx, keys []stri
 	}
 	// Legacy statement keys intentionally span all periods. Their original
 	// frozen bases can affect current carry when no canonical cost receipt exists.
-	rows, err := tx.Query(ctx, `WITH principals AS MATERIALIZED (SELECT unnest($1::text[]) key), selected_expenses AS MATERIALIZED (
- SELECT * FROM expenses WHERE driver_id=ANY($2::uuid[]) OR charge_driver_id=ANY($2::uuid[]) OR truck_id=ANY($3::uuid[]) OR owner_id=ANY($4::uuid[])
+	rows, err := tx.Query(ctx, `WITH principals AS MATERIALIZED (SELECT unnest($1::text[]) key), expense_principals AS MATERIALIZED (
+ `+payrollExpensePrincipalsSQL+`
  ), links AS (
- SELECT p.key,'expense:'||e.id resource FROM selected_expenses e
- CROSS JOIN LATERAL (VALUES('driver:'||e.driver_id),('driver:'||e.charge_driver_id),('truck:'||e.truck_id),('owner:'||e.owner_id)) p(key)
- JOIN principals wanted ON wanted.key=p.key
- UNION SELECT 'truck:'||e.investor_truck_id,'expense:'||e.expense_id FROM expense_payments e WHERE e.investor_truck_id=ANY($3::uuid[])
+ SELECT p.principal key,'expense:'||p.expense_id resource FROM expense_principals p JOIN principals wanted ON wanted.key=p.principal
  UNION SELECT 'driver:'||e.driver_id,'escrow:'||e.id FROM driver_escrows e WHERE e.driver_id=ANY($2::uuid[])
  UNION SELECT 'driver:'||s.driver_id,'schedule:'||s.id FROM driver_charge_schedules s WHERE s.driver_id=ANY($2::uuid[])
  UNION SELECT 'driver:'||w.driver_id,'statement:driver:'||w.driver_id||':'||w.week_start FROM driver_pay_weeks w
@@ -124,7 +121,7 @@ func payrollPublicationResourceLinks(ctx context.Context, tx pgx.Tx, keys []stri
  WHERE w.truck_id=ANY($3::uuid[]) AND (
  (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
  (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll')))
- ) SELECT key,resource FROM links`, keys, drivers, trucks, owners)
+ ) SELECT key,resource FROM links`, keys, drivers, trucks)
 	if err != nil {
 		return nil, err
 	}

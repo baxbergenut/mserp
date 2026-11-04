@@ -186,7 +186,30 @@ func payrollStatementResourceSnapshot(ctx context.Context, tx pgx.Tx, kind, id, 
 			if selection == nil {
 				return nil, ErrPayrollResourceChanged
 			}
-			set, err = payrollResourcesForSelection(read, tx, selection)
+			// Freshness follows financial recipients; lock discovery retains
+			// all provenance keys required by the database mutation guards.
+			set = &payrollResourceSet{selection: selection}
+			for kind, ids := range map[string][]string{"driver": selection.drivers, "truck": selection.trucks, "owner": selection.owners} {
+				for _, id := range ids {
+					set.keys = append(set.keys, kind+":"+id)
+				}
+			}
+			links, e := payrollPublicationResourceLinks(read, tx, set.keys)
+			if e != nil {
+				return nil, e
+			}
+			unique := map[string]bool{}
+			for _, key := range set.keys {
+				unique[key] = true
+				for _, resource := range links[key] {
+					unique[resource] = true
+				}
+			}
+			set.keys = nil
+			for key := range unique {
+				set.keys = append(set.keys, key)
+			}
+			sort.Strings(set.keys)
 		}
 		if err != nil {
 			return nil, err

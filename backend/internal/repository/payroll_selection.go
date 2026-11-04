@@ -237,11 +237,18 @@ const payrollSelectionSharedEdgesSQL = `SELECT 'owner:'||id,'driver:'||driver_id
  UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM payroll_load_placements WHERE truck_id IS NOT NULL`
 
 func payrollSelectionEdgesSQL(fuelSQL string) string {
-	return payrollSelectionEdgesWithSharedSQL(fuelSQL, payrollSelectionSharedEdgesSQL)
+	// All-history discovery retains the conservative lock graph. Dated reads
+	// and publications connect actual shared balances, not invoice labels.
+	shared := `SELECT a,b FROM (` + payrollSelectionSharedEdgesSQL + `) lock_edges(a,b) WHERE $1=''
+ UNION SELECT a,b FROM (` + payrollPeriodSharedEdgesSQL + `) period_edges(a,b) WHERE $1<>''`
+	return payrollSelectionEdgesWithSharedSQL(fuelSQL, shared)
 }
 
 func payrollSelectionEdgesWithSharedSQL(fuelSQL, sharedSQL string) string {
-	return `WITH company_label AS MATERIALIZED (` + payrollCompanyOwnershipLabelSQL + `), cost_weeks AS MATERIALIZED (
+	return `WITH company_label AS MATERIALIZED (
+ SELECT key FROM (` + payrollCompanyOwnershipLabelSQL + `) lock_label WHERE $1=''
+ UNION SELECT key FROM (` + payrollPeriodCompanyOwnershipLabelSQL + `) period_label WHERE $1<>''
+ ), cost_weeks AS MATERIALIZED (
  SELECT nullif($1,'')::date week
  UNION SELECT w.week_start FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)

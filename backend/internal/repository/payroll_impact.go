@@ -18,9 +18,11 @@ type payrollPublicationImpact struct {
 	refreshHeader bool
 	loadIDs       []int64 // Changed sources need new immutable facts before publication.
 	finalizedKind string  // Metadata-only freezing preserves the other page's values.
+	changeIDs     []int64 // Complete captured events for source/command revision proofs.
 }
 type payrollPublicationSelectionKey struct{}
 type payrollPublicationHeaderKey struct{}
+type payrollPublicationImpactKey struct{}
 
 // Narrow registered ledger and principal edits using both event images. Deleted
 // principals are covered only when their old routing was captured in this same
@@ -64,7 +66,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		"truck_charge_phases":              {"truck_id"},
 		"driver_termination_truck_actions": {"driver_id", "truck_id"},
 	}
-	rows, err := tx.Query(ctx, `SELECT table_name,operation,old_routes||new_routes,revision_only FROM payroll_projection_changes
+	rows, err := tx.Query(ctx, `SELECT id,table_name,operation,old_routes||new_routes,revision_only FROM payroll_projection_changes
  WHERE CASE WHEN $1::bigint[] IS NULL THEN source_xid=pg_current_xact_id() ELSE id=ANY($1::bigint[]) END`, changeIDs)
 	if err != nil {
 		return nil, err
@@ -92,15 +94,20 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	expenseOnly := true
 	expenseStart := ""
 	expenseIDs := map[string]bool{}
+	loadsOnly := true
+	capturedIDs := []int64{}
 	for rows.Next() {
+		var changeID int64
 		var table, operation string
 		var body []byte
 		var revisionOnly bool
-		if err = rows.Scan(&table, &operation, &body, &revisionOnly); err != nil {
+		if err = rows.Scan(&changeID, &table, &operation, &body, &revisionOnly); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		capturedIDs = append(capturedIDs, changeID)
 		key, known := allowed[table]
+		loadsOnly = loadsOnly && table == "loads"
 		if table != "expenses" {
 			expenseOnly = false
 		}
@@ -158,7 +165,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			// Editing the company identity or adding/removing a legacy company
 			// ledger can change graph connectivity across all its trucks.
 			if (table == "investors" && value("id") == CompanyOwnerID) ||
-				(value("owner_id") == CompanyOwnerID && (table == "expenses" || table == "truck_settlement_terms" ||
+				(value("owner_id") == CompanyOwnerID && ((table == "expenses" && strings.EqualFold(strings.TrimSpace(value("covered_by")), "Truck Owner")) || table == "truck_settlement_terms" ||
 					table == "investor_pay_weeks" || table == "pay_source_collections")) {
 				safe = false
 			}
@@ -251,6 +258,9 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			}
 			routed := broker
 			for _, field := range []string{"driver_id", "main_driver_id", "team_driver_id", "charge_driver_id", "truck_id", "related_truck_id", "investor_truck_id", "owner_id"} {
+				if table == "expenses" && (field == "truck_id" || field == "owner_id") && !strings.EqualFold(strings.TrimSpace(value("covered_by")), "Truck Owner") {
+					continue // Bookkeeping attribution does not make this truck owe the invoice.
+				}
 				v := value(field)
 				if v == "" {
 					continue
@@ -323,7 +333,10 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	}
 	// Resolve principal references in one query. A missing parent is never silently
 	// ignored: deletion belongs to the conservative source-change path.
-	rows, err = tx.Query(ctx, `SELECT 'expense_id',id::text,ARRAY['driver:'||driver_id,'driver:'||charge_driver_id,'truck:'||truck_id,'owner:'||owner_id] FROM expenses WHERE id=ANY($1::uuid[])
+	rows, err = tx.Query(ctx, `SELECT 'expense_id',id::text,ARRAY['driver:'||driver_id,'driver:'||charge_driver_id,
+ CASE WHEN lower(btrim(covered_by))='truck owner' THEN 'truck:'||truck_id END,
+ CASE WHEN lower(btrim(covered_by))='truck owner' THEN 'owner:'||owner_id END] FROM expenses WHERE id=ANY($1::uuid[])
+ UNION ALL SELECT 'expense_id',expense_id::text,ARRAY['truck:'||investor_truck_id] FROM expense_payments WHERE expense_id=ANY($1::uuid[]) AND investor_truck_id IS NOT NULL
  UNION ALL SELECT 'escrow_id',id::text,ARRAY['driver:'||driver_id] FROM driver_escrows WHERE id=ANY($2::uuid[])
  UNION ALL SELECT 'schedule_id',id::text,ARRAY['driver:'||driver_id] FROM driver_charge_schedules WHERE id=ANY($3::uuid[])`, keys(refs["expense_id"]), keys(refs["escrow_id"]), keys(refs["schedule_id"]))
 	if err != nil {
@@ -434,6 +447,13 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	// weeks, future reservations and unpaid saved destinations. Fully paid old
 	// assignments do not connect otherwise independent present-day obligations.
 	impact := &payrollPublicationImpact{roots: keys(roots), refreshHeader: refreshHeader, loadIDs: changedLoads}
+	// A complete load identity/old-new-number lookup covered native board rows,
+	// explicit placements and frozen reports. An unplaced provider load cannot
+	// affect a statement. Keep that proven empty result distinct from unknown.
+	if loadsOnly && len(changedLoads) > 0 && len(roots) == 0 {
+		impact.weeks = map[string]bool{}
+		impact.refreshHeader = false
+	}
 	if c != nil {
 		impact.snapshot = c.beforeSnapshot
 	}
@@ -510,5 +530,6 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			}
 		}
 	}
+	impact.changeIDs = capturedIDs
 	return impact, nil
 }

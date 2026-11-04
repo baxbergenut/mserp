@@ -282,6 +282,7 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 	affectedSet := map[PayrollStatementIdentity]bool{}
 	selectionWeeks := []string{}
 	eligibleSnapshots := map[string]bool{}
+	eligiblePeriods := map[string]bool{}
 	if len(impacts) > 0 && impacts[0] != nil {
 		eligibleSnapshots[impacts[0].snapshot] = true
 		for _, w := range weeks {
@@ -293,7 +294,11 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 					return nil, err
 				}
 			}
-			if eligibleSnapshots[previous] && (impacts[0].weeks == nil || impacts[0].weeks[date]) {
+			eligiblePeriods[date] = eligibleSnapshots[previous]
+			if resource, ok := tx.(*payrollResourceTransaction); ok && resource.periodSources[date+":"+previous] {
+				eligiblePeriods[date] = true
+			}
+			if eligiblePeriods[date] && (impacts[0].weeks == nil || impacts[0].weeks[date]) {
 				selectionWeeks = append(selectionWeeks, date)
 			}
 		}
@@ -314,8 +319,7 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 		readCtx := ctx
 		rebaseOnly := false
 		if len(impacts) > 0 && impacts[0] != nil {
-			previous := previousSnapshots[w.Format(time.DateOnly)]
-			if eligibleSnapshots[previous] {
+			if eligiblePeriods[w.Format(time.DateOnly)] {
 				rebaseOnly = impacts[0].weeks != nil && !impacts[0].weeks[w.Format(time.DateOnly)]
 				if rebaseOnly {
 					readCtx = context.WithValue(readCtx, payrollSelectionKey{}, &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}})
@@ -399,6 +403,9 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 	}
 	for _, period := range periods {
 		readCtx, w, rebaseOnly := period.ctx, period.week, period.rebaseOnly
+		if len(impacts) > 0 && impacts[0] != nil {
+			readCtx = context.WithValue(readCtx, payrollPublicationImpactKey{}, impacts[0])
+		}
 		if batch, ok := ctx.Value(payrollBalanceBatchKey{}).(*payrollBalanceBatch); ok {
 			readCtx = context.WithValue(readCtx, payrollBalanceBatchKey{}, batch)
 		}
@@ -647,9 +654,10 @@ func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, we
 	var schema int
 	var currentResources bool
 	err := tx.QueryRow(ctx, `SELECT s.version_id::text,g.input_snapshot,g.calendar_week::text,g.calculator_version,g.schema_version,payroll_resources_current(v.resource_dependencies)
- FROM payroll_statement_state s JOIN payroll_projection_weeks w ON w.week_start=s.week_start
- JOIN payroll_projection_generations g ON g.id=w.generation_id
- JOIN payroll_statement_versions v ON v.id=s.version_id
+ FROM payroll_statement_state s JOIN payroll_statement_versions v ON v.id=s.version_id
+ JOIN payroll_projection_weeks w ON w.week_start=s.week_start
+ JOIN payroll_projection_generations g ON g.id=CASE WHEN (SELECT protocol_mode='resources' FROM payroll_projection_control WHERE singleton)
+ THEN v.generation_id ELSE w.generation_id END
  WHERE s.kind=$1 AND s.statement_id=$2::uuid AND s.week_start=$3::date`, kind, id, week).Scan(&revision, &snapshot, &calendar, &calculator, &schema, &currentResources)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrDriverPayConflict
@@ -661,11 +669,11 @@ func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, we
 	if err != nil {
 		return err
 	}
-	if revision != expected || !currentResources || calendar != ChargeCurrentWeek() || calculator != payrollCalculatorVersion || schema != payrollProjectionSchemaVersion {
+	if revision != expected || calendar != ChargeCurrentWeek() || calculator != payrollCalculatorVersion || schema != payrollProjectionSchemaVersion {
 		return ErrDriverPayConflict
 	}
-	if snapshot != current {
-		unrelated, err := payrollSourcesUnrelated(ctx, tx, snapshot, current)
+	if snapshot != current || !currentResources {
+		unrelated, err := preparedPayrollStatementCurrent(ctx, tx, kind, id, week, expected, current)
 		if err != nil {
 			return err
 		}
@@ -673,7 +681,7 @@ func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, we
 			return ErrDriverPayConflict
 		}
 	}
-	return nil
+	return retainPayrollPeriodSourceProofs(ctx, tx, current)
 }
 
 func finishPaySaveCommand(ctx context.Context, tx pgx.Tx, c *payrollCommand, kind string, edits *DriverPayEdits, publish bool) error {

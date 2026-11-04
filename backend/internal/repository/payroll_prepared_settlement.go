@@ -163,7 +163,16 @@ func preparedSettlementReport(ctx context.Context, tx pgx.Tx, c *payrollCommand,
 		return report, err
 	}
 	if snapshot != c.beforeSnapshot || !currentResources {
-		return report, ErrDriverPayConflict
+		if id == "" || c.expected == "" {
+			return report, ErrDriverPayConflict
+		}
+		valid, e := preparedPayrollStatementCurrent(ctx, tx, kind, id, week.Format(time.DateOnly), c.expected, c.beforeSnapshot)
+		if e != nil {
+			return report, e
+		}
+		if !valid {
+			return report, ErrDriverPayConflict
+		}
 	}
 	if err = json.Unmarshal(header, &report); err != nil {
 		return report, err

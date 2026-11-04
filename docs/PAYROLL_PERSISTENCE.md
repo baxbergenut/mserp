@@ -1,5 +1,47 @@
 # Persistent payroll implementation
 
+## Statement-scoped freshness and preparation
+
+In resource mode, projection schema 10 checks each statement's own generation and resource baseline,
+not the weekly header's baseline. Complete old/new source capture proves which
+principals and periods can change. Captured source events may explain an exact
+resource revision delta for an unaffected statement; any unexplained financial
+epoch, missing dependency set, incomplete capture, calendar or schema mismatch
+still fails closed. Shared dependency maps are checked once per generation/map,
+and summaries never load full statement or cost-evidence bodies.
+Identical recalculated statements retain their revision ID but receive the new
+generation certificate. Global/dual modes retain their atomic week certificate.
+
+Dated calculation/freshness graphs join actual expense deduction recipients,
+reimbursement recipients and saved investor allocations. A bookkeeping driver or
+truck label alone is not a shared payroll balance. All-history lock discovery
+retains the conservative graph and all database-required resource claims. Real
+shared invoices, teams, ownership, carry and reservations remain connected.
+
+The worker derives its selection from the complete captured revision interval,
+including undispatched commits. A wider interval outside held claims retries
+discovery. Missing evidence, explicit full retries and initial preparations retain
+full reconciliation. A provider load proven absent from native board, explicit
+placement and frozen destinations does not request a fleet calculation. Unaffected
+current certificates are rebased under the source/resource gates without changing
+statement contents or revision IDs; financial commands keep their exact checks.
+
+Ready statements use that same proof when validating a submitted version under
+the financial lock, including when a later-week source change is still pending.
+Publication retains the pre-write period proof. Resource-mode commands can also
+rebase unchanged certificates using their own complete captured event IDs: exact
+epoch deltas are deduplicated with source events, the financial impact must be
+disjoint, and every dependency must be covered by held claims. Rows already written
+by that transaction are excluded so incorporated epochs cannot be counted twice.
+
+`TestPayrollStatementImpactDatabase` verifies per-row readiness, exact calculated
+statement counts, retained unrelated revisions, current/later-week and unplaced
+load skips, true shared allocations, independent full-report parity, and a newer
+statement baseline that must not reuse an older header's resource allowance, and
+a native save before later-week preparation without staling unrelated statements.
+`test-payroll-prepared.mjs` verifies independent and shared updating rows in both
+payroll pages, including status-only commits with an unchanged weekly generation.
+
 ## Completed-week preparation
 
 Payroll availability ends at the last completed Monday-Sunday week in America/New_York.

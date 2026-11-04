@@ -23,6 +23,9 @@ type payrollResourceTransaction struct {
 	// The shared source gate and validated row guards keep table revisions
 	// fixed throughout this transaction. Resource epochs still change on writes.
 	sourceFence *string
+	// Proven before canonical writes, while the source gate is held. Publication
+	// must not reinterpret this command's own new events as intervening sources.
+	periodSources map[string]bool
 }
 
 func payrollConcurrent(tx pgx.Tx) bool {

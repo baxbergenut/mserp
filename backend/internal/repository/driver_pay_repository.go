@@ -250,6 +250,9 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 	if err = finishPayrollRead(ctx, tx, "driver", &result); err != nil {
 		return result, err
 	}
+	for range result.Drivers {
+		db.Event(ctx, "payroll_driver_statements_calculated")
+	}
 	return result, nil
 }
 func readDriverPaySourceWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID string) (DriverPayWeek, error) {

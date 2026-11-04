@@ -18,7 +18,7 @@ import (
 // Bump whenever calculation/display semantics or the persisted shape changes.
 // These versions are independent of both canonical edit versions and job leases.
 const payrollCalculatorVersion = "payroll-182-v4"
-const payrollProjectionSchemaVersion = 9
+const payrollProjectionSchemaVersion = 10
 
 var ErrPayrollProjectionCoverage = errors.New("payroll projection source capture is incomplete")
 var ErrPayrollProjectionSuperseded = errors.New("payroll projection inputs or lease changed")
@@ -359,6 +359,7 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 	var err error
 	var closeWrite func()
 	selectedResources := false
+	var lockedSelection *payrollSelection
 	if resourceProtocol {
 		// A complete captured group only publishes its component. The independent
 		// reference may read other components in the same snapshot, but it never
@@ -375,6 +376,7 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 		tx, closeWrite, err = r.beginPayrollWriteProtocol(ctx, true, "", "", roots...)
 		if err == nil {
 			defer closeWrite()
+			lockedSelection = tx.(*payrollResourceTransaction).resources.selection
 			tx = tx.(*payrollResourceTransaction).Tx
 		}
 	} else {
@@ -405,34 +407,31 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 	readCtx := context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	readCtx = payrollRoutingFactsContext(readCtx, snapshot)
 	rebaseOnly := false
+	var impact *payrollPublicationImpact
 	if job.Roots != nil {
-		// An undispatched commit may belong to a different component. Until its
-		// exact events have been included in the job, only full preparation can
-		// certify this snapshot. Concurrent later commits are fenced below.
-		var complete bool
-		err = tx.QueryRow(ctx, payrollJobSelectionSQL, job.Week, calendar, payrollCalculatorVersion, payrollProjectionSchemaVersion).Scan(&complete)
+		impact, err = payrollPendingWeekImpact(ctx, tx, job.Week, snapshot)
 		if err != nil {
 			return err
 		}
-		if selectedResources && !complete {
-			// A newly committed source between discovery and gate acquisition may
-			// widen the group. Discard this derived attempt, never upgrade locks.
-			return ErrPayrollProjectionSuperseded
+	}
+	if selectedResources && (impact == nil || !payrollSelectionCovers(lockedSelection, impact.roots)) {
+		// A new source can widen a leased job. Retry discovery, never upgrade
+		// claims or calculate unrelated statements under incomplete locks.
+		return ErrPayrollProjectionSuperseded
+	}
+	if impact != nil {
+		rebaseOnly = len(impact.roots) == 0 || (impact.weeks != nil && !impact.weeks[job.Week.Format(time.DateOnly)])
+		if rebaseOnly {
+			readCtx = context.WithValue(readCtx, payrollSelectionKey{}, &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}})
+		} else {
+			readCtx, err = selectPayrollContexts(payrollWeekContext(readCtx, job.Week.Format(time.DateOnly)), tx, "", impact.roots)
 		}
-		if complete {
-			rebaseOnly = len(job.Roots) == 0
-			if rebaseOnly {
-				readCtx = context.WithValue(readCtx, payrollSelectionKey{}, &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}})
-			} else {
-				readCtx, err = selectPayrollContexts(payrollWeekContext(readCtx, job.Week.Format(time.DateOnly)), tx, "", job.Roots)
-			}
-			if err != nil {
-				return err
-			}
-			selection, _ := readCtx.Value(payrollSelectionKey{}).(*payrollSelection)
-			readCtx = context.WithValue(readCtx, payrollPublicationSelectionKey{}, selection)
-			readCtx = context.WithValue(readCtx, payrollPublicationHeaderKey{}, !rebaseOnly)
+		if err != nil {
+			return err
 		}
+		selection, _ := readCtx.Value(payrollSelectionKey{}).(*payrollSelection)
+		readCtx = context.WithValue(readCtx, payrollPublicationSelectionKey{}, selection)
+		readCtx = context.WithValue(readCtx, payrollPublicationHeaderKey{}, !rebaseOnly)
 	}
 	var reports [2]DriverPayWeek
 	if rebaseOnly {
@@ -716,8 +715,32 @@ func writePayrollProjection(ctx context.Context, tx pgx.Tx, week time.Time, requ
 	if err = tx.SendBatch(ctx, batch).Close(); err != nil {
 		return err
 	}
+	// The current-row store reuses identical revisions without rewriting them.
+	// Their values have nevertheless just been calculated from this generation.
+	// Global/dual publication certifies the entire atomic week (the legacy header
+	// contract); resource publication certifies only its calculated component.
+	var calculatedDrivers, calculatedTrucks []string
+	if selection != nil {
+		calculatedDrivers, calculatedTrucks = selection.drivers, selection.trucks
+	}
+	_, err = tx.Exec(ctx, `UPDATE payroll_statement_current c SET generation_id=$1::uuid
+ FROM payroll_statement_state s WHERE s.version_id=c.id AND s.week_start=$2 AND c.generation_id<>$1::uuid
+ AND ((SELECT protocol_mode<>'resources' FROM payroll_projection_control WHERE singleton) OR $3::boolean
+ OR (s.kind='driver' AND s.statement_id=ANY($4::uuid[])) OR (s.kind='investor' AND s.statement_id=ANY($5::uuid[])))`,
+		generation, week, selection == nil, calculatedDrivers, calculatedTrucks)
+	if err != nil {
+		return err
+	}
 	if payrollConcurrent(tx) {
+		if impact, ok := ctx.Value(payrollPublicationImpactKey{}).(*payrollPublicationImpact); ok && impact != nil {
+			// Only pre-command versions can receive this transaction's exact
+			// revision allowance. Already published rows include those epochs.
+			return rebasePayrollStatementResources(ctx, tx, week, generation, snapshot, impact)
+		}
 		return nil
+	}
+	if err = rebasePayrollStatementResources(ctx, tx, week, generation, snapshot); err != nil {
+		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO payroll_projection_weeks(week_start,generation_id) VALUES($1,$2::uuid)
  ON CONFLICT(week_start) DO UPDATE SET generation_id=excluded.generation_id`, week, generation)

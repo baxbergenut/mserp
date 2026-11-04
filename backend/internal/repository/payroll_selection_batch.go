@@ -83,7 +83,7 @@ func payrollSelectionBatchContext(ctx context.Context, tx pgx.Tx, weeks []string
 // Resolve each dated source week once, then attach it to the periods that need
 // it. Legacy overrides can add remote source weeks, but must never merge the
 // financial destination graphs of distinct report periods.
-const payrollSelectionPeriodsSQL = `WITH company_label AS MATERIALIZED (` + payrollCompanyOwnershipLabelSQL + `),
+const payrollSelectionPeriodsSQL = `WITH company_label AS MATERIALIZED (` + payrollPeriodCompanyOwnershipLabelSQL + `),
  periods AS MATERIALIZED (SELECT unnest($1::date[]) week),
  legacy_weeks AS MATERIALIZED (
  SELECT w.week_start week FROM driver_pay_weeks w WHERE accounting_live_date(w.week_start) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
@@ -115,7 +115,7 @@ const payrollSelectionPeriodsSQL = `WITH company_label AS MATERIALIZED (` + payr
  UNION SELECT w.week,'driver:'||f.driver_id,'truck:'||a.truck_id FROM dates w JOIN fuel_transactions f ON f.purchased_on>=w.week AND f.purchased_on<w.week+7
  CROSS JOIN LATERAL unnest(f.reported_truck_units) unit(key) JOIN truck_unit_aliases a ON a.unit_key=unit.key
  WHERE f.driver_id IS NOT NULL AND NOT (SELECT yes FROM fuel_complete)
- ), shared_edges(a,b) AS MATERIALIZED (` + payrollSelectionSharedEdgesSQL + `),
+ ), shared_edges(a,b) AS MATERIALIZED (` + payrollPeriodSharedEdgesSQL + `),
  relevant_sources AS MATERIALIZED (
  SELECT p.week period,c.* FROM periods p JOIN pay_source_collections c ON c.week_start>=p.week WHERE accounting_live_date(c.week_start)
  UNION ALL

@@ -119,6 +119,15 @@ and requires no schema migration.
   deploy helper first: it stops writers before the cutover backup and rejects
   rollback to pre-189 releases. See `docs/PAYROLL_PERSISTENCE.md` for proof and recovery.
 
+- Payroll projection schema 10 uses each statement's own source/resource baseline
+  for freshness, including exact captured epoch deltas for unaffected statements.
+  Period graphs connect actual expense recipients and allocations; all-history
+  financial lock discovery retains conservative provenance claims. The worker
+  proves the complete source interval even before event dispatch, rebases unchanged
+  statements without new revision IDs, and skips proven unplaced provider loads.
+  Missing evidence and unexplained financial epochs still fail closed. See
+  `TestPayrollStatementImpactDatabase` and `docs/PAYROLL_PERSISTENCE.md`.
+
 - Persistent payroll is implemented with ordered rollout capabilities in
   migrations 182–186 and repository `payroll_projection*.go`. Migration 191
   classifies all weekly PTI checklist/layout/audit tables as unrelated to payroll.
