@@ -43,7 +43,7 @@ type LoadRecord struct {
 	PickupAppointmentTime   *time.Time
 	DeliveryAppointmentTime *time.Time
 	CreatedDatetime         *time.Time
-	ModifiedDatetime        *time.Time
+	ModifiedDatetime        *time.Time `json:"-"`
 	SyncedAt                time.Time
 	RawPayload              []byte
 	Stops                   []LoadStop
