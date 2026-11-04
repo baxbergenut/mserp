@@ -84,8 +84,8 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			const actor = "a4000000-0000-0000-0000-000000000001"
 			exec(`INSERT INTO app_users(id,username,password_hash) VALUES($1,'placement-test',crypt('synthetic-password',gen_salt('bf')))`, actor)
 			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES($1,'Placement Driver','placement driver','gross_percentage',25);
- INSERT INTO investors(id,full_name) VALUES($2,'Placement Investor'); INSERT INTO trucks(id,unit_number) VALUES($3,'PLACEMENT');
- UPDATE trucks SET owner_id=$2 WHERE id=$3; UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_id=$3;
+ INSERT INTO investors(id,full_name) VALUES($2,'Placement Investor'); INSERT INTO trucks(id,unit_number,owner_id) VALUES($3,'PLACEMENT',$2);
+ UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_id=$3;
  INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($3,$1,'2026-01-01');
  INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES($3,$2,'2026-01-05',90)`, driver, owner, truck)
 			exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,pickup_time,delivery_time,raw_payload) VALUES
