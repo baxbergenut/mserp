@@ -20,6 +20,40 @@ Pushes to `main` deploy production. Pull requests run the complete test/build
 job without receiving deployment secrets. `workflow_dispatch` can redeploy the
 current `main` commit.
 
+### Deploy a locally checked commit
+
+Use this option when an operator will run the release checks locally. Add
+`[skip ci]` to the **final merge or squash commit message** on GitHub to skip the
+automatic post-merge workflow for that commit. Use the ordinary merge message
+for the automatic path. Pull request checks can still run before the merge.
+
+From the repository root on Linux, or from Ubuntu in WSL2 on Windows:
+
+```bash
+git fetch origin main
+sha=$(git rev-parse origin/main)
+bash deploy/local-release.sh prepare "$sha"
+bash deploy/local-release.sh publish "$sha"
+```
+
+Run `prepare` as a regular user with Go, Node.js 22, Python 3, GNU tar, and
+the PostgreSQL 16 server tools on PATH (typically add
+`/usr/lib/postgresql/16/bin`). It checks the specified commit in a detached
+checkout and starts a disposable PostgreSQL cluster on loopback. It runs the
+same deployment guard tests, backend tests, lint, frontend checks and production
+builds as the automatic workflow. The optional full Chromium suite still uses a
+regular Actions run. The script saves the checksummed archive in
+`mserp-local-releases/<sha>` under the repository's shared Git directory.
+
+`publish` requires the operator's existing production SSH access with a trusted
+host key and an authenticated `gh` session allowed to dispatch workflows. It
+checks the archive and current `main` SHA, stages the exact bytes, and starts
+only the production deploy job. This job shares the automatic deploy queue and
+checks `main` again before handing the archive to `mserp-deploy`. Follow the
+Actions result and verify the active SHA and health. To fall back to CI after a
+local release attempt, run the workflow on `main` without the local SHA or
+checksum inputs.
+
 The backup helper requires a PostgreSQL client with zstd support (verified on the
 production PostgreSQL 16 client). The deploy job allows 45 minutes for a complete
 backup, migration and activation. Never remove the last valid backup merely to

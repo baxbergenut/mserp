@@ -6,3 +6,5 @@ deploy/mserp-deploy text eol=lf
 deploy/mserp-backup text eol=lf
 deploy/mserp-backup.* text eol=lf
 deploy/test-backup* text eol=lf
+deploy/local-release.sh text eol=lf
+deploy/release-checks.sh text eol=lf

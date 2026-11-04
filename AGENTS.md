@@ -2788,6 +2788,12 @@ local review is already running.
   restricted `mserp-deploy` user. Repository secrets are
   `MSERP_DEPLOY_SSH_KEY` and `MSERP_DEPLOY_KNOWN_HOSTS`; never print or replace
   them during routine work.
+- The opt-in local release path uses `deploy/local-release.sh prepare` and
+  `publish` for the exact commit. A final merge message with `[skip ci]` skips
+  the push workflow. A deploy-only dispatch consumes the checksummed archive
+  after the same release checks run locally in an isolated checkout and test
+  database. Both deploy modes share one production job group and verify current
+  main before activation. See `deploy/README.md` for prerequisites and fallback.
 - When full_browser_tests is enabled, CI installs Chromium with a five-minute timeout, using
   the hosted Ubuntu 24.04 runner's existing system libraries. Do not add
   `--with-deps` to routine browser setup: redundant apt upgrades have stalled
