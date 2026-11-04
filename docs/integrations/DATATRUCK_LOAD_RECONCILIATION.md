@@ -33,7 +33,8 @@ finalized statements remain held. The report includes groups with no board repai
 
 If a current provider record changed outside the operational refresh window,
 `-refresh-current` explicitly runs the native source-only refresh for the returned
-IDs before creating a new preview. This optional mode writes imported sources;
+IDs and records presence for the complete lookup before creating a new preview.
+This optional mode writes imported sources and operational presence evidence;
 ordinary preview does not. It never creates loads or changes fleet assignments.
 Do not reuse an older preview after refreshing sources.
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -182,6 +183,10 @@ func buildLoadReconciliation(ctx context.Context, tx pgx.Tx, since string, ids [
 					break
 				}
 				if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
+					var validation *ChargeValidationError
+					if !errors.As(err, &validation) {
+						return plan, err
+					}
 					g.Hold = err.Error()
 					break
 				}

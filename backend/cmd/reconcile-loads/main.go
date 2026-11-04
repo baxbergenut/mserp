@@ -121,6 +121,13 @@ func run() error {
 			if err = loadRepo.RefreshLoads(ctx, records); err != nil {
 				return err
 			}
+			returned := make([]int, 0, len(live))
+			for _, load := range live {
+				returned = append(returned, load.ID)
+			}
+			if err = loadRepo.RecordLoadSourceLookup(ctx, ids, returned); err != nil {
+				return err
+			}
 		}
 		plan, err = board.PreviewLoadReconciliation(ctx, *since, ids, live)
 		if err != nil {
