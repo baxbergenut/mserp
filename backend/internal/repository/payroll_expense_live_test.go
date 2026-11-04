@@ -36,6 +36,7 @@ func TestPayrollLiveDriverExpenseDatabase(t *testing.T) {
 		repo := NewDriverPayRepository(pool)
 		repo.ConfigurePreparedReads(true)
 		repo.ConfigurePreparedFinalization(true)
+		repo.ConfigurePreparedCommands(true)
 		repo.resourceConcurrency = true
 		if err := repo.EnablePayrollShadow(ctx); err != nil {
 			t.Fatal(err)
@@ -52,7 +53,7 @@ func TestPayrollLiveDriverExpenseDatabase(t *testing.T) {
 		}
 		read := func(summary bool) DriverPayWeek {
 			t.Helper()
-			page, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{Summary: summary}, true)
+			page, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{Summary: summary, ID: projectionDriver}, true)
 			if err != nil || len(page.Drivers) != 1 || page.Preparation.State != "ready" {
 				t.Fatalf("live page: %v %+v", err, page)
 			}
@@ -106,6 +107,40 @@ func TestPayrollLiveDriverExpenseDatabase(t *testing.T) {
 				line := strings.Join(strings.Fields(sql), " ")
 				t.Logf("query %02d %s", i+1, line[:min(len(line), 260)])
 			}
+		}
+		frozen := read(false)
+		if _, err = repo.Settle(WithPayrollReceipt(ctx), week, projectionDriver, frozen.Revision, actor, "Review choice", true, false,
+			PayrollSettlementCommand{RequestID: "19800000-0000-0000-0000-000000000003", ExpectedStatementRevision: frozen.Drivers[0].StatementRevision}); err != nil {
+			t.Fatal("reopen for choice", err)
+		}
+		open := read(false)
+		edit := open.Drivers[0].Edits
+		edit.RequestID, edit.ExpectedStatementRevision = "19800000-0000-0000-0000-000000000004", open.Drivers[0].StatementRevision
+		edit.ExpenseDeductions[0].Mode, edit.ExpenseDeductions[0].Amount, edit.ExpenseDeductions[0].Apply = "fixed", "50.00", true
+		saveCtx, saveMetrics := db.WithMetrics(ctx)
+		saved, err := repo.Save(saveCtx, edit, actor)
+		if err != nil || saved.CommittedStatement == nil {
+			t.Fatal("save choice", err)
+		}
+		if saveMetrics.Events()["payroll_calculation"] != 0 || saved.CommittedStatement.ExpenseRevision == open.Drivers[0].ExpenseRevision {
+			t.Fatal("choice save recalculated or returned an obsolete review token", saveMetrics.Events())
+		}
+		// Finalize directly from the save receipt, without another page/detail read.
+		retryCtx, retryMetrics := db.WithMetrics(WithPayrollReceipt(ctx))
+		retryTrace := &payrollTestQueries{}
+		retryCtx = context.WithValue(retryCtx, payrollTestQueriesKey{}, retryTrace)
+		if _, err = repo.Settle(retryCtx, week, projectionDriver, saved.InputRevision, actor, "", false, true,
+			PayrollSettlementCommand{RequestID: "19800000-0000-0000-0000-000000000005", ExpectedStatementRevision: saved.StatementRevision, ExpenseRevision: saved.CommittedStatement.ExpenseRevision}); err != nil {
+			current := read(false).Drivers[0]
+			t.Log("receipt", saved.CommittedStatement.ExpenseRevision, "current", current.ExpenseRevision, "phases", retryMetrics.Events())
+			if len(retryTrace.SQL) > 0 {
+				t.Log("last query", retryTrace.SQL[len(retryTrace.SQL)-1])
+			}
+			t.Fatal("finalization from choice receipt", err)
+		}
+		var paid string
+		if err = pool.QueryRow(ctx, `SELECT sum(amount)::text FROM expense_payments WHERE expense_id=$1`, expense).Scan(&paid); err != nil || paid != "50.00" {
+			t.Fatal("choice receipt collected wrong amount", paid, err)
 		}
 	})
 }

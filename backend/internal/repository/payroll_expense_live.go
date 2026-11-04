@@ -56,7 +56,7 @@ func overlayDriverExpenseBalances(ctx context.Context, tx pgx.Tx, report *Driver
  ) SELECT statement::text,id::text,coalesce(nullif(btrim(expense_type),''),category),category,expense_date::text,
  total::text,(collectible-paid+coalesce(posted,0))::text,coalesce(posted,collectible-paid)::text,
  balance_version,posted IS NOT NULL,choice
- FROM balances WHERE posted IS NOT NULL OR collectible>paid ORDER BY statement,expense_date,id`, body, report.WeekStart)
+ FROM balances WHERE posted IS NOT NULL OR collectible>paid ORDER BY statement,expense_date,id`, string(body), report.WeekStart)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,8 @@ func publishLiveDriverExpenses(ctx context.Context, tx pgx.Tx) (bool, error) {
  SELECT r->>'charge_driver_id' driver FROM images WHERE table_name='expenses'
  UNION SELECT e.charge_driver_id::text FROM images i JOIN expenses e ON e.id::text=i.r->>'expense_id'
  WHERE i.table_name IN ('expense_balance_corrections','expense_external_settlements')
- ) SELECT EXISTS(SELECT 1 FROM changes)
+ ) SELECT (SELECT protocol_mode='resources' FROM payroll_projection_control WHERE singleton)
+ AND EXISTS(SELECT 1 FROM changes)
  AND NOT EXISTS(SELECT 1 FROM changes WHERE table_name NOT IN ('expenses','expense_balance_corrections','expense_external_settlements') OR operation='TRUNCATE' OR old_routes||new_routes='[]'::jsonb)
  AND NOT EXISTS(SELECT 1 FROM images i WHERE CASE WHEN table_name='expenses' THEN
  NOT (r ? 'payment_type') OR lower(btrim(coalesce(r->>'covered_by','')))<>'driver'

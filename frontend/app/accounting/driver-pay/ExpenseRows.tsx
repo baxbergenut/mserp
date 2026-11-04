@@ -37,6 +37,7 @@ export function ExpenseRows({ driver, edits, disabled, onEdit, onOpenExpense, ex
               disabled={disabled || row.saved}
               value={row.mode ?? "auto"}
               title="The unpaid balance changes only when the statement is finalized."
+              style={{ height: 24, paddingBlock: 0, fontSize: 10 }}
               className="min-w-0 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-[10px] text-zinc-300"
               onChange={event => {
                 const mode = event.target.value as "auto" | "fixed" | "skip";

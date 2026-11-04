@@ -146,7 +146,9 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 				if r := source(third); r.Base != "0.00" || r.Due != "-160.00" {
 					t.Fatalf("excluded fee lost carry: %+v", r)
 				}
-				if _, err = save(clone(third.Edits)); err != nil {
+				e = clone(third.Edits)
+				editFee(&e, "-159.00") // Explicit collection; an unchanged draft save posts nothing.
+				if _, err = save(e); err != nil {
 					t.Fatal(err)
 				}
 				first = read("2026-09-28")

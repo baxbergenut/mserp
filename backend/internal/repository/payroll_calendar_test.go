@@ -139,8 +139,8 @@ func TestPayrollCompletedWeekDatabase(t *testing.T) {
 		}
 		assertParity()
 		assertExpense(entry.ID, "55.00")
-		// Thursday through Sunday invoices wait for the next completed week;
-		// retaining their evidence must not recalculate the current payroll.
+		// Every unpaid ordinary invoice is visible, including later-dated rows.
+		// Global protocol retains synchronous publication; resource mode overlays.
 		for _, offset := range []int{3, 4, 5, 6} {
 			input.ExpenseDate = current.AddDate(0, 0, offset)
 			measured, metrics := db.WithMetrics(WithPayrollPublication(ctx))
@@ -148,10 +148,10 @@ func TestPayrollCompletedWeekDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n := metrics.Events()["payroll_calculation"]; n != 0 {
-				t.Fatalf("post-cutoff expense performed %d calculations", n)
+			if n := metrics.Events()["payroll_calculation"]; n > 2 {
+				t.Fatalf("expense performed %d calculations", n)
 			}
-			assertExpense(later.ID, "")
+			assertExpense(later.ID, "55.00")
 			assertParity()
 			// A backdated correction must invalidate the earlier payroll again.
 			if offset == 3 {

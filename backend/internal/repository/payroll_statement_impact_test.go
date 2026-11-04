@@ -154,10 +154,13 @@ func TestPayrollStatementImpactDatabase(t *testing.T) {
 		prepare(0, 0)
 		states("ready", "ready")
 		parity()
-		// A post-cutoff invoice advances resource epochs. Only its exact captured
-		// increments may be treated as irrelevant to this earlier payroll.
+		// Date no longer excludes an unpaid invoice. An unclassified direct SQL
+		// capture must rebuild before its updated statement can be certified.
 		exec(`INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,covered_by)
  SELECT id,name,'Later expense','2026-10-15',30,$1,'Driver' FROM expense_settings WHERE kind='category' AND name='Other'`, projectionDriver)
+		states("updating", "ready")
+		dispatch()
+		prepare(1, 1)
 		states("ready", "ready")
 		// Independent publication may give a row a newer source/resource baseline
 		// than the weekly header. A header-based allowance would wrongly hide the
@@ -186,11 +189,10 @@ func TestPayrollStatementImpactDatabase(t *testing.T) {
 		if err = tx.Commit(ctx); err != nil {
 			t.Fatal(err)
 		}
-		exec(`UPDATE payroll_resource_revisions SET revision=revision+1 WHERE resource_key=$1`, "driver:"+projectionDriver)
+		exec(`INSERT INTO payroll_resource_revisions(resource_key,revision) VALUES($1,1)
+ ON CONFLICT(resource_key) DO UPDATE SET revision=payroll_resource_revisions.revision+1`, "driver:"+projectionDriver)
 		states("updating", "ready")
 		exec(`UPDATE payroll_resource_revisions SET revision=revision-1 WHERE resource_key=$1`, "driver:"+projectionDriver)
-		dispatch()
-		prepare(0, 0)
 		states("ready", "ready")
 		parity()
 		var exact bool
@@ -212,7 +214,8 @@ func TestPayrollStatementImpactDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				if unexplained {
-					if _, err = tx.Exec(ctx, `UPDATE payroll_resource_revisions SET revision=revision+1 WHERE resource_key=$1`, "truck:"+truck); err != nil {
+					if _, err = tx.Exec(ctx, `INSERT INTO payroll_resource_revisions(resource_key,revision) VALUES($1,1)
+ ON CONFLICT(resource_key) DO UPDATE SET revision=payroll_resource_revisions.revision+1`, "truck:"+truck); err != nil {
 						t.Fatal(err)
 					}
 				}

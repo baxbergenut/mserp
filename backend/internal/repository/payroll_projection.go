@@ -515,7 +515,8 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 }
 
 // Reconciliation reads the actual current pointers, including retained rows
-// outside an incremental publication. It never reconstructs financial values.
+// outside an incremental publication, with the same live expense overlay as HTTP
+// reads. Prepared wages, source costs and frozen statements remain authoritative.
 func readPublishedPayrollReports(ctx context.Context, tx pgx.Tx, week time.Time) ([2]DriverPayWeek, error) {
 	var result [2]DriverPayWeek
 	var driver, investor []byte
@@ -549,6 +550,18 @@ func readPublishedPayrollReports(ctx context.Context, tx pgx.Tx, week time.Time)
 			i = 1
 		}
 		result[i].Drivers = append(result[i].Drivers, row)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return result, err
+	}
+	if err = overlayDriverExpenseBalances(ctx, tx, &result[0]); err != nil {
+		return result, err
+	}
+	for i, kind := range []string{"driver", "investor"} {
+		if err = setPayrollRevision(ctx, tx, kind, &result[i]); err != nil {
+			return result, err
+		}
 	}
 	for k := range result {
 		sort.SliceStable(result[k].Drivers, func(i, j int) bool {

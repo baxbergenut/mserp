@@ -15,7 +15,7 @@ func TestPayrollStatementLocalSave(t *testing.T) {
 		{"expense choice", func(e *DriverPayEdits) {
 			e.ExpenseDeductions = []ExpenseDeduction{{ExpenseID: "expense", Amount: "0.00", Mode: "skip", Apply: true}}
 		}, true},
-		{"cost snapshot changed", func(e *DriverPayEdits) { e.Costs = &DriverPayCosts{Revision: "new"} }, true},
+		{"cost snapshot changed", func(e *DriverPayEdits) { e.Costs = &DriverPayCosts{Revision: "new"} }, false},
 		{"fuel override", func(e *DriverPayEdits) { amount := "-10.00"; e.FuelOverride = &amount }, false},
 		{"escrow application", func(e *DriverPayEdits) {
 			e.ExpenseDeductions = []ExpenseDeduction{{Source: "escrow", Amount: "100.00", Apply: true}}

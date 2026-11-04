@@ -93,7 +93,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 					t.Fatal(storageErr)
 				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
-				for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql", "189_payroll_current_storage.sql", "191_payroll_pti_classification.sql", "192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql", "196_datatruck_modified_sync.sql", "197_board_route_usage.sql"} {
+				for _, name := range []string{"180_payroll_revision_triggers.sql", "181_payroll_load_revision.sql", "182_payroll_projections.sql", "183_payroll_telemetry_classification.sql", "184_payroll_operational_sources.sql", "185_payroll_shared_dependencies.sql", "186_expense_verification_metadata.sql", "187_load_source_availability.sql", "188_status_board_operational.sql", "189_payroll_current_storage.sql", "191_payroll_pti_classification.sql", "192_payroll_unrelated_sources.sql", "193_payroll_unassigned_company_expenses.sql", "196_datatruck_modified_sync.sql", "197_board_route_usage.sql", "198_payroll_expense_drafts.sql"} {
 					body, err := os.ReadFile("../../sql/" + name)
 					if err != nil {
 						t.Fatal(err)
@@ -381,9 +381,10 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if _, e = pr.SettleInvestor(ctx, week, truck, frozen.Revision, actor, "Correction", true, false); e != nil {
 				t.Fatal(e)
 			}
-			// Corrections retain the expense payment's original destination.
-			if _, e = pool.Exec(ctx, `UPDATE expense_payments SET investor_truck_id=NULL WHERE expense_id=$1`, expense); e == nil {
-				t.Fatal("payment destination changed")
+			// Reopening removes exactly this statement's expense collection.
+			var retained int
+			if e = pool.QueryRow(ctx, `SELECT count(*) FROM expense_payments WHERE expense_id=$1`, expense).Scan(&retained); e != nil || retained != 0 {
+				t.Fatal("reopened expense collection remains", retained, e)
 			}
 			// Owner-only work in another week uses Driver Pay once, with the 88% tariff.
 			if _, e = pool.Exec(ctx, `UPDATE truck_driver_assignments SET unassigned_at='2026-10-05 00:00-04' WHERE truck_id=$1 AND unassigned_at IS NULL`, truck); e != nil {

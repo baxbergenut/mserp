@@ -48,7 +48,13 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const requested = params.get("weekStart");
   const targetId = params.get(investor ? "truckId" : "driverId") ?? params.get("driverId");
   const targetKey = investor && params.has("truckId") ? "truckId" : "driverId";
-  const initialWeek = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested >= "2000-01-03" && requested <= "2100-12-27" && new Date(`${requested}T12:00:00Z`).getUTCDay() === 1 ? (requested > latestWeek ? latestWeek : requested) : undefined;
+  const initialWeek = useMemo(() => {
+    if (!requested || !/^\d{4}-\d{2}-\d{2}$/.test(requested) || requested < "2000-01-03" || requested > "2100-12-27" || new Date(`${requested}T12:00:00Z`).getUTCDay() !== 1) return undefined;
+    // Clamp a deep link when it changes. Monday's availability update must not
+    // navigate away from the statement the user is currently reviewing.
+    const latest = latestPayrollWeek();
+    return requested > latest ? latest : requested;
+  }, [requested]);
   const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek(), initialWeek);
   const week = storedWeek > latestWeek ? latestWeek : storedWeek < firstWeek ? firstWeek : storedWeek;
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);

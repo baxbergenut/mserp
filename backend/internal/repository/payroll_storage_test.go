@@ -140,7 +140,12 @@ func TestPayrollCurrentStoragePopulatedUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec(strings.Replace(strings.ReplaceAll(string(init), "\r\n", "\n"), strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1))
+	expenseMigration, err := os.ReadFile("../../sql/198_payroll_expense_drafts.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior := strings.Replace(strings.ReplaceAll(string(init), "\r\n", "\n"), strings.ReplaceAll(string(expenseMigration), "\r\n", "\n"), "", 1)
+	exec(strings.Replace(prior, strings.ReplaceAll(string(migration), "\r\n", "\n"), "", 1))
 	exec(`INSERT INTO app_users(id,username,password_hash) VALUES('18900000-0000-0000-0000-000000000001','Upgrade Storage',crypt('test-only',gen_salt('bf')));
  INSERT INTO payroll_projection_generations(id,week_start,requested_generation,input_snapshot,calendar_week,calculator_version,schema_version,dependencies,driver_header,investor_header)
  SELECT md5('storage-generation-'||n)::uuid,'2026-10-05',n,'old-exact-snapshot','2026-11-02','payroll-182-v4',7,'{}','{}','{}' FROM generate_series(1,12)n;

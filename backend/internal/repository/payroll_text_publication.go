@@ -22,6 +22,9 @@ func payrollFinancialEdits(e DriverPayEdits) []byte {
 // Compare the remaining submitted financial fields against the locked server
 // card; explicit reimbursement/escrow applications still take the ledger path.
 func payrollStatementLocalSave(before, after DriverPayEdits) bool {
+	if after.Costs != nil && (before.Costs == nil || before.Costs.Revision != after.Costs.Revision) {
+		return false
+	}
 	for _, row := range after.ExpenseDeductions {
 		if row.Source != "" && row.Apply {
 			return false
@@ -93,6 +96,16 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
 	d.Edits = edits
 	stripPayCommandMetadata(&d.Edits)
 	d.Edits.InputRevision = ""
+	if kind == "driver" {
+		// A choice changes the reviewed expense set even though it posts no
+		// balance. Return its new token in the save receipt, so immediate
+		// finalization does not require a separate refresh.
+		live := DriverPayWeek{WeekStart: edits.WeekStart, Drivers: []DriverPayDriver{d}}
+		if err = overlayDriverExpenseBalances(ctx, tx, &live); err != nil {
+			return nil, false, err
+		}
+		d = live.Drivers[0]
+	}
 	detail, err := json.Marshal(d)
 	if err != nil {
 		return nil, false, err
@@ -109,7 +122,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
 	if payrollConcurrent(tx) {
 		err = tx.QueryRow(ctx, `WITH generation AS (
  INSERT INTO payroll_projection_generations(week_start,requested_generation,input_snapshot,calendar_week,calculator_version,schema_version,dependencies,driver_header,investor_header)
- SELECT g.week_start,g.requested_generation,g.input_snapshot,g.calendar_week,g.calculator_version,g.schema_version,g.dependencies,g.driver_header,g.investor_header
+ SELECT g.week_start,g.requested_generation,$12,g.calendar_week,g.calculator_version,g.schema_version,$13,g.driver_header,g.investor_header
  FROM payroll_projection_weeks w JOIN payroll_projection_generations g ON g.id=w.generation_id
  WHERE w.week_start=$7::date AND g.input_snapshot=$1 AND g.calendar_week=$2::date AND g.calculator_version=$3 AND g.schema_version=$4
  RETURNING id
@@ -123,7 +136,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
  UPDATE payroll_statement_state SET version_id=(SELECT id FROM version)
  WHERE kind=$5 AND statement_id=$6::uuid AND week_start=$7::date AND version_id=$8::uuid AND EXISTS(SELECT 1 FROM version) RETURNING version_id
  ) SELECT count(*) FROM pointer`, c.beforeSnapshot, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion,
-			kind, edits.DriverID, edits.WeekStart, c.expected, detail, summary, edits.Version).Scan(&published)
+			kind, edits.DriverID, edits.WeekStart, c.expected, detail, summary, edits.Version, snapshot, depJSON).Scan(&published)
 	} else {
 		err = tx.QueryRow(ctx, `WITH eligible AS MATERIALIZED (
  SELECT w.week_start,w.generation_id,g.driver_header,g.investor_header,j.requested_generation

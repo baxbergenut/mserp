@@ -9493,7 +9493,7 @@ ALTER TABLE expense_payments ADD COLUMN statement_kind text,
  ADD COLUMN statement_id uuid,
  ADD CONSTRAINT expense_payment_statement CHECK (
  (statement_kind IS NULL AND statement_id IS NULL) OR
- (statement_kind IN ('driver','investor') AND statement_id IS NOT NULL));
+ (statement_kind IS NOT NULL AND statement_kind IN ('driver','investor') AND statement_id IS NOT NULL));
 
 CREATE FUNCTION payroll_live_driver_expense(route jsonb) RETURNS boolean
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$

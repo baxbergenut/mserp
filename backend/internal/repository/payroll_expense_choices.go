@@ -207,7 +207,7 @@ func reversePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week string, c
  FROM legacy_choices l WHERE $3='investor' AND w.truck_id=l.statement AND w.week_start=$2::date RETURNING w.truck_id
  ), touched AS (
  UPDATE expenses e SET updated_at=now() FROM removed r WHERE e.id=r.expense_id RETURNING e.id
- ) SELECT count(*) FROM touched`, body, week, kind).Scan(&reversed)
+ ) SELECT count(*) FROM touched`, string(body), week, kind).Scan(&reversed)
 	if err != nil {
 		return err
 	}

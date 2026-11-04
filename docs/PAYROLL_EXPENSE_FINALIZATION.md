@@ -25,7 +25,7 @@ cannot silently collect a new or changed invoice. Exact retries recover their
 original result. Older clients may use a still-exact prepared expense set or the
 complete current input revision; they cannot bypass changed-balance validation.
 
-A native driver-paid expense mutation can avoid payroll publication only after
+A native driver-paid expense mutation in resource protocol can avoid payroll publication only after
 every captured event and old/new recipient is proved eligible. Each materialized
 week must already have a compatible statement whose membership exists independently
 of the expense (loads, saved edits or a frozen statement). Posting uses the same
@@ -34,6 +34,11 @@ later source proofs use that recorded classification, not today's payer. Missing
 cards, uncertain routing and expense-only membership changes retain full publication.
 Investor/owner-routed balances retain regular publication while using the same
 finalization-only ordinary expense collection lifecycle.
+
+Local save/freeze publication records the validated current source baseline on
+the changed statement's generation. It leaves the weekly header and other
+statements' certificates intact. Shadow reconciliation applies the same live
+expense overlay before comparing the independently calculated financial report.
 
 Statement-local notes, adjustments and ordinary expense choices do not write
 unchanged source/cost ledgers. The comparison uses the locked server card. Explicit

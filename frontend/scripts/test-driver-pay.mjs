@@ -84,7 +84,7 @@ const expenseEdits = { ...auto, expenseDeductions: [expenseRow] };
 const suggestedExpense = { ...expenseRow, saved: false, apply: false };
 const savedExpense = { ...expenseRow, saved: true, apply: false };
 const normalSave = normalizedPayEdits({ ...auto, notes: "Regular payroll edit", expenseDeductions: [suggestedExpense, savedExpense] });
-assert.equal(normalSave.expenseDeductions[0].apply, true);
+assert.equal(normalSave.expenseDeductions[0].apply, false, "notes must not turn an ordinary expense suggestion into a fixed choice");
 assert.equal(normalSave.expenseDeductions[1].apply, false);
 assert.equal(suggestedExpense.apply, false, "normalizing a save must not mutate the fetched report");
 assert.equal(driverTotals({ loads: [] }, expenseEdits).payable, -3010n);

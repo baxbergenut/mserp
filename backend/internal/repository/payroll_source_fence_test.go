@@ -33,7 +33,8 @@ func TestPayrollResourceSourceFenceDatabase(t *testing.T) {
 			}()
 			measured, metrics := db.WithQueryMetrics(ctx)
 			source, err := payrollProjectionFence(measured, tx)
-			if err != nil || metrics.Queries.Load() == 0 || source == previous {
+			// Setup already validates and retains the source fence under its gate.
+			if err != nil || source == "" || source == previous || metrics.Queries.Load() != 0 {
 				t.Fatal("new resource transaction failed to validate current sources", err, metrics.Queries.Load())
 			}
 			before, err := payrollFinancialSnapshot(ctx, tx)

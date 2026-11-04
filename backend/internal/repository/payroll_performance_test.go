@@ -120,8 +120,8 @@ func TestPayrollPerformance(t *testing.T) {
  SELECT n*100+d,'PERF-'||n||'-'||d,'delivered',1000,1200,400,'2026-09-21 12:00Z'::timestamptz+d*interval '1 day',md5('truck'||n)::uuid,'PERF-'||n,'{}'::jsonb FROM generate_series(1,176)n CROSS JOIN generate_series(0,41)d;
  INSERT INTO tolls(truck_id,posting_date,invoice_date,customer_id,source,read_type,transponder_or_plate,equipment_unit,agency,exit_plaza,exit_date,exit_time,toll_class,amount,row_fingerprint)
  SELECT md5('truck'||(1+n%176))::uuid,'2026-09-21'::date+n%28,'2026-10-01','test','test','test','test','PERF-'||(1+n%176),'test','test','2026-09-21'::date+n%28,'12:00','test',10,md5('toll'||n)||md5('toll'||n) FROM generate_series(1,6000)n;
- INSERT INTO expenses(category_id,category,expense_date,amount,charge_driver_id,driver_settled,expense_type)
- SELECT (SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Other','2026-09-21',100,md5('driver'||(1+(n%176)))::uuid,n>176,'Perf charge' FROM generate_series(1,6000)n;
+ INSERT INTO expenses(category_id,category,expense_date,amount,driver_id,charge_driver_id,covered_by,driver_settled,expense_type)
+ SELECT (SELECT id FROM expense_settings WHERE kind='category' AND name='Other'),'Other','2026-09-21',100,md5('driver'||(1+(n%176)))::uuid,md5('driver'||(1+(n%176)))::uuid,'Driver',n>176,'Perf charge' FROM generate_series(1,6000)n;
  INSERT INTO driver_escrows(id,driver_id,driver_name,start_date,amount,opening_paid)
  SELECT md5('escrow'||n)::uuid,md5('driver'||n)::uuid,'Perf Driver '||n,'2026-01-01',2500,500 FROM generate_series(1,176)n WHERE n%4<>0;
  INSERT INTO driver_escrow_payments(escrow_id,week_start,amount)

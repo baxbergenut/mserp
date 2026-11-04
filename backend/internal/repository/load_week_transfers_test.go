@@ -130,7 +130,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					out, e = pay.Get(ctx, w)
 				}
 				if e != nil {
-					t.Fatal(e)
+					t.Fatalf("read investor=%v week=%s: %#v", investor, w.Format(time.DateOnly), e)
 				}
 				return out
 			}

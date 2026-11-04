@@ -110,3 +110,41 @@ func TestPayrollExpenseDraftLifecycleDatabase(t *testing.T) {
 		balance("50.00")
 	})
 }
+
+func TestPayrollLegacyExpenseReopenDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		var actor, expense string
+		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Legacy expense reopening',crypt('test-only',gen_salt('bf'))) RETURNING id::text`).Scan(&actor); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO expenses(category_id,category,expense_type,expense_date,amount,driver_id,charge_driver_id,covered_by)
+ SELECT id,name,'Legacy partial','2026-10-05',100,$1,$1,'Driver' FROM expense_settings WHERE kind='category' AND name='Other' RETURNING id::text`, projectionDriver).Scan(&expense); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount) VALUES($1,'2026-10-05',40)`, expense); err != nil {
+			t.Fatal(err)
+		}
+		repo := NewDriverPayRepository(pool)
+		week, _ := chargeWeek("2026-10-05")
+		for _, reopen := range []bool{false, true, false} {
+			report, err := repo.Get(ctx, week)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = repo.Settle(ctx, week, projectionDriver, report.Revision, actor, "Legacy expense review", reopen, true); err != nil {
+				t.Fatal("settle", reopen, err)
+			}
+			if reopen {
+				var mode, amount string
+				if err = pool.QueryRow(ctx, `SELECT expense_choices->$2->>'mode',expense_choices->$2->>'amount' FROM driver_pay_weeks WHERE driver_id=$1 AND week_start='2026-10-05'`, projectionDriver, expense).Scan(&mode, &amount); err != nil || mode != "fixed" || amount != "40.00" {
+					t.Fatal("legacy choice was not retained", mode, amount, err)
+				}
+			}
+		}
+		var paid string
+		if err := pool.QueryRow(ctx, `SELECT sum(amount)::text FROM expense_payments WHERE expense_id=$1`, expense).Scan(&paid); err != nil || paid != "40.00" {
+			t.Fatal("legacy partial was collected twice or changed", paid, err)
+		}
+	})
+}

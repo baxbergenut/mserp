@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestPayrollExpenseDraftCutoverDatabase(t *testing.T) {
@@ -108,5 +109,10 @@ func TestPayrollExpenseDraftCutoverDatabase(t *testing.T) {
  (SELECT expense_choices#>>'{19800000-0000-0000-0000-000000000015,amount}' FROM investor_pay_weeks)
  FROM driver_pay_weeks WHERE driver_id='19800000-0000-0000-0000-000000000001' AND week_start='2026-10-05'`).Scan(&count, &fixed, &skip, &investor); err != nil || count != 2 || fixed != "60.00" || skip != "skip" || investor != "35.00" {
 		t.Fatal("draft conversion", count, fixed, skip, investor, err)
+	}
+	_, err = conn.Exec(ctx, `UPDATE expense_payments SET statement_id='19800000-0000-0000-0000-000000000001'
+ WHERE expense_id='19800000-0000-0000-0000-000000000013'`)
+	if constraint, ok := err.(*pgconn.PgError); !ok || constraint.Code != "23514" || constraint.ConstraintName != "expense_payment_statement" {
+		t.Fatal("partial statement identity was not rejected by the pairing constraint", err)
 	}
 }

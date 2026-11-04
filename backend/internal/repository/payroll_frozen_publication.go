@@ -48,10 +48,15 @@ func publishPayrollFrozen(ctx context.Context, tx pgx.Tx, c *payrollCommand, imp
 	if err != nil {
 		return nil, false, err
 	}
+	currentSnapshot, err := payrollCacheSnapshot(ctx, tx)
+	if err != nil {
+		return nil, false, err
+	}
 	var published int
 	err = tx.QueryRow(ctx, `WITH generation AS (
  INSERT INTO payroll_projection_generations(week_start,requested_generation,input_snapshot,calendar_week,calculator_version,schema_version,dependencies,driver_header,investor_header)
- SELECT g.week_start,g.requested_generation,g.input_snapshot,g.calendar_week,g.calculator_version,g.schema_version,g.dependencies,g.driver_header,g.investor_header
+ SELECT g.week_start,g.requested_generation,$8,g.calendar_week,g.calculator_version,g.schema_version,
+ (SELECT jsonb_object_agg(table_name,revision) FROM payroll_cache_revisions WHERE NOT table_name=ANY($9::text[])),g.driver_header,g.investor_header
  FROM payroll_projection_weeks w JOIN payroll_projection_generations g ON g.id=w.generation_id
  WHERE w.week_start=$1::date AND g.input_snapshot=$2 AND g.calendar_week=$3::date AND g.calculator_version=$4 AND g.schema_version=$5
  RETURNING id
@@ -72,7 +77,7 @@ func publishPayrollFrozen(ctx context.Context, tx pgx.Tx, c *payrollCommand, imp
  ), pointers AS (
  UPDATE payroll_statement_state s SET version_id=v.id FROM versions v
  WHERE s.kind=$6 AND s.week_start=$1::date AND s.statement_id=v.statement_id RETURNING s.version_id
- ) SELECT count(*) FROM pointers`, report.WeekStart, c.beforeSnapshot, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion, kind, body).Scan(&published)
+ ) SELECT count(*) FROM pointers`, report.WeekStart, c.beforeSnapshot, ChargeCurrentWeek(), payrollCalculatorVersion, payrollProjectionSchemaVersion, kind, body, currentSnapshot, payrollUnrelatedTables).Scan(&published)
 	if err != nil {
 		return nil, false, err
 	}

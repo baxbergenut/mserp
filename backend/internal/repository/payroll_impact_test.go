@@ -77,12 +77,13 @@ func TestPayrollIncrementalSaveDatabase(t *testing.T) {
 			if kind == "investor" {
 				edits.RequestID = "18200000-0000-0000-0000-000000000082"
 			}
-			edits.Notes = "First comment retains implicit financial effects"
+			edits.Notes = "First comment preserves statement-local choices"
 			edits.Adjustments = append(edits.Adjustments, DriverPayAdjustment{ID: "18200000-0000-0000-0000-000000000083", Kind: "addition", Amount: "12.34", Name: "Reviewed adjustment"})
 			if kind == "driver" {
 				for i := range edits.ExpenseDeductions {
 					if edits.ExpenseDeductions[i].ExpenseID == expense.ID {
 						edits.ExpenseDeductions[i].Apply = true
+						edits.ExpenseDeductions[i].Mode = "fixed"
 						edits.ExpenseDeductions[i].Amount = "40.00"
 					}
 				}
@@ -105,8 +106,9 @@ func TestPayrollIncrementalSaveDatabase(t *testing.T) {
 			}
 			if kind == "driver" {
 				var amount string
-				if err = pool.QueryRow(ctx, `SELECT amount::text FROM expense_payments WHERE expense_id=$1 AND week_start=$2`, expense.ID, week).Scan(&amount); err != nil || amount != "40.00" {
-					t.Fatal("implicit allocation omitted", amount, err)
+				var payments int
+				if err = pool.QueryRow(ctx, `SELECT expense_choices->$1->>'amount',(SELECT count(*) FROM expense_payments WHERE expense_id=$1::uuid AND week_start=$2) FROM driver_pay_weeks WHERE driver_id=$3 AND week_start=$2`, expense.ID, week, id).Scan(&amount, &payments); err != nil || amount != "40.00" || payments != 0 {
+					t.Fatal("draft choice was omitted or posted", amount, payments, err)
 				}
 			}
 			for _, w := range weeks {
