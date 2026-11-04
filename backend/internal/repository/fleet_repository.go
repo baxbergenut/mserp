@@ -1178,7 +1178,7 @@ func assignTruck(ctx context.Context, tx pgx.Tx, truckID, driverID string) error
 	if err := tx.QueryRow(ctx, `SELECT fleet_truck_operating_status($1)`, truckID).Scan(&status); err != nil {
 		return err
 	}
-	if status != "ready" && status != "in_use" {
+	if status != "ready" && status != "in_use" && status != "shop" {
 		return chargeInvalid("Return the truck to service before assigning a driver")
 	}
 	if err := releaseDriverTruck(ctx, tx, driverID); err != nil {

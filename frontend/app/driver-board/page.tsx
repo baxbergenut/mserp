@@ -2,11 +2,11 @@
 
 
 import dynamic from "next/dynamic";
-import { Fragment, memo, useContext, useMemo, useState } from "react";
-import {fetchDriver,fetchFleetStatusCatalog} from "@/app/lib/api";
+import { Fragment, memo, useCallback, useContext, useMemo, useState } from "react";
+import {fetchDriver,fetchFleetStatusCatalog,fetchTruckAssignmentChoices} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
 import { DriverIntakeSetup } from "../drivers/DriverIntakeSetup";
-import type {Driver} from "@/app/lib/types";
+import type {Driver,TruckAssignmentChoice} from "@/app/lib/types";
 import {useEffect} from "react";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } from "lucide-react";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
@@ -41,6 +41,7 @@ const ETAEditor = dynamic(() => import("./ETAEditor").then(m => m.ETAEditor), { 
 import { StatusBoardScrollArea } from "./StatusBoardScrollArea";
 import { CellPresence } from "./CellPresence";
 import { useDriverOrder } from "./useDriverOrder";
+import { TruckAssignmentCell } from "./TruckAssignmentCell";
 import { useDispatcherOrder } from "./useDispatcherOrder";
 import { useDriverRowDrag } from "./useDriverRowDrag";
 
@@ -59,6 +60,7 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
 });
 
 export default function DriverBoardPage() {
+  const [truckChoices, setTruckChoices] = useState<TruckAssignmentChoice[] | null>(null);
   const [setupDriver, setSetupDriver] = useState<{ intakeId: string; fullName: string } | null>(null);
   const [restriction,setRestriction]=useState<{id:string;name:string;status:string}|null>(null);
  const [restrictionReason,setRestrictionReason]=useState("");
@@ -97,6 +99,15 @@ export default function DriverBoardPage() {
   const [destinationError, setDestinationError] = useState("");
   const [orderError, setOrderError] = useState("");
   const [orderNotice, setOrderNotice] = useState("");
+  const canAssignTruck = permissions.includes("drivers.edit") && permissions.includes("trucks.read");
+  const refreshTruckChoices = useCallback(() => {
+    if (canAssignTruck) void fetchTruckAssignmentChoices().then(setTruckChoices).catch(err => setOrderError(err instanceof Error ? err.message : "Could not load trucks"));
+  }, [canAssignTruck]);
+  useEffect(() => {
+    refreshTruckChoices();
+    window.addEventListener("focus", refreshTruckChoices);
+    return () => window.removeEventListener("focus", refreshTruckChoices);
+  }, [refreshTruckChoices]);
   const drivers = (board?.drivers ?? []).filter(d =>
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
     (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
@@ -263,7 +274,7 @@ export default function DriverBoardPage() {
                       if (target && (canEdit || target.dispatcherId === d.dispatcherId) && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision ?? "");
                     }}><GripVertical className="h-4 w-4" /></button>
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
-                <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}><div className="flex items-center gap-1">{d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</div></td>
+                <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
                 <TrailerCell entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-center font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>
                 <td className={`${cellClass} bg-blue-500/5 px-1 text-center font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>

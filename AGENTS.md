@@ -2232,6 +2232,21 @@ assignment lookup lists.
 - Status Board is the visible name of /driver-board; route/permission identifiers
   stay compatible. Sidebar order begins Status Board, Gross Board, Loads.
 
+  The Truck cell uses a native select dropdown for users with drivers.edit
+  and trucks.read. GET/PUT /drivers/{id}/truck-assignment previews and assigns using
+  the server's current New York date. A reviewed revision fences the roster and
+  current team/assignment; occupied trucks require explicit reassignment confirmation.
+  Team rows route through the current main driver. Another driver's nonblank
+  Current load disables the truck
+  and blocks saves under the board fleet lock. Future plans alone do not block.
+  GET /drivers/truck-assignment-choices supplies the choices with active-load reasons.
+  Migration 199 permits driver/team assignments to Shop trucks without releasing
+  restrictions; the driver form includes Shop trucks. OOS/Terminated stay blocked.
+  The narrow mutation reuses native assignment history, actor attribution,
+  restrictions, payroll gates and finalization
+  guards; it never saves the rest of a profile. Test with
+  frontend/scripts/test-status-board-truck-assignment.mjs against review-local.
+
 - Driver/truck assignment history lives in `truck_driver_assignments`. Partial
   unique indexes enforce at most one current truck per driver and one current
   driver per truck. Assignment changes must remain transactional.
@@ -3469,7 +3484,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Any authenticated user may PATCH truck /status or legacy /condition. Truck profile status/return-to-service controls do not require trucks.edit; viewing access and other profile-edit permissions remain unchanged. Reasons, versions, audit history and operational guards still apply.
 
-- Truck Status replaces the visible Condition and Active/Inactive controls: Ready, In use, Shop, OOS, Terminated. Ready/In use derive from employed direct/current team operators; Home/Vacation/rest retain In use. Shop/OOS keep assignments and block new dispatch/assignments. All restrictions are explicitly reversible with a reason; rehire never clears them. Terminated takes precedence, then OOS, Shop and automatic allocation.
+- Truck Status replaces the visible Condition and Active/Inactive controls: Ready, In use, Shop, OOS, Terminated. Ready/In use derive from employed direct/current team operators; Home/Vacation/rest retain In use. Shop/OOS keep assignments and restrict dispatch. Migration 199 permits new driver/team assignments to Shop while preserving its restrictions; OOS still blocks new assignments. All restrictions are explicitly reversible with a reason; rehire never clears them. Terminated takes precedence, then OOS, Shop and automatic allocation.
 - PATCH /trucks/{id}/status and legacy /condition share reason/version/permission guards. Manual Terminated refuses employed operators; owner-operator offboarding retains the existing ownership and continuing-investor safeguards. Active is derived compatibility data, never an independent command; OOS/Terminated are false without automatically clearing crew. Legacy raw status codes and the internal condition history track remain compatible.
 - Board SHOP/STOP/ACCIDENT require statusReason and set Shop; HOLD is retired. Hold for Load remains an annotation. Independent work-order restrictions require reasons and explicit release; payment/completion never releases them. New assignment writers share database guards. Lookups expose operatingStatus without private reasons.
 - Colored count cards filter the directory, with a checkmark on the selected card; counts follow search independently of the selected status. Directory filtering/order/counts happen before pagination: Ready, Shop, In use, OOS, Terminated, then unit. Only Unit, Equipment, Driver, Status and Status notes remain; documents/edit/delete live on profiles. Migration 149 converts all existing inactive trucks to Terminated and remaining Hold restrictions to Shop, retaining notes/history and recording migration provenance. It preserves the prior status activation flag and does not activate provider delivery. FleetScope Terminated projects as legacy inactive/available; no wire enum changes.

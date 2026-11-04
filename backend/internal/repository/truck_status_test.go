@@ -65,6 +65,11 @@ func TestTruckStatusesDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				execAdmin(string(readMigration))
+				shopMigration, e := os.ReadFile("../../sql/199_shop_truck_assignments.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				execAdmin(string(shopMigration))
 				for unit, want := range map[string]string{"OLD-INACTIVE": "terminated", "OLD-HOLD": "shop", "OLD-OOS": "out_of_service"} {
 					var got, reason string
 					if e := admin.QueryRow(ctx, `SELECT fleet_truck_operating_status(id),status_reason FROM trucks WHERE unit_number=$1`, unit).Scan(&got, &reason); e != nil || got != want || reason == "" {
@@ -152,14 +157,22 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	must(setBoardActor(ctx, tx, "", "test"))
 	e = assignTruck(ctx, tx, truck.ID, other.ID)
 	tx.Rollback(ctx)
-	if e == nil {
-		t.Fatal("assigned restricted truck")
-	}
-	if _, e = pool.Exec(ctx, `INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES($1,$2,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date)`, driver.ID, other.ID); e == nil {
-		t.Fatal("added crew to restricted truck")
-	}
+	must(e)
+	tx, e = pool.Begin(ctx)
+	must(e)
+	_, e = tx.Exec(ctx, `INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week) VALUES($1,$2,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date)`, driver.ID, other.ID)
+	tx.Rollback(ctx)
+	must(e)
+	check("shop", true, true)
 	change("out_of_service", "Awaiting engine replacement")
 	current := check("out_of_service", false, true)
+	tx, e = pool.Begin(ctx)
+	must(e)
+	e = assignTruck(ctx, tx, truck.ID, other.ID)
+	tx.Rollback(ctx)
+	if e == nil {
+		t.Fatal("assigned an OOS truck")
+	}
 	_, e = fleet.UpdateTruck(ctx, truck.ID, TruckInput{UnitNumber: current.UnitNumber, Status: current.Status, Active: false, DriverID: &driver.ID, Notes: payTestString("Unrelated note")})
 	must(e)
 	check("out_of_service", false, true)
