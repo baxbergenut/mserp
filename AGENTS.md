@@ -895,7 +895,7 @@ positive Reimburse-method expense credits already included in net payable.
   on the next minute pass and take queue priority. Failed attempts back off five
   minutes. Old truck-route caches establish a DRIVE baseline once.
   `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
-  Stale GPS displays red last-known miles without diagnostic hover notes, including
+  Stale GPS displays yellow last-known miles without diagnostic hover notes, including
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
   Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
@@ -904,7 +904,7 @@ positive Reimburse-method expense credits already included in net payable.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
   proximity/freshness rules and rollout. ETA times round to the nearest 15 minutes;
   cell hover shows only facility-local ETA (offline coordinate timezone lookup).
-  Automatic travel and arrival use green for fresh evidence and red for outdated
+  Automatic travel and arrival use green for fresh evidence and yellow for outdated
   evidence, with an accessible freshness label. Manual values use the normal
   text color. Routing assumptions remain server diagnostics.
   Load cards expose a rightmost read-only-compatible copy-number icon.

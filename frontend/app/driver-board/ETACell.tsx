@@ -26,7 +26,7 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
   const automaticArrival = !!text.schedule && automation?.arrived && automation.arrivalOverride === "auto";
   const automaticTravel = !!text.travel && (!value || automation?.manualETAValid === false) && automation?.travelMode === "auto";
   const outdated = automaticArrival ? automation.stale : automation?.travelStale;
-  const freshnessColor = outdated ? "text-red-400" : "text-emerald-400";
+  const freshnessColor = outdated ? "text-yellow-400" : "text-emerald-400";
   const freshness = automaticArrival || automaticTravel ? `${automaticArrival ? "Arrival observation" : "ETA"} ${outdated ? "outdated" : "up to date"}` : undefined;
   return <>
     <button type="button" data-grid-action aria-label={`${name} · ETA`} aria-describedby={freshness ? freshnessId : undefined} title={title} disabled={disabled}

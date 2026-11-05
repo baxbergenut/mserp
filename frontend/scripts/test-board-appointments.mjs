@@ -136,7 +136,7 @@ try {
   loads.automation.travelValue = '138mi'; loads.automation.travelStale = true;
   await page.reload();
   await expect(cell).toHaveText('DEL 24/7 FRI 138mi');
-  await expect(cell.locator('span').last()).toHaveClass('text-red-400');
+  await expect(cell.locator('span').last()).toHaveClass('text-yellow-400');
   await expect(cell).toHaveAccessibleDescription('ETA outdated');
   await expect(cell).toHaveAttribute('title', '');
   loads.automation.travelStale = false;
@@ -170,7 +170,7 @@ try {
   loads.automation.stale = true; loads.automation.travelMode = 'auto'; loads.automation.travelValue = '1mi';
   await page.reload();
   await expect(cell).toHaveText('@PU');
-  await expect(cell.locator('span').first()).toHaveClass('text-red-400');
+  await expect(cell.locator('span').first()).toHaveClass('text-yellow-400');
   await expect(cell).toHaveAccessibleDescription('Arrival observation outdated');
   await expect(cell).toHaveAttribute('title', '');
   await cell.click();
