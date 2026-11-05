@@ -283,18 +283,21 @@ func TestWeighMyTruckDatabase(t *testing.T) {
 			execute(`UPDATE weighmytruck_memberships SET updated_at=now()-interval '3 minutes' WHERE driver_id=$1`, ids[1])
 			request("POST", "/weighmytruck/"+pending.ID+"/verify", string(verify), "fixture-csrf", 200)
 			if mode == "fresh" && os.Getenv("MSERP_WMT_BROWSER_TEST") == "1" {
+				// The synthetic tickets arrive this week. The default pay pages
+				// show the last completed week, with the same dated payer.
+				statementWeek := repository.PayrollLatestWeek()
 				permissions = append(permissions, "driver_pay.read", "driver_pay.edit", "drivers.read", "investor_pay.read", "weighmytruck.sync")
 				request("PUT", "/weighmytruck/billing", fmt.Sprintf(`{"driverId":%q,"weekStart":%q,"payer":"company","version":0}`, ids[0], repository.ChargeCurrentWeek()), "fixture-csrf", 400)
 				execute(`GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 				execute(`INSERT INTO investors(id,full_name,driver_id) VALUES('07400000-0000-0000-0000-000000000002','Added Driver',$1)`, ids[0])
 				execute(`INSERT INTO trucks(id,unit_number,owner_id) VALUES('07400000-0000-0000-0000-000000000001','074','07400000-0000-0000-0000-000000000002')`)
-				execute(`UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_id='07400000-0000-0000-0000-000000000001'`, repository.ChargeCurrentWeek())
-				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000001',$1,($2::date::timestamp AT TIME ZONE 'America/New_York'))`, ids[0], repository.ChargeCurrentWeek())
+				execute(`UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_id='07400000-0000-0000-0000-000000000001'`, statementWeek)
+				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000001',$1,($2::date::timestamp AT TIME ZONE 'America/New_York'))`, ids[0], statementWeek)
 				execute(`INSERT INTO investors(id,full_name) VALUES('07400000-0000-0000-0000-000000000003','Scale Investor')`)
 				execute(`INSERT INTO trucks(id,unit_number,owner_id) VALUES('07400000-0000-0000-0000-000000000004','075','07400000-0000-0000-0000-000000000003')`)
-				execute(`UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_id='07400000-0000-0000-0000-000000000004'`, repository.ChargeCurrentWeek())
-				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000004',$1,$2::date::timestamp AT TIME ZONE 'America/New_York')`, ids[1], repository.ChargeCurrentWeek())
-				execute(`INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES('07400000-0000-0000-0000-000000000004','07400000-0000-0000-0000-000000000003',$1::date,90)`, repository.ChargeCurrentWeek())
+				execute(`UPDATE truck_ownership_history SET assigned_at=$1::date::timestamp AT TIME ZONE 'America/New_York' WHERE truck_id='07400000-0000-0000-0000-000000000004'`, statementWeek)
+				execute(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('07400000-0000-0000-0000-000000000004',$1,$2::date::timestamp AT TIME ZONE 'America/New_York')`, ids[1], statementWeek)
+				execute(`INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES('07400000-0000-0000-0000-000000000004','07400000-0000-0000-0000-000000000003',$1::date,90)`, statementWeek)
 				if _, err := repo.SyncSettlements(ctx); err != nil {
 					t.Fatal(err)
 				}

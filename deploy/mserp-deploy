@@ -110,6 +110,20 @@ compatible_release() {
     expense_drafts=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_pay_weeks' AND column_name='expense_choices')") || return 1
     if [[ $expense_drafts == t ]]; then
         [[ $("$1/backend/mserp-api" -payroll-expense-drafts-capability 2>/dev/null) == payroll-expense-drafts-v1 ]] || return 1
+        local scale_carry
+        scale_carry=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
+            SELECT EXISTS(
+                SELECT 1 FROM (
+                    SELECT week_start,report FROM public.payroll_settlements WHERE finalized
+                    UNION ALL SELECT week_start,report FROM public.investor_pay_weeks WHERE finalized
+                ) f
+                CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.report->'autoCharges')='array' THEN f.report->'autoCharges' ELSE '[]'::jsonb END) c
+                JOIN public.weighmytruck_transactions t ON c->>'source'='weighmytruck:'||t.id
+                WHERE t.transaction_date NOT BETWEEN f.week_start AND f.week_start+6
+            )") || return 1
+        if [[ $scale_carry == t ]]; then
+            [[ $("$1/backend/mserp-api" -payroll-scale-carry-capability 2>/dev/null) == payroll-scale-carry-v1 ]] || return 1
+        elif [[ $scale_carry != f ]]; then return 1; fi
     elif [[ $expense_drafts != f ]]; then return 1; fi
     local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata load_availability board_operational pti_operational unrelated_payroll payroll_current
     local routing_usage
@@ -174,7 +188,9 @@ activate_release() {
 cleanup() {
     local status=$?
     if [[ $cutover_started == true && $deployment_complete != true ]]; then
-        if compatible_release "$previous_release"; then
+        # Stop the API before checking compatibility so a finalization cannot
+        # create a cross-week collection between the check and the rollback.
+        if systemctl stop mserp-api.service && compatible_release "$previous_release"; then
             activate_release "$previous_release"
             systemctl restart mserp-api.service
             if [[ $expense_exporter_stopped == true ]]; then

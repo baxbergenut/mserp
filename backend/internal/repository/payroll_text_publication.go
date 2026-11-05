@@ -147,8 +147,8 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
  ), generations AS (
  INSERT INTO payroll_projection_generations(week_start,requested_generation,input_snapshot,calendar_week,calculator_version,schema_version,dependencies,driver_header,investor_header)
  SELECT week_start,requested_generation,$5,$2::date,$3,$4,$6,
- jsonb_set(driver_header,'{revision}',to_jsonb('inputs:'||encode(sha256(convert_to('driver:'||week_start::text||':'||$2||':'||$5,'UTF8')),'hex'))),
- jsonb_set(investor_header,'{revision}',to_jsonb('inputs:'||encode(sha256(convert_to('investor:'||week_start::text||':'||$2||':'||$5,'UTF8')),'hex')))
+ jsonb_set(driver_header,'{revision}',to_jsonb('inputs:'||encode(sha256(convert_to('driver:'||week_start::text||':'||$2||':'||$5||':'||$4::integer::text,'UTF8')),'hex'))),
+ jsonb_set(investor_header,'{revision}',to_jsonb('inputs:'||encode(sha256(convert_to('investor:'||week_start::text||':'||$2||':'||$5||':'||$4::integer::text,'UTF8')),'hex')))
  FROM eligible RETURNING id,week_start
  ), version AS (
  INSERT INTO payroll_statement_versions(generation_id,kind,statement_id,week_start,detail,summary,fee_cents,payable_cents,finalized,edit_version,settlement_version,cost_evidence,resource_dependencies)

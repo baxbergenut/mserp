@@ -49,7 +49,12 @@ func main() {
 	resetGrossBoardBalances := flag.Bool("initialize-gross-board-rate-balances", false, "reset all driver rate balances to zero once and exit")
 	routingCapability := flag.Bool("board-routing-usage-capability", false, "print routing usage schema support and exit without opening a database")
 	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
+	scaleCarryCapability := flag.Bool("payroll-scale-carry-capability", false, "print cross-week CAT Scale collection support and exit without opening a database")
 	flag.Parse()
+	if *scaleCarryCapability {
+		fmt.Println("payroll-scale-carry-v1")
+		return
+	}
 	if *expenseDraftCapability {
 		fmt.Println("payroll-expense-drafts-v1")
 		return

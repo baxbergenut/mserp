@@ -108,14 +108,23 @@ dated truck agreement is flagged and withheld from payroll until configured.
 Existing manual billing rows remain as history and no longer control open
 statements. The legacy billing endpoint rejects changes with a refresh message.
 
-Driver and Investor Pay show individual read-only CAT Scale rows in the ticket
-week. They participate in the existing totals, history and frozen statement
-snapshots. Finalized statements never change during sync. Late/corrected tickets
-that differ from a frozen report show a warning; reopen the affected statement
-to reconcile it. Link corrections reject finalized affected statements, including team statements.
-Tickets already frozen on a different statement are withheld from the new
-destination and flagged for reopening, preventing duplicate collection.
-Transactions do not create Expenses & Charges entries.
+Driver and Investor Pay show individual read-only unpaid CAT Scale tickets on
+eligible open statements regardless of transaction date. The ticket keeps its
+dated payer, and an investor statement needs an active agreement for that same
+owner. A carried ticket does not change which statement gets the truck's Fuel,
+Toll or wages. Owner-only weeks continue routing those items to Driver Pay.
+
+Finalization collects the whole ticket through its frozen statement. The same
+ticket disappears from all other open weeks. Reopening releases it for review.
+If a collected ticket changes, Transactions identifies it for review and the
+frozen statement remains intact. Link corrections protect the statement that
+collected the ticket, including a statement from a different week. No expense
+directory row is created.
+
+Install the updated deploy helper before releasing cross-week CAT Scale.
+Once a ticket has been collected on a different week, the helper requires
+`-payroll-scale-carry-capability` support to prevent an older binary from
+collecting it again on its original week.
 
 Reads/sync use `weighmytruck.read/write`; manual transaction linking additionally
 requires `payroll.write` and `fleet.read`.

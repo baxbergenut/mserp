@@ -52,7 +52,9 @@ type WMTBilling struct {
 // Legacy manual billing preferences are retained as history, never as routing
 // inputs. Missing/conflicting evidence stays in review instead of billing a driver.
 var wmtChargeFrom = ` FROM weighmytruck_transactions t
- LEFT JOIN drivers d ON d.id=t.driver_id
+ LEFT JOIN drivers d ON d.id=t.driver_id` + wmtChargeJoins + wmtFrozenJoinSQL
+
+var wmtChargeJoins = `
  LEFT JOIN LATERAL(SELECT payroll_driver_at(t.driver_id,t.transaction_date) driver_id) pd ON true
  LEFT JOIN LATERAL(SELECT (array_agg(DISTINCT h.owner_id))[1] owner_id FROM truck_ownership_history h
  WHERE h.truck_id=t.truck_id AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=t.transaction_date)
@@ -63,13 +65,39 @@ var wmtChargeFrom = ` FROM weighmytruck_transactions t
  WHEN i.is_company THEN 'company' WHEN i.driver_id=pd.driver_id THEN 'driver' ELSE 'investor' END payer) b
  LEFT JOIN LATERAL(SELECT * FROM truck_settlement_terms s WHERE s.truck_id=t.truck_id AND s.week_start<=date_trunc('week',t.transaction_date)::date ORDER BY s.week_start DESC LIMIT 1) s
  ON ` + truckTermCoversWeekSQL("date_trunc('week',t.transaction_date)::date") + `
- LEFT JOIN payroll_settlements ps ON ps.driver_id=pd.driver_id AND ps.week_start=date_trunc('week',t.transaction_date)::date AND ps.finalized
- LEFT JOIN investor_pay_weeks pw ON pw.truck_id=t.truck_id AND pw.week_start=date_trunc('week',t.transaction_date)::date AND pw.finalized
- LEFT JOIN LATERAL(SELECT coalesce(bool_or(f.kind<>b.payer OR f.destination<>CASE WHEN b.payer='driver' THEN pd.driver_id ELSE t.truck_id END),false) misplaced
- FROM (
- SELECT 'driver' kind,driver_id destination,report FROM payroll_settlements WHERE week_start=date_trunc('week',t.transaction_date)::date AND finalized
- UNION ALL SELECT 'investor',truck_id,report FROM investor_pay_weeks WHERE week_start=date_trunc('week',t.transaction_date)::date AND finalized
- ) f WHERE f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id)))) frozen ON true `
+`
+
+const wmtStatementReportsSQL = `SELECT 'driver' kind,driver_id destination,week_start,report,finalized FROM payroll_settlements
+ UNION ALL SELECT 'investor',truck_id,week_start,report,finalized FROM investor_pay_weeks`
+
+// Frozen reports serve as collection receipts across all weeks. Reopening
+// clears the finalized flag, which releases the ticket for review again.
+const wmtFrozenJoinSQL = ` LEFT JOIN LATERAL (
+ SELECT bool_or(f.kind<>b.payer OR f.destination IS DISTINCT FROM CASE WHEN b.payer='driver' THEN pd.driver_id ELSE t.truck_id END) misplaced,
+ bool_or(NOT f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id,'amount',(-t.amount)::text)))) amount_changed
+ FROM (` + wmtStatementReportsSQL + `) f
+ WHERE f.finalized AND f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id)))
+ ) frozen ON true `
+
+// Carry preserves the ticket's original payer. The receiving investor week
+// must have an active agreement for that same owner.
+var wmtPayrollScaleSQL = `WITH collected AS MATERIALIZED (
+ SELECT c->>'source' source, array_agg(DISTINCT f.kind||':'||f.destination) destinations
+ FROM (` + wmtStatementReportsSQL + `) f CROSS JOIN LATERAL ` + wmtReportChargeRowsSQL + `
+ WHERE f.finalized AND c->>'source' LIKE 'weighmytruck:%' GROUP BY 1
+ ) SELECT w.week::text,t.id::text,t.ticket_number,t.transaction_date::text,t.amount::text,
+ coalesce(pd.driver_id::text,''),coalesce(t.truck_id::text,''),b.payer,
+ paid.source IS NOT NULL,t.transaction_date>=w.week AND t.transaction_date<w.week+7
+ FROM unnest($1::date[]) w(week) CROSS JOIN weighmytruck_transactions t` + wmtChargeJoins + `
+ LEFT JOIN collected paid ON paid.source='weighmytruck:'||t.id
+ LEFT JOIN LATERAL (
+ SELECT * FROM truck_settlement_terms s WHERE s.truck_id=t.truck_id AND s.week_start<=w.week ORDER BY s.week_start DESC LIMIT 1
+ ) target ON true
+ WHERE (b.payer='driver' AND paid.source IS NULL) OR
+ (b.payer='investor' AND s.owner_id=i.id AND target.owner_id=i.id
+  AND (paid.source IS NULL OR (paid.destinations=ARRAY['investor:'||t.truck_id] AND t.transaction_date>=w.week AND t.transaction_date<w.week+7))
+  AND EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=target.truck_id AND s.week_start=target.week_start AND ` + truckTermCoversWeekSQL("w.week") + `))
+ ORDER BY t.transaction_date,t.ticket_number,t.site_number`
 
 func (r *WeighMyTruckRepository) Transactions(ctx context.Context, from, to, search string, page Pagination) (WMTTransactions, error) {
 	tx, e := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -88,7 +116,7 @@ func (r *WeighMyTruckRepository) Transactions(ctx context.Context, from, to, sea
 	rows, e := tx.Query(ctx, `SELECT t.id::text,t.transaction_date::text,t.approximate_time,t.ticket_number,t.original_ticket_number,t.amount::text,t.tractor_number,t.driver_code,
  coalesce(t.driver_id::text,''),coalesce(d.full_name,''),coalesce(t.truck_id::text,''),t.location,t.city,t.state,b.payer,CASE WHEN b.payer='investor' THEN coalesce(i.full_name,'') ELSE '' END,
  concat_ws(' ',nullif(t.match_warning,''),CASE WHEN b.payer='review' THEN 'Scale charge needs unambiguous dated driver and truck ownership.' END,CASE WHEN b.payer='investor' AND s.owner_id IS DISTINCT FROM i.id THEN 'Investor charge needs a matching dated truck agreement.' END,
- CASE WHEN (frozen.misplaced OR (b.payer='driver' AND ps.finalized AND NOT ps.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id,'amount',(-t.amount)::text)))) OR (b.payer='investor' AND pw.finalized AND NOT pw.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id,'amount',(-t.amount)::text))))) THEN 'Finalized statement differs; reopen to include this ticket or correction.' END),t.version`+wmtChargeFrom+where+` ORDER BY t.transaction_date DESC,t.approximate_time DESC,t.ticket_number LIMIT $4 OFFSET $5`, from, to, search, page.PageSize, page.Offset())
+ CASE WHEN frozen.misplaced OR frozen.amount_changed THEN 'Finalized statement differs. Reopen the statement that collected this ticket to review the correction.' END),t.version`+wmtChargeFrom+where+` ORDER BY t.transaction_date DESC,t.approximate_time DESC,t.ticket_number LIMIT $4 OFFSET $5`, from, to, search, page.PageSize, page.Offset())
 	if e != nil {
 		return result, e
 	}
@@ -241,29 +269,12 @@ func wmtPayrollCharges(ctx context.Context, tx pgx.Tx, week string) (map[string]
 }
 
 func wmtPayrollChargesUncached(ctx context.Context, tx pgx.Tx, week string) (map[string][]PayAutoCharge, map[string][]PayAutoCharge, error) {
-	drivers, trucks := map[string][]PayAutoCharge{}, map[string][]PayAutoCharge{}
-	rows, e := tx.Query(ctx, `SELECT t.id::text,t.ticket_number,t.transaction_date::text,t.amount::text,coalesce(pd.driver_id::text,''),coalesce(t.truck_id::text,''),b.payer`+wmtChargeFrom+` WHERE t.transaction_date>=$1::date AND t.transaction_date<$1::date+7 AND t.driver_id IS NOT NULL AND t.match_warning NOT LIKE '%conflicts%' AND NOT frozen.misplaced AND (b.payer='driver' OR (b.payer='investor' AND s.owner_id=i.id)) ORDER BY t.transaction_date,t.ticket_number`, week)
-	if e != nil {
-		return nil, nil, e
+	values, err := readPayrollScaleWeeks(ctx, tx, []string{week})
+	if err != nil {
+		return nil, nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var id, ticket, date, amount, driver, truck, payer string
-		if e = rows.Scan(&id, &ticket, &date, &amount, &driver, &truck, &payer); e != nil {
-			return nil, nil, e
-		}
-		n, e := chargeCents(amount)
-		if e != nil {
-			return nil, nil, e
-		}
-		c := PayAutoCharge{Name: "CAT Scale · " + date + " · " + ticket, Amount: chargeMoney(-n), Source: "weighmytruck:" + id}
-		if payer == "driver" {
-			drivers[driver] = append(drivers[driver], c)
-		} else {
-			trucks[truck] = append(trucks[truck], c)
-		}
-	}
-	return drivers, trucks, rows.Err()
+	value := values[week]
+	return value[0], value[1], nil
 }
 
 func (r *WeighMyTruckRepository) LinkTransaction(ctx context.Context, id, driver, truck string, version int, actor string) error {
@@ -279,7 +290,9 @@ func (r *WeighMyTruckRepository) LinkTransaction(ctx context.Context, id, driver
 		return e
 	}
 	var closed bool
-	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements p WHERE p.week_start=date_trunc('week',t.transaction_date)::date AND p.driver_id IN(t.driver_id,$2::uuid,payroll_driver_at(t.driver_id,t.transaction_date),payroll_driver_at($2::uuid,t.transaction_date)) AND p.finalized) OR EXISTS(SELECT 1 FROM investor_pay_weeks p WHERE p.week_start=date_trunc('week',t.transaction_date)::date AND p.truck_id IN(t.truck_id,$3::uuid) AND p.finalized) FROM weighmytruck_transactions t WHERE t.id=$1`, id, driver, truck).Scan(&closed)
+	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements p WHERE p.week_start=date_trunc('week',t.transaction_date)::date AND p.driver_id IN(t.driver_id,$2::uuid,payroll_driver_at(t.driver_id,t.transaction_date),payroll_driver_at($2::uuid,t.transaction_date)) AND p.finalized) OR EXISTS(SELECT 1 FROM investor_pay_weeks p WHERE p.week_start=date_trunc('week',t.transaction_date)::date AND p.truck_id IN(t.truck_id,$3::uuid) AND p.finalized)
+ OR EXISTS(SELECT 1 FROM (`+wmtStatementReportsSQL+`) f WHERE f.finalized AND f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id)))
+ FROM weighmytruck_transactions t WHERE t.id=$1`, id, driver, truck).Scan(&closed)
 	if e != nil {
 		return e
 	}

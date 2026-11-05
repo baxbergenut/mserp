@@ -393,6 +393,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			if err = guardDriverSalaryCarryOrder(ctx, tx, d, report.WeekStart); err != nil {
 				return empty, err
 			}
+			if err = validatePayrollScaleCollection(ctx, tx, d.AutoCharges); err != nil {
+				return empty, err
+			}
 			frozen := d
 			frozen.Settlement = nil
 			if override {

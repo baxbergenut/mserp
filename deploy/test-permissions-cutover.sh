@@ -30,6 +30,7 @@ payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
 mock_routing_usage=f
 mock_expense_drafts=f
+mock_scale_carry=f
 runuser() {
     local result=$mock
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
@@ -51,6 +52,7 @@ runuser() {
     if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
     if [[ $* == *"public.board_route_usage"* ]]; then result=$mock_routing_usage; fi
     if [[ $* == *"column_name='expense_choices'"* ]]; then result=$mock_expense_drafts; fi
+    if [[ $* == *"JOIN public.weighmytruck_transactions"* ]]; then result=$mock_scale_carry; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -248,6 +250,13 @@ mock_expense_drafts=t
 if compatible_release "$test_root/new"; then echo 'Expense drafts allowed a binary that posts on draft save' >&2; exit 1; fi
 printf '#!/usr/bin/env bash\ncase "$1" in -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
 compatible_release "$test_root/new"
+mock_scale_carry=t
+if compatible_release "$test_root/new"; then echo 'Cross-week CAT Scale collection allowed incompatible rollback' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\ncase "$1" in -payroll-scale-carry-capability) echo payroll-scale-carry-v1;; -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_scale_carry=error
+if compatible_release "$test_root/new"; then echo 'CAT Scale collection query failure allowed rollback' >&2; exit 1; fi
+mock_scale_carry=f
 mock_expense_drafts=error
 if compatible_release "$test_root/new"; then echo 'Expense draft schema query failure allowed rollback' >&2; exit 1; fi
 mock_expense_drafts=unexpected

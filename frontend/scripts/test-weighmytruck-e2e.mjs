@@ -123,7 +123,7 @@ try {
   await page.getByRole('tab', { name: 'Drivers', exact: true }).click();
   await page.screenshot({ path: join(tmpdir(), 'mserp-weighmytruck-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
   await expect(page.locator('aside')).toHaveCSS('width', '64px');
   await expect(page.getByRole('heading', { name: 'WeighMyTruck', exact: true })).toBeVisible();
   await page.screenshot({ path: join(tmpdir(), 'mserp-weighmytruck-mobile.png'), fullPage: true });

@@ -252,6 +252,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		}
 	}
 	queueFinal := func(d DriverPayDriver) (DriverPayDriver, error) {
+		if err := validatePayrollScaleCollection(ctx, tx, d.AutoCharges); err != nil {
+			return d, err
+		}
 		d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: finalizedAt, FinalizedBy: username}
 		d.Edits.Version++
 		body, e := json.Marshal(d)

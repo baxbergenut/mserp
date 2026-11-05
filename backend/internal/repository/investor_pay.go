@@ -13,10 +13,11 @@ import (
 )
 
 type PayAutoCharge struct {
-	Name        string `json:"name"`
-	Amount      string `json:"amount"`
-	Source      string `json:"source"`
-	ExpenseDate string `json:"expenseDate,omitempty"`
+	scaleCollected, scaleTicketWeek bool
+	Name                            string `json:"name"`
+	Amount                          string `json:"amount"`
+	Source                          string `json:"source"`
+	ExpenseDate                     string `json:"expenseDate,omitempty"`
 }
 type truckPayGroup struct {
 	term        TruckTerm
@@ -317,7 +318,14 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 				savedInvestor = true
 			}
 		}
-		if savedInvestor || len(scaleCharges[id]) > 0 {
+		// Keep the existing cost/owner routing for the ticket's own week.
+		// A carried ticket must never move Fuel/Toll or wages between pages.
+		for _, charge := range scaleCharges[id] {
+			if charge.scaleTicketWeek {
+				g.ownerOnly = false
+			}
+		}
+		if savedInvestor {
 			g.ownerOnly = false
 		}
 		if !g.ownerOnly && g.drivers[g.ownerDriver] {
@@ -328,7 +336,13 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 		if inputs.metadata[id].feeOwnerMatches {
 			g.card.AutoCharges = truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0)
 		}
-		g.card.AutoCharges = append(g.card.AutoCharges, scaleCharges[id]...)
+		if !g.ownerOnly {
+			for _, charge := range scaleCharges[id] {
+				if !charge.scaleCollected {
+					g.card.AutoCharges = append(g.card.AutoCharges, charge)
+				}
+			}
+		}
 		seenLoads := map[string]bool{}
 		for _, l := range g.card.Loads {
 			if l.LoadRecordID != nil {

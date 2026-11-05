@@ -108,14 +108,13 @@ const payrollSelectionPeriodsSQL = `WITH company_label AS MATERIALIZED (` + payr
  ON (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<w.week+7) AND (h.unassigned_at IS NULL OR (h.unassigned_at AT TIME ZONE 'America/New_York')::date>w.week)
  UNION SELECT w.week,'truck:'||t.truck_id,'owner:'||t.owner_id FROM dates w JOIN terms t ON t.week_start<=w.week AND (t.until_week IS NULL OR t.until_week>w.week)
  UNION SELECT w.week,'truck:'||t.truck_id,'owner:'||t.owner_id FROM dates w JOIN investor_pay_weeks t ON t.week_start=w.week
- UNION SELECT w.week,'driver:'||t.driver_id,'truck:'||t.truck_id FROM dates w JOIN weighmytruck_transactions t ON t.transaction_date>=w.week AND t.transaction_date<w.week+7 WHERE t.driver_id IS NOT NULL AND t.truck_id IS NOT NULL
  UNION SELECT f.week_start,'driver:'||e.driver,'truck:'||e.truck FROM dates w JOIN payroll_routing_facts f ON f.week_start=w.week
  CROSS JOIN LATERAL jsonb_to_recordset(f.payload) e(driver text,truck text)
  WHERE f.kind='selection_fuel' AND f.entity_id='' AND f.calculator_version=$3 AND f.input_fingerprint=$2 AND (SELECT yes FROM fuel_complete)
  UNION SELECT w.week,'driver:'||f.driver_id,'truck:'||a.truck_id FROM dates w JOIN fuel_transactions f ON f.purchased_on>=w.week AND f.purchased_on<w.week+7
  CROSS JOIN LATERAL unnest(f.reported_truck_units) unit(key) JOIN truck_unit_aliases a ON a.unit_key=unit.key
  WHERE f.driver_id IS NOT NULL AND NOT (SELECT yes FROM fuel_complete)
- ), shared_edges(a,b) AS MATERIALIZED (` + payrollPeriodSharedEdgesSQL + `),
+ ), shared_edges(a,b) AS MATERIALIZED (SELECT * FROM (` + payrollPeriodSharedEdgesSQL + `) expense_edges UNION ` + payrollScaleEdgesSQL + `),
  relevant_sources AS MATERIALIZED (
  SELECT p.week period,c.* FROM periods p JOIN pay_source_collections c ON c.week_start>=p.week WHERE accounting_live_date(c.week_start)
  UNION ALL

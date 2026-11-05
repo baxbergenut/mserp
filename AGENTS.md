@@ -640,9 +640,13 @@ positive Reimburse-method expense credits already included in net payable.
   rechecking that window catches corrections without duplicate tickets.
   Exact driver codes or unique dated truck assignments resolve drivers, and
   stored unit aliases resolve trucks. Ambiguity is flagged for manual linking.
-  Driver and Investor Pay include read-only CAT Scale autoCharges in the ticket
-  week. Finalized snapshots stay frozen; differing source tickets show warnings.
-  Link writes require payroll.write and use the financial lock.
+  Driver and Investor Pay include read-only unpaid CAT Scale autoCharges on
+  eligible open statements independent of ticket date. Preserve dated payer and
+  investor ownership. Carry never moves Fuel/Toll or wages. Finalization freezes
+  the ticket once across all weeks and reopening releases it. Link writes
+  require payroll.write and protect the original week and any collecting
+  statement. Install the matching deploy helper before release so a cross-week
+  collection fences older binaries. See docs/integrations/WEIGHMYTRUCK.md.
   No Expenses & Charges rows are created. FleetScope setup can queue enrollment;
   a startup/minute worker removes terminated enrolled drivers and processes adds.
   Uncertain provider mutations retain the existing review/no-replay boundary.

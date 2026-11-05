@@ -284,8 +284,7 @@ func payrollSelectionEdgesWithSharedSQL(fuelSQL, sharedSQL string) string {
  UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM truck_settlement_terms t WHERE $1='' OR EXISTS(
  SELECT 1 FROM source_weeks w WHERE t.week_start=(SELECT max(prior.week_start) FROM truck_settlement_terms prior WHERE prior.truck_id=t.truck_id AND prior.week_start<=w.week))
  UNION SELECT 'truck:'||truck_id,'owner:'||owner_id FROM investor_pay_weeks WHERE $1='' OR week_start IN(SELECT week FROM source_weeks)
- UNION SELECT 'driver:'||driver_id,'truck:'||truck_id FROM weighmytruck_transactions t WHERE driver_id IS NOT NULL AND truck_id IS NOT NULL
- AND ($1='' OR EXISTS(SELECT 1 FROM source_weeks w WHERE t.transaction_date>=w.week AND t.transaction_date<w.week+7))
+ UNION SELECT a,b FROM (` + payrollScaleEdgesSQL + `) scale_edges(a,b)
  UNION SELECT a,b FROM shared_edges
  UNION SELECT a,b FROM fuel_edges
  UNION SELECT CASE kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||statement_id,'owner:'||owner_id FROM relevant_sources

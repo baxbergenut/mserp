@@ -494,7 +494,8 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		// whose base is reconstructed from a frozen report. Require canonical cost
 		// coverage before treating these specific commands as period-local. Any
 		// posting/confirmation event above already disables this optimization.
-		var legacy bool
+		// A frozen or just-reopened scale receipt also changes every open week.
+		var affectsOtherWeeks bool
 		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_pay_weeks w
  WHERE w.week_start::text=ANY($1::text[]) AND ('driver:'||w.driver_id::text)=ANY($2::text[])
  AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
@@ -502,17 +503,21 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
  OR EXISTS(SELECT 1 FROM investor_pay_weeks w
  WHERE w.week_start::text=ANY($1::text[]) AND ('truck:'||w.truck_id::text)=ANY($2::text[]) AND (
  (w.edits->>'fuelOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':fuel')) OR
- (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll'))))`, keys(changedWeeks), impact.roots).Scan(&legacy)
+ (w.edits->>'tollOverride' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pay_source_collections c WHERE c.owner_id=w.owner_id AND c.week_start=w.week_start AND c.source='investor_cost:'||w.truck_id::text||':toll'))))
+ OR EXISTS(SELECT 1 FROM (`+wmtStatementReportsSQL+`) f
+ WHERE f.week_start::text=ANY($1::text[])
+ AND (CASE f.kind WHEN 'driver' THEN 'driver:' ELSE 'truck:' END||f.destination)=ANY($2::text[])
+ AND jsonb_path_exists(f.report, '$.autoCharges[*].source ? (@ starts with "weighmytruck:")'))`, keys(changedWeeks), impact.roots).Scan(&affectsOtherWeeks)
 		if err != nil {
 			return nil, err
 		}
-		if !legacy && strings.HasPrefix(c.name, "driver.") {
-			legacy, err = driverSalaryCarryAffectsOtherWeeks(ctx, tx, keys(changedWeeks), impact.roots)
+		if !affectsOtherWeeks && strings.HasPrefix(c.name, "driver.") {
+			affectsOtherWeeks, err = driverSalaryCarryAffectsOtherWeeks(ctx, tx, keys(changedWeeks), impact.roots)
 			if err != nil {
 				return nil, err
 			}
 		}
-		if !legacy {
+		if !affectsOtherWeeks {
 			impact.weeks = changedWeeks
 			if strings.HasSuffix(c.name, ".finalize") || (payrollConcurrent(tx) && strings.HasSuffix(c.name, ".reopen")) {
 				impact.finalizedKind = strings.TrimSuffix(strings.TrimSuffix(c.name, ".finalize"), ".reopen")

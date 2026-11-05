@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/jackc/pgx/v5"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -128,6 +129,8 @@ func setPayrollRevision(ctx context.Context, tx pgx.Tx, kind string, report *Dri
 }
 
 func payrollInputRevision(kind, week, calendar, snapshot string) string {
-	sum := sha256.Sum256([]byte(kind + ":" + week + ":" + calendar + ":" + snapshot))
+	// An open statement reviewed under an older calculator shape may
+	// omit newly eligible charges even when its financial inputs are unchanged.
+	sum := sha256.Sum256([]byte(kind + ":" + week + ":" + calendar + ":" + snapshot + ":" + strconv.Itoa(payrollProjectionSchemaVersion)))
 	return "inputs:" + hex.EncodeToString(sum[:])
 }
