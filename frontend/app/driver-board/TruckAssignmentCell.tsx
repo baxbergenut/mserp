@@ -7,7 +7,11 @@ import { createPortal } from "react-dom";
 import { assignDriverTruckToday, fetchDriverTruckAssignment } from "@/app/lib/api";
 import type { DriverTruckAssignment, TruckAssignmentChoice } from "@/app/lib/types";
 
-const statusNames: Record<string, string> = { shop: "Shop", out_of_service: "OOS", terminated: "Terminated" };
+const statusNames: Record<string, string> = { shop: "Shop", out_of_service: "OOS" };
+
+function canAssignTruck(truck: TruckAssignmentChoice) {
+  return truck.active && ["ready", "in_use", "shop"].includes(truck.status);
+}
 
 export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled, onFocus, onSaved, onError }: {
   id: string; name: string; truckId: string; unit: string; choices: TruckAssignmentChoice[] | null;
@@ -46,7 +50,7 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
       const view = await fetchDriverTruckAssignment(id);
       if (view.truckId !== truckId) throw new Error("This driver's truck assignment changed. Refresh the board and try again.");
       const truck = view.choices.find(choice => choice.id === nextId);
-      if (!view.active || !truck?.active || !["ready", "in_use", "shop"].includes(truck.status)) throw new Error("This truck is no longer available for assignment. Choose another truck.");
+      if (!view.active || !truck || !canAssignTruck(truck)) throw new Error("This truck is no longer available for assignment. Choose another truck.");
       if (truck.driverId !== view.driverId && truck.activeLoad) throw new Error(`Truck ${truck.unit} cannot be reassigned: ${truck.driverName} has active load ${truck.activeLoad}. Complete or transfer the load first.`);
       if (truck.driverId) {
         setConfirmationError(""); setPending({ view, truck });
@@ -56,19 +60,29 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
     } catch (err) { onError(err instanceof Error ? err.message : "Could not assign truck"); }
     finally { submitting.current = false; setBusy(false); }
   }
+  const currentChoice = choices?.find(truck => truck.id === truckId);
+  const selectedId = currentChoice?.status === "terminated" ? "" : truckId;
+  const options = (choices ?? [])
+    .filter(truck => truck.status !== "terminated")
+    .map(truck => {
+      const loadBlocked = truck.id !== truckId && !!truck.driverId && !!truck.activeLoad;
+      const unavailable = !canAssignTruck(truck) || loadBlocked;
+      const rank = unavailable ? 2 : truck.driverId ? 1 : 0;
+      return { truck, loadBlocked, unavailable, rank };
+    })
+    .sort((a, b) => a.rank - b.rank);
+
   return <><div className="flex items-center justify-between gap-0.5">
     {truckId ? <Link href={`/trucks/detail?id=${truckId}`} className="min-w-0 truncate hover:text-blue-300">{unit}</Link> : <span>—</span>}
     <div className="relative shrink-0">
       <select aria-label={`${name} · Assign truck`} title={busy ? "Saving assignment…" : "Assign truck effective today (New York)"}
-        value={truckId} disabled={disabled || busy || !!pending || choices === null} onFocus={onFocus}
+        value={selectedId} disabled={disabled || busy || !!pending || choices === null} onFocus={onFocus}
         onChange={event => void choose(event.target.value)}
         className="truck-assignment-select peer block h-8 w-5 cursor-pointer appearance-none bg-transparent text-transparent disabled:cursor-default">
-        <option value="" disabled className="bg-zinc-900 text-zinc-200">—</option>
-        {truckId && !choices?.some(truck => truck.id === truckId) && <option value={truckId} className="bg-zinc-900 text-zinc-200">{unit}</option>}
-        {choices?.map(truck => {
+        <option value="" disabled hidden>—</option>
+        {truckId && !currentChoice && <option value={truckId} hidden>{unit}</option>}
+        {options.map(({ truck, loadBlocked, unavailable }) => {
           const current = truck.id === truckId;
-          const loadBlocked = !current && !!truck.driverId && !!truck.activeLoad;
-          const unavailable = !truck.active || !["ready", "in_use", "shop"].includes(truck.status) || loadBlocked;
           const detail = loadBlocked ? `${truck.driverName} · Active load ${truck.activeLoad}`
             : [truck.driverName, statusNames[truck.status]].filter(Boolean).join(" · ") || (!truck.active ? "Unavailable" : "");
           return <option key={truck.id} value={truck.id} disabled={unavailable && !current} className="bg-zinc-900 text-zinc-200">

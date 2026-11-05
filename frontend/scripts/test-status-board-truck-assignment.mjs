@@ -62,7 +62,9 @@ try {
  await expect(cell).toHaveAttribute('title', 'Assign truck effective today (New York)');
  await expect(cell.locator(`option[value="${shop}"]`)).toBeEnabled();
  await expect(cell.locator(`option[value="${shop}"]`)).toContainText('Shop');
- await expect(cell.locator(`option[value="${oos}"]`)).toBeDisabled();
+ await expect(cell.locator(`option[value="${oos}"]`)).toHaveCount(0);
+ await expect(cell.locator(`option:is([value="${free}"], [value="${shop}"], [value="${occupied}"])`))
+   .toHaveText(['202', '204 — Shop', '203 — Chris Davis']);
  await cell.selectOption(free);
  await expect(cell).toHaveValue(free);
  expect(sql(`SELECT count(*) FROM truck_driver_assignments WHERE driver_id='${driver}' AND truck_id='${free}' AND assigned_at='${today}'::date::timestamp AT TIME ZONE 'America/New_York' AND unassigned_at IS NULL`)).toBe('1');
