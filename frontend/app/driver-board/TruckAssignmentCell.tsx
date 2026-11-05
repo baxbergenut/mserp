@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { createPortal } from "react-dom";
 import { assignDriverTruckToday, fetchDriverTruckAssignment } from "@/app/lib/api";
 import type { DriverTruckAssignment, TruckAssignmentChoice } from "@/app/lib/types";
@@ -54,23 +56,29 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
     } catch (err) { onError(err instanceof Error ? err.message : "Could not assign truck"); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <><select aria-label={`${name} · Assign truck`} title={busy ? "Saving assignment…" : "Assign truck effective today (New York)"}
-    value={truckId} disabled={disabled || busy || !!pending || choices === null} onFocus={onFocus}
-    onChange={event => void choose(event.target.value)}
-    className="truck-assignment-select block h-8 w-full min-w-0 cursor-pointer bg-transparent px-0.5 text-[11px] text-zinc-300 disabled:opacity-50">
-    <option value="" disabled className="bg-zinc-900 text-zinc-200">—</option>
-    {truckId && !choices?.some(truck => truck.id === truckId) && <option value={truckId} className="bg-zinc-900 text-zinc-200">{unit}</option>}
-    {choices?.map(truck => {
-      const current = truck.id === truckId;
-      const loadBlocked = !current && !!truck.driverId && !!truck.activeLoad;
-      const unavailable = !truck.active || !["ready", "in_use", "shop"].includes(truck.status) || loadBlocked;
-      const detail = loadBlocked ? `${truck.driverName} · Active load ${truck.activeLoad}`
-        : [truck.driverName, statusNames[truck.status]].filter(Boolean).join(" · ") || (!truck.active ? "Unavailable" : "");
-      return <option key={truck.id} value={truck.id} disabled={unavailable && !current} className="bg-zinc-900 text-zinc-200">
-        {truck.unit}{!current && detail ? ` — ${detail}` : ""}
-      </option>;
-    })}
-  </select>
+  return <><div className="flex items-center justify-between gap-0.5">
+    {truckId ? <Link href={`/trucks/detail?id=${truckId}`} className="min-w-0 truncate hover:text-blue-300">{unit}</Link> : <span>—</span>}
+    <div className="relative shrink-0">
+      <select aria-label={`${name} · Assign truck`} title={busy ? "Saving assignment…" : "Assign truck effective today (New York)"}
+        value={truckId} disabled={disabled || busy || !!pending || choices === null} onFocus={onFocus}
+        onChange={event => void choose(event.target.value)}
+        className="truck-assignment-select peer block h-8 w-5 cursor-pointer appearance-none bg-transparent text-transparent disabled:cursor-default">
+        <option value="" disabled className="bg-zinc-900 text-zinc-200">—</option>
+        {truckId && !choices?.some(truck => truck.id === truckId) && <option value={truckId} className="bg-zinc-900 text-zinc-200">{unit}</option>}
+        {choices?.map(truck => {
+          const current = truck.id === truckId;
+          const loadBlocked = !current && !!truck.driverId && !!truck.activeLoad;
+          const unavailable = !truck.active || !["ready", "in_use", "shop"].includes(truck.status) || loadBlocked;
+          const detail = loadBlocked ? `${truck.driverName} · Active load ${truck.activeLoad}`
+            : [truck.driverName, statusNames[truck.status]].filter(Boolean).join(" · ") || (!truck.active ? "Unavailable" : "");
+          return <option key={truck.id} value={truck.id} disabled={unavailable && !current} className="bg-zinc-900 text-zinc-200">
+            {truck.unit}{!current && detail ? ` — ${detail}` : ""}
+          </option>;
+        })}
+      </select>
+      <ChevronDown aria-hidden="true" className="pointer-events-none absolute left-0.5 top-1/2 size-4 -translate-y-1/2 text-zinc-300 peer-disabled:opacity-50" />
+    </div>
+  </div>
     {pending && createPortal(<dialog ref={dialog} aria-label="Reassign truck" data-grid-ignore
       className="mserp-ui ui-modal-panel fixed inset-0 m-auto w-[calc(100%-32px)] max-w-sm rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-200 backdrop:bg-black/60"
       onCancel={event => { event.preventDefault(); cancel(); }}>
