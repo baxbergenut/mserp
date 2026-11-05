@@ -18,7 +18,7 @@ import { runEscrowTasksE2E } from './escrow-tasks-e2e.mjs';
 import { runPayrollWorkflowsE2E } from './payroll-workflows-e2e.mjs';
 import { runOffboardingE2E } from './offboarding-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
-import { runGrossBoardLiveE2E } from './gross-board-live-e2e.mjs';
+import { runGrossBoardLiveE2E, runGrossBoardPartialE2E } from './gross-board-live-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -39,6 +39,7 @@ const password = randomBytes(24).toString('hex');
 const webhookCompany = 'e5200000-0000-0000-0000-000000000001';
 const webhookSecret = randomBytes(32).toString('hex');
 const temp = await mkdtemp(join(tmpdir(), 'mserp-investor-e2e-'));
+const grossBoard = process.argv.includes('--gross-live-only') || process.argv.includes('--gross-partial-only');
 const sql = (input) => execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 let api, browser, server;
 let networkLatency = 0;
@@ -50,7 +51,7 @@ try {
     INSERT INTO app_users(username,password_hash,email,role_id) VALUES('investor-e2e',crypt('${password}',gen_salt('bf')),'investor-e2e@example.com',(SELECT id FROM app_roles WHERE system_role));
     INSERT INTO drivers(full_name,normalized_name,is_owner_operator,pay_type,pay_rate) VALUES('E2e Driver','e2e driver',true,'gross_percentage',80);
   `);
-  if (process.argv.includes('--gross-live-only')) sql(`SET search_path TO ${schema},public; UPDATE payroll_projection_control SET capture_enabled=true,protocol_mode='resources',first_week=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date;`);
+  if (grossBoard) sql(`SET search_path TO ${schema},public; UPDATE payroll_projection_control SET capture_enabled=true,protocol_mode='resources',first_week=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date;`);
   const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
   database.searchParams.set('search_path', `${schema},public`);
@@ -58,7 +59,7 @@ try {
   const apiPort = Number(process.env.MSERP_E2E_API_PORT || 18549);
   const webPort = Number(process.env.MSERP_E2E_WEB_PORT || 13549);
   api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
-    ...process.env, ...(process.argv.includes('--gross-live-only') ? {PAYROLL_PROJECTION_MODE:'shadow',PAYROLL_PREPARED_READS:'true',PAYROLL_PREPARED_COMMANDS:'true',PAYROLL_PREPARED_FINALIZATION:'true',PAYROLL_RESOURCE_LOCKS:'true'} : {}), DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
+    ...process.env, ...(grossBoard ? {PAYROLL_PROJECTION_MODE:'shadow',PAYROLL_PREPARED_READS:'true',PAYROLL_PREPARED_COMMANDS:'true',PAYROLL_PREPARED_FINALIZATION:'true',PAYROLL_RESOURCE_LOCKS:'true'} : {}), DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
     RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled', DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', SCHEDULED_SYNCS_ENABLED: 'false',
     AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: `http://127.0.0.1:${webPort}`,
     FLEETSCOPE_COMPANY_ID: webhookCompany, FLEETSCOPE_WEBHOOK_SECRET: webhookSecret,
@@ -125,6 +126,8 @@ try {
     await runDriverSetupE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--gross-live-only')) {
     await runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetworkLatency});
+  } else if (process.argv.includes('--gross-partial-only')) {
+    await runGrossBoardPartialE2E({page,base,sql,schema});
   } else if (process.argv.includes('--board-order-only')) {
     const session = await (await page.request.get(`${base}/api/auth/session`)).json();
     const headers = { 'X-CSRF-Token': session.csrfToken };

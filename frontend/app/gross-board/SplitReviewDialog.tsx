@@ -21,8 +21,14 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
     fetchLoadSplit(entry.loadRecordId!, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       const pending = entry.splitReview;
-      const entries = pending?.entries ?? result.entries;
-      const current = { driverName, entry: { ...entry, splitReview: undefined } };
+      const drafts = new Map(pending?.entries.map(row => [key(row.entry), row.entry]));
+      const keepTrip = (tripId: GrossBoardEntry["loadTripId"]) => result.trips.some(trip => trip.id === tripId) ? tripId : null;
+      const entries = result.entries.map(row => {
+        const draft = drafts.get(key(row.entry));
+        return draft ? { ...row, entry: { ...row.entry, loadTripId: keepTrip(draft.loadTripId), driverRate: draft.driverRate } } : row;
+      });
+      const saved = result.entries.find(row => key(row.entry) === key(entry))?.entry;
+      const current = { driverName, entry: { ...entry, version: saved?.version ?? 0, loadTripId: keepTrip(entry.loadTripId), splitReview: undefined } };
       const merged = entries.some(item => key(item.entry) === key(entry))
         ? entries.map(item => key(item.entry) === key(entry) ? current : item) : [...entries, current];
       const allocations = result.trips.map(trip => {
@@ -30,7 +36,7 @@ export function SplitReviewDialog({ entry, driverName, disabled, onClose, onAppl
         const linked = merged.find(item => item.entry.loadTripId === trip.id)?.entry;
         return { tripId: trip.id, originalRate: saved?.originalRate ?? linked?.enteredOriginalRate ?? "" };
       });
-      setWorkspace({ ...result, ...(pending ?? {}), entries: merged, allocations });
+      setWorkspace({ ...result, reason: pending?.reason ?? result.reason, entries: merged, allocations });
     }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Unable to load split"); });
     return () => controller.abort();
     // Freeze the opening draft; source and entry versions are checked at save.

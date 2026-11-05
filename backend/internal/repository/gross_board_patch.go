@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -44,6 +46,21 @@ func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry)
 		return current, false, err
 	}
 	before := current
+	if patch.PreviousLoadNumber != nil && len(patch.Fields) > 0 && !slices.ContainsFunc(patch.Fields, grossBoardIdentityField) {
+		sameNumber := strings.EqualFold(strings.TrimSpace(current.LoadNumber), strings.TrimSpace(*patch.PreviousLoadNumber))
+		sameRecord := current.LoadRecordID != nil && reflect.DeepEqual(current.LoadRecordID, patch.LoadRecordID)
+		if (!sameNumber && !sameRecord) || !reflect.DeepEqual(current.LoadTripID, patch.LoadTripID) || current.DayStatus != patch.DayStatus || current.Deleted != patch.Deleted {
+			savedLoad := current.LoadNumber
+			if current.DayStatus != "" {
+				savedLoad = current.DayStatus
+			}
+			if savedLoad == "" {
+				savedLoad = "Empty"
+			}
+			return current, false, grossBoardRejection{cause: chargeInvalid("The slot now holds a different load or status. Review the saved slot before applying the edit."),
+				code: "load_changed", fields: patch.Fields, currentLoad: savedLoad}
+		}
+	}
 	for _, field := range patch.Fields {
 		switch field {
 		case "loadNumber":
@@ -108,4 +125,13 @@ func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry)
 		}
 	}
 	return current, before.Version > 0 && patch.SplitReview == nil && reflect.DeepEqual(compare, before), nil
+}
+
+func grossBoardIdentityField(field string) bool {
+	switch field {
+	case "loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted":
+		return true
+	default:
+		return false
+	}
 }

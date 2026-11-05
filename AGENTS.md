@@ -3703,6 +3703,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   and finalizable while affected statements update. Unknown impact fails closed;
   stale financial commands still revalidate under the existing source/resource locks.
 - Autosave waits for 300 ms without edits and flushes on requested navigation.
+  The browser opts in to partial PUT responses. After a recoverable rejection
+  the server uses savepoints to keep moves and reviewed splits together and
+  save independent edits under the native locks. The response identifies the
+  rejected load, fields and affected drafts, with current values for source
+  reviews. A later save wins for the same field on the same load. An amount
+  or note queued for a replaced load stays pending with both load identities.
+  The legacy atomic PUT contract remains available.
   New typing during an in-flight request remains queued as field deltas. Dedicated
   user/week/tab-scoped session storage retains pending drafts and only their edit
   baselines across reloads, expires after seven days, and clears on acknowledgement
@@ -3715,7 +3722,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Interactive reads/writes disable JIT and use custom plans. Financial semantics
   and historical duplicate/transfer handling are unchanged.
 - Checks: test-gross-board-reliability.mjs, test-gross-board-daily-loads.mjs,
-  test-investors-e2e.mjs --gross-live-only; TestGrossBoardDatabase,
+  test-investors-e2e.mjs --gross-live-only and --gross-partial-only;
+  TestDataTruckDriverGrossDatabase, TestGrossBoardDatabase,
   TestGrossBoardPatchPublicationDatabase, TestGrossBoardAsyncSaveDatabase,
   TestGrossBoardPreemptsPayrollDatabase, TestPayrollWorkPriority,
   TestPayrollResourceSourceScopeSaveDatabase, TestFleetStatusDatabase, TestLoadTripsDatabase.
