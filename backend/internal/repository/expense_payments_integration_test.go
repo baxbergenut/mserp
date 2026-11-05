@@ -395,11 +395,14 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 				t.Fatalf("concurrent collections: successes=%d conflicts=%d", successes, conflicts)
 			}
 			var collected string
-			if err := pool.QueryRow(ctx, `SELECT sum(amount)::text FROM expense_payments WHERE expense_id=$1`, concurrentExpense.ID).Scan(&collected); err != nil || collected != "125.50" {
+			var collectedWeek time.Time
+			if err := pool.QueryRow(ctx, `SELECT sum(amount)::text,max(week_start) FROM expense_payments WHERE expense_id=$1`, concurrentExpense.ID).Scan(&collected, &collectedWeek); err != nil || collected != "125.50" {
 				t.Fatalf("concurrent principal collected %s: %v", collected, err)
 			}
-			settle(week, true)
+			// Release the later settlements that used the earlier salary balance first.
+			settle(collectedWeek, true)
 			settle(week.AddDate(0, 0, 14), true)
+			settle(week, true)
 			if err = expenses.DeleteExpense(ctx, e.ID); err != nil {
 				t.Fatal("open statement must allow expense deletion", err)
 			}
