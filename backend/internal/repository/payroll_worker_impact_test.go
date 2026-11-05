@@ -43,14 +43,14 @@ func TestPayrollWorkerRecoversFromIncompleteClaimsDatabase(t *testing.T) {
 				t.Fatal("dispatch", n, err)
 			}
 		}
-		// Dispatch these separately, as happens when provider sync and the
-		// board save commit at different times. The later board-only batch
-		// excludes this week, while the combined source proof can widen it.
+		// Both sources affect this week. Simulate a queued hint that retained
+		// only the provider change's principal, so the complete proof must
+		// reject the missing claim for the other driver's board entry.
 		exec(`UPDATE loads SET total_miles=450 WHERE id=18201`)
-		dispatch()
 		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles)
- VALUES($1,'2026-10-12','NEWER-BOARD',1000,1200,400)`, otherDriver)
+ VALUES($1,'2026-10-06','SAME-WEEK-BOARD',1000,1200,400)`, otherDriver)
 		dispatch()
+		exec(`UPDATE payroll_projection_jobs SET impact_roots=$2 WHERE week_start=$1`, week, []string{"driver:" + projectionDriver})
 		if worked, err := repo.PrepareNextPayrollWeek(ctx); !worked || !errors.Is(err, ErrPayrollProjectionSuperseded) {
 			t.Fatal("incomplete claims must stop the first attempt", worked, err)
 		}
@@ -58,7 +58,7 @@ func TestPayrollWorkerRecoversFromIncompleteClaimsDatabase(t *testing.T) {
 			t.Fatal("next attempt must prepare with full claims", worked, err)
 		}
 		page, err := repo.ReadPreparedPayrollPage(ctx, "driver", week, PayPageQuery{})
-		if err != nil || page.State != "ready" || page.Statements[projectionDriver].State != "ready" {
+		if err != nil || page.State != "ready" || page.Statements[projectionDriver].State != "ready" || page.Statements[otherDriver].State != "ready" {
 			t.Fatal("recovered payroll is not current", page.State, err)
 		}
 		var completed bool
