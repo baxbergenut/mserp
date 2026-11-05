@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Check, TriangleAlert } from "lucide-react";
 import type { BoardAutomation, BoardStop } from "@/app/lib/types";
 import { parseETA } from "./board";
@@ -19,6 +20,7 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
   name: string; value: string; automation?: BoardAutomation; stop?: BoardStop; disabled: boolean; expanded: boolean;
   onOpen: (anchor: HTMLButtonElement) => void;
 }) {
+  const freshnessId = useId();
   const text = appointmentCellText(value, automation);
   const parts = text.schedule.split(" ");
   const title = facilityETATitle(value, automation, stop);
@@ -28,12 +30,15 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
   const freshnessColor = outdated ? "text-red-400" : "text-emerald-400";
   const FreshnessIcon = outdated ? TriangleAlert : Check;
   const freshness = automaticArrival || automaticTravel ? `${automaticArrival ? "Arrival observation" : "ETA"} ${outdated ? "outdated" : "up to date"}` : undefined;
-  return <button type="button" data-grid-action aria-label={`${name} · ETA`} aria-description={freshness} title={title} disabled={disabled}
-    className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"
-    aria-haspopup="dialog" aria-expanded={expanded} onClick={event => onOpen(event.currentTarget)}>
-    {text.schedule && <><span className={automaticArrival ? freshnessColor : undefined}>{parts[0]}</span>{" "}{parts.slice(1).join(" ")}</>}
-    {text.schedule && text.travel && " "}<span className={automaticTravel ? freshnessColor : undefined}>{text.travel}</span>
-    {freshness && <FreshnessIcon aria-hidden="true" className={`ml-1 inline-block size-3 align-text-bottom ${freshnessColor}`} />}
-    {!text.full && "—"}
-  </button>;
+  return <>
+    <button type="button" data-grid-action aria-label={`${name} · ETA`} aria-describedby={freshness ? freshnessId : undefined} title={title} disabled={disabled}
+      className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"
+      aria-haspopup="dialog" aria-expanded={expanded} onClick={event => onOpen(event.currentTarget)}>
+      {text.schedule && <><span className={automaticArrival ? freshnessColor : undefined}>{parts[0]}</span>{" "}{parts.slice(1).join(" ")}</>}
+      {text.schedule && text.travel && " "}<span className={automaticTravel ? freshnessColor : undefined}>{text.travel}</span>
+      {freshness && <FreshnessIcon aria-hidden="true" className={`ml-1 inline-block size-3 align-text-bottom ${freshnessColor}`} />}
+      {!text.full && "—"}
+    </button>
+    {freshness && <span id={freshnessId} className="sr-only">{freshness}</span>}
+  </>;
 }

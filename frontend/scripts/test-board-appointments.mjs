@@ -159,7 +159,7 @@ try {
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await expect.poll(() => entry.eta).toBe('133 mi');
   await expect(cell).toHaveText('DEL 24/7 FRI 133mi');
-  await expect(cell).not.toHaveAttribute('aria-description');
+  await expect(cell).not.toHaveAttribute('aria-describedby');
   await cell.click();
   await page.getByRole('button', { name: 'Clear ETA', exact: true }).click();
   await expect.poll(() => entry.eta).toBe('');
