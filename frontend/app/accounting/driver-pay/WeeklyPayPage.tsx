@@ -239,7 +239,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const rowHandlers = useRef<PayRowActions | null>(null);
   const rowActions = useMemo<PayRowActions>(() => ({
     place: input => rowHandlers.current!.place(input),
-    transfer: (id, load, mode, reason) => rowHandlers.current!.transfer(id, load, mode, reason),
+    transfer: (id, load, mode) => rowHandlers.current!.transfer(id, load, mode),
     settle: (id, reopen) => rowHandlers.current!.settle(id, reopen),
     accept: (id, load, field) => rowHandlers.current!.accept(id, load, field),
     reload: id => rowHandlers.current!.reload(id),
@@ -255,10 +255,10 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
           undoStack.current = []; await refreshStatement(input.driverId); setMessage("Saved");
         } finally { setRefreshing(false); }
       },
-      transfer: async (id, load, mode, reason) => {
+      transfer: async (id, load, mode) => {
         setRefreshing(true); setError("");
         try {
-          await transferPayLoadWeek(investor, { ...commandMetadata(id), driverId: load.sourceDriverId || id, date: load.sourceDate || load.date, slot: load.sourceSlot ?? load.slot, boardVersion: load.boardVersion || 0, transferVersion: load.placementVersion ?? load.transferVersion ?? 0, mode, reason });
+          await transferPayLoadWeek(investor, { ...commandMetadata(id), driverId: load.sourceDriverId || id, date: load.sourceDate || load.date, slot: load.sourceSlot ?? load.slot, boardVersion: load.boardVersion || 0, transferVersion: load.placementVersion ?? load.transferVersion ?? 0, mode });
           undoStack.current = []; await refreshStatement(id); setMessage("Saved");
         } finally { setRefreshing(false); }
       },

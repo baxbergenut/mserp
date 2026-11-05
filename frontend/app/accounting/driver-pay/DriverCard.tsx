@@ -41,7 +41,7 @@ export type DriverCardProps = {
   onDraftEditorChange?: (id: string, active: boolean) => void;
   onPlacement?: (input: PayLoadPlacementInput) => Promise<PayLoadPlacementResult | void>;
   placementDisabled?: boolean;
- onTransfer?: (load: DriverPayLoad, mode: LoadWeekTransferMode, reason: string) => Promise<void>;
+ onTransfer?: (load: DriverPayLoad, mode: LoadWeekTransferMode) => Promise<void>;
  transferDisabled?: boolean;
   detailError?: string;
   onRetryDetails?: () => void;
@@ -248,7 +248,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
 
     {menu && onSettlement && <StatementMenu x={menu.x} y={menu.y} label={`${driver.settlement?.finalized ? "Reopen" : "Finalize"} ${investor ? "truck" : "driver"}`} disabled={settlementDisabled} onClose={closeMenu} onSelect={() => onSettlement(!!driver.settlement?.finalized)} />}
     {costDetails && <CostTransactionsDialog kind={investor ? "investor" : "driver"} id={driver.id} name={driver.fullName} weekStart={edits.weekStart} cost={costDetails} revision={driver.statementRevision} onClose={() => setCostDetails(null)} />}
-    {transfer && onTransfer && <LoadTransferDialog load={transfer} finalized={!!driver.settlement?.finalized} onClose={() => setTransfer(null)} onTransfer={(mode,reason) => onTransfer(transfer,mode,reason)} />}
+    {transfer && onTransfer && <LoadTransferDialog load={transfer} finalized={!!driver.settlement?.finalized} onClose={() => setTransfer(null)} onTransfer={mode => onTransfer(transfer, mode)} />}
     {comment && <Modal title={comment.value.trim() ? "Edit comment" : "Add comment"} description={`${driver.fullName} · ${comment.label}`} isSaving={false} submitLabel="Save comment" onClose={() => setComment(null)} onSubmit={event => {
       event.preventDefault();
       edit(current => comment.key === null ? { ...current, notes: comment.value } : { ...current, comments: { ...current.comments, [comment.key]: comment.value } });

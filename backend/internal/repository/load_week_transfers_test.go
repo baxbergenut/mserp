@@ -58,6 +58,15 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			body := strings.ReplaceAll(string(initial), "\r\n", "\n")
+			retirement, err := os.ReadFile("../../sql/200_retire_load_transfer_audit.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			retirementSQL := strings.ReplaceAll(string(retirement), "\r\n", "\n")
+			if strings.Count(body, retirementSQL) != 1 {
+				t.Fatal("transfer audit retirement missing from init")
+			}
+			body = strings.Replace(body, retirementSQL, "", 1)
 			mig := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if migrated {
 				if strings.Count(body, mig) != 1 {
@@ -98,12 +107,16 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				exec(string(balance))
 				exec(string(boardMigration))
 			}
+			const legacyAuditInsert = `INSERT INTO gross_board_transfer_history(actor_id,reason,after_value) VALUES('accountant','Legacy audit','{}')`
+			exec(legacyAuditInsert)
+			exec(retirementSQL)
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;SET ROLE mserp_app`)
+			exec(legacyAuditInsert)
 			pay := NewDriverPayRepository(pool)
 			board := NewGrossBoardRepository(pool)
 			week, _ := time.Parse(time.DateOnly, "2026-10-19")
 			next := week.AddDate(0, 0, 7)
-			input := LoadWeekTransferInput{DriverID: driver, Date: "2026-10-25", Slot: 0, BoardVersion: 1, Mode: "dispatch_only", Reason: "Driver requested original settlement week"}
+			input := LoadWeekTransferInput{DriverID: driver, Date: "2026-10-25", Slot: 0, BoardVersion: 1, Mode: "dispatch_only"}
 			transfer := func() {
 				t.Helper()
 				if e := pay.TransferLoadWeek(ctx, input, "accountant"); e != nil {
@@ -268,8 +281,8 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				}
 			}
 			var history int
-			if e = pool.QueryRow(ctx, `SELECT count(*) FROM gross_board_transfer_history`).Scan(&history); e != nil || history != 4 {
-				t.Fatal("missing audit", history, e)
+			if e = pool.QueryRow(ctx, `SELECT count(*) FROM gross_board_transfer_history`).Scan(&history); e != nil || history != 0 {
+				t.Fatal("transfer wrote history", history, e)
 			}
 			input.TransferVersion = 0
 			input.Mode = "dispatch_only"
@@ -280,7 +293,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			// different, unoccupied Monday slot. Investor finalization fences
 			// the same financial move as driver finalization.
 			exec(`INSERT INTO loads(id,load_id,status,total_pay,load_pay,total_miles,truck_id,raw_payload) VALUES(9103,'SAT-EXTRA','delivered',500,500,100,$1,'{}');INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id,driver_rate) VALUES($2,'2026-10-24',7,'SAT-EXTRA',9103,400)`, truck, driver)
-			extra := LoadWeekTransferInput{DriverID: driver, Date: "2026-10-24", Slot: 7, BoardVersion: 1, Mode: "everyone", Reason: "Saturday delivery after cutoff"}
+			extra := LoadWeekTransferInput{DriverID: driver, Date: "2026-10-24", Slot: 7, BoardVersion: 1, Mode: "everyone"}
 			investorSnapshot := read(true, next).Drivers[0]
 			investorJSON, _ := json.Marshal(investorSnapshot)
 			exec(`INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,report,finalized) VALUES($1,'2026-10-26',$2,'{}',$3,true)`, truck, owner, string(investorJSON))
@@ -320,7 +333,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					targetSlot = 1
 					exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,$2,'SHOP');INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,deleted,version,note) VALUES($1,$2,1,'',$3,25,'Cleared draft')`, driver, mondayDay, i == 1)
 				}
-				move := LoadWeekTransferInput{DriverID: driver, Date: sourceDay.Format(time.DateOnly), Slot: 0, BoardVersion: 1, Mode: "everyone", Reason: kind}
+				move := LoadWeekTransferInput{DriverID: driver, Date: sourceDay.Format(time.DateOnly), Slot: 0, BoardVersion: 1, Mode: "everyone"}
 				if e = pay.TransferLoadWeek(ctx, move, "accountant"); e != nil {
 					t.Fatal(kind, e)
 				}

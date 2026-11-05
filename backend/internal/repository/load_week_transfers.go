@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -37,8 +36,8 @@ type LoadWeekTransferInput struct {
 	Slot            int    `json:"slot"`
 	BoardVersion    int    `json:"boardVersion"`
 	TransferVersion int    `json:"transferVersion"`
-	Mode            string `json:"mode"` // everyone, dispatch_only, restore
-	Reason          string `json:"reason"`
+	Mode            string `json:"mode"`   // everyone, dispatch_only, restore
+	Reason          string `json:"reason"` // Legacy field retained in request hashes for exact retries.
 }
 
 func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWeekTransferInput, actor string) error {
@@ -50,9 +49,6 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 		return chargeInvalid("Invalid transfer option")
 	}
 	input.Reason = strings.TrimSpace(input.Reason)
-	if input.Reason == "" || len([]rune(input.Reason)) > 1000 {
-		return chargeInvalid("Provide a reason, up to 1,000 characters")
-	}
 	week := date.AddDate(0, 0, -(int(date.Weekday())+6)%7)
 	next := week.AddDate(0, 0, 7).Format(time.DateOnly)
 	settlement := input.Date
@@ -94,12 +90,11 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 	if loadID == nil || tripReview {
 		return chargeInvalid("Resolve the load and its trip in Gross Board before transferring")
 	}
-	var before json.RawMessage
 	var oldDate, dispatcherID, dispatcherName string
 	var truck *string
 	var slot, version int
 	var active bool
-	err = tx.QueryRow(ctx, `SELECT to_jsonb(t),settlement_date::text,dispatch_slot,version,active,dispatcher_id,dispatcher_name,truck_id::text FROM gross_board_transfers t WHERE driver_id=$1 AND source_date=$2::date AND source_slot=$3 FOR UPDATE`, input.DriverID, input.Date, input.Slot).Scan(&before, &oldDate, &slot, &version, &active, &dispatcherID, &dispatcherName, &truck)
+	err = tx.QueryRow(ctx, `SELECT settlement_date::text,dispatch_slot,version,active,dispatcher_id,dispatcher_name,truck_id::text FROM gross_board_transfers WHERE driver_id=$1 AND source_date=$2::date AND source_slot=$3 FOR UPDATE`, input.DriverID, input.Date, input.Slot).Scan(&oldDate, &slot, &version, &active, &dispatcherID, &dispatcherName, &truck)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
@@ -162,15 +157,10 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 			return chargeInvalid("Crew or investor terms change between these weeks; review them before moving the settlement")
 		}
 	}
-	var after json.RawMessage
-	err = tx.QueryRow(ctx, `INSERT INTO gross_board_transfers(driver_id,source_date,source_slot,dispatch_date,dispatch_slot,settlement_date,dispatcher_id,dispatcher_name,truck_id,active)
+	_, err = tx.Exec(ctx, `INSERT INTO gross_board_transfers(driver_id,source_date,source_slot,dispatch_date,dispatch_slot,settlement_date,dispatcher_id,dispatcher_name,truck_id,active)
  VALUES($1,$2::date,$3,$4::date,$5,$6::date,$7,$8,$9,$10)
- ON CONFLICT(driver_id,source_date,source_slot) DO UPDATE SET settlement_date=excluded.settlement_date,active=excluded.active,dispatch_slot=excluded.dispatch_slot,version=gross_board_transfers.version+1
- RETURNING to_jsonb(gross_board_transfers)`, input.DriverID, input.Date, input.Slot, next, slot, settlement, dispatcherID, dispatcherName, truck, input.Mode != "restore").Scan(&after)
+ ON CONFLICT(driver_id,source_date,source_slot) DO UPDATE SET settlement_date=excluded.settlement_date,active=excluded.active,dispatch_slot=excluded.dispatch_slot,version=gross_board_transfers.version+1`, input.DriverID, input.Date, input.Slot, next, slot, settlement, dispatcherID, dispatcherName, truck, input.Mode != "restore")
 	if err != nil {
-		return err
-	}
-	if _, err = tx.Exec(ctx, `INSERT INTO gross_board_transfer_history(actor_id,reason,before_value,after_value) VALUES($1,$2,$3,$4)`, actor, input.Reason, before, after); err != nil {
 		return err
 	}
 	// Transfer metadata does not update the source board row, so announce its

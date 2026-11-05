@@ -7,7 +7,7 @@ import { LazyDriverCard } from "./LazyDriverCard";
 
 export type PayRowActions = {
   place: (input: PayLoadPlacementInput) => Promise<PayLoadPlacementResult | void>;
-  transfer: (id: string, load: DriverPayLoad, mode: LoadWeekTransferMode, reason: string) => Promise<void>;
+  transfer: (id: string, load: DriverPayLoad, mode: LoadWeekTransferMode) => Promise<void>;
   settle: (id: string, reopen: boolean) => void;
   accept: (id: string, load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => Promise<void>;
   reload: (id: string) => Promise<void>;
@@ -25,7 +25,7 @@ type Props = Omit<DriverCardProps, "onReload" | "onSettlement" | "onTransfer" | 
 // Bind row identity once; another row's edits no longer replace every callback.
 export const StatementRow = memo(function StatementRow({ actions, canEdit, canSettle, ...props }: Props) {
   const id = props.driver.id;
-  const transfer = useCallback((load: DriverPayLoad, mode: LoadWeekTransferMode, reason: string) => actions.transfer(id, load, mode, reason), [actions, id]);
+  const transfer = useCallback((load: DriverPayLoad, mode: LoadWeekTransferMode) => actions.transfer(id, load, mode), [actions, id]);
   const settle = useCallback((reopen: boolean) => actions.settle(id, reopen), [actions, id]);
   const accept = useCallback((load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => actions.accept(id, load, field), [actions, id]);
   const reload = useCallback(() => actions.reload(id), [actions, id]);

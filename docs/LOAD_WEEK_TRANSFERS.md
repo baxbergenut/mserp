@@ -38,8 +38,10 @@ does not transfer existing loads or send any provider mutation.
 
 ## Storage and boundaries
 
-Migration 159 adds `gross_board_transfers` and append-only
-`gross_board_transfer_history`. Source driver/date/slot and load/trip identity
+Migration 159 adds `gross_board_transfers` for current placement and optimistic
+versions. Migration 200 clears the retired `gross_board_transfer_history` audit
+table and discards audit inserts from older binaries. Return runs on click.
+Source driver/date/slot and load/trip identity
 stay unchanged. Separate dispatch/settlement projections move recognition only.
 Unique reserved Monday slots prevent overwrites; original dispatcher ID/name and
 resolved truck attribution are retained. Unknown load/trip identities require
@@ -64,15 +66,15 @@ guards reserve transferred source/destination slots against older clients.
 `POST /driver-pay/transfer-load` and `/investor-pay/transfer-load` use their
 respective `.edit` permissions. Input includes `driverId`, original `date` and
 `slot`, `boardVersion`, `transferVersion`, `mode` (`everyone`, `dispatch_only`,
-`restore`), and a required reason. The transaction records actor, before/after
-placement and reason. A retry with an obsolete version cannot apply twice.
+`restore`). No reason is required. Legacy reason inputs are accepted for exact
+request replay. A retry with an obsolete version cannot apply twice.
 
 `GET /driver-pay/outgoing-transfers` and `/investor-pay/outgoing-transfers` use
 their respective read permissions and the original completed week's availability
 boundary. They read active moved-out placement metadata directly, independently
 of prepared statements, with statement/search/original-dispatcher filters. Restore
 uses the existing source board and transfer versions, receipt and financial guards;
-it does not need a prepared destination statement or a new schema migration.
+it does not need a prepared destination statement.
 
 ## Validation
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { fetchOutgoingLoadTransfers } from "@/app/lib/api";
 import type { OutgoingLoadTransfer } from "@/app/lib/types";
 import { shortDate } from "@/app/gross-board/board";
-import { ReturnLoadDialog } from "./ReturnLoadDialog";
+import { returnLoadKey, useReturnLoad } from "./useReturnLoad";
 
-const TransferContext = createContext<{ rows: OutgoingLoadTransfer[]; canEdit: boolean; disabled: boolean; open: (row: OutgoingLoadTransfer) => void }>({ rows: [], canEdit: false, disabled: true, open: () => {} });
+const TransferContext = createContext<{ rows: OutgoingLoadTransfer[]; canEdit: boolean; disabled: boolean; returnLoad: (row: OutgoingLoadTransfer) => void; returnError: { key: string; message: string } | null }>({ rows: [], canEdit: false, disabled: true, returnLoad: () => {}, returnError: null });
 export const useOutgoingTransfers = () => useContext(TransferContext);
 
 export function OutgoingTransfers({ investor, week, statementId, search, dispatcherId, refreshKey, canEdit, disabled, onReturned, children }: {
@@ -16,7 +16,10 @@ export function OutgoingTransfers({ investor, week, statementId, search, dispatc
   const [result, setResult] = useState<{ key: string; rows: OutgoingLoadTransfer[] } | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [target, setTarget] = useState<OutgoingLoadTransfer | null>(null);
+  const { pending, error: returnError, returnLoad } = useReturnLoad(investor, () => {
+    setRetry(value => value + 1);
+    onReturned();
+  });
   const key = JSON.stringify([investor,week,statementId,search,dispatcherId]);
   useEffect(() => {
     const abort = new AbortController();
@@ -25,18 +28,18 @@ export function OutgoingTransfers({ investor, week, statementId, search, dispatc
     }).catch(err => { if (!abort.signal.aborted) setError(err instanceof Error ? err.message : "Unable to load transferred loads"); });
     return () => abort.abort();
   }, [investor,week,statementId,search,dispatcherId,key,refreshKey,retry]);
-  const value = useMemo(() => ({ rows: result?.key === key ? result.rows : [], canEdit, disabled: disabled || !!error, open: setTarget }), [result,key,canEdit,disabled,error]);
+  const value = { rows: result?.key === key ? result.rows : [], canEdit, disabled: disabled || pending || !!error, returnLoad, returnError };
   return <TransferContext.Provider value={value}>{children}
     {error && <p role="alert" className="text-xs text-red-300">{error} <button type="button" onClick={() => setRetry(value => value+1)} className="underline">Retry transferred loads</button></p>}
-    {target && <ReturnLoadDialog target={target} investor={investor} onClose={() => setTarget(null)} onReturned={() => { setRetry(value => value+1); onReturned(); }} />}
   </TransferContext.Provider>;
 }
 
 export function OutgoingTransferNote({ row }: { row: OutgoingLoadTransfer }) {
-  const { canEdit, disabled, open } = useOutgoingTransfers();
+  const { canEdit, disabled, returnLoad, returnError } = useOutgoingTransfers();
   return <span className="inline-flex items-center gap-2 whitespace-nowrap text-[11px] text-zinc-500" title="Not included in this week’s payroll totals">
     <span className="font-mono text-zinc-400">{row.loadNumber}</span><span>Moved to {shortDate(row.settlementDate)}</span>
-    {canEdit && <button data-grid-ignore type="button" disabled={disabled} aria-label={`Return ${row.loadNumber} to original date`} onClick={() => open(row)} className="text-blue-400 underline-offset-2 hover:underline disabled:opacity-40">Return</button>}
+    {canEdit && <button data-grid-ignore type="button" disabled={disabled} aria-label={`Return ${row.loadNumber} to original date`} onClick={() => returnLoad(row)} className="text-blue-400 underline-offset-2 hover:underline disabled:opacity-40">Return</button>}
+    {returnError?.key === returnLoadKey(row) && <span role="alert" className="whitespace-normal text-red-300">{returnError.message}</span>}
   </span>;
 }
 

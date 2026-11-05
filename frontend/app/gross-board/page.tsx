@@ -310,7 +310,7 @@ export default function GrossBoardPage() {
   }
 
   return (
-    <GrossTransferReturn disabled={dirty || saving || loading || !!board?.managedInSheets} onReturned={() => { void load(); }}>
+    <GrossTransferReturn disabled={dirty || saving || loading || !!board?.managedInSheets} onReturned={() => receiveLive.current()}>
     <div className="space-y-5 animate-fade-in">
       <PageHeader><div>
           <div className="flex items-center gap-3">

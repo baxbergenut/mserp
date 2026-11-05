@@ -2032,6 +2032,9 @@ assignment lookup lists.
   bounds. Gross Board markers/destinations can return loads with pay edit
   permission; board write alone does not grant that action. Both entry points
   reuse existing source/transfer versions, receipts and finalized guards.
+  Return runs on click. Move and Return require no reason and append no transfer
+  history. Migration 200 clears the retired audit rows and discards legacy audit
+  inserts. Current placements and retry receipts remain authoritative.
   The shared Driver/Investor Pay row action uses separate dispatch/settlement
   projections retain source coordinates, trip identity, truck and original
   dispatcher credit. Both modes move Gross Board visually to next Monday and
@@ -2039,7 +2042,7 @@ assignment lookup lists.
   moves keep driver/investor revenue and hired labor together; dispatcher-only
   moves preserve frozen monetary reports. Changed crew/investor terms require
   review. Version checks, reserved slots, the accounting lock, database source
-  guards and immutable history protect edits; restore in payroll before editing
+  guards and versioned current placement protect edits; restore before editing
   transferred Gross Board values. Reserved cleared/tombstoned Monday rows are
   hidden by projections without losing their restore versions. The day's Add
   action remains available beside protected transfers. Transfers notify Gross

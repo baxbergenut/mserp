@@ -29,7 +29,7 @@ try{
    const request=route.request(),url=new URL(request.url()),path=url.pathname.slice(4),selected=url.searchParams.get('weekStart')||week;
    if(path.endsWith('/transfer-load')){
     const input=request.postDataJSON();requests.push(input);
-    expect(input.driverId).toBe(investor?'operator':'statement');expect(input.date).toBe(source);expect(input.boardVersion).toBe(7);expect(input.transferVersion).toBe(version);expect(input.reason.trim()).not.toBe('');
+    expect(input.driverId).toBe(investor?'operator':'statement');expect(input.date).toBe(source);expect(input.boardVersion).toBe(7);expect(input.transferVersion).toBe(version);expect(input).not.toHaveProperty('reason');
     if(reject){reject=false;return route.fulfill({status:409,json:{error:'Another accountant changed this transfer'}});}
     mode=input.mode==='restore'?'':input.mode;version++;return route.fulfill({status:204});
    }
@@ -69,11 +69,10 @@ try{
   await expect(movedRow).toContainText('Moved to 10/26');
   expect((await movedRow.boundingBox()).height).toBeLessThanOrEqual(36);
   await expect(page.getByText('Transferred out',{exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Return WEEKEND to original date'}).click();
-  await page.getByRole('textbox',{name:'Reason',exact:true}).fill('Corrected transfer');
-  reject=true;await page.getByRole('button',{name:'Return load',exact:true}).click();
+  reject=true;await page.getByRole('button',{name:'Return WEEKEND to original date'}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('alert').filter({hasText:'Another accountant'})).toBeVisible();
-  await page.getByRole('button',{name:'Return load',exact:true}).click();
+  await page.getByRole('button',{name:'Return WEEKEND to original date'}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(movedRow).toHaveCount(0);
   await expect(page.getByRole('link',{name:'WEEKEND',exact:true})).toBeVisible();
@@ -163,7 +162,7 @@ try{
    const request=route.request(),path=new URL(request.url()).pathname.slice(4);
    if(path==='/driver-pay/transfer-load') {
     const input=request.postDataJSON(); calls.push(input);
-    expect(input).toMatchObject({driverId:'15900000-0000-0000-0000-000000000001',date:source,slot:7,boardVersion:9,transferVersion:3,mode:'restore',reason:'Wrong weekend'});
+    expect(input).toMatchObject({driverId:'15900000-0000-0000-0000-000000000001',date:source,slot:7,boardVersion:9,transferVersion:3,mode:'restore'});
     if(blocked){blocked=false;return route.fulfill({status:400,json:{error:'Reopen affected driver and investor statements in both weeks before moving the settlement'}});}
     active=false;return route.fulfill({status:204});
    }
@@ -179,11 +178,10 @@ try{
   await expect(boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'})).toHaveCount(0);
   mayReturn=true;await boardPage.reload();
   await boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'}).click();
-  await boardPage.getByRole('textbox',{name:'Reason',exact:true}).fill('Wrong weekend');
-  await boardPage.getByRole('button',{name:'Return load',exact:true}).click();
+  await expect(boardPage.getByRole('dialog')).toHaveCount(0);
   await expect(boardPage.getByRole('alert').filter({hasText:'Reopen affected'})).toBeVisible();
   expect(active).toBe(true);
-  await boardPage.getByRole('button',{name:'Return load',exact:true}).click();
+  await boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'}).click();
   await expect(boardPage.getByRole('dialog')).toHaveCount(0);
   await expect(boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'})).toHaveCount(0);
   expect(active).toBe(false);expect(calls).toHaveLength(2);

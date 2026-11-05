@@ -88,10 +88,10 @@ func TestPreparedPayrollSourceActionsDatabase(t *testing.T) {
 			}},
 			{"undo source", func() error { return repo.UndoPaySource(write, undo, "source-test") }},
 			{"transfer weekend", func() error {
-				return repo.TransferLoadWeek(write, LoadWeekTransferInput{DriverID: projectionDriver, Date: "2026-10-11", BoardVersion: 1, Mode: "everyone", Reason: "Move recognition"}, "source-test")
+				return repo.TransferLoadWeek(write, LoadWeekTransferInput{DriverID: projectionDriver, Date: "2026-10-11", BoardVersion: 1, Mode: "everyone"}, "source-test")
 			}},
 			{"restore weekend", func() error {
-				return repo.TransferLoadWeek(write, LoadWeekTransferInput{DriverID: projectionDriver, Date: "2026-10-11", BoardVersion: 1, TransferVersion: 1, Mode: "restore", Reason: "Restore recognition"}, "source-test")
+				return repo.TransferLoadWeek(write, LoadWeekTransferInput{DriverID: projectionDriver, Date: "2026-10-11", BoardVersion: 1, TransferVersion: 1, Mode: "restore"}, "source-test")
 			}},
 			{"add historical load", func() error {
 				return repo.PlacePayLoad(write, "driver", PayLoadPlacementInput{DriverID: projectionDriver, WeekStart: "2026-10-12", Action: "add", LoadNumber: "PROJECTION-1"}, "source-test")
