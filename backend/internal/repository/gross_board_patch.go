@@ -44,9 +44,6 @@ func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry)
 		return current, false, err
 	}
 	before := current
-	if patch.AcceptDriverGross && (current.Version != patch.Version || !reflect.DeepEqual(current.LoadRecordID, patch.LoadRecordID) || !reflect.DeepEqual(current.LoadTripID, patch.LoadTripID)) {
-		return current, false, ErrGrossBoardConflict
-	}
 	for _, field := range patch.Fields {
 		switch field {
 		case "loadNumber":
@@ -80,6 +77,20 @@ func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry)
 		}
 	}
 	current.SplitReview = patch.SplitReview
+	if current.AcceptDriverGross || (current.AcceptSystemValues && current.SplitReview == nil) {
+		// Fence the load and the values the editor reviewed. A change to an
+		// unrelated field must not invalidate a field save. Use the merged
+		// identity so the same batch can select a load and accept its values.
+		if patch.LoadRecordID == nil || !reflect.DeepEqual(current.LoadRecordID, patch.LoadRecordID) || !reflect.DeepEqual(current.LoadTripID, patch.LoadTripID) {
+			return current, false, chargeInvalid("The load for %s (load %d) changed. Check the selected load before retrying.", patch.Date, patch.Slot+1)
+		}
+		if current.AcceptDriverGross {
+			current.DriverRate = patch.DriverRate
+		}
+		if current.AcceptSystemValues {
+			current.OriginalRate, current.Miles = patch.OriginalRate, patch.Miles
+		}
+	}
 	compare := current
 	for _, pair := range []struct {
 		next *string

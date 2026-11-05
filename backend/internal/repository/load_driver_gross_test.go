@@ -161,16 +161,35 @@ func TestDataTruckDriverGrossDatabase(t *testing.T) {
 			patch := read(known.Date)
 			patch.Fields = []string{"driverRate", "acceptDriverGross"}
 			patch.DriverRate, patch.AcceptDriverGross = "2200", true
-			patch.Version--
-			if _, err = board.SaveChanges(ctx, []GrossBoardEntry{patch}, "gross-test"); err == nil {
-				t.Fatal("stale board acceptance succeeded")
+			note := "Concurrent note"
+			if _, err = board.SaveChanges(ctx, []GrossBoardEntry{{DriverID: driver, Date: patch.Date, Fields: []string{"note"}, Note: &note}}, "gross-test"); err != nil {
+				t.Fatal(err)
 			}
-			patch.Version++
+			stale := patch
+			stale.DriverRate = "2300"
+			if _, err = board.SaveChanges(ctx, []GrossBoardEntry{stale}, "gross-test"); err == nil {
+				t.Fatal("stale DataTruck amount was accepted")
+			}
+			stale = patch
+			otherID := 9502
+			stale.LoadRecordID = &otherID
+			if _, err = board.SaveChanges(ctx, []GrossBoardEntry{stale}, "gross-test"); err == nil {
+				t.Fatal("acceptance applied to a different load")
+			}
 			patched, err := board.SaveChanges(ctx, []GrossBoardEntry{patch}, "gross-test")
 			if err != nil || len(patched) != 1 || patched[0].DriverRate != "2200.00" || patched[0].OriginalRate != "2800.00" || patched[0].Miles != "541.00" {
 				t.Fatal("independent board acceptance", patched, err)
 			}
-			known = patched[0]
+			if patched[0].AcceptDriverGross || patched[0].Note == nil || *patched[0].Note != note {
+				t.Fatal("acknowledgement retained an acceptance flag or lost the concurrent note", patched[0])
+			}
+			updatedNote := "Ordinary note edit"
+			stale.Note, stale.Fields = &updatedNote, []string{"note"}
+			ordinary, err := board.SaveChanges(ctx, []GrossBoardEntry{stale}, "gross-test")
+			if err != nil || ordinary[0].Note == nil || *ordinary[0].Note != updatedNote || ordinary[0].DriverRate != "2200.00" {
+				t.Fatal("a flag outside the patch blocked or altered an ordinary edit", ordinary, err)
+			}
+			known = ordinary[0]
 			known.DriverRate = "2300"
 			known.AcceptDriverGross = false
 			known.Fields = nil

@@ -113,13 +113,18 @@ try {
   fail = true;
   await fill(field(page, 'driver rate'), '1111');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('Temporary fixture outage');
+  // Edits made after the first failure join the recovery copy in this tab.
+  const queuedDay = '2026-11-04';
+  await fill(field(page, 'load number or status', queuedDay), 'QUEUED-AFTER-ERROR');
   page.once('dialog', dialog => dialog.accept());
   await page.reload();
   await expect(field(page, 'driver rate')).toHaveValue('$1,111.00');
+  await expect(field(page, 'load number or status', queuedDay)).toHaveValue('QUEUED-AFTER-ERROR');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('Temporary fixture outage');
   fail = false;
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await saved(page); expect(stored().driverRate).toBe('1111');
+  expect(stored(queuedDay).loadNumber).toBe('QUEUED-AFTER-ERROR');
 
   // Same-field writes from a stale tab use the last submitted value, without
   // blocking unrelated saves or requesting a version/conflict decision.

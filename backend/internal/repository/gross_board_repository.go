@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +18,16 @@ var ErrGrossBoardConflict = errors.New("another dispatcher changed one of these 
 var ErrGrossBoardTrip = errors.New("select a valid trip whose allocations reconcile with the system load; a trip cannot belong to two board drivers")
 
 var ErrGrossBoardLoad = errors.New("the selected load no longer matches this load number; select it again")
+
+type grossBoardReviewConflict string
+
+func (e grossBoardReviewConflict) Error() string { return string(e) }
+func (e grossBoardReviewConflict) Unwrap() error { return ErrGrossBoardConflict }
+
+func grossBoardReviewError(entry GrossBoardEntry, reason string) error {
+	return grossBoardReviewConflict(fmt.Sprintf("%s for load %s on %s (slot %d). Review the current values before retrying.",
+		reason, entry.LoadNumber, entry.Date, entry.Slot+1))
+}
 
 type GrossBoardRepository struct {
 	pool         *pgxpool.Pool
@@ -544,7 +555,7 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 				return nil, err
 			}
 			if !unchanged {
-				return nil, ErrGrossBoardConflict
+				return nil, grossBoardReviewError(e, "DataTruck total gross or miles changed")
 			}
 			enteredOriginal, enteredMiles = original, miles
 		}
@@ -566,12 +577,12 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		}
 		if e.AcceptDriverGross {
 			if driverGross == "" || review || loadID == nil {
-				return nil, ErrGrossBoardConflict
+				return nil, grossBoardReviewError(e, "DataTruck driver gross is unavailable")
 			}
 			actual, parseErr := chargeCents(driverGross)
 			requested, inputErr := chargeCents(e.DriverRate)
 			if parseErr != nil || inputErr != nil || actual != requested {
-				return nil, ErrGrossBoardConflict
+				return nil, grossBoardReviewError(e, "DataTruck driver gross changed")
 			}
 			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
 				return nil, err
@@ -619,6 +630,7 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		e.Version = version
 		e.EnteredOriginalRate, e.EnteredMiles = enteredOriginal, enteredMiles
 		e.AcceptSystemValues = false
+		e.AcceptDriverGross = false
 		entries[index] = e
 	}
 
