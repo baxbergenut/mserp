@@ -23,7 +23,7 @@ try {
     const driver = {
       id: statementId, statementRevision:'18900000-0000-0000-0000-000000000001', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
-      ...(!investor ? { salaryCarry: '15.00' } : {}),
+      ...(!investor ? { salaryCarry: '15.00', salaryCarryWeek: '2026-09-21' } : {}),
       ...(investor ? { investorId: 'owner', truckId: statementId, autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
@@ -77,7 +77,9 @@ try {
     await expect(page.getByText('Loading statement…',{exact:true})).toBeVisible();
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toBeVisible();expect(detailReads).toBe(1);
     if (!investor) {
-      await expect(page.getByText('Prior salary balance', { exact: true }).locator('..')).toContainText('-$15.00');
+      const carry = page.getByText('Prior salary balance', { exact: true }).locator('xpath=ancestor::tr[1]');
+      await expect(carry).toContainText('-$15.00');
+      await expect(carry).toContainText('Week 39 - 09/21');
       await expect(row).toContainText('$980.00');
     }
     expect(expiredReads).toBe(1);expect(financialWrites).toBe(0);

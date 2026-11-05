@@ -128,6 +128,7 @@ type PayPerson struct {
 
 type DriverPayDriver struct {
 	SalaryCarry            string                        `json:"salaryCarry,omitempty"`
+	SalaryCarryWeek        string                        `json:"salaryCarryWeek,omitempty"`
 	ExpenseRevision        string                        `json:"expenseRevision,omitempty"`
 	PreparationState       string                        `json:"preparationState,omitempty"`
 	StatementRevision      string                        `json:"statementRevision,omitempty"`

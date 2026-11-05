@@ -10,6 +10,7 @@ import { addDays, dayStatuses, decimalDisplay, hundredths, shortDate, validDecim
 import { activeLayovers, carryBreakdown, centsAmount, costAmount, costRows, driverTotals, sourceAmountInput, validSourceAmount } from "./pay";
 import { ChargeActions, GeneratedChargeRows } from "./ChargeRows";
 import { SourceChargeRows } from "./SourceChargeRows";
+import { payrollWeekLabel } from "../payrollWeek";
 import { ExpenseRowLabel, ExpenseRows } from "./ExpenseRows";
 import { StatementMenu } from "./StatementMenu";
 import { PaySourceCell } from "./PaySourceCell";
@@ -128,7 +129,10 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
     <div data-payroll-scroll={`${driver.id}:adjustments`} className="absolute inset-0 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
         <tbody>{driver.salaryCarry && <tr>
-          <td className={`${cell} text-zinc-300`}>Prior salary balance</td>
+          <td className={`${cell} text-zinc-300`}>
+            <span>Prior salary balance</span>
+            {driver.salaryCarryWeek && <div className="text-[11px] text-zinc-400" title={driver.salaryCarryWeek}>{payrollWeekLabel(driver.salaryCarryWeek).label}</div>}
+          </td>
           <td className={`${numeric} !border-r-0 text-red-300`}>{decimalDisplay(-totals.salaryCarry, true)}</td>
         </tr>}{layovers.map(row => <tr key={`layover:${row.date}`}>
           <td className={`${cell} text-zinc-300`}><span title={`Recorded bonus on ${row.date}`}>Layover · {shortDate(row.date)}</span></td>

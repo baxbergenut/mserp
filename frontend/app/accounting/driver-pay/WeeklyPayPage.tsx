@@ -12,16 +12,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, Download, RefreshCw, UserRound } from "lucide-react";
+import { AlertTriangle, Banknote, CloudCheck, Download, RefreshCw, UserRound } from "lucide-react";
 import { APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, PayrollAvailability } from "@/app/lib/types";
-import { latestPayrollWeek } from "../payrollWeek";
+import { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } from "../payrollWeek";
 import { useLatestPayrollWeek } from "../components/useLatestPayrollWeek";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { FinalizationCard } from "../components/FinalizationCard";
 import { MetricCard } from "@/app/components/MetricCard";
 import { ManagementSearch, TablePagination, controlClass } from "@/app/components/management/ManagementUI";
-import { addDays, decimalDisplay, hundredths, shortDate } from "@/app/gross-board/board";
+import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 import { StatementRow, type PayRowActions } from "./StatementRow";
 import { payButtonClass } from "./DriverCard";
 import { SettlementDialog } from "./SettlementDialog";
@@ -44,7 +44,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const latestWeek = useLatestPayrollWeek();
-  const [firstWeek, setFirstWeek] = useState("2000-01-03");
+  const [payrollFirstWeek, setFirstWeek] = useState<string | null>(null);
+  const firstWeek = payrollFirstWeek ?? "2000-01-03";
   const availability = useRef<Partial<Record<"driver" | "investor", Promise<PayrollAvailability>>>>({});
   const requested = params.get("weekStart");
   const targetId = params.get(investor ? "truckId" : "driverId") ?? params.get("driverId");
@@ -58,6 +59,9 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   }, [requested]);
   const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek(), initialWeek);
   const week = storedWeek > latestWeek ? latestWeek : storedWeek < firstWeek ? firstWeek : storedWeek;
+  const optionsFirst = payrollFirstWeek ?? week;
+  const optionsLatest = payrollFirstWeek ? latestWeek : week;
+  const weekOptions = useMemo(() => payrollWeekOptions(optionsFirst, optionsLatest), [optionsFirst, optionsLatest]);
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
   const [expenseId, setExpenseId] = useState<string | null>(null);
   const [expenseStatement, setExpenseStatement] = useState("");
@@ -479,8 +483,12 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     <div className="grid gap-3 md:grid-cols-3"><MetricCard loading={loading} compact label={investor ? "Investor share" : "Earned pay"} value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Total payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /><FinalizationCard loading={loading} finalized={report?.pagination?.finalized ?? drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length} total={report?.pagination?.statements ?? drivers.filter(d => !d.truckInactive).length} /></div>
     <div className="flex flex-wrap items-center gap-3">
       <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={payButtonClass} aria-label="Previous week" disabled={finalizing || busy || week <= firstWeek} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100">{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={payButtonClass} aria-label="Next week" disabled={finalizing || busy || week >= latestWeek} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
-      <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
+      <select aria-label="Payroll week" className={`${controlClass} !w-auto font-mono`} value={week} disabled={finalizing || busy} onChange={event => switchWeek(event.target.value)}>
+        {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>
+          {options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}
+        </optgroup>)}
+      </select>
+      <span className="text-xs text-zinc-500">{payrollWeekLabel(week).year}</span><button className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
           <select aria-label="Dispatcher" className={`${controlClass} !w-44`} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select>
         </TableFilters><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>

@@ -210,7 +210,12 @@ try {
   await expect(penalty).toHaveValue('-30.10');
   await expect(penaltyRow.getByText('Left: $70.15', { exact: true })).toBeVisible();
   await page.screenshot({ path: join(temp, 'penalty-autosave.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Next week', exact: true }).click();
+  const advancePayWeek = async () => {
+    const picker = page.getByRole('combobox', { name: 'Payroll week', exact: true });
+    const next = new Date(Date.parse(await picker.inputValue()) + 7 * 86400000).toISOString().slice(0, 10);
+    await picker.selectOption(next);
+  };
+  await advancePayWeek();
   await expect(page.getByRole('button', {name:'E2e Driver',exact:true})).toHaveAttribute('aria-expanded','false');
   if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(penalty).toHaveValue('-70.15');
@@ -219,7 +224,7 @@ try {
   await page.getByLabel('E2e Driver, adjustment 1, name', { exact: true }).fill('Payroll correction');
   await page.getByLabel('E2e Driver, adjustment 1, amount', { exact: true }).fill('-1.00');
   await expect.poll(async () => (await penaltyBalance()).remainingAmount, { timeout: 12000 }).toBe('0.00');
-  await page.getByRole('button', { name: 'Next week', exact: true }).click();
+  await advancePayWeek();
   await expect(page.getByRole('button', {name:'E2e Driver',exact:true})).toHaveAttribute('aria-expanded','false');
   if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(penalty).toHaveCount(0);

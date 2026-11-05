@@ -190,25 +190,27 @@ try {
     await expect(page.getByText(/settlements finalized/)).toHaveCount(0);
     firstWeek='2026-10-19';
     readWeeks.length=0;
+    const picker=page.getByRole('combobox',{name:'Payroll week',exact:true});
     await page.goto(base+'/accounting/'+kind+'-pay?weekStart=2026-10-05');
-    await expect(page.getByRole('button',{name:'Previous week',exact:true})).toBeDisabled();
+    await expect(picker).toHaveValue('2026-10-19');
+    await expect(picker.locator('option[value="2026-10-12"]')).toHaveCount(0);
     await expect.poll(()=>readWeeks.length).toBeGreaterThan(0);
     expect(readWeeks.every(w=>w>='2026-10-19')).toBe(true);
     await page.clock.setFixedTime(new Date('2026-11-01T12:00:00Z'));
     readWeeks.length=0;
     await page.goto(base+'/accounting/'+kind+'-pay?weekStart=2026-11-09');
-    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
+    await expect(picker.locator('option[value="2026-10-26"]')).toHaveCount(0);
     await expect.poll(()=>readWeeks.length).toBeGreaterThan(0);
     expect(readWeeks.every(w=>w<='2026-10-19')).toBe(true);
     await page.goto(base+'/accounting/'+kind+'-pay');
-    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
+    await expect(picker.locator('option[value="2026-10-26"]')).toHaveCount(0);
     // Monday midnight in New York opens the next week without a new deployment.
     await page.clock.setFixedTime(new Date('2026-11-02T05:01:00Z'));
     await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeEnabled();
-    await page.getByRole('button',{name:'Next week',exact:true}).click();
+    await expect(picker.locator('option[value="2026-10-26"]')).toHaveText('Week 44 - 10/26');
+    await picker.selectOption('2026-10-26');
     await expect.poll(()=>readWeeks.includes('2026-10-26')).toBe(true);
-    await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();
+    await expect(picker.locator('option[value="2026-11-02"]')).toHaveCount(0);
     expect(errors).toEqual([]);await page.close();
   }
   console.log('Prepared payroll: preparation, stale/failed values, retry, pinned details, lost response replay, typing during recovery and committed placement receipts passed on both pages.');

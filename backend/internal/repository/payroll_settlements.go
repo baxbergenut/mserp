@@ -108,6 +108,9 @@ func overlayPayrollSettlements(ctx context.Context, tx pgx.Tx, report DriverPayW
 		return report, err
 	}
 	rows.Close()
+	if err = populateFrozenSalaryCarryWeeks(ctx, tx, report); err != nil {
+		return report, err
+	}
 	if err = populateExpenseReimbursementDates(ctx, tx, report.Drivers); err != nil {
 		return report, err
 	}

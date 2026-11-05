@@ -12,7 +12,7 @@ import (
 // Only the resulting net shortfall becomes payroll debt. Drafts do not add
 // debt or consume it, and a newer frozen statement supersedes the prior balance.
 func applyDriverSalaryCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) error {
-	rows, err := tx.Query(ctx, `SELECT d.id::text,s.report
+	rows, err := tx.Query(ctx, `SELECT d.id::text,s.week_start::text,s.report
  FROM drivers d
  CROSS JOIN LATERAL (
   SELECT week_start,report FROM payroll_settlements
@@ -25,19 +25,18 @@ func applyDriverSalaryCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWee
 		return err
 	}
 	type balance struct {
-		id     string
-		amount string
+		id, week, amount string
 	}
 	balances := []balance{}
 	for rows.Next() {
-		var id string
+		var id, week string
 		var frozen DriverPayDriver
-		if err = rows.Scan(&id, &frozen); err != nil {
+		if err = rows.Scan(&id, &week, &frozen); err != nil {
 			rows.Close()
 			return err
 		}
 		if net := frozen.NetPayCents(); net < 0 {
-			balances = append(balances, balance{id, chargeMoney(-net)})
+			balances = append(balances, balance{id, week, chargeMoney(-net)})
 		}
 	}
 	rows.Close()
@@ -51,6 +50,7 @@ func applyDriverSalaryCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWee
 	for _, b := range balances {
 		if i, ok := index[b.id]; ok {
 			report.Drivers[i].SalaryCarry = b.amount
+			report.Drivers[i].SalaryCarryWeek = b.week
 			continue
 		}
 		d, err := readIdleDriverPayCard(ctx, tx, report.WeekStart, b.id)
@@ -61,9 +61,51 @@ func applyDriverSalaryCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWee
 			return err
 		}
 		d.SalaryCarry = b.amount
+		d.SalaryCarryWeek = b.week
 		report.Drivers = append(report.Drivers, d)
 	}
 	return nil
+}
+
+// Earlier snapshots saved the carry amount without its source week. Recover
+// the latest earlier statement finalized at that time only if its net matches.
+func populateFrozenSalaryCarryWeeks(ctx context.Context, tx pgx.Tx, report DriverPayWeek) error {
+	missing := map[string]*DriverPayDriver{}
+	var ids []string
+	for i := range report.Drivers {
+		d := &report.Drivers[i]
+		if d.SalaryCarry != "" && d.SalaryCarryWeek == "" && d.Settlement != nil && d.Settlement.Finalized {
+			missing[d.ID] = d
+			ids = append(ids, d.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT s.driver_id::text,source.week_start::text,source.report
+ FROM payroll_settlements s
+ CROSS JOIN LATERAL (
+  SELECT p.week_start,p.report FROM payroll_settlements p
+  WHERE p.driver_id=s.driver_id AND p.finalized AND p.week_start<s.week_start AND p.finalized_at<=s.finalized_at
+  ORDER BY p.week_start DESC LIMIT 1
+ ) source
+ WHERE s.week_start=$1::date AND s.driver_id=ANY($2::uuid[])`, report.WeekStart, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, week string
+		var source DriverPayDriver
+		if err = rows.Scan(&id, &week, &source); err != nil {
+			return err
+		}
+		d := missing[id]
+		if amount, err := chargeCents(d.SalaryCarry); err == nil && amount > 0 && source.NetPayCents() == -amount {
+			d.SalaryCarryWeek = week
+		}
+	}
+	return rows.Err()
 }
 
 func guardDriverSalaryCarryOrder(ctx context.Context, tx pgx.Tx, d DriverPayDriver, week string) error {

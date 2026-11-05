@@ -89,6 +89,9 @@ Drafts neither originate nor consume the balance. Source deductions and credits
 keep their native posting rules. Reopen later finalized statements before changing
 an earlier carry-bearing statement. The Driver Pay page shows zero cash payable
 when the statement has a shortfall. Investor Pay keeps its own balance rules.
+The carry row labels the finalized source week using its ISO week number and
+Monday. Older snapshots recover the label from verified prior settlement data.
+Driver and Investor Pay group selectable completed Mondays by ISO week year.
 
 Driver and Investor Pay export the selected week's saved statements across all
 matching pages using the respective read permissions. The XLSX includes only

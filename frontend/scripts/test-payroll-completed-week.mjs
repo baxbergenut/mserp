@@ -7,10 +7,14 @@ import { chromium, expect } from '@playwright/test';
 
 const source = await readFile(new URL('../app/accounting/payrollWeek.ts', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-const { latestPayrollWeek } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 for (const [date, week] of [['2026-11-02T04:59:59Z', '2026-10-19'], ['2026-11-02T05:00:00Z', '2026-10-26'], ['2026-03-09T03:59:59Z', '2026-02-23'], ['2026-03-09T04:00:00Z', '2026-03-02']]) {
   assert.equal(latestPayrollWeek(new Date(date)), week);
 }
+assert.deepEqual(payrollWeekLabel('2026-10-19'), { year: 2026, label: 'Week 43 - 10/19' });
+assert.deepEqual(payrollWeekLabel('2026-12-28'), { year: 2026, label: 'Week 53 - 12/28' });
+assert.deepEqual(payrollWeekLabel('2024-12-30'), { year: 2025, label: 'Week 1 - 12/30' });
+assert.deepEqual(payrollWeekOptions('2026-12-28', '2027-01-04').map(([year]) => year), [2027, 2026]);
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
@@ -40,13 +44,26 @@ try {
     // A current/future deep link must never request an unfinished week.
     await page.goto(`http://127.0.0.1:${server.address().port}/accounting/${kind}-pay?weekStart=2026-11-02`);
     await expect.poll(() => weeks.at(-1)).toBe('2026-10-19');
-    await expect(page.getByRole('button', { name: 'Next week', exact: true })).toBeDisabled();
+    const next = page.getByRole('button', { name: 'Next week', exact: true });
+    const picker = page.getByRole('combobox', { name: 'Payroll week', exact: true });
+    if (kind === 'dispatcher') await expect(next).toBeDisabled();
+    else {
+      await expect(picker).toHaveValue('2026-10-19');
+      await expect(picker.locator('optgroup[label="2026"] option:checked')).toHaveText('Week 43 - 10/19');
+      await expect(picker.locator('option[value="2026-10-26"]')).toHaveCount(0);
+    }
     await page.clock.fastForward(61_000);
     // Monday unlocks the newly completed week without a page reload.
-    await expect(page.getByRole('button', { name: 'Next week', exact: true })).toBeEnabled();
-    await page.getByRole('button', { name: 'Last week', exact: true }).click();
+    if (kind === 'dispatcher') {
+      await expect(next).toBeEnabled();
+      await page.getByRole('button', { name: 'Last week', exact: true }).click();
+    } else {
+      await expect(picker.locator('option[value="2026-10-26"]')).toHaveText('Week 44 - 10/26');
+      await picker.selectOption('2026-10-26');
+    }
     await expect.poll(() => weeks.at(-1)).toBe('2026-10-26');
-    await expect(page.getByRole('button', { name: 'Next week', exact: true })).toBeDisabled();
+    if (kind === 'dispatcher') await expect(next).toBeDisabled();
+    else await expect(picker.locator('option[value="2026-11-02"]')).toHaveCount(0);
     assert(weeks.every(week => week <= '2026-10-26'));
     await page.close();
   }

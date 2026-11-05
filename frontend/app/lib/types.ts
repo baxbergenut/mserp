@@ -1378,6 +1378,7 @@ export interface PayLoadPlacementResult {
 }
 export interface DriverPayDriver {
   salaryCarry?: string;
+  salaryCarryWeek?: string;
 	expenseRevision?: string;
 	preparationState?: "ready" | "preparing" | "updating" | "failed";
 	statementRevision?: string;
