@@ -905,8 +905,8 @@ positive Reimburse-method expense credits already included in net payable.
   proximity/freshness rules and rollout. ETA times round to the nearest 15 minutes;
   cell hover shows only facility-local ETA (offline coordinate timezone lookup).
   Automatic travel and arrival use green for fresh evidence and red for outdated
-  evidence, with a check or warning icon and an accessible freshness label. Manual
-  values use the normal text color. Routing assumptions remain server diagnostics.
+  evidence, with an accessible freshness label. Manual values use the normal
+  text color. Routing assumptions remain server diagnostics.
   Load cards expose a rightmost read-only-compatible copy-number icon.
   Browser checks: `test-board-appointments.mjs`
   and `test-status-board-layout.mjs`; `test-board-pickup-times-e2e.mjs` uses

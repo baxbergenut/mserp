@@ -111,8 +111,8 @@ resolved offline from stop coordinates with tz-lookup; it includes the local dat
 and timezone abbreviation. No appointment, GPS diagnostic or routing-profile notes
 appear in the cell hover. Missing facility coordinates or a valid ETA leave the
 hover empty. Stale GPS retains mileage only, without presenting an old ETA.
-Automatic travel and proximity use a green check for fresh data and a red warning
-for outdated data, with freshness labels for screen readers. Manual times and
+Automatic travel and proximity use green text for fresh data and red text for
+outdated data, with freshness labels for screen readers. Manual times and
 mileage use the normal text color. The API exposes travelStale and
 travelArrivalAt separately from arrival-proximity evidence.
 Entering either clears the other. Notes are never rewritten. Existing manual ETA

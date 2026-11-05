@@ -72,13 +72,13 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
     })
     .sort((a, b) => a.rank - b.rank);
 
-  return <><div className="flex items-center justify-between gap-0.5">
-    {truckId ? <Link href={`/trucks/detail?id=${truckId}`} className="min-w-0 truncate hover:text-blue-300">{unit}</Link> : <span>—</span>}
-    <div className="relative shrink-0">
+  return <><div className="grid grid-cols-[minmax(0,1fr)_20px] items-center gap-1">
+    {truckId ? <Link href={`/trucks/detail?id=${truckId}`} className="block truncate hover:text-blue-300">{unit}</Link> : <span>—</span>}
+    <div className="relative">
       <select aria-label={`${name} · Assign truck`} title={busy ? "Saving assignment…" : "Assign truck effective today (New York)"}
         value={selectedId} disabled={disabled || busy || !!pending || choices === null} onFocus={onFocus}
         onChange={event => void choose(event.target.value)}
-        className="truck-assignment-select peer block h-8 w-5 cursor-pointer appearance-none bg-transparent text-transparent disabled:cursor-default">
+        className="truck-assignment-select peer block h-8 w-full cursor-pointer appearance-none bg-transparent text-transparent disabled:cursor-default">
         <option value="" disabled hidden>—</option>
         {truckId && !currentChoice && <option value={truckId} hidden>{unit}</option>}
         {options.map(({ truck, loadBlocked, unavailable }) => {
@@ -90,7 +90,7 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
           </option>;
         })}
       </select>
-      <ChevronDown aria-hidden="true" className="pointer-events-none absolute left-0.5 top-1/2 size-4 -translate-y-1/2 text-zinc-300 peer-disabled:opacity-50" />
+      <ChevronDown aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 text-zinc-300 peer-disabled:opacity-50" />
     </div>
   </div>
     {pending && createPortal(<dialog ref={dialog} aria-label="Reassign truck" data-grid-ignore
