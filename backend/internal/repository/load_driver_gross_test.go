@@ -189,7 +189,7 @@ func TestDataTruckDriverGrossDatabase(t *testing.T) {
 			if err != nil || ordinary[0].Note == nil || *ordinary[0].Note != updatedNote || ordinary[0].DriverRate != "2200.00" {
 				t.Fatal("a flag outside the patch blocked or altered an ordinary edit", ordinary, err)
 			}
-			known = patched[0]
+			known = ordinary[0]
 			known.DriverRate = "2300"
 			known.AcceptDriverGross = false
 			known.Fields = nil
