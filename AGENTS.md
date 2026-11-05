@@ -2024,7 +2024,13 @@ assignment lookup lists.
   TestPayLoadPlacementsDatabase with MSERP_GROSS_BOARD_TEST_DATABASE_URL and
   `node scripts/test-investors-e2e.mjs --load-placements-only` after a /api build.
 - Weekend load transfers use migration 159, repository `load_week_transfers.go`
-  and the shared Driver/Investor Pay row action. Separate dispatch/settlement
+  and read-only `load_week_transfer_list.go`. Original-week payroll exposes a
+  non-counting Transferred out list even when the destination week is hidden.
+  Its outgoing-transfers endpoint uses pay read permissions and completed-week
+  bounds. Gross Board markers/destinations can return loads with pay edit
+  permission; board write alone does not grant that action. Both entry points
+  reuse existing source/transfer versions, receipts and finalized guards.
+  The shared Driver/Investor Pay row action uses separate dispatch/settlement
   projections retain source coordinates, trip identity, truck and original
   dispatcher credit. Both modes move Gross Board visually to next Monday and
   leave a non-counting Late delivered / moved to next week marker. Settlement

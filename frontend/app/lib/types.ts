@@ -1302,6 +1302,20 @@ export interface DriverPayEdits {
   version: number;
 }
 export type LoadWeekTransferMode = "everyone" | "dispatch_only" | "restore";
+export interface OutgoingLoadTransfer {
+  statementId: string;
+  driverId: string;
+  driverName: string;
+  truckId: string;
+  truckUnit: string;
+  loadNumber: string;
+  sourceDate: string;
+  sourceSlot: number;
+  dispatchDate: string;
+  settlementDate: string;
+  boardVersion: number;
+  transferVersion: number;
+}
 export interface DriverPayLoad {
   payrollSupplement?: boolean;
   payrollPlacementVersion?: number;

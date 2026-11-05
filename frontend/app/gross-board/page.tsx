@@ -25,6 +25,7 @@ import { BoardFilter } from "@/app/components/management/BoardFilter";
 import { parseBoardDriverTarget, parseBoardLoadTarget } from "./loadLink";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
+import { GrossTransferReturn } from "./GrossTransferReturn";
 import { BalanceDetails } from "./BalanceDetails";
 import { BoardScrollArea } from "./BoardScrollArea";
 import { entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, rpmDisplay, shortDate, totals, validDecimal } from "./board";
@@ -309,6 +310,7 @@ export default function GrossBoardPage() {
   }
 
   return (
+    <GrossTransferReturn disabled={dirty || saving || loading || !!board?.managedInSheets} onReturned={() => { void load(); }}>
     <div className="space-y-5 animate-fade-in">
       <PageHeader><div>
           <div className="flex items-center gap-3">
@@ -426,6 +428,6 @@ export default function GrossBoardPage() {
         resetDisabled={dirty || saving || loading}
         openingReference={openings.get(selectedDriver.id)?.openingReference} opening={openings.get(selectedDriver.id)?.openingBalance ?? "0"} openingIncomplete={openings.get(selectedDriver.id)?.openingIncomplete ?? 0}
         entries={entryIndex.byDriver.get(selectedDriver.id) ?? []} onClose={() => setBalanceDriver(null)} />}
-    </div>
+    </div></GrossTransferReturn>
   );
 }

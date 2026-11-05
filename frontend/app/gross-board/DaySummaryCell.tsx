@@ -9,6 +9,7 @@ import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { DayCell } from "./DayCell";
+import { GrossTransferReturnButton } from "./GrossTransferReturn";
 import { additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
@@ -102,6 +103,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
         onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? "bg-emerald-500/15 !text-emerald-300" : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
         <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? (entry.loadRecordId === null || entry.sourceMissing) ? "font-semibold text-red-300" : "text-emerald-300" : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${(entry.loadRecordId === null || entry.sourceMissing) ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber || "Empty"}</span>)}</span>
       </button></div>
+      {displayed.filter(entry => entry.transferVersion).map(entry => <div key={entry.slot} className="px-2 pb-2"><span className="text-[10px] text-zinc-400">{entry.loadNumber} </span><GrossTransferReturnButton entry={entry} /></div>)}
       {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${(name === "driver rate" ? driverNeedsReview : needsReview) ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
     </td>}
     {displayed.length > 1 && notes.popup}
@@ -116,7 +118,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       {!readOnly && onReturn && <div className="mb-4 flex items-center gap-3"><button type="button" disabled={!!invalid} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-blue-300 disabled:opacity-40" onClick={() => { if (applyDraft()) onReturn(); }}>Apply and return to Driver Pay</button><span className="text-xs text-zinc-500">Changes save before returning to your place.</span></div>}
       <div data-gross-editor-day={`${driverId}:${date}`} className="overflow-x-auto pb-32"><table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{draft.filter(entry => !entry.deleted).map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
         <td className="p-0 align-top text-[11px] text-zinc-500"><div className="h-6" />{["Load #", "Total gross", "Driver", "Miles"].map(name => <div key={name} className="flex h-8 items-center">{name}</div>)}</td>
-        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
+        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} hideReturn highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
       </tr></tbody></table></div>
       <button type="button" hidden={readOnly} disabled={readOnly || draft.filter(entry => !entry.deleted).length >= 100} onClick={() => addDraft(driverId, date)} className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-3 py-2 text-xs text-blue-300"><Plus className="h-3 w-3" />Add load</button>
       {invalid && <p role="alert" className="mt-3 text-xs text-red-300">Correct invalid rates or mileage before applying.</p>}

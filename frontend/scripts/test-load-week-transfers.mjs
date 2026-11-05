@@ -37,6 +37,8 @@ try{
     ...(investor?{investorId:'owner',truckId:'statement'}:{}),loads:(mode==='everyone'?selected===next:selected===week)?[load()]:[],settlement:finalized?{finalized:true}:undefined,
     edits:{driverId:'statement',weekStart:selected,version:0,notes:'',comments:{},adjustments:[],fuelOverride:null,tollOverride:null}};
    const fixtures={
+    '/driver-pay/outgoing-transfers':{transfers:mode==='everyone'&&selected===week?[{statementId:'statement',driverId:'statement',driverName:'Transfer Test',truckId:'statement',truckUnit:'T1',loadNumber:'WEEKEND',sourceDate:source,sourceSlot:0,dispatchDate:next,settlementDate:next,boardVersion:7,transferVersion:version}]:[]},
+    '/investor-pay/outgoing-transfers':{transfers:mode==='everyone'&&selected===week?[{statementId:'statement',driverId:'operator',driverName:'Transfer Test',truckId:'statement',truckUnit:'T1',loadNumber:'WEEKEND',sourceDate:source,sourceSlot:0,dispatchDate:next,settlementDate:next,boardVersion:7,transferVersion:version}]:[]},
     '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['driver_pay.read','investor_pay.read','board.read','board.write',...(readonly?[]:['driver_pay.edit','investor_pay.edit'])]},csrfToken:'fixture'},
     '/driver-pay':{weekStart:selected,revision:'fixture',drivers:[driver]},'/investor-pay':{weekStart:selected,revision:'fixture',drivers:[driver]},'/tasks/count':{count:0},
    };
@@ -58,18 +60,25 @@ try{
   await page.getByRole('button',{name:'Save transfer',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('link',{name:'WEEKEND',exact:true})).toHaveCount(0);
-  await navigate(next);await expect(page.getByRole('link',{name:'WEEKEND',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Move WEEKEND to next week'}).click();
-  await page.getByRole('radio',{name:'Restore original placement for everyone'}).check();
+  // The destination is the hidden current week. Restore from the original
+  // week even though its financial load row is no longer present.
+  await expect(page.getByRole('region',{name:'Transferred out',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Return WEEKEND to original date'}).click();
   await page.getByRole('textbox',{name:'Reason',exact:true}).fill('Corrected transfer');
-  await page.getByRole('button',{name:'Save transfer',exact:true}).click();
+  reject=true;await page.getByRole('button',{name:'Return load',exact:true}).click();
+  await expect(page.getByRole('alert').filter({hasText:'Another accountant'})).toBeVisible();
+  await page.getByRole('button',{name:'Return load',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Transferred out',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('link',{name:'WEEKEND',exact:true})).toBeVisible();
   finalized=true;await navigate(week);
   await page.getByRole('button',{name:'Move WEEKEND to next week'}).click();
   await expect(page.getByRole('radio',{name:/Move for everyone/})).toBeDisabled();
   await page.getByRole('button',{name:'Save transfer',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
-  readonly=true;await navigate(week);await expect(page.getByRole('button',{name:'Move WEEKEND to next week'})).toHaveCount(0);
-  expect(requests.map(r=>r.mode)).toEqual(['dispatch_only','everyone','everyone','restore','dispatch_only']);expect(errors).toEqual([]);
+  readonly=true;mode='everyone';await navigate(week);await expect(page.getByRole('button',{name:'Move WEEKEND to next week'})).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Transferred out',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Return WEEKEND to original date'})).toHaveCount(0);
+  expect(requests.map(r=>r.mode)).toEqual(['dispatch_only','everyone','everyone','restore','restore','dispatch_only']);expect(errors).toEqual([]);
   await page.close();
  }
  const page=await browser.newPage({viewport:{width:2000,height:1100}});
@@ -129,5 +138,41 @@ try{
   await expect(addPage.getByRole('button',{name:`Add Driver, ${next}, add another load`,exact:true})).toHaveCount(0);
   await addPage.close();
  }
- console.log('Load week transfers passed: both pay pages, both modes, original dispatcher totals, stale errors, restore, finalized and read-only controls.');
+ // Neither board location needs the hidden destination payroll statement.
+ for (const original of [true,false]) {
+  const boardPage=await browser.newPage({viewport:{width:1800,height:1100}});
+  let active=true,mayReturn=false,blocked=true;
+  const selected=original?week:next, calls=[];
+  await boardPage.clock.setFixedTime(new Date('2026-10-27T12:00:00Z'));
+  await boardPage.route('**/api/**',async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname.slice(4);
+   if(path==='/driver-pay/transfer-load') {
+    const input=request.postDataJSON(); calls.push(input);
+    expect(input).toMatchObject({driverId:'15900000-0000-0000-0000-000000000001',date:source,slot:7,boardVersion:9,transferVersion:3,mode:'restore',reason:'Wrong weekend'});
+    if(blocked){blocked=false;return route.fulfill({status:400,json:{error:'Reopen affected driver and investor statements in both weeks before moving the settlement'}});}
+    active=false;return route.fulfill({status:204});
+   }
+   const moved={driverId:'15900000-0000-0000-0000-000000000001',date:original?source:next,sourceDate:source,sourceSlot:7,slot:original?7:1,version:9,transferVersion:3,transferOut:original,creditedDispatcherId:'old',creditedDispatcherName:'Old Dispatcher',deleted:false,loadNumber:'RESTORE-ME',loadRecordId:9101,dayStatus:'',originalRate:original?'':'3000',driverRate:original?'':'2800',miles:original?'':'600',enteredOriginalRate:'',enteredMiles:'',duplicate:original};
+   const fixtures={
+    '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['board.read','board.write',...(mayReturn?['driver_pay.read','driver_pay.edit']:[])]},csrfToken:'fixture'},
+    '/gross-board':{weekStart:selected,drivers:[{id:'15900000-0000-0000-0000-000000000001',fullName:'Restore Driver',active:true,dispatcherId:'old',dispatcherName:'Old Dispatcher',truckUnit:'T1'}],entries:active?[moved]:original?[{...moved,transferVersion:0,transferOut:false,duplicate:false,originalRate:'3000',driverRate:'2800',miles:'600'}]:[],balances:[]},'/tasks/count':{count:0},
+   };
+   return route.fulfill({json:fixtures[path]??[]});
+  });
+  await boardPage.goto(`${base}/gross-board?weekStart=${selected}&driverId=15900000-0000-0000-0000-000000000001`);
+  await expect(boardPage.getByRole('row',{name:'Old Dispatcher totals'})).toBeVisible();
+  await expect(boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'})).toHaveCount(0);
+  mayReturn=true;await boardPage.reload();
+  await boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'}).click();
+  await boardPage.getByRole('textbox',{name:'Reason',exact:true}).fill('Wrong weekend');
+  await boardPage.getByRole('button',{name:'Return load',exact:true}).click();
+  await expect(boardPage.getByRole('alert').filter({hasText:'Reopen affected'})).toBeVisible();
+  expect(active).toBe(true);
+  await boardPage.getByRole('button',{name:'Return load',exact:true}).click();
+  await expect(boardPage.getByRole('dialog')).toHaveCount(0);
+  await expect(boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'})).toHaveCount(0);
+  expect(active).toBe(false);expect(calls).toHaveLength(2);
+  await boardPage.close();
+ }
+ console.log('Load week transfers passed: both pay pages, hidden-current-week return, both Gross Board locations, permissions, finalized and stale guards, original totals, and adding beside transferred loads.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

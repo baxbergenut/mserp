@@ -13,7 +13,13 @@ The original day on Gross Board shows **Late delivered / moved to next week**
 without contributing gross, mileage or balance. Next Monday contains the load
 once, under its original dispatcher, even after a Monday assignment change.
 The moved cell shows its original date. Transferred board entries are read-only;
-restore the transfer in payroll before changing their underlying load values.
+restore the transfer before changing their underlying load values.
+The original payroll week has a separate **Transferred out** list with
+**Return to original date**, even when no payable loads remain or the destination
+week is not available yet. These metadata rows never contribute to payroll totals.
+Gross Board exposes the same return action on both the original marker and the
+Monday entry, requiring Driver Pay or Investor Pay edit permission (board write
+permission alone is insufficient). Pending board drafts must be saved first.
 The day's **+** action remains available to users with board write permission,
 including when its only entry is transferred or is a moved-out marker. Other
 loads can be added without editing the transferred entry.
@@ -59,6 +65,13 @@ respective `.edit` permissions. Input includes `driverId`, original `date` and
 `slot`, `boardVersion`, `transferVersion`, `mode` (`everyone`, `dispatch_only`,
 `restore`), and a required reason. The transaction records actor, before/after
 placement and reason. A retry with an obsolete version cannot apply twice.
+
+`GET /driver-pay/outgoing-transfers` and `/investor-pay/outgoing-transfers` use
+their respective read permissions and the original completed week's availability
+boundary. They read active moved-out placement metadata directly, independently
+of prepared statements, with statement/search/original-dispatcher filters. Restore
+uses the existing source board and transfer versions, receipt and financial guards;
+it does not need a prepared destination statement or a new schema migration.
 
 ## Validation
 

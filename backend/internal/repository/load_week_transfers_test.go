@@ -195,6 +195,31 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			input.TransferVersion = 1
 			input.Mode = "everyone"
 			transfer()
+			// The original week exposes placement metadata even without a payable
+			// load or a destination statement. Both pay pages use the same source.
+			for _, kind := range []string{"driver", "investor"} {
+				id := driver
+				if kind == "investor" {
+					id = truck
+				}
+				out, err := pay.OutgoingLoadTransfers(ctx, kind, week, PayPageQuery{ID: id, Search: "MOVE-SUN", DispatcherID: oldDispatcher})
+				if err != nil || len(out) != 1 {
+					t.Fatalf("outgoing %s: %+v %v", kind, out, err)
+				}
+				if out[0].StatementID != id || out[0].DriverID != driver || out[0].SourceDate != input.Date || out[0].SourceSlot != 0 || out[0].BoardVersion != 1 || out[0].TransferVersion != 2 || out[0].SettlementDate != "2026-10-26" {
+					t.Fatalf("wrong restore identity: %+v", out[0])
+				}
+				for _, filter := range []PayPageQuery{{ID: owner}, {Search: "not-a-load"}, {DispatcherID: "missing"}} {
+					out, err := pay.OutgoingLoadTransfers(ctx, kind, week, filter)
+					if err != nil || len(out) != 0 {
+						t.Fatalf("outgoing filter: %+v %v", out, err)
+					}
+				}
+				out, err = pay.OutgoingLoadTransfers(ctx, kind, next, PayPageQuery{})
+				if err != nil || len(out) != 0 {
+					t.Fatalf("outgoing leaked to destination: %+v %v", out, err)
+				}
+			}
 			for _, investor := range []bool{false, true} {
 				if l := find(read(investor, week), "MOVE-SUN"); l != nil {
 					t.Fatal("original settlement still contains transferred load", investor)
@@ -233,6 +258,10 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			input.TransferVersion = 3
 			input.Mode = "restore"
 			transfer()
+			out, listErr := pay.OutgoingLoadTransfers(ctx, "driver", week, PayPageQuery{})
+			if listErr != nil || len(out) != 0 {
+				t.Fatalf("restored transfer still listed: %+v %v", out, listErr)
+			}
 			for _, investor := range []bool{false, true} {
 				if find(read(investor, week), "MOVE-SUN") == nil || find(read(investor, next), "MOVE-SUN") != nil {
 					t.Fatal("restore out of sync", investor)

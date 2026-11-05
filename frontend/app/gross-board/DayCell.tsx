@@ -10,11 +10,13 @@ import { LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 import { SplitReviewDialog } from "./SplitReviewDialog";
 import { DecimalInput } from "./DecimalInput";
+import { GrossTransferReturnButton } from "./GrossTransferReturn";
 
 type DayCellProps = {
   entry: GrossBoardEntry;
   id?: string;
   highlighted?: boolean;
+  hideReturn?: boolean;
   driverName: string;
   disabled: boolean;
   // Permission to add to the day is independent of this entry being read-only.
@@ -22,7 +24,7 @@ type DayCellProps = {
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted }: DayCellProps) {
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted, hideReturn }: DayCellProps) {
   const notes = useLoadNotes([entry], disabled, onChange);
   const cellRef = useRef<HTMLTableCellElement>(null);
   useEffect(() => {
@@ -40,7 +42,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   const addButton = onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>;
-  if(entry.transferOut) return <td className="border-b border-r border-zinc-800/70 bg-blue-500/10 p-0 text-center text-xs text-blue-200"><div className="flex h-6 items-center justify-end border-b border-zinc-800/70 px-1">{addButton}</div><div className="p-2"><div className="font-mono">{entry.loadNumber}</div><div className="mt-3 font-medium">Late delivered<br />moved to next week</div><div className="mt-2 text-[10px] text-zinc-500">Manage in Driver / Investor Pay</div></div></td>;
+  if(entry.transferOut) return <td className="border-b border-r border-zinc-800/70 bg-blue-500/10 p-0 text-center text-xs text-blue-200"><div className="flex h-6 items-center justify-end border-b border-zinc-800/70 px-1">{addButton}</div><div className="p-2"><div className="font-mono">{entry.loadNumber}</div><div className="mt-3 font-medium">Late delivered<br />moved to next week</div>{!hideReturn && <GrossTransferReturnButton entry={entry} />}</div></td>;
   return (
     <td data-gross-driver={entry.driverId} data-gross-date={entry.date} data-gross-slot={entry.slot} {...notes.cellProps} id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`relative border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
@@ -50,6 +52,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         </div>
       </div>
       <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} /></div>{notes.popup}
+      {!hideReturn && !!entry.transferVersion && <div className="px-2 pb-2"><GrossTransferReturnButton entry={entry} /></div>}
       {!entry.dayStatus && (["originalRate", "driverRate", "miles"] as const).map((field) => {
         const valid = validDecimal(entry[field], field === "miles");
         const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : driverMismatch;
@@ -90,9 +93,12 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
+  && previous.hideReturn === next.hideReturn
   && previous.entry.sourceMissing === next.entry.sourceMissing && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
   && JSON.stringify(previous.entry.splitReview) === JSON.stringify(next.entry.splitReview)
   && previous.entry.note === next.entry.note
+  && previous.entry.transferVersion === next.entry.transferVersion && previous.entry.transferOut === next.entry.transferOut
+  && previous.entry.sourceDate === next.entry.sourceDate && previous.entry.sourceSlot === next.entry.sourceSlot
   && previous.entry.slot === next.entry.slot && previous.entry.deleted === next.entry.deleted
   && previous.entry.driverId === next.entry.driverId && previous.entry.date === next.entry.date
   && previous.entry.dayStatus === next.entry.dayStatus

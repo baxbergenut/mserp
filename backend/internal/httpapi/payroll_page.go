@@ -48,6 +48,28 @@ func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
 }
 
 func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.DriverPayRepository, fail func(http.ResponseWriter, error)) {
+	r.Get(path+"/outgoing-transfers", func(w http.ResponseWriter, r *http.Request) {
+		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), repo.FirstPayrollWeek())
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		query, err := payPageQuery(r)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
+		}
+		kind := "driver"
+		if path == "/investor-pay" {
+			kind = "investor"
+		}
+		transfers, err := repo.OutgoingLoadTransfers(r.Context(), kind, week, query)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"transfers": transfers})
+	})
 	r.Get(path+"/availability", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"firstWeek": repo.FirstPayrollWeek(), "currentWeek": repository.ChargeCurrentWeek(), "latestWeek": repository.PayrollLatestWeek()})
 	})
