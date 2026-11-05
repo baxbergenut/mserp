@@ -25,7 +25,9 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
   expect(tileReferrers.every(value => value === `${new URL(base).origin}/`)).toBe(true);
   await expect(panel.locator('img.leaflet-tile').first()).toHaveAttribute('referrerpolicy', 'strict-origin');
   await expect(panel.locator('[data-heading="90"]')).toHaveCSS('transform', 'matrix(0, 1, -1, 0, 0, 0)');
-  await panel.getByRole('button', { name: 'Truck ELD-17 · Copy current location', exact: true }).click();
+  const freshLocation = panel.getByRole('button', { name: 'Truck ELD-17 · Copy current location', exact: true });
+  await expect(freshLocation).toHaveClass(/\btext-emerald-400\b/);
+  await freshLocation.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('41.88100, -87.62300');
   await page.locator('main').evaluate(el => el.scrollTo(0, 0));
   await page.screenshot({ path: join(temp, 'truck-details-location.png'), fullPage: true, animations: 'disabled' });
@@ -55,7 +57,7 @@ export async function runFleetLocationE2E({ page, base, sql, schema, temp }) {
   await expect(panel.getByRole('img', { name: 'Reported heading 90 degrees' })).toBeVisible();
   await page.goto(`${base}/trucks/detail?id=${otherTruck}`);
   await expect(panel.getByRole('img', { name: 'Truck location; heading unavailable' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Truck ELD-18 · Copy current location' })).toHaveClass(/(?:^| )text-zinc-500(?: |$)/);
+  await expect(panel.getByRole('button', { name: 'Truck ELD-18 · Copy current location' })).toHaveClass(/\btext-orange-400\b/);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'truck-details-mobile.png'), fullPage: true, animations: 'disabled' });
