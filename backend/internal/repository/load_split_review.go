@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -108,7 +109,13 @@ func readSplitWorkspace(ctx context.Context, tx pgx.Tx, id int) (LoadSplitWorksp
 
 // Caller holds fleet/financial locks. The load lock fences source refreshes;
 // every linked board slot is versioned, including repeats outside this week.
-func prepareSplitReviews(ctx context.Context, tx pgx.Tx, entries []GrossBoardEntry) ([]GrossBoardEntry, error) {
+func prepareSplitReviews(ctx context.Context, tx pgx.Tx, entries []GrossBoardEntry) (_ []GrossBoardEntry, saveErr error) {
+	var reviewing *GrossBoardEntry
+	defer func() {
+		if saveErr != nil && reviewing != nil {
+			saveErr = grossBoardRejection{location: grossBoardLocation(*reviewing), fields: []string{"splitReview"}, cause: saveErr}
+		}
+	}()
 	inputs := map[string]bool{}
 	reviewed := map[int]bool{}
 	for _, e := range entries {
@@ -121,6 +128,7 @@ func prepareSplitReviews(ctx context.Context, tx pgx.Tx, entries []GrossBoardEnt
 		if request == nil {
 			continue
 		}
+		reviewing = e
 		if e.LoadRecordID == nil || request.LoadID != *e.LoadRecordID || e.LoadTripID == nil || e.Deleted || e.DayStatus != "" {
 			return nil, ErrGrossBoardTrip
 		}
@@ -139,7 +147,7 @@ func prepareSplitReviews(ctx context.Context, tx pgx.Tx, entries []GrossBoardEnt
 			return nil, err
 		}
 		if request.Version != current.Version || request.SourceHash != current.SourceHash {
-			return nil, chargeInvalid("The split or DataTruck source changed. Discard unsaved changes, then reopen the split editor")
+			return nil, chargeInvalid("The split or DataTruck source changed. Reopen the split editor to review the current trips and retry.")
 		}
 		// A load can also be recognized in a different payroll week. Fence every
 		// frozen snapshot of the parent order, including legacy number-only rows.
@@ -268,6 +276,7 @@ func prepareSplitReviews(ctx context.Context, tx pgx.Tx, entries []GrossBoardEnt
 		saved.Version++
 		saved.Entries = nil
 		saved.Reason = strings.TrimSpace(saved.Reason)
+		saved.Allocations = slices.Clone(request.Allocations)
 		for j := range saved.Allocations {
 			saved.Allocations[j].OriginalRate = allocations[saved.Allocations[j].TripID]
 		}

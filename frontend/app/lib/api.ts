@@ -231,8 +231,12 @@ export const resetGrossBoardBalance = (driverId: string, weekStart: string, bala
   apiRequest<GrossBoardBalance>("/gross-board/balance/reset", { method: "POST", body: JSON.stringify({ driverId, weekStart, balance }) });
 export const searchGrossBoardLoads = (search: string) =>
   apiRequest<GrossBoardLoad[]>(withQuery("/gross-board/loads", { search }));
-export const saveGrossBoard = (weekStart: string, entries: GrossBoardEntry[]) =>
-  apiRequest<GrossBoardEntry[]>("/gross-board", { method: "PUT", body: JSON.stringify({ weekStart, entries }) });
+export async function saveGrossBoard(weekStart: string, entries: GrossBoardEntry[]): Promise<import("./types").GrossBoardSaveResult> {
+  const result = await apiRequest<import("./types").GrossBoardSaveResult | GrossBoardEntry[]>("/gross-board", {
+    method: "PUT", body: JSON.stringify({ weekStart, entries, allowPartial: true }),
+  });
+  return Array.isArray(result) ? { entries: result, issues: [] } : result;
+}
 
 export async function fetchLoads(): Promise<Load[]> {
 	const json = await apiRequest<unknown>("/loads");

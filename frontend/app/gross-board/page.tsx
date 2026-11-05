@@ -13,11 +13,11 @@ import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo,
 import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck } from "lucide-react";
 import { fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
-import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, reconcileGrossPatches, type GrossDrafts } from "./drafts";
+import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, grossLocationKey, reconcileGrossPatches, refreshRejectedSources, type GrossDrafts } from "./drafts";
 import { mergeGrossLive } from "./liveMerge";
 import { GrossPresence } from "./GrossPresence";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
-import type { GrossBoard, GrossBoardEntry } from "@/app/lib/types";
+import type { GrossBoard, GrossBoardEntry, GrossBoardSaveIssue } from "@/app/lib/types";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { MetricCard } from "@/app/components/MetricCard";
 import { ManagementSearch } from "@/app/components/management/ManagementUI";
@@ -27,6 +27,7 @@ import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { BoardScrollArea } from "./BoardScrollArea";
+import { SaveIssues } from "./SaveIssues";
 import { entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -67,6 +68,7 @@ export default function GrossBoardPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [issues, setIssues] = useState<GrossBoardSaveIssue[]>([]);
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
@@ -93,6 +95,10 @@ export default function GrossBoardPage() {
   const live = useGrossLive(week, useCallback((value?: GrossBoard) => receiveLive.current(value), []));
   useLayoutEffect(() => { connectedRef.current = live.connected; }, [live.connected]);
   const dirty = canEdit && Object.keys(changes).length > 0;
+  const hasReadyEdits = useMemo(() => {
+    const blocked = new Set(issues.flatMap(issue => issue.pending.map(grossLocationKey)));
+    return Object.keys(changes).some(key => !blocked.has(key));
+  }, [changes, issues]);
   useLayoutEffect(() => { idleRef.current = !loading; resumeLive.current(); }, [dirty, saving, loading]);
   const dates = useMemo(() => weekdays.map((_, index) => addDays(week, index)), [week]);
 
@@ -259,6 +265,7 @@ export default function GrossBoardPage() {
     // will be replaced by that response, so it must remain queued.
     if (!(slot > 0 && baseline.version === 0) && !savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[key];
     setDrafts(result);
+    setIssues(currentIssues => currentIssues.filter(issue => !issue.pending.some(location => grossLocationKey(location) === key)));
     setMessage("");
   }, [canEdit, setDrafts]);
 
@@ -271,9 +278,19 @@ export default function GrossBoardPage() {
     busyKeys.current = Object.keys(snapshot);
     setSaving(true); setError(""); setMessage("");
     try {
-      const committed = await saveGrossBoard(week, Object.entries(snapshot).map(([key, entry]) => ({ ...entry, fields: grossDraftFields(entry, baselinesRef.current[key]) })));
+      const { entries: committed, issues: rejected } = await saveGrossBoard(week, Object.entries(snapshot).map(([key, entry]) => ({
+        ...entry, fields: grossDraftFields(entry, baselinesRef.current[key]), previousLoadNumber: baselinesRef.current[key]?.loadNumber,
+      })));
       committed.forEach(entry => { savedRef.current[entryKey(entry.driverId,entry.date,entry.slot)] = entry; });
       const remaining = reconcileGrossPatches(changesRef.current,snapshot,committed);
+      // New typing may already have fixed a rejected group while it was in flight.
+      // Include blocked drafts again when new edits arrive so a later half of a
+      // move can still be saved atomically with the first half.
+      setIssues(rejected.filter(issue => issue.pending.every(location => {
+        const key = grossLocationKey(location);
+        return snapshot[key] === changesRef.current[key];
+      })));
+      refreshRejectedSources(remaining, snapshot, rejected);
       for (const entry of committed) baselinesRef.current[entryKey(entry.driverId, entry.date, entry.slot)] = entry;
       changesRef.current = remaining;
       setBoard((current) => {
@@ -286,7 +303,7 @@ export default function GrossBoardPage() {
       setMessage("Saved");
       // The stream refreshes carry and matching metadata. Recover by GET when
       // disconnected, preserving newer edits and navigation flushes.
-      if (!live.connected && activityRef.current === saveRevision && !leavingRef.current) {
+      if (committed.length > 0 && !live.connected && activityRef.current === saveRevision && !leavingRef.current) {
         try {
           const fresh = await fetchGrossBoard(week);
           if (activityRef.current === saveRevision) receiveLive.current(fresh);
@@ -297,15 +314,31 @@ export default function GrossBoardPage() {
   }, [canEdit, live.connected, invalid, loading, week, setDrafts]);
 
   useEffect(() => {
-    if (!dirty || saving || error || invalid || loading) return;
+    if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
     const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 300);
     return () => clearTimeout(timer);
-  }, [changes, dirty, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
+  }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 
   async function reload() {
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
     activityRef.current += 1;
+    setIssues([]);
     baselinesRef.current = {}; setDrafts({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
+  }
+
+  function discardIssue(issue: GrossBoardSaveIssue) {
+    if (savingRef.current || !window.confirm("Discard the unsaved edits for this issue?")) return;
+    activityRef.current += 1;
+    const remaining = { ...changesRef.current };
+    for (const location of issue.pending) {
+      const key = grossLocationKey(location);
+      delete remaining[key];
+      delete baselinesRef.current[key];
+    }
+    setDrafts(remaining);
+    setIssues(currentIssues => currentIssues.filter(current => current !== issue));
+    resumeLive.current();
+    receiveLive.current();
   }
 
   return (
@@ -341,13 +374,16 @@ export default function GrossBoardPage() {
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={live.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${live.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{live.connected ? "Live" : "Connecting…"}</span>
-          <span role="status" className={`flex items-center gap-1.5 text-xs ${error && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{board?.managedInSheets ? "Managed in Sheets · read only" : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
+          <span role="status" className={`flex items-center gap-1.5 text-xs ${(error || issues.length > 0) && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{board?.managedInSheets ? "Managed in Sheets · read only" : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : issues.length > 0 ? "Edits need review" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
         </div></div></div>
 
     </PinnablePageHeader>
 
       {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <><button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button><button className={`${buttonClass} ml-3`} onClick={reload} disabled={saving}>Discard unsaved changes</button></>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
-      {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">Saving edits before leaving this week…{invalid || error ? " Resolve the highlighted issue to continue." : ""}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
+      {!error && issues.length > 0 && <SaveIssues issues={issues} changes={changes} drivers={board?.drivers ?? []}
+        saving={saving} onDiscard={discardIssue}
+        actions={<><button className={buttonClass} onClick={save} disabled={saving || invalid}>Retry save</button><button className={buttonClass} onClick={reload} disabled={saving}>Discard unsaved changes</button></>} />}
+      {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid || error || issues.length ? "Resolve the unsaved edits before leaving this week." : "Saving edits before leaving this week…"}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
       {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}

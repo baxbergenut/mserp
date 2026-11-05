@@ -194,6 +194,77 @@ func TestDataTruckDriverGrossDatabase(t *testing.T) {
 			known.AcceptDriverGross = false
 			known.Fields = nil
 			known = save(known)
+			t.Run("two dispatchers during a DataTruck refresh", func(t *testing.T) {
+				sync(9511, "REVIEW-DURING-REFRESH", "700")
+				review := save(GrossBoardEntry{DriverID: driver, Date: "2026-10-26", LoadNumber: "REVIEW-DURING-REFRESH", DriverRate: "600"})
+				shared := save(GrossBoardEntry{DriverID: driver, Date: "2026-10-27", LoadNumber: "SHARED-EDIT", DriverRate: "500"})
+				move := save(GrossBoardEntry{DriverID: driver, Date: "2026-10-28", LoadNumber: "ATOMIC-MOVE", DriverRate: "100"})
+				// The first browser queues an approval and an amount from the old
+				// snapshot. A second dispatcher saves while the provider refreshes.
+				accept := review
+				accept.Fields, accept.AcceptDriverGross, accept.DriverRate = []string{"driverRate", "acceptDriverGross"}, true, "700"
+				last := shared
+				last.Fields, last.DriverRate = []string{"driverRate"}, "550"
+				last.PreviousLoadNumber = &shared.LoadNumber
+				other := shared
+				otherNote := "Second dispatcher"
+				other.Fields, other.DriverRate, other.Note = []string{"driverRate", "note"}, "530", &otherNote
+				type saveResponse struct {
+					result GrossBoardSaveResult
+					err    error
+				}
+				second := make(chan saveResponse, 1)
+				go func() {
+					result, err := board.SavePartialChanges(ctx, []GrossBoardEntry{other}, "dispatcher-two")
+					second <- saveResponse{result, err}
+				}()
+				sync(9511, "REVIEW-DURING-REFRESH", "820")
+				out := <-second
+				if out.err != nil || len(out.result.Entries) != 1 || len(out.result.Issues) != 0 {
+					t.Fatalf("second dispatcher did not save: %+v", out)
+				}
+				clear := GrossBoardEntry{DriverID: driver, Date: move.Date, PreviousLoadNumber: &move.LoadNumber}
+				missingID := 99999
+				destination := GrossBoardEntry{DriverID: driver, Date: "2026-10-29", LoadNumber: move.LoadNumber, LoadRecordID: &missingID}
+				result, err := board.SavePartialChanges(ctx, []GrossBoardEntry{accept, last, clear, destination}, "dispatcher-one")
+				if err != nil || len(result.Entries) != 1 || len(result.Issues) != 2 {
+					t.Fatalf("unexpected partial result: %+v %v", result, err)
+				}
+				if got := result.Entries[0]; got.DriverRate != "550.00" || got.Note == nil || *got.Note != otherNote {
+					t.Fatalf("last save lost a concurrent field: %+v", got)
+				}
+				stale, blockedMove := result.Issues[0], result.Issues[1]
+				if stale.Code != "source_values_changed" || stale.DriverID != driver || stale.Date != review.Date || stale.LoadNumber != review.LoadNumber ||
+					len(stale.Fields) != 1 || stale.Fields[0] != "driverRate" || stale.Source["driverRate"] != "820" || len(stale.Pending) != 1 {
+					t.Fatalf("wrong source issue: %+v", stale)
+				}
+				if blockedMove.Code != "load_unavailable" || blockedMove.Date != destination.Date || len(blockedMove.Pending) != 2 {
+					t.Fatalf("a related move was split: %+v", blockedMove)
+				}
+				var rate, number string
+				if err = pool.QueryRow(ctx, "SELECT driver_rate::text,load_number FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date", driver, move.Date).Scan(&rate, &number); err != nil || number != move.LoadNumber || rate != "100.00" {
+					t.Fatalf("failed move altered its original slot: %q %q %v", number, rate, err)
+				}
+				if err = pool.QueryRow(ctx, "SELECT driver_rate::text FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date", driver, review.Date).Scan(&rate); err != nil || rate != "600.00" {
+					t.Fatalf("stale approval was written: %q %v", rate, err)
+				}
+				accept.DriverRate = "820"
+				destination.LoadRecordID, destination.DriverRate = nil, "100"
+				result, err = board.SavePartialChanges(ctx, []GrossBoardEntry{accept, clear, destination}, "dispatcher-one")
+				if err != nil || len(result.Entries) != 3 || len(result.Issues) != 0 {
+					t.Fatalf("revised approval and atomic move did not save: %+v %v", result, err)
+				}
+				replace := shared
+				replace.LoadNumber = "REPLACED-SHARED"
+				if _, err = board.SavePartialChanges(ctx, []GrossBoardEntry{replace}, "dispatcher-two"); err != nil {
+					t.Fatal(err)
+				}
+				result, err = board.SavePartialChanges(ctx, []GrossBoardEntry{last}, "dispatcher-one")
+				if err != nil || len(result.Entries) != 0 || len(result.Issues) != 1 || result.Issues[0].Code != "load_changed" ||
+					result.Issues[0].LoadNumber != "SHARED-EDIT" || result.Issues[0].CurrentLoad != "REPLACED-SHARED" {
+					t.Fatalf("amount for a different load was not held: %+v %v", result, err)
+				}
+			})
 			// Both slot tables, manual zero, and explicit amounts survive late imports.
 			late := save(GrossBoardEntry{DriverID: driver, Date: "2026-10-20", LoadNumber: "LATE"})
 			manual := save(GrossBoardEntry{DriverID: driver, Date: "2026-10-21", LoadNumber: "MANUAL", DriverRate: "2000"})

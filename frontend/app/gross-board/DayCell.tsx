@@ -33,9 +33,9 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
   const confirmed = entry.loadRecordId !== null && !entry.sourceMissing;
-  const rateMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
-  const milesMismatch = confirmed && !entry.acceptSystemValues && mismatch(entry.enteredMiles, entry.systemMiles ?? "");
-  const driverMismatch = confirmed && !entry.acceptDriverGross && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate));
+  const rateMismatch = confirmed && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
+  const milesMismatch = confirmed && mismatch(entry.enteredMiles, entry.systemMiles ?? "");
+  const driverMismatch = confirmed && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate));
   const needsReview = !!entry.tripReview || rateMismatch || milesMismatch || driverMismatch;
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";

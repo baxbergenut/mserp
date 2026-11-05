@@ -1,7 +1,8 @@
-import type { GrossBoardEntry } from "@/app/lib/types";
+import type { GrossBoardEntry, GrossBoardSaveIssue, GrossBoardSaveLocation } from "@/app/lib/types";
 import { emptyEntry, entryKey, hundredths, validDecimal } from "./board";
 
 export type GrossDrafts = Record<string, GrossBoardEntry>;
+export const grossLocationKey = (location: GrossBoardSaveLocation) => entryKey(location.driverId, location.date, location.slot);
 const fields = ["loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted", "originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles", "note", "acceptSystemValues", "acceptDriverGross"] as const;
 const amounts = new Set<string>(["originalRate", "driverRate", "miles", "enteredOriginalRate", "enteredMiles"]);
 const identity = ["loadNumber", "loadRecordId", "loadTripId", "dayStatus", "deleted"] as const;
@@ -37,12 +38,34 @@ export function reconcileGrossPatches(current: GrossDrafts, sent: GrossDrafts, c
   return remaining;
 }
 
+export function refreshRejectedSources(current: GrossDrafts, sent: GrossDrafts, issues: GrossBoardSaveIssue[]) {
+  for (const issue of issues) {
+    const key = grossLocationKey(issue);
+    const entry = current[key];
+    if (!entry || !issue.source || entry.loadRecordId !== sent[key]?.loadRecordId || entry.loadTripId !== sent[key]?.loadTripId) continue;
+    current[key] = {
+      ...entry,
+      systemOriginalRate: issue.source.originalRate ?? entry.systemOriginalRate,
+      systemDriverRate: issue.source.driverRate ?? entry.systemDriverRate,
+      systemMiles: issue.source.miles ?? entry.systemMiles,
+    };
+  }
+}
+
 export function restoreGrossDrafts(changes: GrossDrafts, baselines: GrossDrafts, entries: GrossBoardEntry[]) {
   const saved = Object.fromEntries(entries.map(entry => [entryKey(entry.driverId, entry.date, entry.slot), entry]));
   const restored: GrossDrafts = {}, bases: GrossDrafts = {};
   for (const [key, draft] of Object.entries(changes)) {
     const remote = saved[key] ?? emptyEntry(draft.driverId, draft.date, draft.slot);
-    const changed = grossDraftFields(draft, baselines[key]);
+    const baseline = baselines[key];
+    const changed = grossDraftFields(draft, baseline);
+    if (baseline && !identity.some(field => changed.includes(field)) && identity.some(field => !equal(baseline, remote, field))) {
+      // Keep the load the user actually edited. The server can show a changed
+      // slot without applying the draft amount or note to a different load.
+      restored[key] = draft;
+      bases[key] = baseline;
+      continue;
+    }
     const next = applyFields(remote, draft, changed);
     if (!grossDraftFields(next, remote).length && !next.splitReview) continue;
     restored[key] = next; bases[key] = remote;

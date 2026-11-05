@@ -55,8 +55,8 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
   const sum = totals(displayed);
   const confirmed = displayed.every(entry => entry.loadRecordId !== null && !entry.sourceMissing);
   const unmatched = displayed.some(entry => !entry.dayStatus && (entry.loadRecordId === null || entry.sourceMissing) && entry.loadNumber.trim() !== "");
-  const driverNeedsReview = displayed.some(entry => entry.loadRecordId !== null && !entry.acceptDriverGross && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate)));
-  const needsReview = driverNeedsReview || displayed.some(entry => entry.tripReview || entry.loadRecordId !== null && !entry.acceptSystemValues && (mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "") || mismatch(entry.enteredMiles, entry.systemMiles ?? "")));
+  const driverNeedsReview = displayed.some(entry => entry.loadRecordId !== null && (entry.systemDriverRate === "" || mismatch(entry.driverRate, entry.systemDriverRate ?? "") || (entry.driverRate === "" && !!entry.systemDriverRate)));
+  const needsReview = driverNeedsReview || displayed.some(entry => entry.tripReview || entry.loadRecordId !== null && (mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "") || mismatch(entry.enteredMiles, entry.systemMiles ?? "")));
   const label = `${driverName}, ${date}`;
   const selected = displayed.find(entry => entry.slot === focusSlot);
   const openEditor = (add = false) => {

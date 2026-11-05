@@ -1114,6 +1114,7 @@ export interface GrossBoardTrip {
 }
 
 export interface GrossBoardEntry {
+  previousLoadNumber?: string;
   sourceMissing?: boolean;
   splitReview?: LoadSplitReview;
   fields?: string[];
@@ -1148,6 +1149,27 @@ export interface GrossBoardEntry {
   duplicate: boolean;
   acceptSystemValues?: boolean;
   acceptDriverGross?: boolean;
+}
+
+export interface GrossBoardSaveLocation {
+  driverId: string;
+  date: string;
+  slot: number;
+  loadNumber?: string;
+}
+
+export interface GrossBoardSaveIssue extends GrossBoardSaveLocation {
+  code: string;
+  message: string;
+  fields: string[] | null;
+  pending: GrossBoardSaveLocation[];
+  source?: Partial<Record<"originalRate" | "driverRate" | "miles", string>>;
+  currentLoad?: string;
+}
+
+export interface GrossBoardSaveResult {
+  entries: GrossBoardEntry[];
+  issues: GrossBoardSaveIssue[];
 }
 
 export interface GrossBoardDriver {

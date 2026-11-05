@@ -2,6 +2,101 @@ import { expect } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 
+export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
+  const monday = new Date(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()) + 'T12:00:00Z');
+  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+  const day = offset => {
+    const date = new Date(monday);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  };
+  const [week, sharedDay, independentDay] = [day(0), day(1), day(2)];
+  const driver = 'e5710000-0000-0000-0000-000000000001';
+  const name = 'Partial Save Driver';
+  const password = randomBytes(20).toString('hex');
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO app_roles(name,permissions) VALUES('Gross Board test dispatcher',ARRAY['board.read','board.write']);
+    INSERT INTO app_users(username,email,password_hash,role_id)
+    SELECT 'Test Dispatcher ' || n,'gross-dispatch-' || n || '@example.com',crypt('${password}',gen_salt('bf')),r.id
+    FROM generate_series(1,2) n CROSS JOIN app_roles r WHERE r.name='Gross Board test dispatcher';
+    INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('${driver}','${name}','partial save driver','cpm',0);
+    INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
+    (99101,'REFRESH-TEST','delivered',1000,1000,500,'{"trips":[{"id":99101,"trip_id":"REFRESH-TRIP","driver__full_name":"Partial Save Driver","total_load_pay":700,"mile":450,"empty_mile":50}]}');
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles) VALUES
+    ('${driver}','${week}','REFRESH-TEST',99101,1000,600,500),
+    ('${driver}','${sharedDay}','SHARED-TEST',NULL,900,500,400),
+    ('${driver}','${independentDay}','INDEPENDENT-TEST',NULL,800,450,350);`);
+  const contexts = await Promise.all([1, 2].map(() => page.context().browser().newContext({viewport: {width: 1800, height: 1000}})));
+  const read = async date => {
+    const response = await page.request.get(`${base}/api/gross-board?weekStart=${week}`);
+    expect(response.ok()).toBeTruthy();
+    return (await response.json()).entries.find(e => e.driverId === driver && e.date === date && e.slot === 0);
+  };
+  const saved = editor => expect(editor.getByRole('status').filter({hasText: /^Saved$/})).toBeVisible();
+  const rate = (editor, date) => editor.getByLabel(`${name}, ${date}, driver rate`, {exact: true});
+  const fillRate = async (editor, date, value) => {
+    const input = rate(editor, date);
+    await input.focus();
+    await input.fill(value);
+  };
+  const review = editor => editor.getByRole('button', {name: `Review rate and miles for ${name}, ${week}`, exact: true});
+  let release;
+  try {
+    const [first, second] = await Promise.all(contexts.map(async (context, index) => {
+      const editor = await context.newPage();
+      await editor.goto(base + '/login');
+      await editor.getByLabel('Email', {exact: true}).fill(`gross-dispatch-${index + 1}@example.com`);
+      await editor.getByLabel('Password', {exact: true}).fill(password);
+      await editor.getByRole('button', {name: 'Sign in', exact: true}).click();
+      await expect(editor.getByRole('heading', {name: 'Gross Board', exact: true})).toBeVisible();
+      await expect(editor.getByText('Live', {exact: true})).toBeVisible();
+      return editor;
+    }));
+    const users = await Promise.all([first, second].map(async editor => (await (await editor.request.get(base + '/api/auth/session')).json()).user.id));
+    expect(users[0]).not.toBe(users[1]);
+    const captured = first.waitForRequest(req => req.method() === 'PUT' && new URL(req.url()).pathname === '/api/gross-board');
+    const gate = new Promise(resolve => { release = resolve; });
+    await first.route('**/api/gross-board', async route => {
+      if (route.request().method() === 'PUT') await gate;
+      await route.continue();
+    });
+    await review(first).click();
+    await first.getByRole('button', {name: 'Accept DataTruck driver gross', exact: true}).click();
+    await fillRate(first, sharedDay, '550');
+    expect((await captured).postDataJSON().entries).toHaveLength(2);
+    // Hold the first request while a provider source update and the second
+    // dispatcher's write commit. The production repository refresh path is
+    // also exercised with UpsertLoads in TestDataTruckDriverGrossDatabase.
+    await fillRate(second, sharedDay, '530');
+    sql(`SET search_path TO ${schema},public;
+      UPDATE loads SET raw_payload=jsonb_set(raw_payload,'{trips,0,total_load_pay}','820') WHERE id=99101;`);
+    await saved(second);
+    expect((await read(sharedDay)).driverRate).toBe('530.00');
+    release();
+    const issue = first.getByRole('alert').filter({hasText: 'Review the edits that could not be saved'});
+    await expect(issue).toContainText(`${name} · ${week} · Load 1 · REFRESH-TEST · Driver gross`);
+    await expect(issue).toContainText('$700.00');
+    await expect(issue).toContainText('$820.00');
+    expect((await read(sharedDay)).driverRate).toBe('550.00');
+    expect((await read(week)).driverRate).toBe('600.00');
+    await rate(second, sharedDay).blur();
+    await expect(rate(second, sharedDay)).toHaveValue(/550/);
+    // Subsequent edits still save while the original approval is pending.
+    await fillRate(first, independentDay, '460');
+    await expect.poll(async () => (await read(independentDay)).driverRate).toBe('460.00');
+    await expect(issue).toBeVisible();
+    await review(first).click();
+    await first.getByRole('button', {name: 'Accept DataTruck driver gross', exact: true}).click();
+    await saved(first);
+    await expect(issue).toHaveCount(0);
+    expect((await read(week)).driverRate).toBe('820.00');
+    console.log('Gross Board partial saves passed with two authenticated dispatchers, overlapping edits, a DataTruck source refresh, and review of the rejected field.');
+  } finally {
+    release?.();
+    await Promise.all(contexts.map(context => context.close()));
+  }
+}
+
 export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetworkLatency}) {
   const date = new Date(new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())+'T12:00:00Z');
   date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);

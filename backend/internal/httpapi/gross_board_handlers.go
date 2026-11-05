@@ -19,8 +19,9 @@ import (
 var grossBoardDecimal = regexp.MustCompile(`^-?\d{1,10}(?:\.\d{1,2})?$`)
 
 type grossBoardRequest struct {
-	WeekStart string                       `json:"weekStart"`
-	Entries   []repository.GrossBoardEntry `json:"entries"`
+	WeekStart    string                       `json:"weekStart"`
+	Entries      []repository.GrossBoardEntry `json:"entries"`
+	AllowPartial bool                         `json:"allowPartial,omitempty"`
 }
 
 func grossBoardWeek(value string) (time.Time, error) {
@@ -88,7 +89,7 @@ func (request *grossBoardRequest) validate() error {
 			empty := ""
 			e.Note = &empty
 		}
-		if len([]rune(e.LoadNumber)) > 200 {
+		if len([]rune(e.LoadNumber)) > 200 || (e.PreviousLoadNumber != nil && len([]rune(*e.PreviousLoadNumber)) > 200) {
 			return errors.New("load number or planning text must be 200 characters or fewer")
 		}
 		if e.Version < 0 || e.Version > 2147483646 {
@@ -257,6 +258,15 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
+		if request.AllowPartial {
+			result, err := repo.SavePartialChanges(r.Context(), request.Entries, session.User.ID)
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
+			return
+		}
 		entries, err := repo.SaveChanges(r.Context(), request.Entries, session.User.ID)
 		if err != nil {
 			fail(w, err)

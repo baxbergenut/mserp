@@ -14,7 +14,7 @@ import (
 	"mserp/internal/db"
 )
 
-var ErrGrossBoardConflict = errors.New("another dispatcher changed one of these days; reload the board before saving again")
+var ErrGrossBoardConflict = errors.New("The saved load changed before this edit could commit. Review the load and retry.")
 var ErrGrossBoardTrip = errors.New("select a valid trip whose allocations reconcile with the system load; a trip cannot belong to two board drivers")
 
 var ErrGrossBoardLoad = errors.New("the selected load no longer matches this load number; select it again")
@@ -41,6 +41,7 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 type GrossBoardEntry struct {
 	SourceMissing          bool             `json:"sourceMissing,omitempty"`
 	Fields                 []string         `json:"fields,omitempty"`
+	PreviousLoadNumber     *string          `json:"previousLoadNumber,omitempty"`
 	SplitReview            *LoadSplitReview `json:"splitReview,omitempty"`
 	SourceDate             string           `json:"sourceDate,omitempty"`
 	SourceSlot             int              `json:"sourceSlot,omitempty"`
@@ -407,27 +408,41 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 // Shared by native edits and the fenced duplicate reconciliation command.
 // The caller owns the transaction, publication and immutable receipt.
 func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, entries []GrossBoardEntry, actors ...string) ([]GrossBoardEntry, error) {
-	var err error
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
-		return nil, err
-	}
 	actor := ""
 	if len(actors) > 0 {
 		actor = actors[0]
 	}
-	if err = setBoardActor(ctx, tx, actor, "gross_board"); err != nil {
+	if err := lockGrossBoardWrite(ctx, tx, actor); err != nil {
 		return nil, err
+	}
+	return r.saveEntriesLocked(ctx, tx, entries)
+}
+
+func lockGrossBoardWrite(ctx context.Context, tx pgx.Tx, actor string) error {
+	if _, err := tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
+		return err
+	}
+	if err := setBoardActor(ctx, tx, actor, "gross_board"); err != nil {
+		return err
 	}
 	// Preserve the existing fleet-status then financial lock order.
 	finishLockWait := db.Phase(ctx, "gross_financial_lock_wait")
-	err = lockTruckAccounting(ctx, tx)
-	finishLockWait()
-	if err != nil {
-		return nil, err
-	}
+	defer finishLockWait()
+	return lockTruckAccounting(ctx, tx)
+}
+
+func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx, entries []GrossBoardEntry) (_ []GrossBoardEntry, err error) {
+	var editing *GrossBoardEntry
+	defer func() {
+		if err != nil && editing != nil {
+			err = locateGrossBoardRejection(*editing, err)
+		}
+	}()
 	allUnchanged := len(entries) > 0
 	for i := range entries {
 		if entries[i].Fields != nil {
+			patch := entries[i]
+			editing = &patch
 			var unchanged bool
 			entries[i], unchanged, err = mergeGrossBoardPatch(ctx, tx, entries[i])
 			if err != nil {
@@ -438,6 +453,7 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 			allUnchanged = false
 		}
 	}
+	editing = nil
 	// Retrying an acknowledged value does not invalidate payroll or rewrite the
 	// row. This also handles an acknowledgement lost during a browser reload.
 	if allUnchanged {
@@ -456,12 +472,13 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 	})
 	var newClaims []grossBoardLoadClaim
 	for index, e := range entries {
+		editing = &e
 		var transferred bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND active AND ((source_date=$2::date AND source_slot=$3) OR (dispatch_date=$2::date AND dispatch_slot=$3)))`, e.DriverID, e.Date, e.Slot).Scan(&transferred); err != nil {
 			return nil, err
 		}
 		if transferred {
-			return nil, chargeInvalid("Manage or restore this transferred load in Driver Pay or Investor Pay before editing it")
+			return nil, grossBoardRejection{cause: chargeInvalid("Manage or restore this transferred load in Driver Pay or Investor Pay before editing it"), code: "transferred_load"}
 		}
 
 		if e.Deleted || e.DayStatus != "" || e.LoadNumber == "" {
@@ -550,12 +567,19 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 				}
 				return nil, ErrGrossBoardTrip
 			}
-			var unchanged bool
-			if err = tx.QueryRow(ctx, `SELECT nullif($1,'')::numeric IS NOT DISTINCT FROM nullif($2,'')::numeric AND nullif($3,'')::numeric IS NOT DISTINCT FROM nullif($4,'')::numeric`, original, e.OriginalRate, miles, e.Miles).Scan(&unchanged); err != nil {
+			var sameGross, sameMiles bool
+			if err = tx.QueryRow(ctx, `SELECT nullif($1,'')::numeric IS NOT DISTINCT FROM nullif($2,'')::numeric, nullif($3,'')::numeric IS NOT DISTINCT FROM nullif($4,'')::numeric`, original, e.OriginalRate, miles, e.Miles).Scan(&sameGross, &sameMiles); err != nil {
 				return nil, err
 			}
-			if !unchanged {
-				return nil, grossBoardReviewError(e, "DataTruck total gross or miles changed")
+			if !sameGross || !sameMiles {
+				var fields []string
+				if !sameGross {
+					fields = append(fields, "originalRate")
+				}
+				if !sameMiles {
+					fields = append(fields, "miles")
+				}
+				return nil, grossBoardRejection{cause: grossBoardReviewError(e, "DataTruck total gross or miles changed"), code: "source_values_changed", fields: fields, source: map[string]string{"originalRate": original, "miles": miles}}
 			}
 			enteredOriginal, enteredMiles = original, miles
 		}
@@ -577,12 +601,12 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		}
 		if e.AcceptDriverGross {
 			if driverGross == "" || review || loadID == nil {
-				return nil, grossBoardReviewError(e, "DataTruck driver gross is unavailable")
+				return nil, grossBoardRejection{cause: grossBoardReviewError(e, "DataTruck driver gross is unavailable"), code: "source_values_changed", fields: []string{"driverRate"}, source: map[string]string{"driverRate": ""}}
 			}
 			actual, parseErr := chargeCents(driverGross)
 			requested, inputErr := chargeCents(e.DriverRate)
 			if parseErr != nil || inputErr != nil || actual != requested {
-				return nil, grossBoardReviewError(e, "DataTruck driver gross changed")
+				return nil, grossBoardRejection{cause: grossBoardReviewError(e, "DataTruck driver gross changed"), code: "source_values_changed", fields: []string{"driverRate"}, source: map[string]string{"driverRate": driverGross}}
 			}
 			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
 				return nil, err
@@ -633,6 +657,7 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 		e.AcceptDriverGross = false
 		entries[index] = e
 	}
+	editing = nil
 
 	if err = assertGrossBoardLoadClaims(ctx, tx, newClaims); err != nil {
 		return nil, err
