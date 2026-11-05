@@ -2025,7 +2025,9 @@ assignment lookup lists.
   `node scripts/test-investors-e2e.mjs --load-placements-only` after a /api build.
 - Weekend load transfers use migration 159, repository `load_week_transfers.go`
   and read-only `load_week_transfer_list.go`. Original-week payroll exposes a
-  non-counting Transferred out list even when the destination week is hidden.
+  compact non-counting transfer line on the original day inside the statement,
+  even when the destination week is hidden. A compact fallback retains Return
+  when no payable statement exists.
   Its outgoing-transfers endpoint uses pay read permissions and completed-week
   bounds. Gross Board markers/destinations can return loads with pay edit
   permission; board write alone does not grant that action. Both entry points

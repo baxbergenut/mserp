@@ -14,9 +14,10 @@ without contributing gross, mileage or balance. Next Monday contains the load
 once, under its original dispatcher, even after a Monday assignment change.
 The moved cell shows its original date. Transferred board entries are read-only;
 restore the transfer before changing their underlying load values.
-The original payroll week has a separate **Transferred out** list with
-**Return to original date**, even when no payable loads remain or the destination
-week is not available yet. These metadata rows never contribute to payroll totals.
+The original payroll statement shows a compact load number, **Moved to** date and
+**Return** action inside its original day's row, even when the destination week
+is not available yet. If no payable statement exists, a compact fallback line
+keeps restoration accessible. These metadata rows never contribute to payroll totals.
 Gross Board exposes the same return action on both the original marker and the
 Monday entry, requiring Driver Pay or Investor Pay edit permission (board write
 permission alone is insufficient). Pending board drafts must be saved first.

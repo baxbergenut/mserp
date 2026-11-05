@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { fetchOutgoingLoadTransfers } from "@/app/lib/api";
 import type { OutgoingLoadTransfer } from "@/app/lib/types";
 import { shortDate } from "@/app/gross-board/board";
 import { ReturnLoadDialog } from "./ReturnLoadDialog";
 
-export function OutgoingTransfers({ investor, week, statementId, search, dispatcherId, refreshKey, canEdit, disabled, onReturned }: {
+const TransferContext = createContext<{ rows: OutgoingLoadTransfer[]; canEdit: boolean; disabled: boolean; open: (row: OutgoingLoadTransfer) => void }>({ rows: [], canEdit: false, disabled: true, open: () => {} });
+export const useOutgoingTransfers = () => useContext(TransferContext);
+
+export function OutgoingTransfers({ investor, week, statementId, search, dispatcherId, refreshKey, canEdit, disabled, onReturned, children }: {
   investor: boolean; week: string; statementId: string; search: string; dispatcherId: string;
-  refreshKey: unknown; canEdit: boolean; disabled: boolean; onReturned: () => void;
+  refreshKey: unknown; canEdit: boolean; disabled: boolean; onReturned: () => void; children: ReactNode;
 }) {
   const [result, setResult] = useState<{ key: string; rows: OutgoingLoadTransfer[] } | null>(null);
   const [error, setError] = useState("");
@@ -22,17 +25,27 @@ export function OutgoingTransfers({ investor, week, statementId, search, dispatc
     }).catch(err => { if (!abort.signal.aborted) setError(err instanceof Error ? err.message : "Unable to load transferred loads"); });
     return () => abort.abort();
   }, [investor,week,statementId,search,dispatcherId,key,refreshKey,retry]);
-  const rows = result?.key === key ? result.rows : [];
-  if (!rows.length && !error) return null;
-  return <section aria-label="Transferred out" className="rounded-lg border border-zinc-700 px-4 py-3 text-xs">
-    <h2 className="font-medium text-zinc-200">Transferred out{rows.length ? ` (${rows.length})` : ""}</h2>
-    <p className="mt-1 text-zinc-500">Moved to next week. Not included in this week’s payroll totals.</p>
-    {error && <p role="alert" className="mt-2 text-red-300">{error} <button type="button" onClick={() => setRetry(value => value+1)} className="underline">Retry transferred loads</button></p>}
-    <ul className="mt-2 divide-y divide-zinc-800">{rows.map(row => <li key={`${row.driverId}:${row.sourceDate}:${row.sourceSlot}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-      <span className="font-mono text-zinc-200">{row.loadNumber}</span><span>{row.driverName}{row.truckUnit ? ` · ${row.truckUnit}` : ""}</span>
-      <span className="text-zinc-400">{shortDate(row.sourceDate)} → {shortDate(row.settlementDate)}</span>
-      {canEdit && <button type="button" disabled={disabled || !!error} aria-label={`Return ${row.loadNumber} to original date`} onClick={() => setTarget(row)} className="ml-auto rounded border border-zinc-700 px-2 py-1 text-blue-300 hover:bg-zinc-800 disabled:opacity-40">Return to original date</button>}
-    </li>)}</ul>
+  const value = useMemo(() => ({ rows: result?.key === key ? result.rows : [], canEdit, disabled: disabled || !!error, open: setTarget }), [result,key,canEdit,disabled,error]);
+  return <TransferContext.Provider value={value}>{children}
+    {error && <p role="alert" className="text-xs text-red-300">{error} <button type="button" onClick={() => setRetry(value => value+1)} className="underline">Retry transferred loads</button></p>}
     {target && <ReturnLoadDialog target={target} investor={investor} onClose={() => setTarget(null)} onReturned={() => { setRetry(value => value+1); onReturned(); }} />}
-  </section>;
+  </TransferContext.Provider>;
+}
+
+export function OutgoingTransferNote({ row }: { row: OutgoingLoadTransfer }) {
+  const { canEdit, disabled, open } = useOutgoingTransfers();
+  return <span className="inline-flex items-center gap-2 whitespace-nowrap text-[11px] text-zinc-500" title="Not included in this week’s payroll totals">
+    <span className="font-mono text-zinc-400">{row.loadNumber}</span><span>Moved to {shortDate(row.settlementDate)}</span>
+    {canEdit && <button data-grid-ignore type="button" disabled={disabled} aria-label={`Return ${row.loadNumber} to original date`} onClick={() => open(row)} className="text-blue-400 underline-offset-2 hover:underline disabled:opacity-40">Return</button>}
+  </span>;
+}
+
+// Keep restoration reachable when there is no payable statement to expand.
+export function UnlistedOutgoingTransfers({ statementIds }: { statementIds: string[] }) {
+  const { rows } = useOutgoingTransfers();
+  const absent = rows.filter(row => !statementIds.includes(row.statementId));
+  if (!absent.length) return null;
+  return <div className="text-xs">{absent.map(row => <div key={`${row.driverId}:${row.sourceDate}:${row.sourceSlot}`} className="flex min-h-8 items-center gap-3 border-b border-zinc-800 px-3">
+    <span className="text-zinc-400">{row.driverName} · {row.truckUnit} · {shortDate(row.sourceDate)}</span><OutgoingTransferNote row={row} />
+  </div>)}</div>;
 }

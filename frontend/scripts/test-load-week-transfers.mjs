@@ -17,7 +17,7 @@ const browser=await chromium.launch();
 const week='2026-10-19',next='2026-10-26',source='2026-10-25';
 try{
  for(const investor of [false,true]){
-  let mode='',version=0,readonly=false,finalized=false,reject=false;
+  let mode='',version=0,readonly=false,finalized=false,reject=false,omitStatement=false,sameDayLoad=false;
   const requests=[],errors=[];
   const page=await browser.newPage({viewport:{width:1800,height:1100}});
   page.on('pageerror',error=>errors.push(error.message));
@@ -36,11 +36,12 @@ try{
    const driver={id:'statement',fullName:'Transfer Test',truckUnit:'T1',payType:'gross_percentage',payRate:'25',isOwnerOperator:false,dispatcherId:'old',dispatcherName:'Old Dispatcher',fuelTotal:'0',tollTotal:'0',
     ...(investor?{investorId:'owner',truckId:'statement'}:{}),loads:(mode==='everyone'?selected===next:selected===week)?[load()]:[],settlement:finalized?{finalized:true}:undefined,
     edits:{driverId:'statement',weekStart:selected,version:0,notes:'',comments:{},adjustments:[],fuelOverride:null,tollOverride:null}};
+   if(sameDayLoad)driver.loads.push({...load(),date:source,sourceDate:source,loadNumber:'STAYS',commentKey:'stays',slot:2,transferVersion:0});
    const fixtures={
     '/driver-pay/outgoing-transfers':{transfers:mode==='everyone'&&selected===week?[{statementId:'statement',driverId:'statement',driverName:'Transfer Test',truckId:'statement',truckUnit:'T1',loadNumber:'WEEKEND',sourceDate:source,sourceSlot:0,dispatchDate:next,settlementDate:next,boardVersion:7,transferVersion:version}]:[]},
     '/investor-pay/outgoing-transfers':{transfers:mode==='everyone'&&selected===week?[{statementId:'statement',driverId:'operator',driverName:'Transfer Test',truckId:'statement',truckUnit:'T1',loadNumber:'WEEKEND',sourceDate:source,sourceSlot:0,dispatchDate:next,settlementDate:next,boardVersion:7,transferVersion:version}]:[]},
     '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['driver_pay.read','investor_pay.read','board.read','board.write',...(readonly?[]:['driver_pay.edit','investor_pay.edit'])]},csrfToken:'fixture'},
-    '/driver-pay':{weekStart:selected,revision:'fixture',drivers:[driver]},'/investor-pay':{weekStart:selected,revision:'fixture',drivers:[driver]},'/tasks/count':{count:0},
+    '/driver-pay':{weekStart:selected,revision:'fixture',drivers:omitStatement?[]:[driver]},'/investor-pay':{weekStart:selected,revision:'fixture',drivers:omitStatement?[]:[driver]},'/tasks/count':{count:0},
    };
    return route.fulfill({json:fixtures[path]??[]});
   });
@@ -62,22 +63,36 @@ try{
   await expect(page.getByRole('link',{name:'WEEKEND',exact:true})).toHaveCount(0);
   // The destination is the hidden current week. Restore from the original
   // week even though its financial load row is no longer present.
-  await expect(page.getByRole('region',{name:'Transferred out',exact:true})).toBeVisible();
+  const movedRow=page.getByRole('region',{name:'Transfer Test weekly loads'}).locator(`[data-pay-transferred-out="${source}"]`);
+  await expect(movedRow).toBeVisible();
+  await expect(movedRow.getByRole('rowheader')).toContainText('Sun');
+  await expect(movedRow).toContainText('Moved to 10/26');
+  expect((await movedRow.boundingBox()).height).toBeLessThanOrEqual(36);
+  await expect(page.getByText('Transferred out',{exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Return WEEKEND to original date'}).click();
   await page.getByRole('textbox',{name:'Reason',exact:true}).fill('Corrected transfer');
   reject=true;await page.getByRole('button',{name:'Return load',exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'Another accountant'})).toBeVisible();
   await page.getByRole('button',{name:'Return load',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('region',{name:'Transferred out',exact:true})).toHaveCount(0);
+  await expect(movedRow).toHaveCount(0);
   await expect(page.getByRole('link',{name:'WEEKEND',exact:true})).toBeVisible();
   finalized=true;await navigate(week);
   await page.getByRole('button',{name:'Move WEEKEND to next week'}).click();
   await expect(page.getByRole('radio',{name:/Move for everyone/})).toBeDisabled();
   await page.getByRole('button',{name:'Save transfer',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
   readonly=true;mode='everyone';await navigate(week);await expect(page.getByRole('button',{name:'Move WEEKEND to next week'})).toHaveCount(0);
-  await expect(page.getByRole('region',{name:'Transferred out',exact:true})).toBeVisible();
+  await expect(movedRow).toBeVisible();
   await expect(page.getByRole('button',{name:'Return WEEKEND to original date'})).toHaveCount(0);
+  sameDayLoad=true;await navigate(week);
+  const sameDayHeader=page.getByRole('region',{name:'Transfer Test weekly loads'}).getByRole('rowheader',{name:/Sun/});
+  await expect(sameDayHeader).toHaveAttribute('rowspan','2');
+  await expect(movedRow).toBeVisible();
+  await expect(movedRow.getByRole('rowheader')).toHaveCount(0);
+  sameDayLoad=false;
+  readonly=false;omitStatement=true;await page.reload();
+  await expect(page.getByText('No statements match this view.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Return WEEKEND to original date'})).toBeVisible();
   expect(requests.map(r=>r.mode)).toEqual(['dispatch_only','everyone','everyone','restore','restore','dispatch_only']);expect(errors).toEqual([]);
   await page.close();
  }
