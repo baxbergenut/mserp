@@ -101,7 +101,7 @@ try{
   const path=new URL(route.request().url()).pathname.slice(4);
   const transferred={driverId:'driver',date:next,sourceDate:source,sourceSlot:0,slot:1,version:1,transferVersion:1,creditedDispatcherId:'old',creditedDispatcherName:'Old Dispatcher',deleted:false,loadNumber:'WEEKEND',loadRecordId:9101,dayStatus:'',originalRate:'3000',driverRate:'2800',miles:'600',enteredOriginalRate:'',enteredMiles:'',duplicate:false};
   const fixtures={
-   '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['board.read','board.write']},csrfToken:'fixture'},
+   '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['board.read','board.write','driver_pay.read','driver_pay.edit']},csrfToken:'fixture'},
    '/gross-board':{weekStart:next,drivers:[{id:'driver',fullName:'Transfer Driver',active:true,dispatcherId:'new',dispatcherName:'New Dispatcher',truckUnit:'T1',assignments:Array.from({length:7},(_,n)=>({date:`2026-10-${26+n}`,dispatcherId:'new',dispatcherName:'New Dispatcher',truckId:'truck',truckUnit:'T1'}))}],entries:[transferred,{...transferred,transferVersion:0,slot:0,loadNumber:'MONDAY',originalRate:'1000',driverRate:'900',miles:'100'}],balances:[]},'/tasks/count':{count:0},
   };return route.fulfill({json:fixtures[path]??[]});
  });
@@ -109,6 +109,7 @@ try{
  await expect(page.getByRole('row',{name:'Old Dispatcher totals'}).getByText('$3,000.00',{exact:true})).toBeVisible();
  await expect(page.getByRole('row',{name:'New Dispatcher totals'}).getByText('$1,000.00',{exact:true})).toBeVisible();
  await expect(page.getByText(`From ${source}`,{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:/Return .* to original date/})).toHaveCount(0);
  await page.close();
  // A single transferred Monday cell stays read-only while its day can add
  // another load. A view-only user still cannot see an add action.
@@ -118,12 +119,13 @@ try{
   let editable=true;
   const writes=[];
   const moved={driverId:'add-driver',date:next,sourceDate:source,sourceSlot:0,slot:0,version:2,transferVersion:1,creditedDispatcherId:'old',creditedDispatcherName:'Old Dispatcher',deleted:false,loadNumber:'WEEKEND',loadRecordId:9101,dayStatus:'',originalRate:'3000',driverRate:'2800',miles:'600',enteredOriginalRate:'',enteredMiles:'',duplicate:false};
-  let entries=[moved];
+  const blank={...moved,slot:1,version:4,transferVersion:0,loadNumber:'',loadRecordId:null,originalRate:'',driverRate:'',miles:''};
+  let entries=[moved,blank];
   await addPage.route('**/api/**',async route=>{
    const request=route.request(),path=new URL(request.url()).pathname.slice(4);
    if(request.method()==='PUT'&&path==='/gross-board'){
     const changes=request.postDataJSON().entries;writes.push(changes);
-    expect(changes.every(e=>!e.transferVersion&&e.slot===1)).toBe(true);
+    expect(changes.every(e=>!e.transferVersion&&e.slot===1&&e.version===4)).toBe(true);
     const committed=changes.map(e=>({...e,version:e.version+1}));
     entries=[...entries.filter(e=>!committed.some(c=>c.date===e.date&&c.slot===e.slot)),...committed];
     return route.fulfill({json:committed});
@@ -145,47 +147,24 @@ try{
   await day.getByRole('button',{name:'Apply changes',exact:true}).click();
   await expect.poll(()=>entries.find(e=>e.slot===1)?.loadNumber).toBe('ADDED-MONDAY');
   expect(writes).toHaveLength(1);expect(entries.find(e=>e.slot===0)).toEqual(moved);
+  entries.push({...blank,slot:2});
   await addPage.reload();
   await expect(addPage.getByRole('row',{name:'Old Dispatcher totals'}).getByText('$3,250.00',{exact:true})).toBeVisible();
+  const summary=addPage.getByRole('button',{name:`Add Driver, ${next}, load numbers and details`,exact:true});
+  await summary.hover();
+  const breakdown=addPage.getByRole('tooltip').filter({hasText:'Add Driver'});
+  await expect(breakdown.getByRole('row')).toHaveCount(3);
+  await expect(summary).not.toContainText('Empty');
+  await expect(addPage.getByRole('button',{name:/Return .* to original date/})).toHaveCount(0);
+  await summary.click();
+  const editor=addPage.getByRole('dialog',{name:'Daily loads',exact:true});
+  await expect(editor.locator('[data-gross-slot="2"]')).toHaveCount(0);
+  await editor.getByRole('button',{name:'Add load',exact:true}).click();
+  await expect(editor.locator('[data-gross-slot="2"]')).toBeVisible();
   editable=false;await addPage.reload();
   await expect(addPage.getByRole('row',{name:'Old Dispatcher totals'})).toBeVisible();
   await expect(addPage.getByRole('button',{name:`Add Driver, ${next}, add another load`,exact:true})).toHaveCount(0);
   await addPage.close();
  }
- // Neither board location needs the hidden destination payroll statement.
- for (const original of [true,false]) {
-  const boardPage=await browser.newPage({viewport:{width:1800,height:1100}});
-  let active=true,mayReturn=false,blocked=true;
-  const selected=original?week:next, calls=[];
-  await boardPage.clock.setFixedTime(new Date('2026-10-27T12:00:00Z'));
-  await boardPage.route('**/api/**',async route=>{
-   const request=route.request(),path=new URL(request.url()).pathname.slice(4);
-   if(path==='/driver-pay/transfer-load') {
-    const input=request.postDataJSON(); calls.push(input);
-    expect(input).toMatchObject({driverId:'15900000-0000-0000-0000-000000000001',date:source,slot:7,boardVersion:9,transferVersion:3,mode:'restore'});
-    if(blocked){blocked=false;return route.fulfill({status:400,json:{error:'Reopen affected driver and investor statements in both weeks before moving the settlement'}});}
-    active=false;return route.fulfill({status:204});
-   }
-   const moved={driverId:'15900000-0000-0000-0000-000000000001',date:original?source:next,sourceDate:source,sourceSlot:7,slot:original?7:1,version:9,transferVersion:3,transferOut:original,creditedDispatcherId:'old',creditedDispatcherName:'Old Dispatcher',deleted:false,loadNumber:'RESTORE-ME',loadRecordId:9101,dayStatus:'',originalRate:original?'':'3000',driverRate:original?'':'2800',miles:original?'':'600',enteredOriginalRate:'',enteredMiles:'',duplicate:original};
-   const fixtures={
-    '/auth/session':{user:{id:'user',username:'Test',theme:'original',permissions:['board.read','board.write',...(mayReturn?['driver_pay.read','driver_pay.edit']:[])]},csrfToken:'fixture'},
-    '/gross-board':{weekStart:selected,drivers:[{id:'15900000-0000-0000-0000-000000000001',fullName:'Restore Driver',active:true,dispatcherId:'old',dispatcherName:'Old Dispatcher',truckUnit:'T1'}],entries:active?[moved]:original?[{...moved,transferVersion:0,transferOut:false,duplicate:false,originalRate:'3000',driverRate:'2800',miles:'600'}]:[],balances:[]},'/tasks/count':{count:0},
-   };
-   return route.fulfill({json:fixtures[path]??[]});
-  });
-  await boardPage.goto(`${base}/gross-board?weekStart=${selected}&driverId=15900000-0000-0000-0000-000000000001`);
-  await expect(boardPage.getByRole('row',{name:'Old Dispatcher totals'})).toBeVisible();
-  await expect(boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'})).toHaveCount(0);
-  mayReturn=true;await boardPage.reload();
-  await boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'}).click();
-  await expect(boardPage.getByRole('dialog')).toHaveCount(0);
-  await expect(boardPage.getByRole('alert').filter({hasText:'Reopen affected'})).toBeVisible();
-  expect(active).toBe(true);
-  await boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'}).click();
-  await expect(boardPage.getByRole('dialog')).toHaveCount(0);
-  await expect(boardPage.getByRole('button',{name:'Return RESTORE-ME to original date'})).toHaveCount(0);
-  expect(active).toBe(false);expect(calls).toHaveLength(2);
-  await boardPage.close();
- }
- console.log('Load week transfers passed: both pay pages, hidden-current-week return, both Gross Board locations, permissions, finalized and stale guards, original totals, and adding beside transferred loads.');
+ console.log('Load week transfers passed: both pay pages, hidden-current-week return, Gross Board transfer indicators, hidden unused slots, permissions, finalized and stale guards, original totals, and adding beside transferred loads.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

@@ -2056,9 +2056,9 @@ assignment lookup lists.
   even when the destination week is hidden. A compact fallback retains Return
   when no payable statement exists.
   Its outgoing-transfers endpoint uses pay read permissions and completed-week
-  bounds. Gross Board markers/destinations can return loads with pay edit
-  permission; board write alone does not grant that action. Both entry points
-  reuse existing source/transfer versions, receipts and finalized guards.
+  bounds. Gross Board shows the transfer, and Driver/Investor Pay handle Return
+  using existing source/transfer versions, receipts and finalized guards.
+  Gross Board daily summaries and editors hide unused slots until Add load.
   Return runs on click. Move and Return require no reason and append no transfer
   history. Migration 200 clears the retired audit rows and discards legacy audit
   inserts. Current placements and retry receipts remain authoritative.

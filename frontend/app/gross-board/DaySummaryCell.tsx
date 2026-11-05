@@ -9,7 +9,6 @@ import type { GrossBoardEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { DayCell } from "./DayCell";
-import { GrossTransferReturnButton } from "./GrossTransferReturn";
 import { additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
@@ -22,6 +21,12 @@ type Props = {
   date: string;
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
+
+function hasDayContent(entry: GrossBoardEntry) {
+  return !!(entry.transferOut || entry.transferVersion || entry.loadNumber.trim() || entry.loadRecordId != null ||
+    entry.dayStatus || entry.note?.trim() || entry.originalRate || entry.driverRate ||
+    entry.miles || entry.enteredOriginalRate || entry.enteredMiles);
+}
 
 export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, entries, driverId, driverName, date, onChange, focusSlot, onReturn }: Props) {
   const [draft, setDraft] = useState<GrossBoardEntry[] | null>(null);
@@ -43,8 +48,9 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
     }, 0);
     return () => clearTimeout(timer);
   }, [focusSlot, driverId, date, entries, cellId]);
-  const visible = entries.filter(entry => !entry.deleted);
-  const displayed = visible.length ? visible : [emptyEntry(driverId, date)];
+  const visible = entries.filter(entry => !entry.deleted && hasDayContent(entry));
+  const blank = entries.find(entry => entry.slot === 0 && !entry.deleted) ?? emptyEntry(driverId, date);
+  const displayed = visible.length ? visible : [blank];
   const notes = useLoadNotes(displayed, readOnly, onChange);
   const sum = totals(displayed);
   const confirmed = displayed.every(entry => entry.loadRecordId !== null && !entry.sourceMissing);
@@ -55,7 +61,13 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
   const selected = displayed.find(entry => entry.slot === focusSlot);
   const openEditor = (add = false) => {
     setHover(null);
-    const initial = entries.length ? entries : displayed;
+    const displayedSlots = new Set(displayed.map(entry => entry.slot));
+    // Keep unused slot versions available for Add load without opening blank columns.
+    const initial = [
+      ...displayed,
+      ...entries.filter(entry => !displayedSlots.has(entry.slot)).map(entry =>
+        entry.deleted ? entry : { ...entry, deleted: true }),
+    ];
     draftBaseline.current = initial;
     const added = add ? additionalLoadEntries(initial, driverId, date) : [];
     // Retain every removed slot's version, including slots reused by Add load later.
@@ -85,6 +97,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       if (!draft || invalid) return false;
       for (const entry of draft) {
         const previous = draftBaseline.current.find(saved => saved.slot === entry.slot);
+        if ((!previous || previous.deleted) && !hasDayContent(entry)) continue;
         if (JSON.stringify(previous) !== JSON.stringify(entry)) onChange(driverId, date, entry.slot,
           current => applyDailyDraft(current, previous, entry));
       }
@@ -101,15 +114,14 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
         onMouseEnter={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onMouseLeave={() => setHover(null)} onFocus={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onBlur={() => setHover(null)}
         title={unmatched ? "Contains unmatched manual loads. Open to review each load." : undefined}
         onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? "bg-emerald-500/15 !text-emerald-300" : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
-        <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? (entry.loadRecordId === null || entry.sourceMissing) ? "font-semibold text-red-300" : "text-emerald-300" : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${(entry.loadRecordId === null || entry.sourceMissing) ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber || "Empty"}</span>)}</span>
+        <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? (entry.loadRecordId === null || entry.sourceMissing) ? "font-semibold text-red-300" : "text-emerald-300" : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${(entry.loadRecordId === null || entry.sourceMissing) ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber}</span>)}</span>
       </button></div>
-      {displayed.filter(entry => entry.transferVersion).map(entry => <div key={entry.slot} className="px-2 pb-2"><span className="text-[10px] text-zinc-400">{entry.loadNumber} </span><GrossTransferReturnButton entry={entry} /></div>)}
       {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${(name === "driver rate" ? driverNeedsReview : needsReview) ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
     </td>}
     {displayed.length > 1 && notes.popup}
     {hover && createPortal(<div id={tooltipId} role="tooltip" style={hover} className="pointer-events-none fixed z-50 w-[480px] rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 ui-popover">
       <div className="mb-2 flex justify-between"><span>{driverName} · {date}</span><span className="text-zinc-500">{readOnly ? "Click to inspect" : "Click to edit"}</span></div>
-      <div className="max-h-40 overflow-hidden"><table className="w-full text-left"><thead className="text-[10px] text-zinc-500"><tr><th className="h-7 font-medium">Load</th><th className="text-right font-medium">Total gross</th><th className="text-right font-medium">Driver</th><th className="text-right font-medium">Miles</th></tr></thead><tbody>{displayed.map(entry => <tr key={entry.slot} className="h-7 border-t border-zinc-800"><td className={entry.dayStatus ? dayStatuses.find(status => status.value === entry.dayStatus)?.color : entry.loadRecordId !== null && !entry.sourceMissing ? "text-emerald-300" : entry.loadNumber.trim() ? "font-semibold text-red-300" : "text-zinc-500"}>{entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber || "Empty"}</td>{[entry.originalRate, entry.driverRate, entry.miles].map((value, index) => <td key={index} className="text-right font-mono">{amountDisplay(value, index < 2) || "—"}</td>)}</tr>)}</tbody></table></div>
+      <div className="max-h-40 overflow-hidden"><table className="w-full text-left"><thead className="text-[10px] text-zinc-500"><tr><th className="h-7 font-medium">Load</th><th className="text-right font-medium">Total gross</th><th className="text-right font-medium">Driver</th><th className="text-right font-medium">Miles</th></tr></thead><tbody>{displayed.map(entry => <tr key={entry.slot} className="h-7 border-t border-zinc-800"><td className={entry.dayStatus ? dayStatuses.find(status => status.value === entry.dayStatus)?.color : entry.loadRecordId !== null && !entry.sourceMissing ? "text-emerald-300" : entry.loadNumber.trim() ? "font-semibold text-red-300" : "text-zinc-500"}>{entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber}</td>{[entry.originalRate, entry.driverRate, entry.miles].map((value, index) => <td key={index} className="text-right font-mono">{amountDisplay(value, index < 2) || "—"}</td>)}</tr>)}</tbody></table></div>
       {displayed.length > 4 && <p className="mt-2 text-[10px] text-zinc-500">Open to view all {displayed.length} loads.</p>}
     </div>, document.body)}
     {draft && <Modal title="Daily loads" description={`${driverName} · ${date}. Total gross and miles stay linked to system loads.`} isSaving={false} submitLabel={readOnly ? "Close" : "Apply changes"} onClose={() => setDraft(null)} onSubmit={event => {
@@ -118,7 +130,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       {!readOnly && onReturn && <div className="mb-4 flex items-center gap-3"><button type="button" disabled={!!invalid} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-blue-300 disabled:opacity-40" onClick={() => { if (applyDraft()) onReturn(); }}>Apply and return to Driver Pay</button><span className="text-xs text-zinc-500">Changes save before returning to your place.</span></div>}
       <div data-gross-editor-day={`${driverId}:${date}`} className="overflow-x-auto pb-32"><table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{draft.filter(entry => !entry.deleted).map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
         <td className="p-0 align-top text-[11px] text-zinc-500"><div className="h-6" />{["Load #", "Total gross", "Driver", "Miles"].map(name => <div key={name} className="flex h-8 items-center">{name}</div>)}</td>
-        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} hideReturn highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
+        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
       </tr></tbody></table></div>
       <button type="button" hidden={readOnly} disabled={readOnly || draft.filter(entry => !entry.deleted).length >= 100} onClick={() => addDraft(driverId, date)} className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-3 py-2 text-xs text-blue-300"><Plus className="h-3 w-3" />Add load</button>
       {invalid && <p role="alert" className="mt-3 text-xs text-red-300">Correct invalid rates or mileage before applying.</p>}

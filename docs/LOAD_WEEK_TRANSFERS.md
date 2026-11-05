@@ -18,9 +18,8 @@ The original payroll statement shows a compact load number, **Moved to** date an
 **Return** action inside its original day's row, even when the destination week
 is not available yet. If no payable statement exists, a compact fallback line
 keeps restoration accessible. These metadata rows never contribute to payroll totals.
-Gross Board exposes the same return action on both the original marker and the
-Monday entry, requiring Driver Pay or Investor Pay edit permission (board write
-permission alone is insufficient). Pending board drafts must be saved first.
+Accountants return loads from Driver Pay or Investor Pay. Gross Board displays
+the transfer on the original day and on Monday.
 The day's **+** action remains available to users with board write permission,
 including when its only entry is transferred or is a moved-out marker. Other
 loads can be added without editing the transferred entry.
