@@ -49,32 +49,64 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if !slices.Equal(group(b, dispatcher), ids) {
 		t.Fatal("initial alphabetical order", b.Drivers)
 	}
-	// Old saved order no longer changes presentation, even for new viewers.
-	if _, err := pool.Exec(ctx, `INSERT INTO driver_board_driver_order(dispatcher_key,dispatcher_id,driver_ids) VALUES($1::text,($1::text)::uuid,$2)`, dispatcher, []string{ids[2], ids[0], ids[1]}); err != nil {
+	stale := b.DriverOrderRevisions[dispatcher]
+	action := DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[2], TargetDriverID: ids[0], Revision: stale}
+	result, err := repo.ReorderDrivers(ctx, action, "")
+	if err != nil {
 		t.Fatal(err)
 	}
+	want := []string{ids[2], ids[0], ids[1]}
 	b = get()
-	if !slices.Equal(group(b, dispatcher), ids) {
-		t.Fatal("legacy order affected presentation", b.Drivers)
+	if !slices.Equal(result.DriverIDs, want) || !slices.Equal(group(b, dispatcher), want) || b.DriverOrderRevisions[dispatcher] != result.Revision {
+		t.Fatal("order not persisted", result, b.Drivers)
 	}
-	action := DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[2], TargetDriverID: ids[0], Revision: b.DriverOrderRevisions[dispatcher]}
-	if _, err := repo.ReorderDrivers(ctx, action, ""); !errors.Is(err, ErrDriverBoardOrderLocal) {
-		t.Fatal("shared reorder accepted", err)
+	if _, err = repo.ReorderDrivers(ctx, action, ""); !errors.Is(err, ErrDriverBoardOrderConflict) {
+		t.Fatal("stale reorder accepted", err)
 	}
+	action.Revision = result.Revision
+	action.TargetDriverID = ids[1]
+	action.After = true
+	result, err = repo.ReorderDrivers(ctx, action, "")
+	if err != nil || !slices.Equal(result.DriverIDs, ids) {
+		t.Fatal("move after", result, err)
+	}
+	// A changed roster invalidates the gesture before it can overwrite another group.
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET dispatcher_id=$2 WHERE id=$1`, ids[1], otherDispatcher); err != nil {
+		t.Fatal(err)
+	}
+	action.Revision = result.Revision
+	if _, err = repo.ReorderDrivers(ctx, action, ""); !errors.Is(err, ErrDriverBoardOrderConflict) {
+		t.Fatal("cross-dispatcher move accepted", err)
+	}
+	b = get()
+	if !slices.Equal(group(b, dispatcher), []string{ids[0], ids[2]}) {
+		t.Fatal("departed member remained", b.Drivers)
+	}
+	action.TargetDriverID = ids[0]
+	action.After = false
+	if _, err = repo.ReorderDrivers(ctx, action, ""); !errors.Is(err, ErrDriverBoardOrderConflict) {
+		t.Fatal("roster revision not fenced", err)
+	}
+	// New drivers append without disturbing the saved sequence, even if alphabetically first.
 	var added string
-	if err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,dispatcher_id) VALUES('Order Aardvark',gen_random_uuid()::text,'cpm',0,$1) RETURNING id`, dispatcher).Scan(&added); err != nil {
+	if err = pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,dispatcher_id) VALUES('Order Aardvark',gen_random_uuid()::text,'cpm',0,$1) RETURNING id`, dispatcher).Scan(&added); err != nil {
 		t.Fatal(err)
 	}
 	defer pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, added)
-	if !slices.Equal(group(get(), dispatcher), []string{added, ids[0], ids[1], ids[2]}) {
-		t.Fatal("default order is not alphabetical")
+	b = get()
+	if !slices.Equal(group(b, dispatcher), []string{ids[0], ids[2], added}) {
+		t.Fatal("new member did not append", b.Drivers)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE drivers SET dispatcher_id=NULL WHERE id=ANY($1::uuid[])`, ids[:2]); err != nil {
+	// Unassigned is a real group too, with the same concurrency rules.
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET dispatcher_id=NULL WHERE id=ANY($1::uuid[])`, ids[:2]); err != nil {
 		t.Fatal(err)
 	}
+	b = get()
+	_, err = repo.ReorderDrivers(ctx, DriverBoardOrderAction{DispatcherID: "", DriverID: ids[1], TargetDriverID: ids[0], Revision: b.DriverOrderRevisions[""]}, "")
+	if err != nil {
+		t.Fatal("unassigned reorder", err)
+	}
 	defer pool.Exec(ctx, `DELETE FROM driver_board_driver_order WHERE dispatcher_key=''`)
-	var err error
-	var result DriverBoardOrder
 	// Cross-group drops preserve prior history and become effective now, with
 	// source/destination roster fences and no duplicate history on stale replay.
 	b = get()

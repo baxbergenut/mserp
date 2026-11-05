@@ -1050,26 +1050,25 @@ positive Reimburse-method expense credits already included in net payable.
   separately from load/Gross Board day statuses. Migration 122 adds the sheet
   choices; legacy saved statuses and undo history remain valid without inferred
   replacements, but are not offered for new selection. ACCIDENT is trimmed.
-  Driver row order is personal browser localStorage, keyed by user and dispatcher
-  (including Unassigned). Read-only users can reorder within groups. Migration 118's
-  legacy sequences/versions remain only for assignment concurrency; reads no longer
-  use them to sort rows. Default rows are alphabetical; personal moves retain hidden rows.
+  Driver row order is shared across users and browsers within each dispatcher
+  group, including Unassigned. Migration 118 stores the order and revision.
+  Existing saved shared orders are reused; new drivers append in alphabetical
+  order. Reordering requires driver_board.write, retains hidden rows, and
+  propagates through live board snapshots.
   Unassigned is pinned first, uses the same group heading and remains a drop
   target when empty. Dragging between dispatcher groups assigns/unassigns the
-  native driver immediately at the database clock, with actor-attributed assignment
-  history; no week backdating or provider assignment calls. POST /driver-board/order
-  rejects retired within-group reorder with 410 and accepts explicit targetDispatcherId plus
-  targetRevision for transfers. Both complete rosters are fenced and locked; hidden
-  rows remain, inactive destinations and pending hires are rejected. Pointer/touch,
-  edge scrolling, Escape, failed-save rollback and Up/Down work; Alt+Up unassigns.
+  native driver immediately at the database clock and saves the shared placement,
+  with actor-attributed assignment history. POST /driver-board/order fences and
+  locks the complete affected rosters. Transfers send explicit targetDispatcherId
+  and targetRevision. Inactive destinations and pending hires are rejected.
+  Pointer/touch, edge scrolling, Escape, failed-save rollback and Up/Down work;
+  Alt+Up unassigns.
   Dispatcher-group order is personal browser localStorage, keyed by signed-in user.
   Read-only users can reorder groups; Unassigned stays first. Live snapshots retain
   the local preference. Migration 125's shared order is ignored and retained only
   for compatibility; POST /driver-board/dispatcher-order returns 410 for old clients.
-  Cross-group assignments remain shared and require driver_board.write; successful
-  transfers save the destination placement only in the mover's browser.
   Browser regressions: frontend/scripts/test-dispatcher-order.mjs and
-  frontend/scripts/test-driver-order.mjs.
+  frontend/scripts/status-board-order-e2e.mjs.
   Migration 168 invalidates the live board on intake changes. Pending hires appear
   under Unassigned as New driver / Needs setup, using existing onboarding task
   visibility and setup permissions; they cannot be dispatched before setup.

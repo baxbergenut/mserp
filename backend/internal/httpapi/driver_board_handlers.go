@@ -67,10 +67,6 @@ func (request *driverBoardRequest) validate() error {
 func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository) {
 	registerBoardPresenceRoutes(r, logger, repo)
 	fail := func(w http.ResponseWriter, err error) {
-		if errors.Is(err, repository.ErrDriverBoardOrderLocal) {
-			writeAPIError(w, http.StatusGone, err.Error())
-			return
-		}
 		var statusError *pgconn.PgError
 		if errors.As(err, &statusError) && statusError.ConstraintName == "fleet_status_invalid" {
 			writeAPIError(w, 409, statusError.Message)

@@ -29,7 +29,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await viewer.getByLabel('Search Status Board',{exact:true}).fill('Order ');
   await expect.poll(()=>order(page)).toEqual(ids);
   await expect(page.locator('tr[data-dispatcher-id]').first()).toHaveAttribute('data-dispatcher-id','');
-  await expect(viewer.getByRole('button',{name:'Move Order Alpha',exact:true})).toBeEnabled();
+  await expect(viewer.getByRole('button',{name:'Move Order Alpha',exact:true})).toHaveCount(0);
   await expect(page.getByText('Live',{exact:true})).toBeVisible();
   const auth = await (await viewer.request.get(`${base}/api/auth/session`)).json();
   const initial = await read();
@@ -41,17 +41,18 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
     await handle().dragTo(target,{targetPosition:{x:180,y}});
     await expect(page.locator('[data-row-dragging]')).toHaveCount(0);
   };
-  // Within-group animation saves only the current user's browser preference.
+  // Within-group animation and delayed response preserve the preview until saved.
   const start = await handle().boundingBox(), top = await row(ids[0]).boundingBox();
   await page.mouse.move(start.x+start.width/2,start.y+start.height/2); await page.mouse.down();
   await page.mouse.move(top.x+400,top.y+4,{steps:8});
   await expect.poll(visualOrder).toEqual([ids[2],ids[0],ids[1],ids[3]]);
   expect(group(await read())).toEqual(ids.slice(0,3));
+  await page.route('**/api/driver-board/order',async route=>{await new Promise(r=>setTimeout(r,500));await route.continue();},{times:1});
   await page.mouse.up();
   await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
-  await expect.poll(()=>order(viewer)).toEqual(ids);
+  await expect.poll(()=>order(viewer)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
   await expect(page.locator('[data-row-dragging]')).toHaveCount(0);
-  expect((await page.request.post(`${base}/api/driver-board/order`,{headers,data:action})).status()).toBe(410);
+  expect((await page.request.post(`${base}/api/driver-board/order`,{headers,data:action})).status()).toBe(409);
   await handle().focus(); await page.keyboard.press('ArrowDown');
   await expect.poll(()=>order(page)).toEqual([ids[0],ids[2],ids[1],ids[3]]);
   await handle().focus(); await page.keyboard.press('ArrowDown');
@@ -61,7 +62,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await page.getByRole('button',{name:'Clear all',exact:true}).click();
   await page.getByRole('checkbox',{name:'Enroute',exact:true}).check(); await page.keyboard.press('Escape');
   await drag(row(ids[0]));
-  expect(group(await read())).toEqual(ids.slice(0,3));
+  expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await page.getByLabel('Status filter',{exact:true}).click();
   await page.getByRole('button',{name:'Select all',exact:true}).click(); await page.keyboard.press('Escape');
   // Cross-dispatcher move changes native ownership now and reaches a second viewer.
@@ -80,9 +81,9 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
     // destination slot without covering neighbours or distorting sticky cells.
     await expect.poll(()=>order(page)).toEqual([ids[0],ids[1],ids[2],ids[3]]);
     await expect.poll(()=>normalRows(page)).toBe(true);
-    await expect.poll(()=>order(viewer)).toEqual(ids);
+    await expect.poll(()=>order(viewer)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
     await expect.poll(()=>normalRows(viewer)).toBe(true);
-    expect(group(await read())).toEqual(ids.slice(0,3));
+    expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
     await page.screenshot({path:join(temp,'status-board-transfer-pending.png'),fullPage:true});
     releaseWrite();
     await expect.poll(async()=>group(await read(),other)).toEqual([ids[2],ids[3]]);
@@ -105,7 +106,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await expect(handle()).toBeEnabled();
   await page.reload(); await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);
   await drag(row(ids[0]));
-  await expect.poll(async()=>group(await read())).toEqual(ids.slice(0,3));
+  await expect.poll(async()=>group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await expect(handle()).toBeEnabled();
   // Cancellation and failed transfers retain the saved dispatcher and order.
   const begin = await handle().boundingBox(), destination = await row(ids[3]).boundingBox();
@@ -113,11 +114,11 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await page.mouse.move(destination.x+180,destination.y+4,{steps:8});
   await page.keyboard.press('Escape');await page.mouse.up();
   await expect(page.locator('[data-row-dragging]')).toHaveCount(0);
-  expect(group(await read())).toEqual(ids.slice(0,3));
+  expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await page.route('**/api/driver-board/order',r=>r.fulfill({status:503,json:{error:'Order save unavailable'}}),{times:1});
   await drag(row(ids[3]));
   const alert=page.getByRole('alert').filter({hasText:'Order save unavailable'});
-  await expect(alert).toBeVisible();await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);await expect.poll(()=>normalRows(page)).toBe(true);expect(group(await read())).toEqual(ids.slice(0,3));
+  await expect(alert).toBeVisible();await expect.poll(()=>order(page)).toEqual([ids[2],ids[0],ids[1],ids[3]]);await expect.poll(()=>normalRows(page)).toBe(true);expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await alert.getByRole('button',{name:'Reload board',exact:true}).click();
   // Keyboard unassignment and touch reassignment use the same saved action.
   await expect(handle()).toBeEnabled();await handle().focus();await page.keyboard.press('Alt+ArrowUp');
@@ -130,7 +131,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:from.x+from.width/2,y:from.y+from.height/2}]});
   await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:to.x+180,y:to.y+3}]});
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await expect.poll(async()=>group(await read())).toEqual(ids.slice(0,3));
+  await expect.poll(async()=>group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await cdp.detach();await page.emulateMedia({reducedMotion:'no-preference'});
   // A pending hire arrives live without becoming an assignable fleet record.
   sql(`SET search_path TO ${schema},public; INSERT INTO fleetscope_driver_intake(id,company_id,fleetscope_driver_id,driver_data,normalized_name,occurred_at) VALUES('${intake}',gen_random_uuid(),gen_random_uuid(),'{"fullName":"Order New Hire","phone":"4703344443"}','order new hire',now());`);
