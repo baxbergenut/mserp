@@ -12,7 +12,7 @@ import (
 type payrollSourceImpactMemoKey struct{}
 type payrollSourceImpactMemo struct {
 	tx     pgx.Tx
-	proofs map[[2]string]*payrollPublicationImpact
+	proofs map[[3]string]*payrollPublicationImpact
 }
 
 // A table revision can change without touching this command's complete locked
@@ -29,7 +29,7 @@ func payrollSourcesUnrelatedForWeek(ctx context.Context, tx pgx.Tx, before, curr
 	if !ok || !resource.single || resource.resources == nil || before == "" || current == "" {
 		return false, nil
 	}
-	impact, err := payrollChangedSourceImpact(ctx, tx, before, current)
+	impact, err := payrollChangedSourceImpact(ctx, tx, before, current, week)
 	if err != nil || impact == nil {
 		return false, err
 	}
@@ -85,7 +85,7 @@ func retainPayrollPeriodSourceProofs(ctx context.Context, tx pgx.Tx, current str
 // A repeatable read may use the same complete capture proof to label each
 // statement. Financial commands still require the locked wrapper above.
 func payrollChangedSourceRoots(ctx context.Context, tx pgx.Tx, before, current string) ([]string, bool, error) {
-	impact, err := payrollChangedSourceImpact(ctx, tx, before, current)
+	impact, err := payrollChangedSourceImpact(ctx, tx, before, current, "")
 	if err != nil || impact == nil {
 		return nil, false, err
 	}
@@ -94,22 +94,22 @@ func payrollChangedSourceRoots(ctx context.Context, tx pgx.Tx, before, current s
 
 // Keep the period proof with the principal proof. Discarding it makes a
 // current-week board edit look like a change to the same driver's past payroll.
-func payrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, current string) (*payrollPublicationImpact, error) {
+func payrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, current, week string) (*payrollPublicationImpact, error) {
 	if memo, ok := ctx.Value(payrollSourceImpactMemoKey{}).(*payrollSourceImpactMemo); ok && memo.tx == tx {
-		key := [2]string{before, current}
+		key := [3]string{before, current, week}
 		if proof, found := memo.proofs[key]; found {
 			return proof, nil
 		}
-		proof, err := readPayrollChangedSourceImpact(ctx, tx, before, current)
+		proof, err := readPayrollChangedSourceImpact(ctx, tx, before, current, week)
 		if err == nil {
 			memo.proofs[key] = proof
 		}
 		return proof, err
 	}
-	return readPayrollChangedSourceImpact(ctx, tx, before, current)
+	return readPayrollChangedSourceImpact(ctx, tx, before, current, week)
 }
 
-func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, current string) (*payrollPublicationImpact, error) {
+func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, current, week string) (*payrollPublicationImpact, error) {
 	if before == "" || current == "" {
 		return nil, nil
 	}
@@ -166,7 +166,7 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 	}
 	defer rows.Close()
 	seen := map[string]map[int64]bool{}
-	ids := []int64{}
+	var ids, boardIDs, otherIDs []int64
 	for rows.Next() {
 		var id, revision int64
 		var table string
@@ -178,6 +178,11 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 		}
 		seen[table][revision] = true
 		ids = append(ids, id)
+		if table == "gross_board_entries" || table == "gross_board_extra_entries" {
+			boardIDs = append(boardIDs, id)
+		} else {
+			otherIDs = append(otherIDs, id)
+		}
 	}
 	if err = rows.Err(); err != nil {
 		return nil, err
@@ -188,10 +193,24 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 			return nil, nil
 		}
 	}
-	impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", ids)
+	impactIDs := ids
+	if week != "" && len(boardIDs) > 0 && len(otherIDs) > 0 {
+		// A provider or ledger change in the same interval must not discard
+		// the date and placement proof for later Gross Board edits.
+		board, err := payrollCapturedImpact(ctx, tx, nil, "", "", boardIDs)
+		if err != nil {
+			return nil, err
+		}
+		if board != nil && board.weeks != nil && !board.weeks[week] {
+			impactIDs = otherIDs
+		}
+	}
+	impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", impactIDs)
 	if err != nil || impact == nil || (len(impact.roots) == 0 && impact.weeks == nil) {
 		return nil, err
 	}
+	// Even when a board event cannot change this week's values, it can bump
+	// a shared resource epoch. Keep its captured delta in the exact proof.
 	impact.changeIDs = ids
 	return impact, nil
 }

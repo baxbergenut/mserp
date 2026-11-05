@@ -211,7 +211,10 @@ positive Reimburse-method expense credits already included in net payable.
   Source saves and background captures rebase earlier projections without calculators
   only with complete board-date or expense-cutoff proofs. Old/new dates, placement
   history, cross-driver placements and existing allocations retain earlier impacts.
-  Unknown/mixed sources retain conservative calculation. Expense eligibility remains
+  Mixed source intervals preserve the board-date and placement proof for earlier
+  weeks while retaining every captured resource revision delta. Completed-week
+  exports stay available when that proof and every statement revision are current.
+  Unproven impact retains conservative calculation. Expense eligibility remains
   before the following Thursday (week+10, exclusive); unpaid carry and finalized
   guards are unchanged. APIs expose latestWeek alongside the actual currentWeek. Future
   source schedules and existing reservations stay authoritative but do not create

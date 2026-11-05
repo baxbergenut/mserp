@@ -677,7 +677,7 @@ func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, we
 	// Share capture proofs only during this read-only validation phase. The
 	// context never escapes into posting, so own writes cannot reuse an old proof.
 	ctx = context.WithValue(ctx, payrollSourceImpactMemoKey{}, &payrollSourceImpactMemo{
-		tx: tx, proofs: map[[2]string]*payrollPublicationImpact{},
+		tx: tx, proofs: map[[3]string]*payrollPublicationImpact{},
 	})
 	if err := payrollProjectionCoverage(ctx, tx); err != nil {
 		return err

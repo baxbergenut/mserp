@@ -188,11 +188,11 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 		}
 	}
 	if result.State == "updating" && compatible && snapshot != current {
-		impact, e := payrollChangedSourceImpact(ctx, tx, snapshot, current)
+		impact, e := payrollChangedSourceImpact(ctx, tx, snapshot, current, week.Format(time.DateOnly))
 		if e != nil {
 			return result, e
 		}
-		if impact != nil && impact.liveOnly {
+		if impact != nil && (impact.liveOnly || (impact.weeks != nil && !impact.weeks[week.Format(time.DateOnly)])) {
 			ready := true
 			for _, statement := range result.Statements {
 				ready = ready && statement.State == "ready"

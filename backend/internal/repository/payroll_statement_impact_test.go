@@ -132,7 +132,11 @@ func TestPayrollStatementImpactDatabase(t *testing.T) {
 		parity()
 		// An edit in a later week is a freshness rebase, not a payroll calculation.
 		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles) VALUES($1,'2026-10-12','LATER-WEEK',300,400,100)`, projectionDriver)
+		exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(18204,'UNPLACED-WITH-LATER-BOARD','delivered',100,150,50,'{}')`)
 		states("ready", "ready")
+		if report, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{}, false); err != nil || report.Preparation.State != "ready" {
+			t.Fatal("completed-week export blocked by unrelated mixed sources", err)
+		}
 		// Ready must also mean an unrelated save can proceed before the worker
 		// catches up, with the same exact expected revision and financial locks.
 		editable, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{ID: projectionDriver}, true)

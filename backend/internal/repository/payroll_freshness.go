@@ -43,7 +43,7 @@ func payrollPendingWeekImpact(ctx context.Context, tx pgx.Tx, week time.Time, cu
 	if err != nil {
 		return nil, err
 	}
-	return payrollChangedSourceImpact(ctx, tx, before, current)
+	return payrollChangedSourceImpact(ctx, tx, before, current, week.Format(time.DateOnly))
 }
 
 // Each resource certificate belongs to its statement generation, which may be
@@ -85,7 +85,7 @@ func payrollStatementSourceProofs(ctx context.Context, tx pgx.Tx, week time.Time
 		proof, found := cache[b.snapshot]
 		if !found {
 			proof = payrollSourceProof{Roots: []string{}, Deltas: json.RawMessage(`{}`)}
-			impact, e := payrollChangedSourceImpact(ctx, tx, b.snapshot, current)
+			impact, e := payrollChangedSourceImpact(ctx, tx, b.snapshot, current, week.Format(time.DateOnly))
 			if e != nil {
 				return nil, e
 			}
