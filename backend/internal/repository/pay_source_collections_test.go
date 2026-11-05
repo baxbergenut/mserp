@@ -48,7 +48,7 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 					t.Fatal(err)
 				}
 				fee := "truck_charge:" + truck + ":" + typ.ID
-				read := func(week string) DriverPayDriver {
+				readReport := func(week string) DriverPayWeek {
 					t.Helper()
 					w, _ := chargeWeek(week)
 					var r DriverPayWeek
@@ -61,6 +61,11 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 					if e != nil {
 						t.Fatal(e)
 					}
+					return r
+				}
+				read := func(week string) DriverPayDriver {
+					t.Helper()
+					r := readReport(week)
 					for _, d := range r.Drivers {
 						if d.ID == driver && kind == "driver" || d.ID == truck && kind == "investor" {
 							return d
@@ -151,11 +156,66 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 				if _, err = save(e); err != nil {
 					t.Fatal(err)
 				}
+				staleThird := read("2026-10-12").Edits
 				first = read("2026-09-28")
 				e = clone(first.Edits)
 				editFee(&e, "-50.00")
-				if _, err = save(e); err == nil {
-					t.Fatal("earlier change invalidated later collection")
+				if _, err = save(e); err != nil {
+					t.Fatal("correcting the earlier open collection", err)
+				}
+				if r := source(read("2026-10-12")); r.Base != "0.00" || r.Amount != "-150.00" {
+					t.Fatalf("carry-only collection was not reduced: %+v", r)
+				}
+				if _, err = save(staleThird); err != ErrDriverPayConflict {
+					t.Fatal("stale save after automatic rebalance accepted", err)
+				}
+				next = read("2026-10-05")
+				e = clone(next.Edits)
+				editFee(&e, "-150.00")
+				if _, err = save(e); err != nil {
+					t.Fatal("collecting the full balance in the middle week", err)
+				}
+				if r := source(read("2026-10-12")); r.Amount != "0.00" || r.Due != "0.00" {
+					t.Fatalf("fully corrected carry was collected twice: %+v", r)
+				}
+				e = clone(read("2026-09-28").Edits)
+				editFee(&e, "-75.00")
+				if _, err = save(e); err != nil {
+					t.Fatal(err)
+				}
+				if r := source(read("2026-10-05")); r.Base != "-100.00" || r.Carry != "-25.00" || r.Amount != "-125.00" {
+					t.Fatalf("the later week's own charge was lost: %+v", r)
+				}
+				e = clone(read("2026-09-28").Edits)
+				editFee(&e, "-60.00")
+				if _, err = save(e); err != nil {
+					t.Fatal(err)
+				}
+				if r := source(read("2026-10-05")); r.Due != "-140.00" || r.Amount != "-125.00" {
+					t.Fatalf("earlier deferral increased a later saved deduction: %+v", r)
+				}
+				if r := source(read("2026-10-12")); r.Due != "-15.00" || r.Amount != "0.00" {
+					t.Fatalf("uncollected balance did not carry: %+v", r)
+				}
+				nextWeek, _ := chargeWeek("2026-10-05")
+				statementID := read("2026-10-05").ID
+				finalize := pr.Settle
+				if kind == "investor" {
+					finalize = pr.SettleInvestor
+				}
+				if _, err = finalize(ctx, nextWeek, statementID, readReport("2026-10-05").Revision, actor, "", false, false); err != nil {
+					t.Fatal(err)
+				}
+				e = clone(read("2026-09-28").Edits)
+				editFee(&e, "-75.00")
+				if _, err = save(e); err == nil || !strings.Contains(err.Error(), "Reopen affected finalized statements") {
+					t.Fatalf("earlier correction changed a finalized statement: %v", err)
+				}
+				if r := source(read("2026-09-28")); r.Amount != "-60.00" {
+					t.Fatalf("blocked correction changed the earlier deduction: %+v", r)
+				}
+				if _, err = finalize(ctx, nextWeek, statementID, readReport("2026-10-05").Revision, actor, "", true, false); err != nil {
+					t.Fatal(err)
 				}
 				// The same source remains truck-linked when the owner hires a driver.
 				if kind == "driver" {
@@ -171,7 +231,7 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 					for _, d := range r.Drivers {
 						if d.ID == truck {
 							for _, s := range d.Edits.SourceCharges {
-								if s.Source == fee && s.Carry != "-60.00" {
+								if s.Source == fee && s.Carry != "-40.00" {
 									t.Fatal("routing lost carry", s)
 								}
 							}

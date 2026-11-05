@@ -448,7 +448,8 @@ func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *Dr
 			result = append(result, row)
 			continue
 		}
-		if later {
+		truckDeduction := strings.HasPrefix(row.Source, "truck_charge:") && due <= 0
+		if later && !truckDeduction {
 			return chargeInvalid("Set later saved %s deductions to zero before correcting this week, then reapply them", row.Name)
 		}
 		truck := d.TruckID
@@ -471,6 +472,11 @@ func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *Dr
 		}
 		if closed {
 			return chargeInvalid("Reopen affected finalized statements before correcting %s", row.Name)
+		}
+		if later {
+			if err = rebalanceOpenTruckDeductions(ctx, tx, row, edits.WeekStart, actor, due-value, records); err != nil {
+				return err
+			}
 		}
 		snapshot := DriverPayDriver{ID: d.ID, FullName: d.FullName, TruckID: truck, TruckUnit: d.TruckUnit, InvestorID: d.InvestorID, ProfileDriverID: d.ProfileDriverID, IsOwnerOperator: d.IsOwnerOperator, EmploymentType: d.EmploymentType, PayType: d.PayType, PayRate: d.PayRate, DispatcherID: d.DispatcherID, DispatcherName: d.DispatcherName}
 		body, _ := json.Marshal(snapshot)
@@ -519,6 +525,44 @@ func savePaySources(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits *Dr
 		d.Edits = *edits
 		setInvestorSourceCosts(&d)
 		edits.Costs = d.Edits.Costs
+	}
+	return nil
+}
+
+// Records are in week order. Preserve each later saved amount up to that
+// week's own base plus the corrected carry. Never increase a saved deduction.
+func rebalanceOpenTruckDeductions(ctx context.Context, tx pgx.Tx, row PaySourceCharge, week, actor string, carry int64, records []paySourceRecord) error {
+	for _, old := range records {
+		if old.Week <= week || old.Source != row.Source || old.Owner != row.OwnerID {
+			continue
+		}
+		base, baseErr := chargeCents(old.Base)
+		amount, amountErr := chargeCents(old.Amount)
+		if baseErr != nil || amountErr != nil || base > 0 || amount > 0 || old.Version == 0 {
+			return chargeInvalid("Review the saved %s deduction for week %s before correcting this week", row.Name, old.Week)
+		}
+		due := base + carry
+		revised := max(due, amount)
+		carry = due - revised
+		if revised == amount {
+			continue
+		}
+		updated, err := tx.Exec(ctx, `UPDATE pay_source_collections SET amount=$4::numeric,version=version+1,
+ updated_by=nullif($5,'')::uuid,updated_at=now()
+ WHERE source=$1 AND owner_id=$2 AND week_start=$3::date AND version=$6`,
+			old.Source, old.Owner, old.Week, chargeMoney(revised), actor, old.Version)
+		if err != nil {
+			return err
+		}
+		if updated.RowsAffected() != 1 {
+			return ErrDriverPayConflict
+		}
+		if err = truckAudit(ctx, tx, old.Truck, old.Week, "source_collection", actor, map[string]any{
+			"source": old.Source, "ownerId": old.Owner, "base": old.Base, "previousAmount": old.Amount,
+			"amount": chargeMoney(revised), "kind": old.Kind, "statementId": old.ID, "adjustedFromWeek": week,
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

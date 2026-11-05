@@ -1844,9 +1844,12 @@ assignment lookup lists.
   Investor Fuel/Toll now have the same partial/zero carry semantics as Driver Pay;
   pre-ledger investor overrides resolve their historical sources and are pinned
   when later collections depend on them. Genuine source credits keep their sign
-  and carry unpaid credit too. Cross-week revisions reject stale saves; later
-  collections must be zeroed before an earlier correction. Finalized snapshots
-  remain frozen and reopening retains collections. Driver autosave uses the
+  and carry unpaid credit too. Cross-week revisions reject stale saves. A
+  correction to a truck deduction reduces later open collections for the same
+  truck, charge and owner only when they exceed that week's base plus the revised
+  carry. Reductions are audited and commit with the correction. Investor Fuel/Toll
+  and credits retain their manual correction guards. Finalized snapshots remain
+  frozen and reopening retains collections. Driver autosave uses the
   exclusive shared financial lock to serialize against truck/investor writes.
   Source input limits apply in the browser and API; expenses/escrow/installments
   retain their existing principal bounds. Computed driver earnings, CAT tickets
