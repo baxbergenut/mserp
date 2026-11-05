@@ -78,6 +78,7 @@ type FiveELDBoardSummary struct {
 type DriverBoard struct {
 	PendingDrivers          []BoardPendingDriver  `json:"pendingDrivers"`
 	StatusSyncEnabled       bool                  `json:"statusSyncEnabled"`
+	AutoOrderDispatchers    map[string]bool       `json:"autoOrderDispatchers"`
 	DriverOrderRevisions    map[string]string     `json:"driverOrderRevisions"`
 	DispatcherOrderRevision string                `json:"dispatcherOrderRevision"`
 	WeekStart               string                `json:"weekStart"`
@@ -189,10 +190,6 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
-	if err = applyBoardDriverOrder(ctx, tx, &result); err != nil {
-		return result, err
-	}
-	applyBoardDispatcherOrder(&result)
 	// Use the same exact load resolution and entered/source precedence as Gross Board.
 	rows, err = tx.Query(ctx, driverBoardCurrentEntries+"SELECT "+grossBoardEntryColumns+` FROM effective
  WHERE service_date >= $1::date AND driver_id IN (SELECT id FROM drivers WHERE active)
@@ -235,6 +232,10 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 			e.ETA = ""
 		}
 	}
+	if err = applyBoardDriverOrder(ctx, tx, &result); err != nil {
+		return result, err
+	}
+	applyBoardDispatcherOrder(&result)
 	result.PendingDrivers, err = readBoardPendingDrivers(ctx, tx)
 	if err != nil {
 		return result, err

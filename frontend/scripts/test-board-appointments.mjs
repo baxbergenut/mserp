@@ -125,7 +125,8 @@ try {
   const cell = page.getByRole('button', { name: 'Appointment Driver · ETA', exact: true });
   await expect(cell).toHaveText('DEL 24/7 FRI ETA 13:00');
   await expect(cell).toHaveAttribute('title', 'ETA Oct 20, 12:00 CDT');
-  await expect(cell.locator('span').last()).toHaveClass('text-red-500');
+  await expect(cell.locator('span').last()).toHaveClass('text-emerald-400');
+  await expect(cell).toHaveAccessibleDescription('ETA up to date');
   const copied = await cell.evaluate(button => { let value = ''; const e = new Event('copy', { bubbles: true, cancelable: true }); Object.defineProperty(e, 'clipboardData', { value: { setData: (_, text) => { value = text; } } }); button.dispatchEvent(e); return value; });
   expect(copied).toBe('DEL 24/7 FRI ETA 13:00');
   loads.automation.travelValue = 'ETA 13:38'; loads.automation.travelArrivalAt = '2026-10-20T17:38:00Z';
@@ -135,11 +136,12 @@ try {
   loads.automation.travelValue = '138mi'; loads.automation.travelStale = true;
   await page.reload();
   await expect(cell).toHaveText('DEL 24/7 FRI 138mi');
-  await expect(cell.locator('span').last()).toHaveClass('text-amber-400');
+  await expect(cell.locator('span').last()).toHaveClass('text-red-400');
+  await expect(cell).toHaveAccessibleDescription('ETA outdated');
   await expect(cell).toHaveAttribute('title', '');
   loads.automation.travelStale = false;
   await page.reload();
-  await expect(cell.locator('span').last()).toHaveClass('text-red-500');
+  await expect(cell.locator('span').last()).toHaveClass('text-emerald-400');
   loads.automation.travelValue = 'ETA 13:00'; loads.automation.travelArrivalAt = '2026-10-20T17:00:00Z';
   await page.reload();
   await cell.click();
@@ -157,6 +159,7 @@ try {
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await expect.poll(() => entry.eta).toBe('133 mi');
   await expect(cell).toHaveText('DEL 24/7 FRI 133mi');
+  await expect(cell).not.toHaveAttribute('aria-description');
   await cell.click();
   await page.getByRole('button', { name: 'Clear ETA', exact: true }).click();
   await expect.poll(() => entry.eta).toBe('');
@@ -167,7 +170,8 @@ try {
   loads.automation.stale = true; loads.automation.travelMode = 'auto'; loads.automation.travelValue = '1mi';
   await page.reload();
   await expect(cell).toHaveText('@PU');
-  await expect(cell.locator('span').first()).toHaveClass(/text-amber-400/);
+  await expect(cell.locator('span').first()).toHaveClass('text-red-400');
+  await expect(cell).toHaveAccessibleDescription('Arrival observation outdated');
   await expect(cell).toHaveAttribute('title', '');
   await cell.click();
   await expect(page.getByLabel('Manual pickup time', { exact: true })).toBeEmpty();

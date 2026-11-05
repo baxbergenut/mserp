@@ -2,7 +2,7 @@
 
 
 import dynamic from "next/dynamic";
-import { Fragment, memo, useCallback, useContext, useMemo, useState } from "react";
+import { memo, useCallback, useContext, useMemo, useState } from "react";
 import {fetchDriver,fetchFleetStatusCatalog,fetchTruckAssignmentChoices} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
 import { DriverIntakeSetup } from "../drivers/DriverIntakeSetup";
@@ -110,7 +110,8 @@ export default function DriverBoardPage() {
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
     (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()));
-  const rowDrag = useDriverRowDrag(drivers, moveDriver);
+  const autoOrder = board?.autoOrderDispatchers;
+  const rowDrag = useDriverRowDrag(drivers, moveDriver, autoOrder);
   const renderedDrivers = rowDrag.drivers;
   const { table, minimumWidth, tableWidth, columnWidth } = useBoardColumnWidths(renderedDrivers.map(driver => {
     const entry = entries[driver.id];
@@ -136,6 +137,14 @@ export default function DriverBoardPage() {
   }
   const disabled = !canEdit || loading || leaving || state.actionBusy;
   const orderDisabled = disabled || saving || dirty;
+  async function toggleAutoOrder(dispatcherId: string, dispatcherName: string) {
+    const enabled = !autoOrder?.[dispatcherId];
+    setOrderError(""); setOrderNotice("");
+    try {
+      await state.setAutoOrder(dispatcherId, enabled);
+      setOrderNotice(`Auto-order ${enabled ? "on" : "off"} for ${dispatcherName}.`);
+    } catch (err) { setOrderError(err instanceof Error ? err.message : "Auto-order could not be saved. Try again."); }
+  }
   async function moveDriver(id: string, target: string, after: boolean, revision: string, dispatcher?: string) {
     setOrderError(""); setOrderNotice("");
     try {
@@ -158,11 +167,22 @@ export default function DriverBoardPage() {
 
   function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
     const group = groups.get(d.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) };
-    return <tr data-dispatcher-id={d.dispatcherId} className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
+    const enabled = !!autoOrder?.[d.dispatcherId];
+    return <tr key={`dispatcher:${d.dispatcherId}`} data-dispatcher-id={d.dispatcherId} className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
                 <th scope="rowgroup" colSpan={4} className="border-b border-r border-zinc-700 bg-zinc-900 px-3 text-left font-medium">
-                  <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap">
-                    <span className="min-w-0 truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
-                    {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater ml-auto min-w-0 truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap">
+                    <span className="truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
+                    <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-order for ${d.dispatcherName}`} data-grid-ignore
+                      disabled={orderDisabled || rowDrag.active || !board}
+                      title="Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses"
+                      onClick={() => void toggleAutoOrder(d.dispatcherId, d.dispatcherName)}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-full px-1.5 text-[10px] focus-visible:outline-2 focus-visible:outline-blue-400 disabled:cursor-default">
+                      Auto-order
+                      <span aria-hidden="true" className={`inline-flex h-5 w-9 items-center rounded-full p-0.5 ${enabled ? "bg-linear-to-r from-emerald-300 to-blue-500" : "bg-zinc-600"}`}>
+                        <span className={`size-4 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${enabled ? "translate-x-4" : "translate-x-0"}`} />
+                      </span>
+                    </button>
+                    {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
                   </div>
                 </th>
                 <td className="border-b border-r border-zinc-700 px-2 text-center font-mono">{decimalDisplay(group.original, true)}</td>
@@ -232,7 +252,7 @@ export default function DriverBoardPage() {
               {canCreateDriver(permissions) && permissions.includes("tasks.review") ? <button type="button" onClick={() => setSetupDriver(d)} className="hover:underline">Needs setup</button> : "Needs setup"}
             </td>
           </tr>)}
-          {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.map((d, i) => {
+          {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(([label]) => <td key={label} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.flatMap((d, i) => {
             const entry = entries[d.id];
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
             const atHome = ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status);
@@ -245,24 +265,28 @@ export default function DriverBoardPage() {
             const next = loads?.next[0];
             const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
             const nextPickup = nextStop?.schedule;
-            return <Fragment key={d.id}>
-              {d.dispatcherId !== "" && (i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) && groupHeader(d)}
-              <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
+            const dragDisabled = orderDisabled || !!autoOrder?.[d.dispatcherId];
+            return [
+              d.dispatcherId !== "" && (i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) ? groupHeader(d) : null,
+              <tr key={d.id} className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 <td className={`${cellClass} bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>
                 <th scope="row" title={d.fullName} className={`${cellClass} bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
-                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title="Drag to change the shared driver order or move between dispatchers. Arrow Up / Down moves rows; Alt + Arrow Up unassigns." disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
+                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title={autoOrder?.[d.dispatcherId] ? "Turn off Auto-order to move drivers." : "Drag to change the shared driver order or move between dispatchers. Arrow Up / Down moves rows; Alt + Arrow Up unassigns."} disabled={dragDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
                     className="flex h-8 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
                     onPointerDown={event => {
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (!orderDisabled && revision) { rowDrag.start(event, d, revision); setOrderNotice(""); }
+                      if (!dragDisabled && revision) { rowDrag.start(event, d, revision); setOrderNotice(""); }
                     }}
                     onKeyDown={event => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                       event.preventDefault(); event.stopPropagation();
-                      if (event.altKey && event.key === "ArrowUp" && d.dispatcherId && !orderDisabled && !rowDrag.active) { void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], ""); return; }
+                      if (event.altKey && event.key === "ArrowUp" && d.dispatcherId) {
+                        if (!dragDisabled && !autoOrder?.[""] && !rowDrag.active) void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], "");
+                        return;
+                      }
                       const target = drivers[i + (event.key === "ArrowUp" ? -1 : 1)];
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (target && revision && !orderDisabled && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
+                      if (target && revision && !dragDisabled && !autoOrder?.[target.dispatcherId] && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>
                 <td title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>
@@ -296,8 +320,8 @@ export default function DriverBoardPage() {
                 <td className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>
                 <td className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>
                 <td className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>
-              </tr>
-            </Fragment>;
+              </tr>,
+            ];
           })}
           {!loading && drivers.length === 0 && pendingDrivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
         </tbody>

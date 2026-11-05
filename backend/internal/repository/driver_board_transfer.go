@@ -20,7 +20,7 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	keys := []string{a.DispatcherID, destination}
 	slices.Sort(keys)
 	for _, key := range keys {
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('status-board-order:'||$1,0))`, key); err != nil {
+		if err := lockBoardOrder(ctx, tx, key); err != nil {
 			return result, err
 		}
 	}
@@ -36,33 +36,14 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	groups := map[string][]string{}
 	versions := map[string]int64{}
 	for _, key := range keys {
-		rows, err := tx.Query(ctx, `SELECT d.id FROM drivers d WHERE d.active
- AND payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date)=d.id
- AND coalesce(d.dispatcher_id::text,'')=$1 ORDER BY d.full_name,d.id FOR UPDATE OF d`, key)
+		ids, version, autoOrder, err := readBoardOrderGroup(ctx, tx, key)
 		if err != nil {
 			return result, err
 		}
-		ids := []string{}
-		for rows.Next() {
-			var id string
-			if err = rows.Scan(&id); err != nil {
-				rows.Close()
-				return result, err
-			}
-			ids = append(ids, id)
+		if autoOrder {
+			return result, ErrDriverBoardAutoOrder
 		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return result, err
-		}
-		var saved []string
-		var version int64
-		err = tx.QueryRow(ctx, `SELECT driver_ids,version FROM driver_board_driver_order WHERE dispatcher_key=$1`, key).Scan(&saved, &version)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return result, err
-		}
-		groups[key], versions[key] = boardOrder(ids, saved), version
+		groups[key], versions[key] = ids, version
 	}
 	source, target := groups[a.DispatcherID], groups[destination]
 	if boardOrderRevision(a.DispatcherID, versions[a.DispatcherID], source) != a.Revision || boardOrderRevision(destination, versions[destination], target) != a.TargetRevision || !slices.Contains(source, a.DriverID) || (a.TargetDriverID != "" && !slices.Contains(target, a.TargetDriverID)) {

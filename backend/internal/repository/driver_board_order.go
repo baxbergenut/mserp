@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var ErrDriverBoardAutoOrder = errors.New("turn off Auto-order before moving drivers in this group")
+
 var ErrDriverBoardOrderConflict = errors.New("driver order or dispatcher roster changed; reload the board and try again")
 
 type DriverBoardOrderAction struct {
@@ -63,7 +65,8 @@ func applyBoardDriverOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) e
 		groups[d.DispatcherID] = append(groups[d.DispatcherID], d.ID)
 	}
 	versions := map[string]int64{}
-	rows, err := tx.Query(ctx, `SELECT dispatcher_key,driver_ids,version FROM driver_board_driver_order`)
+	board.AutoOrderDispatchers = map[string]bool{}
+	rows, err := tx.Query(ctx, `SELECT dispatcher_key,driver_ids,version,auto_order FROM driver_board_driver_order`)
 	if err != nil {
 		return err
 	}
@@ -71,9 +74,13 @@ func applyBoardDriverOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) e
 		var key string
 		var ids []string
 		var version int64
-		if err = rows.Scan(&key, &ids, &version); err != nil {
+		var autoOrder bool
+		if err = rows.Scan(&key, &ids, &version, &autoOrder); err != nil {
 			rows.Close()
 			return err
+		}
+		if autoOrder {
+			board.AutoOrderDispatchers[key] = true
 		}
 		if current, ok := groups[key]; ok {
 			groups[key] = boardOrder(current, ids)
@@ -86,9 +93,16 @@ func applyBoardDriverOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) e
 		return err
 	}
 	board.DriverOrderRevisions = map[string]string{}
+	statuses := make(map[string]string, len(board.Entries))
+	for _, entry := range board.Entries {
+		statuses[entry.DriverID] = entry.Status
+	}
 	ranks := map[string]int{}
 	for key, ids := range groups {
 		board.DriverOrderRevisions[key] = boardOrderRevision(key, versions[key], ids)
+		if board.AutoOrderDispatchers[key] {
+			sortBoardOrderByStatus(ids, statuses)
+		}
 		for rank, id := range ids {
 			ranks[id] = rank
 		}
@@ -118,38 +132,16 @@ func (r *DriverBoardRepository) ReorderDrivers(ctx context.Context, a DriverBoar
 	if a.TargetDispatcherID != nil && *a.TargetDispatcherID != a.DispatcherID {
 		return r.transferBoardDriver(ctx, tx, a, actor)
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('status-board-order:'||$1,0))`, a.DispatcherID); err != nil {
+	if err = lockBoardOrder(ctx, tx, a.DispatcherID); err != nil {
 		return result, err
 	}
-	// Lock existing members against concurrent termination/reassignment. Newly
-	// arriving members are safely appended on the next snapshot.
-	rows, err := tx.Query(ctx, `SELECT d.id FROM drivers d WHERE d.active
- AND payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date)=d.id
- AND coalesce(d.dispatcher_id::text,'')=$1 ORDER BY d.full_name,d.id FOR UPDATE OF d`, a.DispatcherID)
+	ids, version, autoOrder, err := readBoardOrderGroup(ctx, tx, a.DispatcherID)
 	if err != nil {
 		return result, err
 	}
-	ids := []string{}
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
-			return result, err
-		}
-		ids = append(ids, id)
+	if autoOrder {
+		return result, ErrDriverBoardAutoOrder
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return result, err
-	}
-	var saved []string
-	var version int64
-	err = tx.QueryRow(ctx, `SELECT driver_ids,version FROM driver_board_driver_order WHERE dispatcher_key=$1`, a.DispatcherID).Scan(&saved, &version)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return result, err
-	}
-	ids = boardOrder(ids, saved)
 	if boardOrderRevision(a.DispatcherID, version, ids) != a.Revision || a.DriverID == a.TargetDriverID || !slices.Contains(ids, a.DriverID) || !slices.Contains(ids, a.TargetDriverID) {
 		return result, ErrDriverBoardOrderConflict
 	}

@@ -85,7 +85,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 409, err.Error())
 			return
 		}
-		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) || errors.Is(err, repository.ErrDriverBoardOrderConflict) {
+		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) || errors.Is(err, repository.ErrDriverBoardOrderConflict) || errors.Is(err, repository.ErrDriverBoardAutoOrder) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -180,6 +180,35 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		writeJSON(w, 200, result)
+	})
+	r.Put("/driver-board/auto-order", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			DispatcherID *string `json:"dispatcherId"`
+			Enabled      *bool   `json:"enabled"`
+		}
+		if err := decodeJSON(r, &request); err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if request.DispatcherID == nil || request.Enabled == nil {
+			writeAPIError(w, http.StatusBadRequest, "dispatcherId and enabled are required")
+			return
+		}
+		dispatcher := *request.DispatcherID
+		if dispatcher != "" {
+			if !isUUID(dispatcher) {
+				writeAPIError(w, http.StatusBadRequest, "valid dispatcher id is required")
+				return
+			}
+			compact := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(dispatcher), "-", ""))
+			dispatcher = compact[:8] + "-" + compact[8:12] + "-" + compact[12:16] + "-" + compact[16:20] + "-" + compact[20:]
+		}
+		session, _ := authSessionFromContext(r.Context())
+		if err := repo.SetDriverAutoOrder(r.Context(), dispatcher, *request.Enabled, session.User.ID); err != nil {
+			fail(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 	r.Post("/driver-board/dispatcher-order", func(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusGone, "Dispatcher ordering is now personal to this browser. Reload the page to reorder.")

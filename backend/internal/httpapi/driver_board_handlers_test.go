@@ -61,7 +61,7 @@ func TestDriverBoardValidation(t *testing.T) {
 	if routePermission("GET", "/driver-board") != "driver_board.read" || routePermission("PUT", "/driver-board") != "driver_board.write" {
 		t.Fatal("driver board must have explicit access controls")
 	}
-	if routePermission("POST", "/driver-board/order") != "driver_board.write" {
+	if routePermission("POST", "/driver-board/order") != "driver_board.write" || routePermission("PUT", "/driver-board/auto-order") != "driver_board.write" {
 		t.Fatal("driver ordering requires board write permission")
 	}
 	if routePermission("POST", "/driver-board/dispatcher-order") != "driver_board.write" {

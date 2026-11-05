@@ -178,4 +178,56 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err = pool.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname=current_schema() AND tablename='driver_board_driver_order'`).Scan(&owner); err != nil || owner != "mserp_app" {
 		t.Fatal("order ownership", owner, err)
 	}
+
+	t.Run("shared auto-order", func(t *testing.T) {
+		exec := func(query string, args ...any) {
+			t.Helper()
+			if _, err := pool.Exec(ctx, query, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		exec(`UPDATE dispatchers SET active=true WHERE id=$1`, dispatcher)
+		exec(`UPDATE drivers SET dispatcher_id=$1 WHERE id=ANY($2::uuid[])`, dispatcher, ids)
+		exec(`INSERT INTO driver_board(driver_id,status) VALUES ($1,'HOME'),($2,'DISPATCHED'),($3,'READY'),($4,'REST')`, ids[0], ids[1], ids[2], added)
+		if err := repo.SetDriverAutoOrder(ctx, dispatcher, true, actor); err != nil {
+			t.Fatal(err)
+		}
+		current := get()
+		want := []string{ids[2], ids[1], added, ids[0]}
+		if !current.AutoOrderDispatchers[dispatcher] || current.AutoOrderDispatchers[otherDispatcher] || !slices.Equal(group(current, dispatcher), want) {
+			t.Fatal("shared auto-order not applied", group(current, dispatcher), current.AutoOrderDispatchers)
+		}
+		move := DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[1], TargetDriverID: ids[2], Revision: current.DriverOrderRevisions[dispatcher]}
+		if _, err := repo.ReorderDrivers(ctx, move, actor); !errors.Is(err, ErrDriverBoardAutoOrder) {
+			t.Fatal("manual reorder was not blocked", err)
+		}
+		unassigned := ""
+		transfer := DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[1], TargetDispatcherID: &unassigned, Revision: move.Revision, TargetRevision: current.DriverOrderRevisions[""]}
+		if _, err := repo.ReorderDrivers(ctx, transfer, actor); !errors.Is(err, ErrDriverBoardAutoOrder) {
+			t.Fatal("transfer from auto-order group was not blocked", err)
+		}
+
+		exec(`UPDATE driver_board SET status='READY' WHERE driver_id=$1`, added)
+		exec(`UPDATE driver_board SET status='REST' WHERE driver_id=$1`, ids[2])
+		want = []string{added, ids[1], ids[2], ids[0]}
+		if got := group(get(), dispatcher); !slices.Equal(got, want) {
+			t.Fatal("status changes did not update the order", got)
+		}
+		if err := repo.SetDriverAutoOrder(ctx, dispatcher, false, actor); err != nil {
+			t.Fatal(err)
+		}
+		exec(`UPDATE driver_board SET status='HOME' WHERE driver_id=$1`, added)
+		frozen := get()
+		if frozen.AutoOrderDispatchers[dispatcher] || !slices.Equal(group(frozen, dispatcher), want) {
+			t.Fatal("disabling did not retain the current order", group(frozen, dispatcher))
+		}
+		if _, err := repo.ReorderDrivers(ctx, move, actor); !errors.Is(err, ErrDriverBoardOrderConflict) {
+			t.Fatal("a drag from before the mode change was accepted", err)
+		}
+		move.Revision = frozen.DriverOrderRevisions[dispatcher]
+		move.TargetDriverID = added
+		if result, err := repo.ReorderDrivers(ctx, move, actor); err != nil || !slices.Equal(result.DriverIDs, []string{ids[1], added, ids[2], ids[0]}) {
+			t.Fatal("manual reorder did not resume", result, err)
+		}
+	})
 }

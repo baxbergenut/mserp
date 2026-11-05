@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
+import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { applyCommittedFleetStatus, progressStatus, reconcileDriverBoard } from "./board";
@@ -124,12 +124,28 @@ export function useDriverBoard(lockedDriverId?: string) {
     setChanges(result);
   }, [canEdit]);
 
+  async function setAutoOrder(dispatcherId: string, enabled: boolean) {
+    if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) throw new Error("Finish the current save before changing Auto-order.");
+    orderSavingRef.current = true;
+    setOrderSaving(true);
+    try {
+      await updateBoardAutoOrder(dispatcherId, enabled);
+      try {
+        refreshWanted.current(await fetchDriverBoard(currentChargeWeek()));
+      } catch {
+        refreshWanted.current();
+        throw new Error("Auto-order was saved. Reload the board to see the current order.");
+      }
+    } finally { orderSavingRef.current = false; setOrderSaving(false); }
+  }
+
   async function reorderDrivers(driverId: string, targetDriverId: string, after: boolean, revision: string, destination?: string) {
     if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) throw new Error("Finish the current save before moving a driver.");
     const driver = board?.drivers.find(d => d.id === driverId);
     const target = board?.drivers.find(d => d.id === targetDriverId);
     const targetDispatcherId = destination ?? target?.dispatcherId;
     if (!driver || targetDispatcherId === undefined || driverId === targetDriverId) throw new Error("The driver list changed. Reload the board and try again.");
+    if (board?.autoOrderDispatchers?.[driver.dispatcherId] || board?.autoOrderDispatchers?.[targetDispatcherId]) throw new Error("Turn off Auto-order before moving drivers in this group.");
     const transfer = driver.dispatcherId !== targetDispatcherId;
     orderSavingRef.current = true;
     setOrderSaving(true);
@@ -352,5 +368,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   }, [saving, dirty, error]);
 
   const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) }]));
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, ...live, leaving: !!pendingLink };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink };
 }

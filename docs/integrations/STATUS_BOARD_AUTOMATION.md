@@ -89,11 +89,11 @@ It uses the cached GPS coordinates and selected stop coordinates without requiri
 optional road routing. Future/out-of-order positions are ignored. An unchanged
 cached position is re-evaluated after a rule change, including when the provider
 has not sent a new point. Positions older than ten minutes show only last-known
-proximity, with an amber marker. Automatic
+proximity, with a red marker. Automatic
 proximity requires a uniquely identified assigned truck VIN. Driver/truck assignment identity,
 VIN, trailer, load ID, selected stop and facility coordinates scope evidence.
 
-Fresh proximity displays a red @PU/@DEL prefix; stale proximity uses amber.
+Fresh proximity displays a green @PU/@DEL prefix. Outdated proximity uses red.
 While @PU/@DEL is displayed, the ETA cell hides the retained travel estimate,
 which returns when the automatic marker clears.
 Time/day remains the normal theme color.
@@ -111,8 +111,9 @@ resolved offline from stop coordinates with tz-lookup; it includes the local dat
 and timezone abbreviation. No appointment, GPS diagnostic or routing-profile notes
 appear in the cell hover. Missing facility coordinates or a valid ETA leave the
 hover empty. Stale GPS retains mileage only, without presenting an old ETA.
-Manual times/mileage and live automatic travel display red; stale automatic
-mileage displays amber, matching stale @PU/@DEL. The API exposes travelStale and
+Automatic travel and proximity use a green check for fresh data and a red warning
+for outdated data, with freshness labels for screen readers. Manual times and
+mileage use the normal text color. The API exposes travelStale and
 travelArrivalAt separately from arrival-proximity evidence.
 Entering either clears the other. Notes are never rewritten. Existing manual ETA
 survives rollout and is bound to its current context; a subsequent load/stop/truck

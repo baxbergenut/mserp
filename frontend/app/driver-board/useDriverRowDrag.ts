@@ -9,7 +9,7 @@ type Move = (id: string, target: string, after: boolean, revision: string, dispa
 
 // Keep DOM order stable during the gesture and save. Transforms move the actual
 // rows, including their sticky cells, while group headers identify drop targets.
-export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
+export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, autoOrder?: Readonly<Record<string, boolean>>) {
   const [frozen, setFrozen] = useState<T[] | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
@@ -18,7 +18,7 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
   useLayoutEffect(() => () => { cleanup.current?.(); cleanup.current = null; }, []);
 
   function start(event: ReactPointerEvent<HTMLButtonElement>, driver: T, revision: string) {
-    if (event.button !== 0 || !event.isPrimary || cleanup.current) return;
+    if (event.button !== 0 || !event.isPrimary || cleanup.current || autoOrder?.[driver.dispatcherId]) return;
     const table = event.currentTarget.closest("table");
     if (!table) return;
     event.preventDefault(); event.stopPropagation();
@@ -62,7 +62,12 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
     const update = () => {
       const pointerTop = y - table.getBoundingClientRect().top;
       destinationGroup = [...headers].reverse().find(h => pointerTop >= h.top)?.id ?? headers[0]?.id ?? driver.dispatcherId;
-      for (const h of headers) h.element.style.outline = destinationGroup !== driver.dispatcherId && h.id === destinationGroup ? "2px solid #60a5fa" : "";
+      for (const h of headers) h.element.style.outline = !autoOrder?.[destinationGroup] && destinationGroup !== driver.dispatcherId && h.id === destinationGroup ? "2px solid #60a5fa" : "";
+      if (autoOrder?.[destinationGroup]) {
+        preview = rows;
+        paint();
+        return;
+      }
       if (destinationGroup !== driver.dispatcherId) {
         for (const row of rows) row.element.style.transform = row === source ? `translate3d(0,${Math.max(headers[0]?.top ?? 0, Math.min(tableMax, pointerTop - grabOffset)) - row.top}px,0)` : "";
         const groupTargets = targets.filter(t => t.dispatcher === destinationGroup);
@@ -107,7 +112,10 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move) {
     };
     const finish = async (cancel: boolean) => {
       if (!pointerActive) return;
-      if (!cancel) update();
+      if (!cancel) {
+        update();
+        cancel = !!autoOrder?.[destinationGroup];
+      }
       stopListening();
       source.element.style.transition = transition;
       if (cancel) preview = rows;

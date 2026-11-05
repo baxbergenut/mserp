@@ -534,6 +534,7 @@ export interface FiveELDBoardSummary {
 export interface DriverBoard {
   pendingDrivers?: { intakeId: string; fullName: string }[];
 	statusSyncEnabled?: boolean;
+  autoOrderDispatchers?: Record<string, boolean>;
   driverOrderRevisions: Record<string, string>;
   dispatcherOrderRevision: string;
   weekStart: string;

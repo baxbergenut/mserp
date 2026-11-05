@@ -895,7 +895,7 @@ positive Reimburse-method expense credits already included in net payable.
   on the next minute pass and take queue priority. Failed attempts back off five
   minutes. Old truck-route caches establish a DRIVE baseline once.
   `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
-  Stale GPS displays amber last-known miles without diagnostic hover notes, including
+  Stale GPS displays red last-known miles without diagnostic hover notes, including
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
   Fresh moving trucks show miles above 600 miles remaining, otherwise ETA;
@@ -904,8 +904,10 @@ positive Reimburse-method expense credits already included in net payable.
   See `docs/integrations/STATUS_BOARD_AUTOMATION.md` for environment variables,
   proximity/freshness rules and rollout. ETA times round to the nearest 15 minutes;
   cell hover shows only facility-local ETA (offline coordinate timezone lookup).
-  Live travel is red; stale miles are amber. Routing assumptions remain server
-  diagnostics. Load cards expose a rightmost read-only-compatible copy-number icon.
+  Automatic travel and arrival use green for fresh evidence and red for outdated
+  evidence, with a check or warning icon and an accessible freshness label. Manual
+  values use the normal text color. Routing assumptions remain server diagnostics.
+  Load cards expose a rightmost read-only-compatible copy-number icon.
   Browser checks: `test-board-appointments.mjs`
   and `test-status-board-layout.mjs`; `test-board-pickup-times-e2e.mjs` uses
   review-local with MSERP_REVIEW_ACCESS_FILE and MSERP_REVIEW_TEST_DATABASE_URL.
@@ -1054,7 +1056,13 @@ positive Reimburse-method expense credits already included in net payable.
   group, including Unassigned. Migration 118 stores the order and revision.
   Existing saved shared orders are reused; new drivers append in alphabetical
   order. Reordering requires driver_board.write, retains hidden rows, and
-  propagates through live board snapshots.
+  propagates through live board snapshots. Migration 201 adds shared Auto-order
+  per dispatcher (including Unassigned). While enabled, snapshots sort the complete
+  roster by Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses,
+  with ties preserving the saved order. Dragging into or out of those groups is
+  blocked. Turning Auto-order off saves the current sorted roster as manual order.
+  PUT /driver-board/auto-order requires driver_board.write and uses the same
+  dispatcher lock as row moves. Status/assignment records are left intact.
   Unassigned is pinned first, uses the same group heading and remains a drop
   target when empty. Dragging between dispatcher groups assigns/unassigns the
   native driver immediately at the database clock and saves the shared placement,
