@@ -291,7 +291,7 @@ func (r *WeighMyTruckRepository) LinkTransaction(ctx context.Context, id, driver
 	}
 	var closed bool
 	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements p WHERE p.week_start=date_trunc('week',t.transaction_date)::date AND p.driver_id IN(t.driver_id,$2::uuid,payroll_driver_at(t.driver_id,t.transaction_date),payroll_driver_at($2::uuid,t.transaction_date)) AND p.finalized) OR EXISTS(SELECT 1 FROM investor_pay_weeks p WHERE p.week_start=date_trunc('week',t.transaction_date)::date AND p.truck_id IN(t.truck_id,$3::uuid) AND p.finalized)
- OR EXISTS(SELECT 1 FROM (`+wmtStatementReportsSQL+`) f WHERE f.finalized AND f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id)))
+ OR EXISTS(SELECT 1 FROM (`+wmtStatementReportsSQL+`) f WHERE f.finalized AND f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id))))
  FROM weighmytruck_transactions t WHERE t.id=$1`, id, driver, truck).Scan(&closed)
 	if e != nil {
 		return e
