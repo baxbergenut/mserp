@@ -3678,6 +3678,10 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - PUT /gross-board accepts per-entry `fields`; SaveChanges merges those fields
   into the latest row under the financial lock. Ordinary saves do not require
   the caller's row version. Missing fields supports older full-row clients.
+  DataTruck acceptance flags apply only when explicitly included in the patch.
+  They verify the selected load/trip and the reviewed values under lock, and
+  the save acknowledgement clears them. Split reviews keep their separate
+  source and companion-version fences.
   Existing current-row counters order live snapshots; no version history is added.
   Identical field retries skip writes/publication. Interactive SaveChanges commits
   canonical rows, source revisions and durable payroll work before acknowledgement;

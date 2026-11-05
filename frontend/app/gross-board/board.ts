@@ -135,7 +135,7 @@ export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBo
     enteredOriginalRate: entry.enteredOriginalRate || entry.originalRate,
     enteredMiles: entry.enteredMiles || entry.miles,
     originalRate: original, miles, systemOriginalRate: load.originalRate, systemMiles: load.miles, systemDriverRate: load.driverRate ?? "",
-    driverRate: entry.driverRate === "" ? load.driverRate ?? "" : entry.driverRate, acceptSystemValues: false };
+    driverRate: entry.driverRate === "" ? load.driverRate ?? "" : entry.driverRate, acceptDriverGross: false, acceptSystemValues: false };
 }
 
 // Original revenue and driver gross are independent financial inputs.
