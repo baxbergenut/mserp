@@ -213,20 +213,14 @@ func applyDriverPayCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) 
 		if f == 0 && t == 0 {
 			continue
 		}
-		var d DriverPayDriver
-		if err = tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,(driver_employment_type(d.id,$1::date+6)='owner_operator'),
- coalesce(t.id::text,''),coalesce(t.unit_number,''),coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned')
- FROM drivers d `+weeklyAssignmentJoins+` WHERE d.id=$2 AND d.active`, report.WeekStart, r.Driver).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName); err != nil {
+		d, err := readIdleDriverPayCard(ctx, tx, report.WeekStart, r.Driver)
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				seen[r.Driver] = true
 				continue
 			}
 			return err
 		}
-		d.FuelTotal = "0.00"
-		d.TollTotal = "0.00"
-		d.Loads = []DriverPayLoad{}
-		d.Edits = DriverPayEdits{DriverID: d.ID, WeekStart: report.WeekStart, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
 		report.Drivers = append(report.Drivers, d)
 		seen[d.ID] = true
 	}
@@ -250,6 +244,18 @@ func applyDriverPayCarry(ctx context.Context, tx pgx.Tx, report *DriverPayWeek) 
 		d.Edits.Costs = &state
 	}
 	return nil
+}
+
+func readIdleDriverPayCard(ctx context.Context, tx pgx.Tx, week, driver string) (DriverPayDriver, error) {
+	var d DriverPayDriver
+	err := tx.QueryRow(ctx, `SELECT d.id::text,d.full_name,d.pay_type,d.pay_rate::text,(driver_employment_type(d.id,$1::date+6)='owner_operator'),
+ coalesce(t.id::text,''),coalesce(t.unit_number,''),coalesce(dp.id::text,''),coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned')
+ FROM drivers d `+weeklyAssignmentJoins+` WHERE d.id=$2 AND d.active`, week, driver).Scan(&d.ID, &d.FullName, &d.PayType, &d.PayRate, &d.IsOwnerOperator, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName)
+	d.FuelTotal = "0.00"
+	d.TollTotal = "0.00"
+	d.Loads = []DriverPayLoad{}
+	d.Edits = DriverPayEdits{DriverID: d.ID, WeekStart: week, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
+	return d, err
 }
 
 func saveDriverPayCosts(ctx context.Context, tx pgx.Tx, d DriverPayDriver, edits DriverPayEdits, actor string) error {

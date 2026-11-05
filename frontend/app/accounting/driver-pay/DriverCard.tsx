@@ -104,7 +104,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
   const homeBadge = driver.homeWeek && loadCount === 0 ? <span title="Home every day of this week, with no loads" className="shrink-0 whitespace-nowrap rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-300">Home</span> : null;
   const allFeesMissing = loadCount > 0 && totals.missingFees === loadCount;
   const incomplete = totals.review > 0;
-  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses;
+  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses - totals.salaryCarry;
   const payable = allFeesMissing ? "Needs review" : decimalDisplay(totals.payable, true);
   const editAdjustment = (index: number, update: (item: DriverPayAdjustment) => DriverPayAdjustment) => {
     edit(current => {
@@ -123,11 +123,14 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
       || carry !== BigInt(0) || hundredths(edits.costs?.[`${key}Due`] ?? "0") !== BigInt(0) || hundredths(costAmount(driver, edits, key)) !== BigInt(0);
   });
   const layovers = activeLayovers(driver, edits);
-  const fixedChargeRows = layovers.length + visibleCostRows.length + (driver.autoCharges?.length ?? 0) + (edits.expenseDeductions?.length ?? 0) + (edits.generatedCharges?.length ?? 0);
+  const fixedChargeRows = Number(!!driver.salaryCarry) + layovers.length + visibleCostRows.length + (driver.autoCharges?.length ?? 0) + (edits.expenseDeductions?.length ?? 0) + (edits.generatedCharges?.length ?? 0);
   const adjustmentCells = open ? <td colSpan={2} rowSpan={weekRowCount} className="pay-adjustment-span relative border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
     <div data-payroll-scroll={`${driver.id}:adjustments`} className="absolute inset-0 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
-        <tbody>{layovers.map(row => <tr key={`layover:${row.date}`}>
+        <tbody>{driver.salaryCarry && <tr>
+          <td className={`${cell} text-zinc-300`}>Prior salary balance</td>
+          <td className={`${numeric} !border-r-0 text-red-300`}>{decimalDisplay(-totals.salaryCarry, true)}</td>
+        </tr>}{layovers.map(row => <tr key={`layover:${row.date}`}>
           <td className={`${cell} text-zinc-300`}><span title={`Recorded bonus on ${row.date}`}>Layover · {shortDate(row.date)}</span></td>
           <td className={`${numeric} !border-r-0 text-emerald-300`}>+{amount(row.amount, true)}</td>
         </tr>)}{visibleCostRows.map(({ key, label }, index) => {
@@ -193,7 +196,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}
         {placementError && <p role="alert" className="px-3 py-2 text-xs text-red-300">{placementError}</p>}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
- {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">Negative payable — adjust deductions to what was collected. Unpaid balances carry forward.</p>}
+ {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">{investor ? "Negative payable — adjust deductions to what was collected. Unpaid balances carry forward." : driver.settlement?.finalized ? "Cash payable is $0. This statement closed with a salary shortfall." : "Cash payable is $0. Finalizing carries the salary shortfall to later open payroll."}</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
           <table onMouseDown={selectPayCell} onDoubleClick={editPayCell} onCopy={copyPayCell} onPaste={pastePayCell} onKeyDown={navigatePayGrid} className={`${styles.grid} w-full min-w-[1504px] table-fixed border-separate border-spacing-0 text-left text-xs`}>
             <colgroup>{displayColumns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>

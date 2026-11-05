@@ -23,6 +23,7 @@ try {
     const driver = {
       id: statementId, statementRevision:'18900000-0000-0000-0000-000000000001', fullName: 'Grid Test', truckUnit: 'T1', payType: 'gross_percentage', payRate: '80', isOwnerOperator: true,
       dispatcherId: '', dispatcherName: '', fuelTotal: '40.00', tollTotal: '10.00',
+      ...(!investor ? { salaryCarry: '15.00' } : {}),
       ...(investor ? { investorId: 'owner', truckId: statementId, autoCharges: [{ source: 'driver:operator', name: 'Driver earnings · Operator', amount: '-80.00' }] } : {}),
       loads: Array.from({ length: 4 }, (_, slot) => ({ date: week, slot, loadNumber: `L${slot}`, loadRecordId: slot + 1, commentKey: `load${slot}`, boardVersion: 1,
         originalRate: '400.00', systemOriginalRate: '401.00', driverGross: '350.00', totalMiles: '90.00', systemMiles: '91.00', loadedMiles: '80.00', deadheadMiles: '10.00', fee: '280.00', pickupDate: week, pickupLocation: 'Columbus, OH', deliveryLocation: 'Pittsburgh, PA', issues: [] })),
@@ -38,6 +39,10 @@ try {
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname.replace('/lookups/','/').slice(4);
       if(request.method() !== 'GET' && /^\/(driver|investor)-pay/.test(path)) financialWrites++;
+      if (path === (investor ? '/investor-pay/export' : '/driver-pay/export')) {
+        expect(new URL(request.url()).searchParams.get('weekStart')).toBe(week);
+        return route.fulfill({ contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: 'XLSX download fixture' });
+      }
       if (path === '/driver-pay' || path === '/investor-pay' || /^\/(driver|investor)-pay\/statements\//.test(path)) {
         if(path.includes('/statements/') && new URL(request.url()).searchParams.get('revision')==='18900000-0000-0000-0000-000000000001') {
           expiredReads++; driver.statementRevision='18900000-0000-0000-0000-000000000002';
@@ -47,7 +52,7 @@ try {
         let row=structuredClone(driver);
         if(summary) summaryReads++;
         const withDetails = new URL(request.url()).searchParams.get('detailIds')?.split(',').includes(statementId);
-        if(summary && !withDetails){row.summary={loads:4,missingFees:0,review:0,fee:'1120.00',payable:investor?'915.00':'995.00'};row.loads=[];row.autoCharges=[];row.edits={driverId:statementId,weekStart:week,version:0,notes:'',comments:{},adjustments:[]};
+        if(summary && !withDetails){row.summary={loads:4,missingFees:0,review:0,fee:'1120.00',payable:investor?'915.00':'980.00'};row.loads=[];row.autoCharges=[];row.edits={driverId:statementId,weekStart:week,version:0,notes:'',comments:{},adjustments:[]};
           expect(JSON.stringify(row).length).toBeLessThan(JSON.stringify(driver).length/2);
         } else if (!summary) {detailReads++;await new Promise(resolve=>setTimeout(resolve,150));}
         return route.fulfill({json:{weekStart:week,revision:'fixture',drivers:[row]}});
@@ -66,13 +71,22 @@ try {
     await expect(expand).toBeVisible(); expect(summaryReads).toBe(1);expect(detailReads).toBe(0);
     await expect(expand).toHaveAttribute('aria-expanded','false');
     const row=expand.locator('xpath=ancestor::tr');
-    await expect(row).toContainText(investor?'$915.00':'$995.00');
+    await expect(row).toContainText(investor?'$915.00':'$980.00');
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toHaveCount(0);
     await expand.click();
     await expect(page.getByText('Loading statement…',{exact:true})).toBeVisible();
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toBeVisible();expect(detailReads).toBe(1);
+    if (!investor) {
+      await expect(page.getByText('Prior salary balance', { exact: true }).locator('..')).toContainText('-$15.00');
+      await expect(row).toContainText('$980.00');
+    }
     expect(expiredReads).toBe(1);expect(financialWrites).toBe(0);
-    await expect(page.getByRole('button',{name:'Export statement',exact:true})).toHaveCount(0);
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button',{name:'Export statements',exact:true}).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe(`${investor ? 'investor' : 'driver'}-pay-${week}.xlsx`);
+    expect(await readFile(await download.path(), 'utf8')).toBe('XLSX download fixture');
     await expect(page.getByRole('button',{name:'Sheets adjustment',exact:true})).toHaveCount(0);
     await expand.click();await expand.click();expect(detailReads).toBe(1);
     await expect(page.getByLabel('Grid Test, Fuel, amount',{exact:true})).toHaveValue('-40.00');

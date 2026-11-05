@@ -144,35 +144,11 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 		for _, l := range d.Loads {
 			n, _ := chargeCents(l.Fee)
 			fee += n
-			payable += n
 			if len(l.Issues) > 0 {
 				info.Review++
 			}
 		}
-		for _, a := range d.Edits.Adjustments {
-			n, _ := chargeCents(a.Amount)
-			if a.Kind == "deduction" {
-				n = -n
-			}
-			payable += n
-		}
-		for _, a := range d.AutoCharges {
-			n, _ := chargeCents(a.Amount)
-			payable += n
-		}
-		for _, a := range d.Edits.GeneratedCharges {
-			n, _ := chargeCents(a.Amount)
-			payable += n
-		}
-		for _, a := range d.Edits.ExpenseDeductions {
-			n, _ := chargeCents(a.Amount)
-			if a.Source == "reimburse" {
-				n = -n
-			}
-			payable -= n
-		}
-		payable += payPageCosts(*d)
-		payable += driverLayoverTotal(*d)
+		payable += d.NetPayCents()
 	}
 	for i := range report.SetupRequired {
 		s := &report.SetupRequired[i]
@@ -227,6 +203,55 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	}
 	report.Pagination = info
 	return report
+}
+
+func (d DriverPayDriver) NetPayCents() int64 {
+	var net int64
+	for _, load := range d.Loads {
+		n, _ := chargeCents(load.Fee)
+		net += n
+	}
+	for _, a := range d.Edits.Adjustments {
+		n, _ := chargeCents(a.Amount)
+		if a.Kind == "deduction" {
+			n = -n
+		}
+		net += n
+	}
+	for _, a := range d.AutoCharges {
+		n, _ := chargeCents(a.Amount)
+		net += n
+	}
+	for _, a := range d.Edits.GeneratedCharges {
+		n, _ := chargeCents(a.Amount)
+		net += n
+	}
+	for _, a := range d.Edits.ExpenseDeductions {
+		n, _ := chargeCents(a.Amount)
+		if a.Source == "reimburse" {
+			n = -n
+		}
+		net -= n
+	}
+	carry, _ := chargeCents(d.SalaryCarry)
+	return net + payPageCosts(d) + driverLayoverTotal(d) - carry
+}
+
+func (d DriverPayDriver) ReimbursedCents() int64 {
+	var total int64
+	for _, row := range d.Edits.ExpenseDeductions {
+		if row.Source == "reimburse" {
+			amount, _ := chargeCents(row.Amount)
+			total += max(0, amount)
+		}
+	}
+	for _, row := range d.AutoCharges {
+		if strings.HasPrefix(row.Source, "expense-reimburse:") {
+			amount, _ := chargeCents(row.Amount)
+			total += max(0, amount)
+		}
+	}
+	return total
 }
 
 func payPageCosts(d DriverPayDriver) int64 {

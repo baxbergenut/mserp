@@ -201,6 +201,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 		})
 	}
 	registerPaySourceAcceptance(r, "/driver-pay", repo, fail)
+	registerPayrollExport(r, "/driver-pay", "driver", repo, fail)
 	r.Get("/driver-pay", func(w http.ResponseWriter, r *http.Request) {
 		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), repo.FirstPayrollWeek())
 		if err != nil {

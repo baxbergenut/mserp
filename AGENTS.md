@@ -82,6 +82,20 @@ financial correction audits and idempotent command receipts remain authoritative
 Existing legacy event rows are left in place; this change stops new action writes
 and requires no schema migration.
 
+Driver Pay carries the negative net of the same payee's latest finalized
+statement as a separate, read-only salary deduction on later open statements.
+Existing finalized negatives qualify when they are still the latest settlement.
+Drafts neither originate nor consume the balance. Source deductions and credits
+keep their native posting rules. Reopen later finalized statements before changing
+an earlier carry-bearing statement. The Driver Pay page shows zero cash payable
+when the statement has a shortfall. Investor Pay keeps its own balance rules.
+
+Driver and Investor Pay export the selected week's saved statements across all
+matching pages using the respective read permissions. The XLSX includes only
+positive net payables, sorted case-insensitively by driver name. Investor rows
+use the statement's operating drivers. The Reimbursed Amount column totals
+positive Reimburse-method expense credits already included in net payable.
+
 ## Repository map
 
 ### Backend
@@ -313,8 +327,8 @@ and requires no schema migration.
   solely for release/schema compatibility. Ordinary unpaid balances carry normally.
   External expense settlements/reversals remain available with expenses.settle
   and category View permissions, immutable receipts, reservation limits and
-  finalized-statement guards. The special Sheets adjustment and Export statement
-  controls are removed from both payroll pages; existing adjustment data remains.
+  finalized-statement guards. The special Sheets adjustment control is removed
+  from both payroll pages; existing adjustment data remains.
   TestAccountingCutoverRetiredDatabase (MSERP_CUTOVER_TEST_DATABASE_URL) covers
   fresh/migrated databases, external settlements and payroll calculator parity.
   Browser: scripts/test-accounting-retirement.mjs against review-local.
@@ -2138,8 +2152,8 @@ assignment lookup lists.
   a small This week marker. It does not change future schedule rates. Reset removes
   that exception. Fuel/Toll have no waiver action. Expense balances continue their
   existing principal-based behavior. Freeform adjustments have no separate unpaid
-  principal, and negative net pay itself never creates a second debt. Investor Pay
-  keeps its existing truck-cost rules. Tests cover fresh/migrated schemas and the
+  principal. Driver Pay carries the finalized net shortfall after individual
+  line postings. Investor Pay keeps its existing truck-cost rules. Tests cover fresh/migrated schemas and the
   charge E2E right-click/keyboard workflow.
 
 - Toll overview aggregates production PrePass and historical imported records by

@@ -12,8 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, RefreshCw, UserRound } from "lucide-react";
-import { APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
+import { AlertTriangle, Banknote, ChevronLeft, ChevronRight, CloudCheck, Download, RefreshCw, UserRound } from "lucide-react";
+import { APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, PayrollAvailability } from "@/app/lib/types";
 import { latestPayrollWeek } from "../payrollWeek";
 import { useLatestPayrollWeek } from "../components/useLatestPayrollWeek";
@@ -124,6 +124,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [error, setError] = useState("");
   const [preparationError, setPreparationError] = useState("");
   const [message, setMessage] = useState("");
@@ -446,6 +448,24 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     fee: hundredths(report.pagination.fee), payable: hundredths(report.pagination.payable) + drivers.reduce((sum, d) => sum + driverTotals(d, changes[d.id] ?? d.edits).payable - driverTotals(d, d.edits).payable, BigInt(0)), review: report.pagination.review, loads: report.pagination.loads,
   } : pageSummary;
   const busy = loading || refreshing;
+  async function exportStatements() {
+    const kind = investor ? "investor" : "driver";
+    setExporting(true);
+    setExportError("");
+    try {
+      const blob = await fetchPayStatementExport(kind, week, { search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${kind}-pay-${week}.xlsx`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Unable to export statements");
+    } finally {
+      setExporting(false);
+    }
+  }
   const setupRequired = investor ? report?.setupRequired ?? [] : [];
   const rowOrder = new Map(report?.pagination?.rowIds?.map((id, index) => [id, index]));
   const rows = [
@@ -464,7 +484,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
         <TableFilters>
           <select aria-label="Dispatcher" className={`${controlClass} !w-44`} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select>
         </TableFilters><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>
-    <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${refreshing || report?.preparation?.state === "updating" ? "invisible" : ""} ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!preparedReady ? (report?.preparation?.state === "failed" ? "Preparation failed" : report?.preparation?.state === "preparing" ? "Preparing…" : "") : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span><button className={payButtonClass} disabled={finalizing || saving || loading || refreshing} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button hidden={!canEdit || investor} className={payButtonClass} disabled={finalizing || saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>
+    <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><button type="button" className={payButtonClass} disabled={exporting || !report || !preparedReady || finalizing || busy || dirty || saving || editingDraft} onClick={() => void exportStatements()}><Download className="h-3.5 w-3.5" />{exporting ? "Exporting…" : "Export statements"}</button><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${refreshing || report?.preparation?.state === "updating" ? "invisible" : ""} ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!preparedReady ? (report?.preparation?.state === "failed" ? "Preparation failed" : report?.preparation?.state === "preparing" ? "Preparing…" : "") : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span><button className={payButtonClass} disabled={finalizing || saving || loading || refreshing} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button hidden={!canEdit || investor} className={payButtonClass} disabled={finalizing || saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>
     {driverFilter && <div><button className="text-xs text-blue-400" onClick={() => { setDriverFilter(""); setPage(1); }} disabled={finalizing || busy || dirty || saving}>{investor ? "Show all trucks" : "Show all drivers"}</button></div>}
     </PinnablePageHeader>
 
@@ -472,6 +492,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     {report?.preparation && report.preparation.state !== "ready" && report.preparation.state !== "updating" && <div role="status" className="rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">{report.preparation.state === "failed" ? "Statement preparation failed. The last complete values are shown." : "Preparing this week…"}{report.preparation.state === "failed" && <button className={`${payButtonClass} ml-3`} disabled={saving || refreshing} onClick={() => { void retryPayPreparation(investor, week).then(() => fetchPay(week)).then(setReport).catch(reason => setError(reason instanceof Error ? reason.message : "Unable to retry preparation")); }}>Retry preparation</button>}</div>}
     {report?.notices?.map((notice, i) => <p key={i} className="rounded border border-zinc-700 p-3 text-xs text-zinc-400">{notice}</p>)}
     {preparationError && <div role="alert" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-200">{preparationError} Retrying automatically…</div>}
+    {exportError && <p role="alert" className="text-sm text-red-300">{exportError}</p>}
     {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still here."}<button className={`${payButtonClass} ml-3`} disabled={saving || busy} onClick={() => dirty ? void save() : void reload()}>{dirty ? "Retry save" : "Retry"}</button>{dirty && <button className={`${payButtonClass} ml-2`} disabled={saving || busy} onClick={() => void reload()}>Reload saved version</button>}</div>}
     {report?.managedInSheets&&<p className="rounded-lg border border-zinc-700 p-3 text-sm text-amber-200">Managed in Sheets · historical payroll is read-only. Unfinished statements are archived drafts.</p>}
     {sourceError && <p role="alert" className="text-sm text-red-300">{sourceError} This edit has not been saved.</p>}

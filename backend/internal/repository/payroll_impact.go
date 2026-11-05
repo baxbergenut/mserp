@@ -506,6 +506,12 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		if err != nil {
 			return nil, err
 		}
+		if !legacy && strings.HasPrefix(c.name, "driver.") {
+			legacy, err = driverSalaryCarryAffectsOtherWeeks(ctx, tx, keys(changedWeeks), impact.roots)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if !legacy {
 			impact.weeks = changedWeeks
 			if strings.HasSuffix(c.name, ".finalize") || (payrollConcurrent(tx) && strings.HasSuffix(c.name, ".reopen")) {

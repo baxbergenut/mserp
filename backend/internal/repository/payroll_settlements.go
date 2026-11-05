@@ -251,6 +251,11 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		if closed != reopen {
 			continue
 		}
+		if reopen {
+			if err = guardDriverSalaryCarryOrder(ctx, tx, d, report.WeekStart); err != nil {
+				return empty, err
+			}
+		}
 		selected++
 		selectedIDs[d.ID] = true
 		if prepared && reopen && driver == "" {
@@ -384,6 +389,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			confirmed, ok := pending[d.ID]
 			if !ok {
 				continue
+			}
+			if err = guardDriverSalaryCarryOrder(ctx, tx, d, report.WeekStart); err != nil {
+				return empty, err
 			}
 			frozen := d
 			frozen.Settlement = nil

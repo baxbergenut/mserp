@@ -104,6 +104,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 		writeJSON(w, 200, results)
 	})
 	registerPaySourceAcceptance(r, "/investor-pay", pay, fail)
+	registerPayrollExport(r, "/investor-pay", "investor", pay, fail)
 	r.Get("/investor-pay", func(w http.ResponseWriter, r *http.Request) {
 		week, err := availablePayrollWeek(r.URL.Query().Get("weekStart"), pay.FirstPayrollWeek())
 		if err != nil {

@@ -127,6 +127,7 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	SalaryCarry            string                        `json:"salaryCarry,omitempty"`
 	ExpenseRevision        string                        `json:"expenseRevision,omitempty"`
 	PreparationState       string                        `json:"preparationState,omitempty"`
 	StatementRevision      string                        `json:"statementRevision,omitempty"`
@@ -230,6 +231,9 @@ func readDriverPayWeek(ctx context.Context, tx pgx.Tx, week time.Time, driverID 
 		return result, err
 	}
 	if err = routeTeamPay(ctx, tx, &result); err != nil {
+		return result, err
+	}
+	if err = applyDriverSalaryCarry(ctx, tx, &result); err != nil {
 		return result, err
 	}
 	if err = applyDriverPayCarry(ctx, tx, &result); err != nil {

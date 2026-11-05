@@ -1377,6 +1377,7 @@ export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
 export interface DriverPayDriver {
+  salaryCarry?: string;
 	expenseRevision?: string;
 	preparationState?: "ready" | "preparing" | "updating" | "failed";
 	statementRevision?: string;

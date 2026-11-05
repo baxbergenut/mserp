@@ -328,7 +328,7 @@ function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
 }
-async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
+async function performRequest<T>(path: string, init?: RequestInit, readBody?: (response: Response) => Promise<T>): Promise<T> {
 	const generation = accessGeneration;
 	const method = (init?.method ?? "GET").toUpperCase();
 	const needsCSRF = !["GET", "HEAD", "OPTIONS"].includes(method);
@@ -369,7 +369,7 @@ async function performRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (generation !== accessGeneration && !path.startsWith("/auth/")) throw new APIError("Access changed; refresh this view", 403, "access_changed");
   if (response.status === 204) return undefined as T;
-  const value = await response.json();
+  const value = await (readBody ? readBody(response) : response.json());
   if (generation !== accessGeneration && !path.startsWith("/auth/")) throw new APIError("Access changed; refresh this view", 403, "access_changed");
   return value as T;
 }
@@ -572,6 +572,8 @@ export const deleteExpense = (id: string) =>
 export const fetchPayStatement = (investor: boolean, weekStart: string, id: string, signal?: AbortSignal, revision?: string) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/statements/${encodeURIComponent(id)}`, { weekStart, prepared: "1", revision }), { signal });
 export const fetchPaySettlementPreview = (investor: boolean, weekStart: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/settlement-preview`, { weekStart, prepared: "1" }), { signal });
 export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, prepared: "1", ...query }), { signal });
+export const fetchPayStatementExport = (kind: "driver" | "investor", weekStart: string, query: Pick<PayPageQuery, "search" | "dispatcherId" | "statementId">) =>
+  performRequest(withQuery(`/${kind}-pay/export`, { weekStart, ...query }), undefined, response => response.blob());
 export const fetchPayrollAvailability = (investor = false) => apiRequest<import("./types").PayrollAvailability>(investor ? "/investor-pay/availability" : "/driver-pay/availability");
 export const fetchOutgoingLoadTransfers = (investor: boolean, weekStart: string, query: { statementId: string; search: string; dispatcherId: string }, signal?: AbortSignal) => apiRequest<{ transfers: import("./types").OutgoingLoadTransfer[] }>(withQuery(`/${investor ? "investor" : "driver"}-pay/outgoing-transfers`, { weekStart, ...query }), { signal });
 export const fetchPayCostTransactions = (kind: "driver" | "investor", id: string, weekStart: string, cost: "fuel" | "toll", signal?: AbortSignal, revision?: string) => apiRequest<import("./types").PayCostTransactions>(withQuery(`/${kind}-pay/${id}/cost-transactions`, { weekStart, cost, revision }), { signal });
