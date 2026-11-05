@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -218,5 +219,58 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	act(BoardLoadAction{Action: "advance"})
 	if e.CurrentLoad != "" || view().Current != nil {
 		t.Fatal("final delivery did not finish load", view(), e)
+	}
+
+	// Recover a load after another one has become current and the plan date
+	// has passed. Only the restored load's completion should be reset.
+	repo.now = func() time.Time { return time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC) }
+	e.CurrentLoad = "PROGRESS-A"
+	rows, err = repo.Save(ctx, []DriverBoardEntry{e}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = rows[0]
+	act(BoardLoadAction{Action: "advance"})
+	e.ETA = "2026-10-02T14:00"
+	rows, err = repo.Save(ctx, []DriverBoardEntry{e}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e = rows[0]
+	restore := BoardLoadAction{Action: "restore_completed", PlanID: next}
+	exec(`UPDATE loads SET status='Invoiced' WHERE id=88122`)
+	v = view()
+	if len(v.Unavailable) != 1 || v.Unavailable[0].CanRestoreToQueue {
+		t.Fatal("provider-finished load offered for restore", v.Unavailable)
+	}
+	restore.DriverID, restore.Version, restore.FromDate, restore.Revision = d.ID, e.Version, v.FromDate, v.Revision
+	if _, err := repo.ChangeLoads(ctx, restore, actor); !errors.Is(err, ErrBoardLoadSelection) {
+		t.Fatal("provider-finished load restored", err)
+	}
+	exec(`UPDATE loads SET status='Dispatched' WHERE id=88122`)
+	before := view()
+	if len(before.Unavailable) != 1 || !before.Unavailable[0].CanRestoreToQueue {
+		t.Fatal("board-completed load has no recovery action", before.Unavailable)
+	}
+	requeued := act(restore)
+	if len(requeued.Loads.Next) != 1 || requeued.Loads.Next[0].PlanID != next ||
+		e.CurrentLoad != "PROGRESS-A" || e.Status != "RESERVED" || e.ETA != "2026-10-02T14:00" ||
+		e.Notes != "someone else's edit" || requeued.Loads.StopKey != before.StopKey ||
+		!slices.Equal(requeued.Loads.CompletedStopKeys, before.CompletedStopKeys) || e.UndoID == 0 {
+		t.Fatal("restore did not preserve the current load and queue the completed plan", requeued)
+	}
+	ids, err := NewLoadRepository(pool).OperationalLoadIDs(ctx, repo.now(), repo.now().Add(time.Hour))
+	if err != nil || !slices.Contains(ids, 88122) {
+		t.Fatal("restored older plan is missing from source refresh", ids, err)
+	}
+	undo(e.UndoID)
+	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 || !v.Unavailable[0].CanRestoreToQueue {
+		t.Fatal("restore undo did not reinstate completion", v)
+	}
+	act(restore)
+	selected := act(BoardLoadAction{Action: "select", PlanID: next})
+	if selected.Entry.CurrentLoad != "PROGRESS-B" || selected.Loads.SourceDestination != "Boston, MA" ||
+		len(selected.Loads.CompletedStopKeys) != 0 {
+		t.Fatal("restored load retained old delivery progress", selected)
 	}
 }

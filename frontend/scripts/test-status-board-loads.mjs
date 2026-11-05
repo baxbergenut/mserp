@@ -18,7 +18,9 @@ const browser = await chromium.launch();
 const driver = { id: 'driver-1', fullName: 'Loads Driver', active: true, driverType: 'M', truckId: '', truckUnit: '101', dispatcherId: '', dispatcherName: '', phone: '', location: null };
 const load = number => ({ planId: number, number, date: '2026-10-29', slot: 0, loadId: 1, sourceStatus: 'Active', sourceDriver: '', syncedAt: '', warning: '', stops: [{ key: 'pickup', type: 'pickup', location: 'Atlanta, GA', appointment: '' }] });
 const current = load('CURRENT'), earlier = load('EARLIER'), next = load('NEXT');
-let full = { current, week: [current, next], next: [next], earlier: [earlier], hidden: [load('HIDDEN')], unavailable: [load('DELIVERED')], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
+const completed = { ...load('COMPLETED-HERE'), canRestoreToQueue: true };
+const delivered = { ...load('DELIVERED'), sourceStatus: 'Delivered' };
+let full = { current, week: [current, next], next: [next], earlier: [earlier], hidden: [load('HIDDEN')], unavailable: [completed, delivered], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
 let entry = { driverId: driver.id, currentLoad: current.number, trailerNumber: '', trailerNote: '', status: 'DISPATCHED', destination: '', eta: '', notes: '', homeTime: '', version: 1 };
 const overview = () => ({ ...full, detailsOmitted: true, earlier: [], hidden: [], unavailable: [] });
 const board = () => ({ weekStart: '2026-10-26', drivers: [driver], entries: [entry], grossEntries: [], loads: { [driver.id]: overview() }, eld: { configured: false } });
@@ -42,8 +44,13 @@ try {
         const input = req.postDataJSON();
         expect(input.revision).toBe(full.revision);
         expect(input.version).toBe(entry.version);
-        expect(input.action).toBe('manual');
-        full = { ...full, destinationSource: false, revision: 'saved' };
+        if (input.action === 'restore_completed') {
+          expect(input.planId).toBe(completed.planId);
+          full = { ...full, next: [completed], unavailable: [delivered], revision: 'restored' };
+        } else {
+          expect(input.action).toBe('manual');
+          full = { ...full, destinationSource: false, revision: 'saved' };
+        }
         entry = { ...entry, version: entry.version + 1 };
         return route.fulfill({ json: { entry, loads: full } });
       }
@@ -73,7 +80,7 @@ try {
   await expect(destination).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'CURRENT · Current load', exact: true })).toBeVisible();
   await expect(panel.getByText('Removed from queue (1)', { exact: true })).toBeVisible();
-  await expect(panel.getByText('Unavailable loads (1)', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Unavailable loads (2)', { exact: true })).toBeVisible();
 
   // Identical live snapshots must not refetch, lock controls, or shift the panel.
   holdDetails = true;
@@ -149,8 +156,15 @@ try {
   await expect(history).toBeVisible();
   await expect(panel.getByRole('button', { name: 'NEXT · Current load', exact: true })).toBeVisible();
   await expect(destination).toBeEnabled();
+  await panel.getByText('Unavailable loads (2)', { exact: true }).click();
+  await expect(panel.getByText('Completed on Status Board', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Restore to queue · DELIVERED', exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Restore to queue · COMPLETED-HERE', exact: true }).click();
+  await expect.poll(() => mutations).toBe(2);
+  await expect(sequence.getByRole('button', { name: 'COMPLETED-HERE', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'NEXT · Current load', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
-  console.log('Status Board loads passed: retained current/history groups across compact live updates, full rehydration, stale edit guards, failure/retry, versioned save and close/reopen cancellation.');
+  console.log('Status Board loads passed: live history, stale edit guards, failure/retry, versioned saves, close/reopen cancellation, and restoring a board-completed load.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

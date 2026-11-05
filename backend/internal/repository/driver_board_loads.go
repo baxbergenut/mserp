@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -29,18 +30,19 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
-	Manual        bool        `json:"manual,omitempty"`
-	PlanID        string      `json:"planId"`
-	Date          string      `json:"date"`
-	Slot          int         `json:"slot"`
-	Number        string      `json:"number"`
-	LoadID        *int        `json:"loadId"`
-	SourceStatus  string      `json:"sourceStatus"`
-	SourceDriver  string      `json:"sourceDriver"`
-	SourceMissing bool        `json:"sourceMissing,omitempty"`
-	SyncedAt      string      `json:"syncedAt"`
-	Stops         []BoardStop `json:"stops"`
-	Warning       string      `json:"warning"`
+	CanRestoreToQueue bool        `json:"canRestoreToQueue,omitempty"`
+	Manual            bool        `json:"manual,omitempty"`
+	PlanID            string      `json:"planId"`
+	Date              string      `json:"date"`
+	Slot              int         `json:"slot"`
+	Number            string      `json:"number"`
+	LoadID            *int        `json:"loadId"`
+	SourceStatus      string      `json:"sourceStatus"`
+	SourceDriver      string      `json:"sourceDriver"`
+	SourceMissing     bool        `json:"sourceMissing,omitempty"`
+	SyncedAt          string      `json:"syncedAt"`
+	Stops             []BoardStop `json:"stops"`
+	Warning           string      `json:"warning"`
 }
 type boardLoadState struct {
 	Manual                []BoardLoad       `json:"manual,omitempty"`
@@ -59,6 +61,7 @@ type boardLoadState struct {
 	StopKey               string            `json:"stopKey"`
 	Completed             []string          `json:"completed,omitempty"`
 	CompletedStops        map[string]bool   `json:"completedStops,omitempty"`
+	RestoredPlans         map[string]bool   `json:"restoredPlans,omitempty"`
 }
 
 func boardCompletionKey(p BoardLoad) string {
@@ -550,11 +553,15 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				}
 				seen[*p.LoadID] = true
 			}
-			if p.SourceMissing || completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || terminalLoad(p.SourceStatus) {
+			sourceUnavailable := p.SourceMissing || terminalLoad(p.SourceStatus)
+			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID]
+			if sourceUnavailable || completedHere {
+				p.CanRestoreToQueue = completedHere && !sourceUnavailable &&
+					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] {
 				view.Hidden = append(view.Hidden, p)
-			} else if !p.Manual && p.Date < from {
+			} else if !p.Manual && p.Date < from && !s.RestoredPlans[p.PlanID] {
 				view.Earlier = append(view.Earlier, p)
 			} else {
 				view.Next = append(view.Next, p)
@@ -772,6 +779,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			}
 			if view.Current != nil {
 				s.Completed = append(s.Completed, boardCompletionKey(*view.Current))
+				delete(s.RestoredPlans, view.Current.PlanID)
 				if view.Current.Manual {
 					s.Completed = append(s.Completed, "plan:"+view.Current.PlanID)
 				}
@@ -837,6 +845,32 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	case "reset_order":
 		s.Order = nil
 		s.OrderLabels = nil
+	case "restore_completed":
+		index := slices.IndexFunc(view.Unavailable, func(p BoardLoad) bool {
+			return p.PlanID == a.PlanID && p.CanRestoreToQueue
+		})
+		if index < 0 {
+			return result, ErrBoardLoadSelection
+		}
+		p := view.Unavailable[index]
+		loadKey, planKey := boardCompletionKey(p), "plan:"+p.PlanID
+		matchesCompletion := func(key string) bool { return key == loadKey || key == planKey }
+		s.Completed = slices.DeleteFunc(s.Completed, matchesCompletion)
+		for stop := range s.CompletedStops {
+			key, _, _ := strings.Cut(stop, "/")
+			if matchesCompletion(key) {
+				delete(s.CompletedStops, stop)
+			}
+		}
+		s.Hidden = slices.DeleteFunc(s.Hidden, func(id string) bool { return id == p.PlanID })
+		// A deliberate restore keeps a dated plan queued across the daily cutoff.
+		if !p.Manual {
+			if s.RestoredPlans == nil {
+				s.RestoredPlans = make(map[string]bool)
+			}
+			s.RestoredPlans[p.PlanID] = true
+		}
+		e.Status = boardProgressStatus(e.Status, []BoardLoad{p})
 	case "hide", "restore":
 		list := append(append([]BoardLoad{}, view.Next...), view.Earlier...)
 		if a.Action == "restore" {
@@ -922,7 +956,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		}
 		if a.Action == "restore" {
 			for _, p := range view.Hidden {
-				if p.PlanID == a.PlanID && (p.Manual || p.Date >= view.FromDate) {
+				if p.PlanID == a.PlanID && (p.Manual || p.Date >= view.FromDate || s.RestoredPlans[p.PlanID]) {
 					next = append(next, p)
 				}
 			}

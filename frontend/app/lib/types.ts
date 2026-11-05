@@ -580,6 +580,7 @@ export interface BoardAutomation {
 }
 export interface BoardStop { key: string; type: string; location: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule; manualStopTime?: string }
 export interface BoardLoad {
+  canRestoreToQueue?: boolean;
   manual?: boolean;
   planId: string; date: string; slot: number; number: string; loadId: number | null;
   sourceStatus: string; sourceDriver: string; sourceMissing?: boolean; syncedAt: string; stops: BoardStop[]; warning: string;
@@ -595,7 +596,7 @@ export interface BoardLoads {
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "source" | "manual" | "stop_time";
+  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "restore_completed" | "source" | "manual" | "stop_time";
   number?: string; planId?: string; order?: string[]; stopKey?: string; manualStopTime?: string;
 }
 

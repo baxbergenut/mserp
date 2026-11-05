@@ -10,7 +10,8 @@ import (
 
 // OperationalLoadIDs deduplicates the local service-date window before spending
 // API requests. Recent creations include orders whose stops/dates are still being
-// entered. Explicit current selections remain eligible regardless of their age.
+// entered. Current selections and explicitly restored plans stay eligible
+// regardless of their age.
 func (r *LoadRepository) OperationalLoadIDs(ctx context.Context, from, until time.Time) ([]int, error) {
 	rows, err := r.pool.Query(ctx, `WITH current_ids AS (
  SELECT l.id FROM `+boardPlansSQL+` e
@@ -30,6 +31,16 @@ func (r *LoadRepository) OperationalLoadIDs(ctx context.Context, from, until tim
  JOIN loads l ON lower(btrim(l.load_id))=lower(btrim(p->>'number'))
  WHERE NOT coalesce(s.payload->'hidden' ? (p->>'planId'),false)
  AND NOT coalesce(s.payload->'completed' ? ('plan:'||(p->>'planId')),false)
+ AND lower(btrim(l.status)) NOT IN ('delivered','completed','invoiced','cancelled','canceled')
+ UNION
+ SELECT l.id FROM driver_board_load_state s JOIN drivers d ON d.id=s.driver_id AND d.active
+ CROSS JOIN LATERAL jsonb_object_keys(coalesce(s.payload->'restoredPlans','{}'::jsonb)) restored(plan_id)
+ JOIN `+boardPlansSQL+` e ON e.driver_id=s.driver_id AND e.plan_id=restored.plan_id::uuid
+ `+grossBoardResolvedLoad+`
+ WHERE NOT e.deleted AND e.day_status='' AND l.id IS NOT NULL
+ AND NOT coalesce(s.payload->'hidden' ? e.plan_id::text,false)
+ AND NOT coalesce(s.payload->'completed' ? ('load:'||l.id::text),false)
+ AND NOT coalesce(s.payload->'completed' ? ('plan:'||e.plan_id::text),false)
  AND lower(btrim(l.status)) NOT IN ('delivered','completed','invoiced','cancelled','canceled')
  )
  SELECT l.id FROM loads l WHERE

@@ -1557,6 +1557,11 @@ assignment lookup lists.
   next loads remain inspectable; finished current loads are not auto-cleared.
   DataTruck invoiced loads count as finished for queue eligibility and manual
   queue refresh candidates; explicit current selections stay visible for review.
+  Under Unavailable loads, Restore to queue clears only the selected load's
+  Status Board completion and delivery progress. Missing or terminal provider
+  records remain unavailable. Explicit restores keep the original plan queued
+  across the date cutoff and leave the driver's current load and Gross Board
+  placement intact. The correction uses the normal version and undo history.
   Stops come from imported raw_payload. Only first pickup/final delivery inherit
   load-level appointments; ETA remains manually set in a compact cell-anchored
   popup with a date picker and optional time, shown on one line. New ETAs persist as YYYY-MM-DD or
