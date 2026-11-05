@@ -309,13 +309,27 @@ func TestStatusBoardLoadReturnToServiceDatabase(t *testing.T) {
 		}
 		assertStatus(undone, "", "active", "in_use")
 
-		entry = setStatus(undone, "REST")
+		entry = undone
+		for _, status := range []string{"NEW DRIVER", "VACATION", "Family issue", "Health issue"} {
+			entry = setStatus(entry, status)
+			if status == "VACATION" {
+				// Reselecting the same current load is also an explicit assignment.
+				entry.ResolveCurrentLoad = true
+			} else {
+				entry.CurrentLoad = "CURRENT-" + status
+			}
+			entry = save(entry)
+			assertStatus(entry, "DISPATCHED", "active", "in_use")
+		}
+		entry = action(entry, "clear", "", "").Entry
+
+		entry = setStatus(entry, "REST")
 		added := action(entry, "add", "QUEUED-RETURN", "")
 		assertStatus(added.Entry, "READY", "active", "in_use")
 		if added.Entry.CurrentLoad != "" || len(added.Loads.Next) != 1 {
 			t.Fatal("queue addition changed current load or did not save the next load")
 		}
-		entry = setStatus(added.Entry, "SHOP")
+		entry = setStatus(setStatus(added.Entry, "SHOP"), "NEW DRIVER")
 		selected := action(entry, "select", "", added.Loads.Next[0].PlanID)
 		assertStatus(selected.Entry, "DISPATCHED", "active", "in_use")
 		if selected.Entry.CurrentLoad != "QUEUED-RETURN" {

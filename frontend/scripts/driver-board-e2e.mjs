@@ -86,14 +86,14 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByRole('rowheader', { name: /Board Cpm/ }).getByText('(M)', { exact: true })).toBeVisible();
   const location = page.getByRole('button', { name: 'Board Cpm · Copy current location', exact: true });
   await expect(location).toHaveText('');
-  await expect(location).toHaveClass(/(?:^| )text-zinc-300(?: |$)/);
-  await expect(location).toHaveAttribute('title', /Copy current location · Five ELD updated .* NY/);
+  await expect(location).toHaveClass(/(?:^| )text-emerald-400(?: |$)/);
+  await expect(location).toHaveAttribute('title', /Copy current location · Five ELD updated .* NY · Location up to date/);
   await location.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('41.88100, -87.62300');
   await expect(location.getByRole('status')).toHaveText('Copied');
   const olderLocation = page.getByRole('button', { name: 'Board Percent · Copy current location', exact: true });
   await expect(olderLocation).toHaveText('');
-  await expect(olderLocation).toHaveClass(/(?:^| )text-zinc-500(?: |$)/);
+  await expect(olderLocation).toHaveClass(/(?:^| )text-orange-400(?: |$)/);
   await expect(olderLocation).toHaveAttribute('title', /Location may be outdated/);
   await olderLocation.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('39.95260, -75.16520');

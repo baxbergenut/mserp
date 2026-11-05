@@ -18,7 +18,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 const base = `http://127.0.0.1:${server.address().port}`;
 const week = '2026-10-12';
-const drivers = ['Alice Grid', 'Bob Grid'].map((fullName, i) => ({ id: `driver-${i}`, fullName, active: true, driverType: i ? 'M-O' : 'O', truckId: `truck-${i}`, truckUnit: `T${i}`, dispatcherId: 'dispatcher', dispatcherName: 'Dispatch', phone: '', location: i ? null : { latitude: 41.881, longitude: -87.623, reportedAt: new Date().toISOString(), heading: null }, mainUpdaterName: 'Main updater', afterHoursUpdaterName: 'Night updater' }));
+const drivers = ['Alice Grid', 'Bob Grid'].map((fullName, i) => ({ id: `driver-${i}`, fullName, active: true, driverType: i ? 'M-O' : 'O', truckId: `truck-${i}`, truckUnit: `T${i}`, dispatcherId: 'dispatcher', dispatcherName: 'Dispatch', phone: '', location: i ? null : { latitude: 41.881, longitude: -87.623, reportedAt: '2026-10-13T11:59:00Z', heading: null }, mainUpdaterName: 'Main updater', afterHoursUpdaterName: 'Night updater' }));
 const load = (driverId, date, slot = 0) => ({ driverId, date, slot, deleted: false, loadNumber: `LOAD-${slot}`, loadRecordId: null, dayStatus: '', originalRate: '400', driverRate: '350', miles: '90', enteredOriginalRate: '400', enteredMiles: '90', version: 1, duplicate: false });
 let statusEntries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: 'OLD', status: '', destination: 'Chicago', eta: '', notes: 'Existing note', homeTime: '', version: 1 }));
 let grossEntries = drivers.flatMap(d => [load(d.id, week), load(d.id, '2026-10-13'), load(d.id, '2026-10-14'), load(d.id, '2026-10-14', 1)]);
@@ -61,6 +61,8 @@ try {
   await expect(page.getByRole('button', { name: 'Alice Grid · History', exact: true })).toHaveCount(0);
  await expect(page.locator('tr[data-driver-id="driver-0"] th')).toContainText('(O)');
   await expect(field('Copy current location', 'Bob Grid')).toBeDisabled();
+  await expect(field('Copy current location')).toHaveClass(/\btext-emerald-400\b/);
+  await expect(field('Copy current location')).toHaveAttribute('title', /Location up to date/);
   await field('Copy current location').click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('41.88100, -87.62300');
   await expect(field('Copy current location').getByRole('status')).toHaveText('Copied');
@@ -100,7 +102,10 @@ try {
   expect(statusEntries[0].notes).toBe('New note');
   await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-grid.png'), fullPage: true });
 
+  drivers[0].location.reportedAt = '2026-10-13T09:00:00Z';
   readOnly = true; await page.reload();
+  await expect(field('Copy current location')).toHaveClass(/\btext-orange-400\b/);
+  await expect(field('Copy current location')).toHaveAttribute('title', /Location may be outdated/);
   const beforeSaves = saves;
   await expect(trailer).toBeDisabled(); await trailerCell.click(); await page.keyboard.type('NO');
   await page.evaluate(() => navigator.clipboard.writeText('NO'));

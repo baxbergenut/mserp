@@ -27,12 +27,13 @@ export function LocationCell({ name, location }: { name: string; location: Drive
   }, [feedback]);
   const coordinates = location ? formatCoordinates(location) : "";
   const old = location ? isOldLocation(location.reportedAt, now) : false;
+  const pinColor = !location ? "text-zinc-400" : old ? "text-orange-400" : "text-emerald-400";
   function copy() {
     if (!navigator.clipboard) { setFeedback("Copy failed"); return; }
     navigator.clipboard.writeText(coordinates).then(() => setFeedback("Copied"), () => setFeedback("Copy failed"));
   }
   return <button type="button" aria-label={`${name} · Copy current location`} disabled={!location}
-    title={feedback || (location ? `Copy current location · ${location.source==="samsara"?"Samsara":"Five ELD"} updated ${locationTime(location.reportedAt)} NY${old ? " · Location may be outdated" : ""}` : "Location unavailable")}
-    className={`flex h-8 w-6 shrink-0 items-center justify-center rounded enabled:hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-30 ${old ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-300 hover:text-zinc-100"}`}
+    title={feedback || (location ? `Copy current location · ${location.source === "samsara" ? "Samsara" : "Five ELD"} updated ${locationTime(location.reportedAt)} NY · ${old ? "Location may be outdated" : "Location up to date"}` : "Location unavailable")}
+    className={`flex h-8 w-6 shrink-0 items-center justify-center rounded enabled:hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-30 ${pinColor}`}
     onClick={copy}>{feedback === "Copied" ? <Check className="h-4 w-4 text-emerald-400" /> : feedback ? <TriangleAlert className="h-4 w-4 text-amber-400" /> : <MapPin className="h-4 w-4" />}<span className="sr-only" role="status">{feedback}</span></button>;
 }

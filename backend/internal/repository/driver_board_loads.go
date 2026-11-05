@@ -893,11 +893,12 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	if assigning {
-		returned, err := prepareBoardLoadAssignment(ctx, tx, a.DriverID, "")
+		queueOnly := a.Action == "add" || a.Action == "restore"
+		returned, err := prepareBoardLoadAssignment(ctx, tx, a.DriverID, "", !queueOnly)
 		if err != nil {
 			return result, err
 		}
-		if returned && (a.Action == "add" || a.Action == "restore") {
+		if returned && queueOnly {
 			e.Status = "READY"
 		}
 	}

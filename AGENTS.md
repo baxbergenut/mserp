@@ -2878,9 +2878,11 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   details separately, fencing late responses by entry version and pending edits.
   Blank board statuses retain canonical Home/Vacation and truck restrictions.
   The migration repairs derived labels only, preserving canonical profiles.
-- Assigning a Status Board load returns Home/Rest/34 Reset drivers to Active
-  and releases manual Shop in the same audited save. Work-order holds, OOS
-  and Terminated still block assignment. Board undo restores the load fields
+- Assigning a current Status Board load returns employed drivers from any
+  availability to Active and releases manual Shop in the same audited save.
+  Queue-only additions and restores keep their existing Home/Rest/34 Reset
+  return behavior. Work-order holds, OOS and Terminated still block assignment.
+  Board undo restores the load fields
   without reinstating the released fleet restrictions. Source stops match the
   exact load number independently of DataTruck truck and driver labels.
 - Routing waits for five seconds without load/status/destination/selected-stop

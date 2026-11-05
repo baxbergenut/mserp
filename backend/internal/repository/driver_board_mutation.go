@@ -28,10 +28,11 @@ const boardLoadReturnReason = "Load assigned from Status Board"
 
 // Return the existing crew to service as part of an explicit load assignment.
 // The fleet lock serializes assignment, profile and work-order changes.
-func prepareBoardLoadAssignment(ctx context.Context, tx pgx.Tx, driver, explicitStatus string) (bool, error) {
+func prepareBoardLoadAssignment(ctx context.Context, tx pgx.Tx, driver, explicitStatus string, current bool) (bool, error) {
 	var returnDriver, releaseShop, setsRestriction bool
 	var truck, previousCommand, previousReason, previousRef string
-	err := tx.QueryRow(ctx, `SELECT fleet_status_enabled() AND d.availability_status IN ('home','rest','reset'),
+	err := tx.QueryRow(ctx, `SELECT fleet_status_enabled() AND d.active AND d.availability_status<>'active'
+ AND ($3 OR d.availability_status IN ('home','rest','reset')),
  fleet_status_enabled() AND coalesce(t.status='maintenance' AND NOT EXISTS (
    SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status<>''
  ),false),coalesce(t.id::text,''),
@@ -39,7 +40,7 @@ func prepareBoardLoadAssignment(ctx context.Context, tx pgx.Tx, driver, explicit
  coalesce(current_setting('mserp.status_source_ref',true),''),
  EXISTS (SELECT 1 FROM fleet_status_rules WHERE board_status=$2
    AND (availability NOT IN ('','active') OR truck_condition<>''))
- FROM drivers d LEFT JOIN trucks t ON t.id=fleet_status_driver_truck(d.id) WHERE d.id=$1`, driver, explicitStatus).
+ FROM drivers d LEFT JOIN trucks t ON t.id=fleet_status_driver_truck(d.id) WHERE d.id=$1`, driver, explicitStatus, current).
 		Scan(&returnDriver, &releaseShop, &truck, &previousCommand, &previousReason, &previousRef, &setsRestriction)
 	if err != nil {
 		return false, err
