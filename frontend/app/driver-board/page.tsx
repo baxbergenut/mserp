@@ -47,6 +47,7 @@ import { useDriverRowDrag } from "./useDriverRowDrag";
 
 const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
 const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80";
+const grossTierColors = ["", "bg-yellow-500/25", "bg-green-500/25", "bg-blue-500/25"];
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, edit }: {
@@ -321,6 +322,10 @@ export default function DriverBoardPage() {
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
             const atHome = ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status);
             const sum = totals(index.byDriver.get(d.id) ?? []);
+            const grossTier = board?.grossTierMinimumCents?.reduce(
+              (tier, minimum, i) => sum.original >= BigInt(minimum) ? i + 1 : tier, 0,
+            ) ?? 0;
+            const grossCellClass = `${cellClass} ${grossTierColors[grossTier] ?? ""} px-1 text-center font-mono text-zinc-200`;
             const loads = previewCurrentLoad(board?.loads[d.id], entry, savedEntries.get(d.id));
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();
@@ -353,8 +358,8 @@ export default function DriverBoardPage() {
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>,
               truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,
               trailerNumber: <TrailerCell key="trailerNumber" entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />,
-              originalGross: <td key="originalGross" data-board-column="originalGross" className={`${cellClass} bg-blue-500/5 px-1 text-center font-mono text-zinc-200`}>{decimalDisplay(sum.original, true)}</td>,
-              driverGross: <td key="driverGross" data-board-column="driverGross" className={`${cellClass} bg-blue-500/5 px-1 text-center font-mono text-zinc-200`}>{decimalDisplay(sum.driver, true)}</td>,
+              originalGross: <td key="originalGross" data-board-column="originalGross" className={grossCellClass}>{decimalDisplay(sum.original, true)}</td>,
+              driverGross: <td key="driverGross" data-board-column="driverGross" className={grossCellClass}>{decimalDisplay(sum.driver, true)}</td>,
               phone: <td key="phone" data-board-column="phone" className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>,
               status: <td key="status" data-board-column="status" className={`${cellClass} ${statusColor(entry.status)}`}><StatusCell name={d.fullName} value={entry.status} disabled={disabled}
                   canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}

@@ -541,6 +541,7 @@ export interface DriverBoard {
   drivers: DriverBoardDriver[];
   entries: DriverBoardEntry[];
   grossEntries: GrossBoardEntry[];
+  grossTierMinimumCents?: number[];
   loads: Record<string, BoardLoads>;
   eld: FiveELDBoardSummary;
 }

@@ -21,6 +21,9 @@ const drivers = Array.from({ length: 100 }, (_, i) => ({ id: `driver-${i}`, full
   truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', phone: '', location: null,
   city: i === 0 ? 'Louisville' : '', state: i === 0 ? 'Kentucky' : '' }));
 let entries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: 'ENROUTE', destination: '', eta: d.id === 'driver-0' ? '13:00 · 300 mi' : '', notes: '', homeTime: '', version: 1 }));
+const grossEntries = ['7999.99', '8000.00', '9500.00', '12000.00'].map((originalRate, i) => ({
+  driverId: drivers[i].id, date: '2026-10-12', slot: 1, loadNumber: `LOAD-${i}`, originalRate, driverRate: '6000.00', miles: i % 2 ? '10000' : '0',
+}));
 const loads = { current: null, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: '2026-10-12', revision: 'fixture', customOrder: false };
 const errors = [];
 let account = 'scroll';
@@ -38,7 +41,7 @@ async function setup(page) {
     }
     const fixtures = {
       '/auth/session': { user: { id: account, username: 'Scroll Test', permissions: ['driver_board.read', 'driver_board.write'] }, csrfToken: 'fixture' },
-      '/driver-board': { weekStart: '2026-10-12', drivers, entries, grossEntries: [], loads: Object.fromEntries(drivers.map(d => [d.id, loads])), eld: { configured: false } },
+      '/driver-board': { weekStart: '2026-10-12', drivers, entries, grossEntries, grossTierMinimumCents: [800000, 950000, 1200000], loads: Object.fromEntries(drivers.map(d => [d.id, loads])), eld: { configured: false } },
       '/driver-board/history': { items: [], nextCursor: 0 },
       '/driver-board/presence': peers,
       '/tasks/count': { count: 0 }, '/sidebar-counts': {},
@@ -56,6 +59,20 @@ try {
   const columnOrder = () => grid.locator('thead th').evaluateAll(cells => cells.map(cell => cell.dataset.boardColumn));
   const defaults = await columnOrder();
   const firstRow = grid.locator('tr[data-driver-id]').first();
+  const grossCell = (i, column) => grid.locator(`tr[data-driver-id="driver-${i}"] [data-board-column="${column}"]`);
+  for (const [i, color] of [[0, null], [1, 'yellow'], [2, 'green'], [3, 'blue'], [4, null]]) {
+    for (const column of ['originalGross', 'driverGross']) {
+      const cell = grossCell(i, column);
+      if (color) {
+        await expect(cell).toHaveClass(new RegExp(`bg-${color}-500/25`));
+        await expect(cell).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      } else {
+        await expect(cell).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      }
+    }
+  }
+  await expect(grossCell(1, 'originalGross')).toHaveText('$8,000.00');
+  await expect(grossCell(1, 'driverGross')).toHaveText('$6,000.00');
   const writes = [];
   const trackWrites = request => {
     if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/driver-board')) writes.push(request.url());

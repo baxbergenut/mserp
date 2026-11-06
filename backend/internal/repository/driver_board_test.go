@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -169,11 +170,18 @@ func TestDriverBoardDatabase(t *testing.T) {
 			exec(`INSERT INTO five_eld_sync_state(singleton,last_attempt_at,last_success_at) VALUES(true,now(),now())`)
 			repo = NewDriverBoardRepository(pool, true)
 			week, _ := time.Parse("2006-01-02", "2026-09-28")
+			exec(`INSERT INTO dispatcher_commission_rules(effective_week,rules,actor_id) VALUES
+			 ('2026-09-28','{"tiers":[{"minGross":7000}]}','board-test'),
+			 ('2026-09-28','{"tiers":[{"minGross":8000.01},{"minGross":9500},{"minGross":12000}]}','board-test'),
+			 ('2026-10-05','{"tiers":[{"minGross":8500}]}','board-test')`)
 			exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(999,'BOARD-LOAD','Delivered',1234.56,1234.56,450.25,'{}')`)
 			exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate,entered_original_rate) VALUES($1,'2026-09-28','BOARD-LOAD',999,1100.10,1250.15)`, driver.ID)
 			board, err := repo.Get(ctx, week)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !slices.Equal(board.GrossTierMinimumCents, []int64{800001, 950000, 1200000}) {
+				t.Fatal("board must use the latest commission rules effective for its week", board.GrossTierMinimumCents)
 			}
 			if len(board.Drivers) != 2 || len(board.GrossEntries) != 1 || board.GrossEntries[0].OriginalRate != "1250.15" || board.GrossEntries[0].Miles != "450.25" {
 				t.Fatalf("board read: %+v", board)

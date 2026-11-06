@@ -85,6 +85,7 @@ type DriverBoard struct {
 	Drivers                 []DriverBoardDriver   `json:"drivers"`
 	Entries                 []DriverBoardEntry    `json:"entries"`
 	GrossEntries            []GrossBoardEntry     `json:"grossEntries"`
+	GrossTierMinimumCents   []int64               `json:"grossTierMinimumCents,omitempty"`
 	Loads                   map[string]BoardLoads `json:"loads"`
 	ELD                     FiveELDBoardSummary   `json:"eld"`
 }
@@ -132,6 +133,15 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	}
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
 		return result, err
+	}
+	rule, err := readEffectiveCommissionRule(ctx, tx, result.WeekStart)
+	if err != nil {
+		return result, err
+	}
+	if rule != nil {
+		for _, tier := range rule.Rules.Tiers {
+			result.GrossTierMinimumCents = append(result.GrossTierMinimumCents, tier.minGrossCents())
+		}
 	}
 	// Every joined truck already has this active direct operator. Preserve the
 	// canonical restriction precedence without re-scanning every driver per row.

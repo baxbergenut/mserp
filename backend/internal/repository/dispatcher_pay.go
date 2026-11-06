@@ -31,6 +31,11 @@ type CommissionTier struct {
 	MinGross float64             `json:"minGross"`
 	Brackets []CommissionBracket `json:"brackets"`
 }
+
+func (t CommissionTier) minGrossCents() int64 {
+	return int64(math.Round(t.MinGross * 100))
+}
+
 type CommissionRules struct {
 	HomeDayCredit    float64          `json:"homeDayCredit"`
 	MaxTierPromotion int              `json:"maxTierPromotion"`
@@ -151,6 +156,25 @@ func readCommissionRules(ctx context.Context, tx pgx.Tx) ([]CommissionRuleVersio
 	}
 	return out, rows.Err()
 }
+
+func readEffectiveCommissionRule(ctx context.Context, tx pgx.Tx, week string) (*CommissionRuleVersion, error) {
+	var v CommissionRuleVersion
+	var raw []byte
+	err := tx.QueryRow(ctx, `SELECT id,effective_week::text,rules,created_at FROM dispatcher_commission_rules
+WHERE effective_week <= $1::date ORDER BY effective_week DESC,id DESC LIMIT 1`, week).
+		Scan(&v.ID, &v.EffectiveWeek, &raw, &v.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(raw, &v.Rules); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
 func (r *DispatcherPayRepository) Rules(ctx context.Context) ([]CommissionRuleVersion, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -193,6 +217,9 @@ func (r *DispatcherPayRepository) SaveRules(ctx context.Context, in CommissionRu
 	if err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `SELECT pg_notify('mserp_driver_board','')`); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -201,7 +228,7 @@ func commissionCalculation(gross, miles int64, home int, rules CommissionRules) 
 	adjusted = gross + int64(home)*int64(math.Round(rules.HomeDayCredit*100))
 	raw := 0
 	for i, t := range rules.Tiers {
-		threshold := int64(math.Round(t.MinGross * 100))
+		threshold := t.minGrossCents()
 		if gross >= threshold {
 			actual = i + 1
 		}
@@ -412,16 +439,11 @@ func buildDispatcherCommissions(board GrossBoard, inputs map[string]DispatcherPa
 
 func (r *DispatcherPayRepository) report(ctx context.Context, tx pgx.Tx, week time.Time, frozen bool) (DispatcherCommissionReport, error) {
 	out := DispatcherCommissionReport{WeekStart: week.Format(time.DateOnly), AvailableWeeks: []string{}, Statements: []DispatcherCommissionStatement{}}
-	versions, err := readCommissionRules(ctx, tx)
+	rule, err := readEffectiveCommissionRule(ctx, tx, out.WeekStart)
 	if err != nil {
 		return out, err
 	}
-	for _, v := range versions {
-		if v.EffectiveWeek <= out.WeekStart {
-			out.Rule = &v
-			break
-		}
-	}
+	out.Rule = rule
 	board, err := readGrossBoard(ctx, tx, week)
 	if err != nil {
 		return out, err
