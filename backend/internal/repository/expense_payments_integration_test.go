@@ -159,7 +159,7 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
-				for _, name := range []string{"174_payroll_load_placements.sql", "177_broker_expenses.sql"} {
+				for _, name := range []string{"174_payroll_load_placements.sql", "177_broker_expenses.sql", "202_driver_scale_deductions.sql"} {
 					body, readErr := os.ReadFile("../../sql/" + name)
 					if readErr != nil {
 						t.Fatal(readErr)
