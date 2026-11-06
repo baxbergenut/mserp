@@ -138,6 +138,9 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 		} else {
 			table, key := "expense_payments", "expense_id"
 			if source == "reimburse" {
+				if err := validateOwnerReimbursementPayments(ctx, tx, week, keys, amounts); err != nil {
+					return err
+				}
 				table = "expense_reimbursement_payments"
 			}
 			if source == "escrow" {

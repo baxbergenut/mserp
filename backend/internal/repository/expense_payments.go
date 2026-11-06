@@ -101,6 +101,9 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 			continue
 		}
 		if old.Source == "reimburse" {
+			if err = validateOwnerReimbursementPayments(ctx, tx, week, []string{item.ExpenseID}, []string{item.Amount}); err != nil {
+				return nil, err
+			}
 			if _, err = tx.Exec(ctx, `INSERT INTO expense_reimbursement_payments(expense_id,week_start,amount,updated_by) VALUES($1,$2::date,$3::numeric,nullif($4,'')::uuid) ON CONFLICT(expense_id,week_start) DO UPDATE SET amount=excluded.amount,updated_by=excluded.updated_by,updated_at=now()`, item.ExpenseID, week, item.Amount, actor); err != nil {
 				return nil, err
 			}

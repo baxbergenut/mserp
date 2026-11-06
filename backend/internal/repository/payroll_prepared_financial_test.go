@@ -51,7 +51,7 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
  FROM expense_settings s CROSS JOIN (VALUES
  ('18200000-0000-0000-0000-000000001001','Personal invoice',200,'Driver',''),
  ('18200000-0000-0000-0000-000000001002','Owner invoice',120,'Truck Owner',''),
- ('18200000-0000-0000-0000-000000001003','Reimbursement',25,'Company','Reimburse')) v(id,name,amount,payer,method)
+ ('18200000-0000-0000-0000-000000001003','Reimbursement',25,'Truck Owner','Reimburse')) v(id,name,amount,payer,method)
  WHERE s.kind='category' AND s.name='Other';
  INSERT INTO expense_payments(expense_id,week_start,amount) VALUES('18200000-0000-0000-0000-000000001001','2026-10-12',30);
  INSERT INTO expense_payments(expense_id,week_start,amount,investor_truck_id) VALUES('18200000-0000-0000-0000-000000001002','2026-10-12',15,'18200000-0000-0000-0000-000000000002');
@@ -126,6 +126,17 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
 								t.Fatal("financial fixture statement", kind, err)
 							}
 							for _, row := range page.Drivers {
+								if kind == "investor" && row.ID == projectionTruck {
+									var ownerCharge string
+									for _, charge := range row.AutoCharges {
+										if charge.Source == "expense-reimburse:18200000-0000-0000-0000-000000001003" {
+											ownerCharge = charge.Amount
+										}
+									}
+									if ownerCharge != "-18.00" {
+										t.Fatal("prepared investor statement did not mirror the driver payout", ownerCharge)
+									}
+								}
 								trip, miles, gross := 102, int64(30000), int64(110000)
 								if row.ID == projectionDriver || row.ID == projectionTruck {
 									trip, miles, gross = 101, 40000, 120000
