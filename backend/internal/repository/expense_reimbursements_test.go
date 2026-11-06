@@ -41,6 +41,10 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	accessorialMigration, err := os.ReadFile("../../sql/203_accessorial_expenses.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "migration"} {
 		t.Run(mode, func(t *testing.T) {
 			schema := fmt.Sprintf("reimburse_%d", time.Now().UnixNano())
@@ -61,7 +65,10 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 			}
 			exec("CREATE SCHEMA " + quoted + "; SET search_path TO " + quoted + ",public")
 			defer func() { _, _ = admin.Exec(ctx, "SET search_path TO public; DROP SCHEMA "+quoted+" CASCADE") }()
+			// This fixture exercises the legacy mirrored reimbursement contract.
+			// Independent owner collections are covered by TestAccessorialPayrollDatabase.
 			initial := strings.ReplaceAll(string(source), "\r\n", "\n")
+			initial = strings.Replace(initial, strings.ReplaceAll(string(accessorialMigration), "\r\n", "\n"), "", 1)
 			body := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if mode == "migration" {
 				if strings.Count(initial, body) != 1 {

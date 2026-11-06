@@ -86,6 +86,11 @@ func prepareExpensePayerCorrection(ctx context.Context, tx pgx.Tx, id string, in
 		return fail("Previously settled expenses retain their responsible person; reverse the settlement before correcting the payer")
 	}
 	if normalizedExpenseText(old.PaymentType) == "reimburse" || normalizedExpenseText(in.PaymentType) == "reimburse" {
+		// Linked records have an independent owner obligation. The database
+		// rejects responsibility changes once either side has posted.
+		if old.OwnerRecovery && normalizedExpenseText(in.PaymentType) == "reimburse" && (covered == "company" || covered == "truck owner") {
+			return nil, nil
+		}
 		return fail("Reimbursements retain their payout recipient; correct the reimbursement separately")
 	}
 	rows, err := tx.Query(ctx, `SELECT week_start::text,amount::text,investor_truck_id::text,updated_by::text,updated_at FROM expense_payments WHERE expense_id=$1 ORDER BY week_start FOR UPDATE`, id)

@@ -9,7 +9,7 @@ import type { Expense, ExpenseBalanceCorrection } from "@/app/lib/types";
 import { controlClass, ErrorBanner } from "@/app/components/management/ManagementUI";
 
 export function canCorrectExpenseBalance(expense: Expense) {
-  return expense.remainingAmount != null && !expense.managedInSheets && (expense.paymentType ?? "").trim().toLowerCase() !== "reimburse" && !!(expense.chargeDriverId || expense.ownerId);
+  return expense.paymentType !== "Driver payroll" && !expense.ownerRecovery && expense.remainingAmount != null && !expense.managedInSheets && (expense.paymentType ?? "").trim().toLowerCase() !== "reimburse" && !!(expense.chargeDriverId || expense.ownerId);
 }
 
 export function ExpenseBalanceAction({ expense, onSaved }: { expense: Expense; onSaved: () => void | Promise<void> }) {

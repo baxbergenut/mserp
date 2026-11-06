@@ -247,13 +247,24 @@ func (d DriverPayDriver) NetPayCents() int64 {
 	}
 	for _, a := range d.Edits.ExpenseDeductions {
 		n, _ := chargeCents(a.Amount)
-		if a.Source == "reimburse" {
+		if a.Source == "reimburse" || a.Source == "accessorial" {
 			n = -n
 		}
 		net -= n
 	}
 	carry, _ := chargeCents(d.SalaryCarry)
 	return net + payPageCosts(d) + driverLayoverTotal(d) - carry
+}
+
+func (d DriverPayDriver) AccessorialCents() int64 {
+	var total int64
+	for _, row := range d.Edits.ExpenseDeductions {
+		if row.Source == "accessorial" {
+			amount, _ := chargeCents(row.Amount)
+			total += max(0, amount)
+		}
+	}
+	return total
 }
 
 func (d DriverPayDriver) ReimbursedCents() int64 {

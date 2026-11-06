@@ -15,7 +15,7 @@ func TestPayrollStatementWorkbook(t *testing.T) {
 			Edits: repository.DriverPayEdits{
 				Adjustments: []repository.DriverPayAdjustment{{Kind: "reimbursement", Amount: "10.00"}},
 				ExpenseDeductions: []repository.ExpenseDeduction{
-					{Source: "reimburse", Amount: "25.25"}, {Source: "reimburse", Amount: "12.50"}, {Source: "reimburse", Amount: "0.00"}, {Amount: "40.00"},
+					{Source: "reimburse", Amount: "25.25"}, {Source: "reimburse", Amount: "12.50"}, {Source: "reimburse", Amount: "0.00"}, {Amount: "40.00"}, {Source: "accessorial", Amount: "50.00"},
 				},
 			}},
 		{FullName: "alice", OperatingDrivers: []repository.PayPerson{{Name: "alice"}}, Loads: []repository.DriverPayLoad{{Fee: "81.99"}},
@@ -35,11 +35,11 @@ func TestPayrollStatementWorkbook(t *testing.T) {
 			}
 			defer book.Close()
 			rows, err := book.GetRows("Statements")
-			want := [][]string{{"Driver Name", "Total Salary Payable", "Reimbursed Amount"}, {"alice", "$83.00", "$1.01"}, {"Zoe", "$407.75", "$37.75"}}
+			want := [][]string{{"Driver Name", "Total Salary Payable", "Reimbursed Amount", "Accessorials"}, {"alice", "$83.00", "$1.01", "$0.00"}, {"Zoe", "$457.75", "$37.75", "$50.00"}}
 			if err != nil || !reflect.DeepEqual(rows, want) {
 				t.Fatalf("got %v, want %v: %v", rows, want, err)
 			}
-			for _, cell := range []string{"B2", "C2", "B3", "C3"} {
+			for _, cell := range []string{"B2", "C2", "D2", "B3", "C3", "D3"} {
 				kind, err := book.GetCellType("Statements", cell)
 				if err != nil || (kind != excelize.CellTypeNumber && kind != excelize.CellTypeUnset) {
 					t.Fatalf("%s is not numeric: %v %v", cell, kind, err)

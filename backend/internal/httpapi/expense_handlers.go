@@ -354,9 +354,10 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	value, err := handler.repo.ListExpensesPage(r.Context(), repository.ExpensePageQuery{
-		ExpenseType: strings.TrimSpace(r.URL.Query().Get("expenseType")),
-		Description: strings.TrimSpace(r.URL.Query().Get("description")),
-		AmountMin:   r.URL.Query().Get("amountMin"), AmountMax: r.URL.Query().Get("amountMax"), PaidMin: r.URL.Query().Get("paidMin"), PaidMax: r.URL.Query().Get("paidMax"), RemainingMin: r.URL.Query().Get("remainingMin"), RemainingMax: r.URL.Query().Get("remainingMax"),
+		OwnerReimbursementReview: r.URL.Query().Get("ownerReimbursementReview") == "1",
+		ExpenseType:              strings.TrimSpace(r.URL.Query().Get("expenseType")),
+		Description:              strings.TrimSpace(r.URL.Query().Get("description")),
+		AmountMin:                r.URL.Query().Get("amountMin"), AmountMax: r.URL.Query().Get("amountMax"), PaidMin: r.URL.Query().Get("paidMin"), PaidMax: r.URL.Query().Get("paidMax"), RemainingMin: r.URL.Query().Get("remainingMin"), RemainingMax: r.URL.Query().Get("remainingMax"),
 		AccountantVerified: accountantVerified,
 		Pagination:         pagination,
 		ChargeDriverID:     chargeDriverID, Responsibility: responsibility,
@@ -438,6 +439,11 @@ func (handler expenseHandler) createExpense(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	input.CreatedBy, input.CreatedByName = session.User.ID, session.User.Username
+	input.AccessorialRequestID = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if input.AccessorialRequestID != "" && (!isUUID(input.AccessorialRequestID) || input.PaymentType == nil || *input.PaymentType != "Driver payroll") {
+		writeAPIError(w, 400, "A valid accessorial request ID requires Driver payroll")
+		return
+	}
 	if err := handler.repo.ValidateExpensePaymentMethod(r.Context(), input.PaymentType, nil); err != nil {
 		handler.writeError(w, err)
 		return

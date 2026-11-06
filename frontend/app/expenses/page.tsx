@@ -135,10 +135,12 @@ export default function ExpensesPage() {
   const [uploadError, setUploadError] = useState("");
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
   const saveLock=useRef(false);
+  const accessorialRequest=useRef<{ key: string; body: string } | null>(null);
   const [currentUser, setCurrentUser] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [administrator, setAdministrator] = useState(false);
   const [showHistory,setShowHistory]=useState(false);
+  const [ownerReview,setOwnerReview]=useState(false);
   const [verificationDetails, setVerificationDetails] = useState<Expense | null>(null);
   const verificationUndo = useRef<{ expenseId: string; verificationId: string }[]>([]);
   const verificationBusy = useRef(false);
@@ -154,7 +156,7 @@ export default function ExpensesPage() {
     if (showLoading) setIsLoading(true);
     try {
       const [response, session] = await Promise.all([fetchExpensesPage({
-        history:showHistory?"1":"",page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
+        history:showHistory || ownerReview?"1":"",ownerReimbursementReview:ownerReview?"1":"",page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
       }), fetchAuthSession()]);
       setCurrentUser(session.user.username);
       setCurrentUserId(session.user.id);
@@ -173,7 +175,7 @@ export default function ExpensesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [showHistory,setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
+  }, [showHistory,ownerReview,setPage, truckId, category, dateFrom, dateTo, debouncedSearch, page, pageSize, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadData(), 0);
@@ -214,9 +216,10 @@ export default function ExpensesPage() {
   function completeEntry() {setEditing(undefined);setAttachment(null);setPendingUploadId(null);setUploadError("");if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
   function closeEntry(){setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
   function changeForm(next:ExpenseInput){ setForm(next); }
-  const hasFilters = Boolean(truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified);
+  const hasFilters = Boolean(ownerReview || truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified);
 
   function openCreate() {
+    accessorialRequest.current=null;
     const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds[0] ?? "";
     const value={...emptyExpenseInput,paidBy:currentUser,categoryId,expenseDate:new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())};
     setReview(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);setUploadError("");
@@ -250,7 +253,13 @@ export default function ExpensesPage() {
       let id = pendingUploadId;
       if (!id) {
         const input = applyExpenseCategoryRules(form, options.settings);
-        const saved = editing ? await updateExpense(editing.id, input) : await createExpense(input);
+        let requestId: string | undefined;
+        if (!editing && input.paymentType === "Driver payroll") {
+          const body=JSON.stringify(input);
+          if (accessorialRequest.current?.body !== body) accessorialRequest.current={body,key:crypto.randomUUID()};
+          requestId=accessorialRequest.current.key;
+        }
+        const saved = editing ? await updateExpense(editing.id, input) : await createExpense(input,requestId);
         id = saved.id;
       }
       if (attachment) {
@@ -383,7 +392,7 @@ export default function ExpensesPage() {
           <option value="">All categories</option>
           {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
         </select>
-          <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={showHistory} onChange={e=>{setShowHistory(e.target.checked);setPage(1)}}/>Show historical</label><select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
+          <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={showHistory} onChange={e=>{setShowHistory(e.target.checked);setPage(1)}}/>Show historical</label><label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={ownerReview} onChange={e=>{setOwnerReview(e.target.checked);setPage(1)}}/>Owner reimbursement review</label><select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
           <select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
           <select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select>
         </TableFilters>
@@ -391,7 +400,7 @@ export default function ExpensesPage() {
 
 
         {hasFilters && (
-          <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition hover:bg-zinc-800/50 hover:text-zinc-300">
+          <button type="button" onClick={() => { clearFilters(); setOwnerReview(false); }} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition hover:bg-zinc-800/50 hover:text-zinc-300">
             <X className="h-3 w-3" /> Clear
           </button>
         )}
@@ -424,8 +433,8 @@ export default function ExpensesPage() {
         )}</td></tr> : <>
               {expenses.map((expense) => (
                 <tr key={expense.id} tabIndex={0} aria-label={"Open " + (expense.workOrderDescription?.trim() || expense.description?.trim() || expense.expenseType || expense.category)}
-                  onClick={event => { if (!(event.target as HTMLElement).closest("a,button")) openEdit(expense); }}
-                  onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openEdit(expense); } }}
+                  onClick={event => { if (!ownerReview && !(event.target as HTMLElement).closest("a,button")) openEdit(expense); }}
+                  onKeyDown={event => { if (!ownerReview && event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openEdit(expense); } }}
                   className="cursor-pointer border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/25 focus-visible:outline-2 focus-visible:outline-blue-500">
                   <td className="px-4 py-3">
                     <div className={expense.expenseDate ? "font-mono tabular-nums text-zinc-200" : "text-amber-400"}>{formatDate(expense.expenseDate)}</div>
@@ -455,12 +464,13 @@ export default function ExpensesPage() {
                   </td>
                   <td className={`px-4 py-3 text-right font-mono font-medium tabular-nums ${expense.amount === null ? "text-amber-400" : "text-zinc-100"}`}>
                     <span tabIndex={0} title={(expense.paymentFee && expense.paymentFee !== "0.00" ? "Base: " + formatMoney(expense.baseAmount ?? expense.amount) + "\nEFS fee: " + formatMoney(expense.paymentFee) + "\n" : "") + "Paid: " + (expense.paidAmount == null ? "—" : formatMoney(expense.paidAmount)) + "\nRemaining: " + (expense.remainingAmount == null ? "—" : formatMoney(expense.remainingAmount)) + (expense.driverSettled ? "\nExisting expense: assumed fully paid" : "")} className="cursor-help border-b border-dotted border-zinc-600">{formatMoney(expense.amount)}</span>
-                    {expense.remainingAmount != null && <div className="mt-1 text-xs text-zinc-400">Remaining: {formatMoney(expense.remainingAmount)}<ExpenseBalanceAction expense={expense} onSaved={() => loadData(false)} /></div>}
+                    {expense.ownerCollectionRemaining != null && <div className="mt-1 text-xs text-zinc-400">Owner remaining: {formatMoney(expense.ownerCollectionRemaining)}</div>}
+                    {expense.remainingAmount != null && <div className="mt-1 text-xs text-zinc-400">{expense.driverPayoutRemaining != null ? "Driver remaining" : "Remaining"}: {formatMoney(expense.remainingAmount)}{!ownerReview && <ExpenseBalanceAction expense={expense} onSaved={() => loadData(false)} />}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <Verification expense={expense} onClick={() => { setError(""); setVerificationDetails(expense); }} />
-                      {verificationRole && !(expense.accountingVerified) && <button type="button" className="ui-button" disabled={verifying !== null} onClick={() => void verify(expense)}>{verifying === expense.id ? "Verifying…" : "Verify"}</button>}
+                      {!ownerReview && <Verification expense={expense} onClick={() => { setError(""); setVerificationDetails(expense); }} />}
+                      {!ownerReview && verificationRole && !(expense.accountingVerified) && <button type="button" className="ui-button" disabled={verifying !== null} onClick={() => void verify(expense)}>{verifying === expense.id ? "Verifying…" : "Verify"}</button>}
                     </div>
                   </td>
                 </tr>

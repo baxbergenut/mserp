@@ -515,6 +515,7 @@ export const syncTolls = () =>
 export const fetchExpensesPage = (query: PageQuery & {
   expenseType?: string; description?: string; amountMin?: string; amountMax?: string; paidMin?: string; paidMax?: string; remainingMin?: string; remainingMax?: string;
  history?:string;
+  ownerReimbursementReview?: string;
   scope?: "general";
   accountantVerified?: string;
   responsibility?: "non_personal";
@@ -541,9 +542,10 @@ export const uploadExpenseDocument = (id: string, file: File) => {
 };
 export const expenseDocumentUrl = (id: string) => `${API_BASE}/expenses/documents/${encodeURIComponent(id)}`;
 
-export const createExpense = (input: ExpenseInput) =>
+export const createExpense = (input: ExpenseInput, requestId?: string) =>
   apiRequest<Expense>("/expenses", {
     method: "POST",
+    headers: requestId ? { "Idempotency-Key": requestId } : undefined,
     body: JSON.stringify(expensePayload(input)),
   });
 export const createExpenses = (expenses: ExpenseInput[]) =>

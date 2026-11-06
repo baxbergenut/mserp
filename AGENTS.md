@@ -73,6 +73,15 @@ conversion used that faulty check and created duplicate slots.
 
 ## Pay-page actions
 
+Migration 203 adds the Accessorials expense category and the Driver Pay entry
+button. Accessorials use the ordinary expense date and finalization-only draft
+choices, with a dedicated driver payout ledger. Owner-covered accessorials and
+new owner-covered Reimburse entries use independent ordinary owner collections.
+Legacy reimbursements retain their prior mirrored Investor Pay behavior and
+appear in the owner reimbursement review filter. The XLSX breaks out Accessorials
+separately. Install the matching deploy helper before 203; see
+`docs/PAYROLL_EXPENSE_FINALIZATION.md`.
+
 Driver and Investor Pay accept any CAT Scale deduction up to the unpaid balance.
 Driver choices use migration 202 and investor choices use the existing statement
 edits JSON. Finalization records the amount collected and the original ticket

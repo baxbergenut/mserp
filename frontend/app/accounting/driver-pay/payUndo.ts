@@ -18,8 +18,8 @@ export function restorePayEdit(current: DriverPayEdits, before: DriverPayEdits, 
       waiveRemainder: previous.waiveRemainder, reset: !previous.overridden };
   });
   restored.expenseDeductions = current.expenseDeductions?.map(row => {
-    const previous = before.expenseDeductions?.find(item => item.expenseId === row.expenseId);
-    const next = after.expenseDeductions?.find(item => item.expenseId === row.expenseId);
+    const previous = before.expenseDeductions?.find(item => item.expenseId === row.expenseId && item.source === row.source);
+    const next = after.expenseDeductions?.find(item => item.expenseId === row.expenseId && item.source === row.source);
     return previous && next && previous.amount !== next.amount ? { ...row, amount: previous.amount, apply: true } : row;
   });
   restored.sourceCharges = current.sourceCharges?.map(row => {

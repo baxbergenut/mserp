@@ -42,8 +42,8 @@ try {
     let writable = true;
     let expense = { id: 'expense', categoryId: 'category', category: 'Maintenance', expenseDate: '2026-09-28', expenseType: 'Equipment', amount: '100.00', baseAmount: null, paymentFee: '0.00', paymentType: 'Cash', coveredBy: 'Company', paidBy: 'Test', truckId: null, driverId: null, updatedAt: '2026-10-13T12:00:00Z' };
     let reimbursement = { ...expense, id: 'reimbursement', expenseType: 'Parking refund', expenseDate: '2026-09-30', amount: '42.25', paymentType: 'Reimburse' };
-    let writes = 0;
-    const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true}], categories: [], paymentTypes:['EFS','Cash','Reimburse'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
+    let writes = 0, createdAccessorials = 0;
+    const options = { settings: [{id:'category',kind:'category',name:'Maintenance',active:true},{id:'accessorial-category',kind:'category',name:'Accessorials',active:true,accessorials:true},{id:'bonus-type',kind:'name',categoryId:'accessorial-category',name:'DOT inspection bonus',active:true}], categories: [], paymentTypes:['EFS','Cash','Reimburse'], expenseTypes:[], paidBy:['Test'], coveredBy:[], filters:{drivers:[],trucks:[],paymentTypes:[],paidBy:[],coveredBy:[]} };
     const errors = [];
     const expenseReads = []; const expensiveLookups=[];
     const costReads = []; let costFailure = true; let payWrites = 0;
@@ -80,7 +80,16 @@ try {
         }
         return route.fulfill({json:expense});
       }
-      if (path === '/expenses/form-choices') return route.fulfill({json:{options,drivers:[],trucks:[],owners:[]}});
+      if (path === '/expenses/form-choices') return route.fulfill({json:{options,drivers:[{id:'statement',fullName:'Grid Test',truckId:'truck'}],trucks:[{id:'truck',unitNumber:'T1',driverId:'statement',ownerId:'owner',isCompanyOwned:false}],owners:[{id:'owner',fullName:'Fixture owner',isCompany:false}]}});
+      if (path === '/expenses' && request.method() === 'POST') {
+        createdAccessorials++;
+        const input=request.postDataJSON();
+        expect(input).toMatchObject({categoryId:'accessorial-category',driverId:'statement',expenseType:'DOT inspection bonus',paymentType:'Driver payroll',coveredBy:'Truck Owner',ownerId:'owner',amount:'150',expenseDate:'2026-10-01'});
+        expect(input.weekStart).toBeUndefined();
+        expect(request.headers()['idempotency-key']).toMatch(/^[a-f0-9-]{36}$/);
+        driver.edits.expenseDeductions.push({source:'accessorial',expenseId:'new-accessorial',name:input.expenseType,expenseDate:input.expenseDate,amount:'150.00',total:'150.00',available:'150.00',openingBalance:'150.00',remaining:'0.00',version:1,saved:false});
+        return route.fulfill({status:201,json:{id:'new-accessorial',...input}});
+      }
       if (path === '/expenses') return route.fulfill({json:{items:[],total:0,page:1,pageSize:1,totalPages:1,options}});
       if (request.method() === 'PUT') {
         payWrites++;
@@ -97,7 +106,7 @@ try {
       }
       if (path.endsWith('/undo-system')) { driver.loads = beforeSource; return route.fulfill({ status: 204 }); }
       const fixtures = {
-        '/auth/session': { user: { id: 'user', username: 'Test', expenseCategoryAccess:[{categoryId:'category',canView:true,canEdit:writable,canCreate:true}], permissions: ['driver_pay.read','investor_pay.read','dispatcher_pay.read', 'driver_pay.edit','investor_pay.edit', 'driver_pay.finalize','driver_pay.reopen','investor_pay.finalize','investor_pay.reopen', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], theme: 'solarized-dark' }, csrfToken: 'fixture' },
+        '/auth/session': { user: { id: 'user', username: 'Test', expenseCategoryAccess:[{categoryId:'category',canView:true,canEdit:writable,canCreate:true},{categoryId:'accessorial-category',accessorials:true,canView:true,canCreate:writable}], permissions: ['driver_pay.read','investor_pay.read','dispatcher_pay.read', 'driver_pay.edit','investor_pay.edit', 'driver_pay.finalize','driver_pay.reopen','investor_pay.finalize','investor_pay.reopen', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], theme: 'solarized-dark' }, csrfToken: 'fixture' },
         '/driver-pay': { weekStart: week, revision: 'fixture', drivers: [driver] },
         '/investor-pay': { weekStart: week, revision: 'fixture', drivers: [driver] },
         '/tasks/count': { count: 0 },
@@ -244,7 +253,24 @@ try {
     await modal.getByLabel('Broker load number').scrollIntoViewIfNeeded();
     await page.screenshot({path:join(tmpdir(), investor ? 'mserp-broker-investor-expense.png':'mserp-broker-driver-expense.png'),fullPage:true,animations:"disabled"});
     await modal.getByRole('button',{name:'Cancel',exact:true}).click();
+    if (!investor) {
+      await page.getByRole('button',{name:'Add accessorial',exact:true}).click();
+      const add = page.getByRole('dialog',{name:'Add accessorial'});
+      await expect(add.getByLabel('Driver',{exact:true})).toHaveValue('statement');
+      await expect(add.getByLabel('Who will cover',{exact:true})).toHaveValue('Truck Owner');
+      await expect(add.getByText('Driver payroll',{exact:true})).toBeVisible();
+      await expect(add.getByLabel(/payroll week/i)).toHaveCount(0);
+      await add.getByLabel('Expense date',{exact:true}).fill('2026-10-01');
+      await add.getByLabel('Expense type',{exact:true}).selectOption('DOT inspection bonus');
+      await add.getByLabel('Amount',{exact:true}).fill('150');
+      await expect(add.getByRole('status')).toContainText('Owner charge (Fixture owner): −$150');
+      await add.getByRole('button',{name:'Save accessorial',exact:true}).click();
+      await expect(add).toHaveCount(0);
+      expect(createdAccessorials).toBe(1);
+      await expect(region.getByRole('textbox',{name:'Grid Test, expense DOT inspection bonus, accessorial credit'})).toHaveValue('+150.00');
+    } else await expect(page.getByRole('button',{name:'Add accessorial',exact:true})).toHaveCount(0);
     writable=false; await page.reload();
+    await expect(page.getByRole('button',{name:'Add accessorial',exact:true})).toHaveCount(0);
     if (!investor) {
       await page.getByRole('button', { name: 'Open expense Parking refund', exact: true }).click();
       const reimbursementDetails = page.getByRole('dialog', { name: 'Expense details' });

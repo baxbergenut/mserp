@@ -40,9 +40,18 @@ func payrollBalanceBatchContext(ctx context.Context, tx pgx.Tx, scopes []payroll
 	if err != nil {
 		return ctx, err
 	}
-	for _, part := range []struct{ source, query string }{
-		{"", payrollExpenseBalanceBatchSQL(false)}, {"reimburse", payrollExpenseBalanceBatchSQL(true)}, {"escrow", payrollEscrowBalanceBatchSQL},
-	} {
+	parts := []struct{ source, query string }{
+		{"", payrollExpenseBalanceBatchSQL("")}, {"reimburse", payrollExpenseBalanceBatchSQL("reimburse")},
+	}
+	available, err := accessorialLedgerAvailable(ctx, tx)
+	if err != nil {
+		return ctx, err
+	}
+	if available {
+		parts = append(parts, struct{ source, query string }{"accessorial", payrollExpenseBalanceBatchSQL("accessorial")})
+	}
+	parts = append(parts, struct{ source, query string }{"escrow", payrollEscrowBalanceBatchSQL})
+	for _, part := range parts {
 		rows, err := tx.Query(ctx, part.query, body)
 		if err != nil {
 			return ctx, err
@@ -77,24 +86,30 @@ func payrollBalanceBatchContext(ctx context.Context, tx pgx.Tx, scopes []payroll
 // Materialize each eligible principal and its ledger once. Cross it with only
 // the explicitly selected periods, retaining the original Thursday-exclusive
 // invoice window and all-period reservations (including later saved amounts).
-func payrollExpenseBalanceBatchSQL(reimburse bool) string {
+func payrollExpenseBalanceBatchSQL(source string) string {
 	driver, total, ledger := "charge_driver_id", "expense_collectible_total(e)", "expense_payments"
-	eligible := "lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND (NOT driver_settled OR expense_balance_adjustment(e.id)<>0)"
+	external := expenseOwnerExternalSQL
+	eligible := "(lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)) AND (NOT driver_settled OR expense_balance_adjustment(e.id)<>0)"
 	destination := "w.investor_truck_id IS NULL AND "
 	invoiceWindow, periodWindow := "", ""
 	liveColumn := ",lower(btrim(e.covered_by))='driver'"
-	if reimburse {
+	if source == "reimburse" {
 		driver, total, ledger = "driver_id", "e.amount", "expense_reimbursement_payments"
 		eligible = "lower(btrim(payment_type))='reimburse'"
 		destination = ""
 		liveColumn = ""
 		invoiceWindow = " AND e.expense_date<(SELECT max(week)+10 FROM scopes)"
 		periodWindow = " AND e.expense_date<s.week+10"
+		external = "expense_external_total(e.id)"
+	} else if source == "accessorial" {
+		driver, total, ledger = "driver_id", "e.amount", "expense_accessorial_payments"
+		eligible = "payment_type='Driver payroll'"
+		destination, liveColumn, external = "", "", "0"
 	}
 	return `WITH scopes AS MATERIALIZED (
  SELECT * FROM jsonb_to_recordset($1::jsonb) s(week date,drivers uuid[])
  ), relevant AS MATERIALIZED (
- SELECT e.*,e.` + driver + ` AS payer,` + total + ` AS collectible,expense_external_total(e.id) AS external_paid
+ SELECT e.*,e.` + driver + ` AS payer,` + total + ` AS collectible,` + external + ` AS external_paid
  FROM expenses e WHERE e.` + driver + ` IN (SELECT unnest(drivers) FROM scopes)
  AND ` + eligible + ` AND accounting_live_source('expense',e.id,e.expense_date)
  ` + invoiceWindow + ` AND e.amount>=0

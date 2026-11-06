@@ -60,7 +60,7 @@ func saveExpenseDeductions(ctx context.Context, tx pgx.Tx, driver, week, actor s
 			continue
 		}
 		var version int
-		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND CASE WHEN lower(btrim(payment_type))='reimburse' THEN driver_id ELSE charge_driver_id END=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
+		err := tx.QueryRow(ctx, `SELECT balance_version FROM expenses WHERE id=$1 AND CASE WHEN $3='reimburse' THEN driver_id ELSE charge_driver_id END=$2 FOR UPDATE`, item.ExpenseID, driver, item.Source).Scan(&version)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = tx.QueryRow(ctx, `SELECT balance_version FROM driver_escrows WHERE id=$1 AND driver_id=$2 FOR UPDATE`, item.ExpenseID, driver).Scan(&version)
 		}

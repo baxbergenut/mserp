@@ -114,10 +114,10 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 		s.User.Permissions = PermissionKeys()
 	}
 	s.User.ExpenseCategoryAccess = []ExpenseCategoryAccess{}
-	query := `SELECT s.id::text,true,true,true,true FROM expense_settings s WHERE s.kind='category' ORDER BY s.id`
+	query := `SELECT s.id::text,true,true,true,true,(s.active AND coalesce((to_jsonb(s)->>'accessorials')::boolean,false)) FROM expense_settings s WHERE s.kind='category' ORDER BY s.id`
 	args := []any{}
 	if !system {
-		query = `SELECT category_id::text,can_view,can_create,can_edit,can_delete FROM role_expense_category_access WHERE role_id=$1 ORDER BY category_id`
+		query = `SELECT a.category_id::text,a.can_view,a.can_create,a.can_edit,a.can_delete,(s.active AND coalesce((to_jsonb(s)->>'accessorials')::boolean,false)) FROM role_expense_category_access a JOIN expense_settings s ON s.id=a.category_id WHERE a.role_id=$1 ORDER BY a.category_id`
 		args = append(args, s.User.RoleID)
 	}
 	rows, accessErr := r.pool.Query(ctx, query, args...)
@@ -127,7 +127,7 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 	defer rows.Close()
 	for rows.Next() {
 		var access ExpenseCategoryAccess
-		if accessErr = rows.Scan(&access.CategoryID, &access.CanView, &access.CanCreate, &access.CanEdit, &access.CanDelete); accessErr != nil {
+		if accessErr = rows.Scan(&access.CategoryID, &access.CanView, &access.CanCreate, &access.CanEdit, &access.CanDelete, &access.Accessorials); accessErr != nil {
 			return AuthSession{}, accessErr
 		}
 		s.User.ExpenseCategoryAccess = append(s.User.ExpenseCategoryAccess, access)

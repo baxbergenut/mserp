@@ -21,11 +21,12 @@ type AccessRole struct {
 	Version               int                     `json:"version"`
 }
 type ExpenseCategoryAccess struct {
-	CategoryID string `json:"categoryId"`
-	CanView    bool   `json:"canView"`
-	CanCreate  bool   `json:"canCreate"`
-	CanEdit    bool   `json:"canEdit"`
-	CanDelete  bool   `json:"canDelete"`
+	Accessorials bool   `json:"accessorials,omitempty"`
+	CategoryID   string `json:"categoryId"`
+	CanView      bool   `json:"canView"`
+	CanCreate    bool   `json:"canCreate"`
+	CanEdit      bool   `json:"canEdit"`
+	CanDelete    bool   `json:"canDelete"`
 }
 type ExpenseAccessCategory struct {
 	ID     string `json:"id"`

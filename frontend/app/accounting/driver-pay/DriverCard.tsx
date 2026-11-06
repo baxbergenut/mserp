@@ -48,6 +48,7 @@ export type DriverCardProps = {
   detailError?: string;
   onRetryDetails?: () => void;
   onOpenExpense?: (id: string) => void;
+  onAddAccessorial?: (driver: DriverPayDriver) => void;
   expenseOpenDisabled?: boolean;
   onAcceptSource?: (load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => Promise<void>;
   sourceActionDisabled?: boolean;
@@ -65,7 +66,7 @@ export type DriverCardProps = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, settlementPending, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, settlementPending, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, onAddAccessorial, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
   const [extraNumber, setExtraNumber] = useState("");
   const [extraChoices, setExtraChoices] = useState<PayLoadPlacementResult["choices"]>([]);
   const [extraChoice, setExtraChoice] = useState("");
@@ -110,7 +111,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
   const payable = allFeesMissing ? "Needs review" : decimalDisplay(totals.payable, true);
   const editAdjustment = (index: number, update: (item: DriverPayAdjustment) => DriverPayAdjustment) => {
     edit(current => {
-      const adjustments = Array.from({ length: Math.max(current.adjustments.length, index + 1) }, (_, row) => current.adjustments[row] ?? { id: crypto.randomUUID(), kind: "reimbursement" as const, name: "", note: "", amount: "" });
+      const adjustments = Array.from({ length: Math.max(current.adjustments.length, index + 1) }, (_, row) => current.adjustments[row] ?? { id: crypto.randomUUID(), kind: "addition" as const, name: "", note: "", amount: "" });
       adjustments[index] = update(adjustments[index]);
       return { ...current, adjustments };
     });
@@ -157,8 +158,8 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
           const empty = !name.trim() && !item?.amount && item?.kind !== "deduction";
           return <tr key={index} className="hover:bg-zinc-800/20">
             <td className={`${cell} !px-0`}><PayInput aria-label={`${driver.fullName}, adjustment ${index + 1}, name`} aria-invalid={!empty && !name.trim()} disabled={disabled} maxLength={200} value={name} title={item?.legacySheets?`${name} · ${item.note}`:name} onValueChange={name => { editAdjustment(index, current => ({ ...current, name })); }} className="h-[31px] w-full min-w-0 bg-transparent px-2 text-xs text-zinc-300 outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500" /></td>
-            <td className={`${cell} !border-r-0 !px-0`}><PayInput aria-label={`${driver.fullName}, adjustment ${index + 1}, amount`} aria-invalid={!empty && (!validDecimal(item?.amount ?? "", true) || hundredths(item?.amount ?? "") <= BigInt(0))} disabled={disabled} inputMode="decimal" value={value} normalizeValue={item?.kind === "deduction" ? value => value.startsWith("+") ? value.slice(1) : sourceAmountInput(value, "-1") : undefined} title="Positive: reimbursement. Negative: charge. Existing charges keep their minus sign; enter + explicitly to change to reimbursement. Clear both cells to remove." onValueChange={value => {
-              editAdjustment(index, current => ({ ...current, amount: value.startsWith("-") ? value.slice(1) : value, kind: value.startsWith("-") ? "deduction" : "reimbursement" }));
+            <td className={`${cell} !border-r-0 !px-0`}><PayInput aria-label={`${driver.fullName}, adjustment ${index + 1}, amount`} aria-invalid={!empty && (!validDecimal(item?.amount ?? "", true) || hundredths(item?.amount ?? "") <= BigInt(0))} disabled={disabled} inputMode="decimal" value={value} normalizeValue={item?.kind === "deduction" ? value => value.startsWith("+") ? value.slice(1) : sourceAmountInput(value, "-1") : undefined} title="Positive: addition. Negative: charge. Existing charges keep their minus sign; enter + explicitly to change to an addition. Clear both cells to remove." onValueChange={value => {
+              editAdjustment(index, current => ({ ...current, amount: value.startsWith("-") ? value.slice(1) : value, kind: value.startsWith("-") ? "deduction" : current.kind === "reimbursement" && current.amount ? "reimbursement" : "addition" }));
             }} className={`h-[31px] w-full min-w-0 bg-transparent px-2 text-right font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 aria-invalid:bg-red-500/10 ${item?.kind === "deduction" ? "text-red-300" : "text-emerald-300"}`} /></td>
           </tr>;
         })}</tbody>
@@ -191,6 +192,7 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
     {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
     {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">
       <div id={`driver-${driver.id}`}>
+        {onAddAccessorial && <button type="button" className={`${payButtonClass} m-2`} onClick={() => onAddAccessorial(driver)}>Add accessorial</button>}
         {!!driver.brokerReimbursements?.length && <div className="border-b border-zinc-800 px-3 py-2 text-xs text-amber-300" aria-label="Broker reimbursement reminders">
           {driver.brokerReimbursements.map(item => <div key={item.expenseId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>Broker reimbursement expected · Load {item.loadNumber} · {amount(item.amount, true)}</span>

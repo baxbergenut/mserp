@@ -208,8 +208,8 @@ var payrollTruckAssignmentsSQL = `SELECT truck_id::text,driver_id::text FROM tru
 var payrollTruckEditsSQL = `SELECT w.truck_id::text,w.edits,w.version,w.finalized,w.report,coalesce(w.finalized_at,now()),coalesce(u.username,'') FROM investor_pay_weeks w LEFT JOIN app_users u ON u.id=w.finalized_by WHERE w.week_start=$1::date`
 
 var payrollTruckExpensesSQL = `WITH terms AS (` + activePayrollTruckTermsSQL + `), relevant_expenses AS MATERIALIZED (
- SELECT e.*, expense_external_total(e.id) AS external_paid, ` + expenseSettlementTotalSQL + ` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
- WHERE lower(btrim(e.covered_by))='truck owner' AND lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0) AND e.amount>=0
+ SELECT e.*, ` + expenseOwnerExternalSQL + ` AS external_paid, ` + expenseSettlementTotalSQL + ` AS settlement_total FROM expenses e JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
+ WHERE lower(btrim(e.covered_by))='truck owner' AND (lower(btrim(coalesce(e.payment_type,'')))<>'reimburse' OR coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)) AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT e.driver_settled OR expense_balance_adjustment(e.id)<>0) AND e.amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$1::date) other,sum(p.amount) FILTER(WHERE p.week_start<$1::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id)

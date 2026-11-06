@@ -40,7 +40,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		"driver_pay_weeks": "driver_id", "driver_pay_cost_collections": "driver_id",
 		"investor_pay_weeks": "truck_id", "truck_settlement_events": "truck_id",
 		"pay_source_collections": "owner_id", "expense_payments": "expense_id",
-		"expense_reimbursement_payments": "expense_id", "driver_escrow_payments": "escrow_id",
+		"expense_reimbursement_payments": "expense_id", "expense_accessorial_payments": "expense_id", "driver_escrow_payments": "escrow_id",
 		"driver_charge_occurrences": "schedule_id", "driver_charge_events": "schedule_id",
 		"payroll_settlements": "driver_id", "payroll_settlement_events": "driver_id",
 		"expenses": "id", "expense_balance_corrections": "expense_id", "expense_external_settlements": "expense_id",

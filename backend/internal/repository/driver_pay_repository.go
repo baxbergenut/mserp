@@ -628,10 +628,10 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 		if edits.ExpenseDeductions != nil {
 			allowed := map[string]bool{}
 			for _, x := range costDriver.Edits.ExpenseDeductions {
-				allowed[x.ExpenseID] = true
+				allowed[expenseEffectKey(x)] = true
 			}
 			for _, x := range edits.ExpenseDeductions {
-				if x.Apply && !allowed[x.ExpenseID] {
+				if x.Apply && !allowed[expenseEffectKey(x)] {
 					// The principal may have been collected in another week or moved to
 					// another payer since this tab loaded. Treat both as stale payroll.
 					return edits, ErrDriverPayConflict
@@ -643,7 +643,7 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 			}
 			filtered := []ExpenseDeduction{}
 			for _, item := range edits.ExpenseDeductions {
-				if allowed[item.ExpenseID] {
+				if allowed[expenseEffectKey(item)] {
 					filtered = append(filtered, item)
 				}
 			}

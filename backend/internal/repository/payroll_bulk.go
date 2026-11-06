@@ -13,7 +13,7 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 	// Open statements show all unpaid expenses, independently of invoice date.
 	// Only posted payments reduce the central balance; choices are overlaid later.
 	rows, err := tx.Query(ctx, `WITH relevant_expenses AS MATERIALIZED (
- SELECT e.*, expense_external_total(e.id) AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND lower(btrim(coalesce(payment_type,'')))<>'reimburse' AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT driver_settled OR expense_balance_adjustment(id)<>0) AND amount>=0
+ SELECT e.*, `+expenseOwnerExternalSQL+` AS external_paid, `+expenseSettlementTotalSQL+` AS settlement_total FROM expenses e WHERE charge_driver_id=ANY($1::uuid[]) AND (lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)) AND accounting_live_source('expense',e.id,e.expense_date) AND (NOT driver_settled OR expense_balance_adjustment(id)<>0) AND amount>=0
  ), payments AS MATERIALIZED (
  SELECT p.expense_id,sum(p.amount) FILTER(WHERE p.week_start<>$2::date) other,sum(p.amount) FILTER(WHERE p.week_start<$2::date) prior
  FROM expense_payments p JOIN relevant_expenses e ON e.id=p.expense_id GROUP BY p.expense_id
@@ -53,6 +53,13 @@ func expenseDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, wee
 		return nil, err
 	}
 	for id, entries := range credits {
+		result[id] = append(result[id], entries...)
+	}
+	accessorials, err := expenseAccessorialCredits(ctx, tx, drivers, week)
+	if err != nil {
+		return nil, err
+	}
+	for id, entries := range accessorials {
 		result[id] = append(result[id], entries...)
 	}
 	escrows, err := escrowDeductionsBulk(ctx, tx, drivers, week)

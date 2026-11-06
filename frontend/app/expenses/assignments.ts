@@ -11,7 +11,7 @@ export function expenseResponsibility(value: ExpenseInput, trucks: TruckOption[]
 export function defaultExpenseResponsibility(value: ExpenseInput, trucks: TruckOption[], owners: InvestorOption[]): ExpenseInput {
   if (value.coveredBy === "Broker") return { ...value, ownerId: null };
   const { truck, privatelyOwned, driverOwnsTruck } = expenseResponsibility(value, trucks, owners);
-  return { ...value, coveredBy: privatelyOwned ? driverOwnsTruck ? "Driver" : "Truck Owner" : "Company", ownerId: privatelyOwned && !driverOwnsTruck ? truck!.ownerId : null };
+  return { ...value, coveredBy: privatelyOwned ? driverOwnsTruck && value.paymentType !== "Driver payroll" ? "Driver" : "Truck Owner" : "Company", ownerId: privatelyOwned && (!driverOwnsTruck || value.paymentType === "Driver payroll") ? truck!.ownerId : null };
 }
 
 export function expenseAssignment(value: ExpenseInput, kind: "driver" | "truck", id: string, drivers: DriverOption[], trucks: TruckOption[], owners: InvestorOption[]): ExpenseInput {
@@ -19,7 +19,7 @@ export function expenseAssignment(value: ExpenseInput, kind: "driver" | "truck",
     const truck = trucks.find(t => t.id === id);
     return defaultExpenseResponsibility({ ...value, truckId: truck?.id ?? null, unitNumber: truck?.unitNumber ?? "" }, trucks, owners);
   }
-  const driver = kind === "driver" ? drivers.find(d => d.id === id) : drivers.find(d => d.id === trucks.find(t => t.id === id)?.driverId);
+  const driver = kind === "driver" ? drivers.find(d => d.id === id) : drivers.find(d => d.id === (value.paymentType === "Driver payroll" ? value.driverId : trucks.find(t => t.id === id)?.driverId));
   const truck = kind === "truck" ? trucks.find(t => t.id === id) : trucks.find(t => t.id === driver?.truckId);
   return defaultExpenseResponsibility({ ...value, applicantId: null, driverId: driver?.id ?? null, driverName: driver?.fullName ?? "", truckId: truck?.id ?? null, unitNumber: truck?.unitNumber ?? "" }, trucks, owners);
 }

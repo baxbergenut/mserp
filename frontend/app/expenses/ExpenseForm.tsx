@@ -3,9 +3,10 @@ import type { ExpenseDriverChoice as DriverOption, ExpenseTruckChoice as TruckOp
 
 import { ExpensePayerSelect, ExpensePaymentMethodSelect, ExpenseResponsibilitySelect } from "./ExpenseFields";
 import { ExpenseDriverSelect } from "./ExpenseDriverSelect";
-import { expenseAssignment } from "./assignments";
+import { defaultExpenseResponsibility, expenseAssignment, expenseResponsibility } from "./assignments";
 import { ExpenseNameSelect } from "./ExpenseNameSelect";
 import { ExpenseMaintenanceFields } from "./ExpenseMaintenanceFields";
+import { centsLabel, expenseCents } from "@/app/lib/expenseCosts";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
@@ -84,6 +85,11 @@ export function ExpenseForm({
 }) {
   const driverOnly = isDriverOnlyExpense(options.settings, initialValue.categoryId);
   const value = applyExpenseCategoryRules(initialValue, options.settings);
+  const accessorial = value.paymentType === "Driver payroll";
+  const responsibility = expenseResponsibility(value,trucks,owners);
+  const savedOwner = owners.find(owner => owner.id === value.ownerId);
+  const amount = accessorial ? expenseCents(value.amount) : null;
+  const previewAmount = amount !== null && amount > BigInt(0) ? centsLabel(amount) : "";
   const change = (next: ExpenseInput) => {
     if (next.truckId !== value.truckId && next.maintenance) next = { ...next, maintenance: { ...next.maintenance, odometer: null } };
     onChange(applyExpenseCategoryRules(next.categoryId === options.workOrdersCategoryId || options.settings.some(item => item.id === next.categoryId && item.kind === "category" && item.name === "Maintenance") ? next : { ...next, maintenance: undefined }, options.settings));
@@ -98,7 +104,10 @@ export function ExpenseForm({
           <select autoFocus aria-label="Category"
             required
             value={value.categoryId}
-            onChange={(event) => change(changeExpenseCategory(value, event.target.value, options.settings))}
+            onChange={(event) => {
+              const next=changeExpenseCategory(value, event.target.value, options.settings);
+              change(next.paymentType === "Driver payroll" ? defaultExpenseResponsibility(next,trucks,owners) : next);
+            }}
             className={controlClass}
           >
             <option value="">Select category</option>
@@ -125,7 +134,7 @@ export function ExpenseForm({
           <input aria-label="Amount"
             required
             type="number"
-            step="0.01"
+            step="0.01" min={accessorial ? "0.01" : undefined}
             value={value.amount}
             onChange={(event) => set("amount", event.target.value)}
             className={controlClass}
@@ -153,19 +162,21 @@ export function ExpenseForm({
 
         </Field>
         <Field label="Driver">
-          <ExpenseDriverSelect value={value} drivers={drivers} applicants={options.applicants} trucks={trucks} owners={owners} onChange={change} required={driverOnly} className={controlClass} />
+          <ExpenseDriverSelect value={value} drivers={drivers} applicants={accessorial ? [] : options.applicants} trucks={trucks} owners={owners} onChange={change} required={driverOnly || accessorial} className={controlClass} />
 
         </Field>
         {driverOnly ? <p className="text-xs text-zinc-400 sm:col-span-2">Charged to the selected driver.</p> : <>
         <Field label="Who will cover" wide>
-          <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={change} className={controlClass} />
+          {accessorial ? <select aria-label="Who will cover" className={controlClass} value={value.coveredBy} onChange={event => change({...value,coveredBy:event.target.value,ownerId:event.target.value === "Truck Owner" ? responsibility.truck?.ownerId : null})}>
+            <option>Company</option><option disabled={!responsibility.privatelyOwned && value.coveredBy !== "Truck Owner"}>Truck Owner</option>
+          </select> : <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={change} className={controlClass} />}
         </Field>
         <Field label="Payment method">
-          <ExpensePaymentMethodSelect value={value.paymentType} methods={options.paymentTypes} onChange={next => set("paymentType", next)} saved={!!value.updatedAt} className={controlClass} />
+          {accessorial ? <p className="text-sm">Driver payroll</p> : <ExpensePaymentMethodSelect value={value.paymentType} methods={options.paymentTypes} onChange={next => set("paymentType", next)} saved={!!value.updatedAt} className={controlClass} />}
         </Field>
-        <Field label="Paid by">
+        {accessorial ? <p role="status" className="text-sm text-zinc-400">Driver earnings: {previewAmount ? `+${previewAmount}` : "—"}. {value.coveredBy === "Truck Owner" ? `Owner charge${savedOwner ? ` (${savedOwner.fullName})` : ""}: ${previewAmount ? `−${previewAmount}` : "—"}.` : "Company covers the cost."}</p> : <Field label="Paid by">
           <ExpensePayerSelect value={value.paidBy} users={options.paidBy} onChange={next => set("paidBy", next)} className={controlClass} />
-        </Field>
+        </Field>}
         </>}
         <Field label="Reference number" wide>
           <input

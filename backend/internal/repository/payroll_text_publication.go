@@ -26,7 +26,7 @@ func payrollStatementLocalSave(before, after DriverPayEdits) bool {
 		return false
 	}
 	for _, row := range after.ExpenseDeductions {
-		if row.Source != "" && row.Apply {
+		if !draftExpenseEffect(row) && row.Apply {
 			return false
 		}
 	}

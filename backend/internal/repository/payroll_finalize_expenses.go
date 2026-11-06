@@ -17,6 +17,7 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 	}
 	selected := map[string]allocation{}
 	ids := []string{}
+	byID := map[string][]string{}
 	for _, d := range cards {
 		if d.Settlement != nil && d.Settlement.Finalized || kind == "investor" && d.TruckInactive {
 			continue
@@ -25,7 +26,8 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 			if v.Saved {
 				continue
 			}
-			if _, exists := selected[v.ExpenseID]; exists {
+			key := expenseEffectKey(v)
+			if _, exists := selected[key]; exists {
 				return ErrDriverPayConflict
 			}
 			n, e := chargeCents(v.Amount)
@@ -33,7 +35,8 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 			if e != nil || le != nil || n < 0 || n > limit {
 				return chargeInvalid("Expense deduction exceeds its available balance")
 			}
-			selected[v.ExpenseID] = allocation{v, d.ID, d.InvestorID}
+			selected[key] = allocation{v, d.ID, d.InvestorID}
+			byID[v.ExpenseID] = append(byID[v.ExpenseID], key)
 			ids = append(ids, v.ExpenseID)
 		}
 	}
@@ -42,27 +45,37 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 	}
 	found := map[string]bool{}
 	rows, err := tx.Query(ctx, `SELECT id::text,balance_version,
- CASE WHEN lower(btrim(payment_type))='reimburse' THEN 'reimburse' ELSE '' END,
- coalesce(payroll_driver_at(CASE WHEN lower(btrim(payment_type))='reimburse' THEN driver_id ELSE charge_driver_id END,$2::date)::text,''),
+ CASE WHEN lower(btrim(payment_type))='reimburse' THEN 'reimburse' WHEN payment_type='Driver payroll' THEN 'accessorial' ELSE '' END,
+ coalesce(payroll_driver_at(driver_id,$2::date)::text,''),
+ coalesce(payroll_driver_at(charge_driver_id,$2::date)::text,''),
+ coalesce((to_jsonb(expenses)->>'owner_recovery')::boolean,false),
  coalesce(truck_id::text,''),coalesce(owner_id::text,''),lower(btrim(covered_by))
  FROM expenses WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, ids, week)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var id, source, driver, truck, owner, payer string
+		var id, source, driver, debtor, truck, owner, payer string
+		var recovery bool
 		var version int
-		if err = rows.Scan(&id, &version, &source, &driver, &truck, &owner, &payer); err != nil {
+		if err = rows.Scan(&id, &version, &source, &driver, &debtor, &recovery, &truck, &owner, &payer); err != nil {
 			rows.Close()
 			return err
 		}
-		a := selected[id]
-		if version != a.item.Version || source != a.item.Source || (kind == "driver" && driver != a.statement) ||
-			(kind == "investor" && (truck != a.statement || owner != a.owner || payer != "truck owner" || source != "")) {
-			rows.Close()
-			return ErrDriverPayConflict
+		for _, key := range byID[id] {
+			a := selected[key]
+			valid := false
+			if a.item.Source == "" && (source != "reimburse" || recovery) && (source == "" || payer == "truck owner") {
+				valid = kind == "driver" && debtor == a.statement || kind == "investor" && truck == a.statement && owner == a.owner && payer == "truck owner"
+			} else if a.item.Source != "" && source == a.item.Source {
+				valid = kind == "driver" && driver == a.statement
+			}
+			if !valid || version != a.item.Version {
+				rows.Close()
+				return ErrDriverPayConflict
+			}
+			found[key] = true
 		}
-		found[id] = true
 	}
 	err = rows.Err()
 	rows.Close()
@@ -70,9 +83,9 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 		return err
 	}
 	escrowIDs := []string{}
-	for _, id := range ids {
-		if selected[id].item.Source == "escrow" {
-			escrowIDs = append(escrowIDs, id)
+	for _, a := range selected {
+		if a.item.Source == "escrow" {
+			escrowIDs = append(escrowIDs, a.item.ExpenseID)
 		}
 	}
 	if len(escrowIDs) > 0 {
@@ -87,12 +100,13 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 				rows.Close()
 				return err
 			}
-			a := selected[id]
-			if found[id] || kind != "driver" || a.item.Source != "escrow" || version != a.item.Version || driver != a.statement {
+			key := "escrow:" + id
+			a := selected[key]
+			if found[key] || kind != "driver" || a.item.Source != "escrow" || version != a.item.Version || driver != a.statement {
 				rows.Close()
 				return ErrDriverPayConflict
 			}
-			found[id] = true
+			found[key] = true
 		}
 		err = rows.Err()
 		rows.Close()
@@ -104,12 +118,11 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 		return ErrDriverPayConflict
 	}
 	// Use the same three destination ledgers and immutable per-row receipts.
-	for _, source := range []string{"", "reimburse", "escrow"} {
+	for _, source := range []string{"", "accessorial", "reimburse", "escrow"} {
 		keys, amounts, trucks := []string{}, []string{}, []string{}
-		for _, id := range ids {
-			a := selected[id]
+		for _, a := range selected {
 			if a.item.Source == source {
-				keys = append(keys, id)
+				keys = append(keys, a.item.ExpenseID)
 				amounts = append(amounts, a.item.Amount)
 				trucks = append(trucks, a.statement)
 			}
@@ -131,6 +144,13 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 			tag, e := tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,statement_kind,statement_id)
  SELECT id,$2::date,amount::numeric,nullif($4,'')::uuid,'driver',statement FROM unnest($1::uuid[],$3::text[],$5::uuid[]) v(id,amount,statement) ORDER BY id
  ON CONFLICT(expense_id,week_start) DO NOTHING`, keys, week, amounts, actor, trucks)
+			if e != nil {
+				return e
+			}
+			resultCount = tag.RowsAffected()
+		} else if source == "accessorial" {
+			tag, e := tx.Exec(ctx, `INSERT INTO expense_accessorial_payments(expense_id,week_start,amount,updated_by,driver_id)
+ SELECT id,$2::date,amount::numeric,nullif($4,'')::uuid,driver FROM unnest($1::uuid[],$3::text[],$5::uuid[]) v(id,amount,driver) ORDER BY id`, keys, week, amounts, actor, trucks)
 			if e != nil {
 				return e
 			}

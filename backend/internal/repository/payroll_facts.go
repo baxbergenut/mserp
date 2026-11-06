@@ -43,7 +43,7 @@ var payDriverEligibilitySQL = `, scale_paid AS MATERIALIZED (` + wmtCollectionsS
  SELECT d.*,
  (d.active AND (` + weeklyDriverStartedSQL + ` OR EXISTS(SELECT 1 FROM driver_teams dt WHERE (dt.main_driver_id=d.id OR dt.team_driver_id=d.id) AND dt.start_week<=$1::date AND (dt.end_week IS NULL OR $1::date<dt.end_week)))) pay_enabled,
  EXISTS(SELECT 1 FROM driver_escrow_releases r JOIN driver_escrows x ON x.id=r.escrow_id WHERE accounting_live_source('escrow',x.id,x.start_date) AND x.driver_id=d.id AND r.week_start=$1::date AND NOT r.cancelled) pay_release,
- EXISTS(SELECT 1 FROM expenses x WHERE accounting_live_source('expense',x.id,x.expense_date) AND x.driver_id=d.id AND lower(btrim(x.payment_type))='reimburse' AND x.expense_date < $1::date+10 AND x.amount>0) pay_reimburse,
+ EXISTS(SELECT 1 FROM expenses x WHERE accounting_live_source('expense',x.id,x.expense_date) AND x.driver_id=d.id AND (x.payment_type='Driver payroll' OR (lower(btrim(x.payment_type))='reimburse' AND x.expense_date < $1::date+10)) AND x.amount>0) pay_reimburse,
  EXISTS(SELECT 1 FROM weighmytruck_transactions t` + wmtChargeJoins + wmtBalanceJoinSQL + `
  WHERE pd.driver_id=d.id AND ((t.transaction_date >= $1::date AND t.transaction_date < $1::date+7) OR
  (b.payer='driver' AND (paid.source IS NULL OR balance.due<>0)))) pay_scale,

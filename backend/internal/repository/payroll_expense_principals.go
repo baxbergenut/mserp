@@ -5,12 +5,12 @@ package repository
 // collectors. Keep every date and balance here: historical reservations and
 // corrections must still connect the same financial resource.
 const payrollExpensePrincipalsSQL = `SELECT id expense_id,'driver:'||charge_driver_id principal FROM expenses
- WHERE charge_driver_id IS NOT NULL AND lower(btrim(coalesce(payment_type,'')))<>'reimburse'
- UNION SELECT id,'driver:'||driver_id FROM expenses WHERE driver_id IS NOT NULL AND lower(btrim(payment_type))='reimburse'
+ WHERE charge_driver_id IS NOT NULL AND (lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR coalesce((to_jsonb(expenses)->>'owner_recovery')::boolean,false))
+ UNION SELECT id,'driver:'||driver_id FROM expenses WHERE driver_id IS NOT NULL AND (lower(btrim(payment_type))='reimburse' OR payment_type='Driver payroll')
  UNION SELECT id,'truck:'||truck_id FROM expenses WHERE truck_id IS NOT NULL AND lower(btrim(covered_by))='truck owner'
- AND (lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR owner_id<>'` + CompanyOwnerID + `')
+ AND ((lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR coalesce((to_jsonb(expenses)->>'owner_recovery')::boolean,false)) OR owner_id<>'` + CompanyOwnerID + `')
  UNION SELECT id,'owner:'||owner_id FROM expenses WHERE owner_id IS NOT NULL AND lower(btrim(covered_by))='truck owner'
- AND (lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR owner_id<>'` + CompanyOwnerID + `')
+ AND ((lower(btrim(coalesce(payment_type,'')))<>'reimburse' OR coalesce((to_jsonb(expenses)->>'owner_recovery')::boolean,false)) OR owner_id<>'` + CompanyOwnerID + `')
  UNION SELECT expense_id,'truck:'||investor_truck_id FROM expense_payments WHERE investor_truck_id IS NOT NULL`
 
 const payrollPeriodSharedEdgesSQL = `WITH expense_principals AS MATERIALIZED (` + payrollExpensePrincipalsSQL + `)

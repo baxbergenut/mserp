@@ -14,6 +14,11 @@ import (
 
 func withoutAccountingCutoverMigration(t *testing.T, source string) string {
 	t.Helper()
+	accessorial, err := os.ReadFile("../../sql/203_accessorial_expenses.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = strings.Replace(source, strings.ReplaceAll(string(accessorial), "\r\n", "\n"), "", 1)
 	archive, err := os.ReadFile("../../sql/190_expense_receipt_archives.sql")
 	if err != nil {
 		t.Fatal(err)

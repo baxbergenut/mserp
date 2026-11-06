@@ -49,24 +49,24 @@ func mergePayrollExpenseChoices(before payrollExpenseChoices, current, input []E
 	}
 	balances := map[string]ExpenseDeduction{}
 	for _, row := range current {
-		if row.Source == "" {
-			balances[row.ExpenseID] = row
+		if draftExpenseEffect(row) {
+			balances[expenseEffectKey(row)] = row
 		}
 	}
 	seen := map[string]bool{}
 	for _, row := range input {
-		if row.Source != "" || !row.Apply {
+		if !draftExpenseEffect(row) || !row.Apply {
 			continue
 		}
-		balance, exists := balances[row.ExpenseID]
-		if !exists || seen[row.ExpenseID] || balance.Version != row.Version || balance.Saved {
+		balance, exists := balances[expenseEffectKey(row)]
+		if !exists || seen[expenseEffectKey(row)] || balance.Version != row.Version || balance.Saved {
 			return nil, ErrDriverPayConflict
 		}
-		seen[row.ExpenseID] = true
+		seen[expenseEffectKey(row)] = true
 		choice := payrollExpenseChoice{Mode: row.Mode, Amount: row.Amount}
 		switch choice.Mode {
 		case "auto":
-			delete(choices, row.ExpenseID)
+			delete(choices, expenseEffectKey(row))
 			continue
 		case "skip":
 			choice.Amount = "0.00"
@@ -81,7 +81,7 @@ func mergePayrollExpenseChoices(before payrollExpenseChoices, current, input []E
 		default:
 			return nil, chargeInvalid("Choose automatic, a fixed amount, or skip for the expense")
 		}
-		choices[row.ExpenseID] = choice
+		choices[expenseEffectKey(row)] = choice
 	}
 	return choices, nil
 }
@@ -89,12 +89,12 @@ func mergePayrollExpenseChoices(before payrollExpenseChoices, current, input []E
 func applyPayrollExpenseChoices(rows []ExpenseDeduction, choices payrollExpenseChoices) error {
 	for i := range rows {
 		row := &rows[i]
-		if row.Source != "" || row.Saved {
+		if !draftExpenseEffect(*row) || row.Saved {
 			continue
 		}
 		row.Mode = "auto"
 		row.Amount = row.Available
-		if choice, ok := choices[row.ExpenseID]; ok {
+		if choice, ok := choices[expenseEffectKey(*row)]; ok {
 			row.Mode = choice.Mode
 			switch choice.Mode {
 			case "auto":
@@ -152,7 +152,7 @@ func applyPayrollReportExpenseChoices(ctx context.Context, tx pgx.Tx, kind strin
 func nonExpenseDeductions(input []ExpenseDeduction) []ExpenseDeduction {
 	rows := []ExpenseDeduction{}
 	for _, row := range input {
-		if row.Source != "" {
+		if !draftExpenseEffect(row) {
 			rows = append(rows, row)
 		}
 	}
@@ -167,6 +167,11 @@ func reversePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week string, c
 		Expense   string `json:"expense"`
 		Statement string `json:"statement"`
 		Amount    string `json:"amount"`
+	}
+	if kind == "driver" {
+		if err := reverseAccessorialPayments(ctx, tx, week, cards); err != nil {
+			return err
+		}
 	}
 	postings := []posting{}
 	for _, d := range cards {

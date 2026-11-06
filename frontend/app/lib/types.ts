@@ -949,6 +949,11 @@ export interface ExpenseApplicant { id: string; fullName: string; status: "appli
 export interface ExpenseMaintenance { recordId?: string; version?: number; odometer: number | null; vendorId: string | null; vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string; oilType: string; }
 
 export interface Expense {
+  ownerRecovery?: boolean;
+  driverPayoutPaid?: string;
+  driverPayoutRemaining?: string;
+  ownerCollectionPaid?: string;
+  ownerCollectionRemaining?: string;
  managedInSheets?:boolean; balanceVersion:number;
   maintenance?: ExpenseMaintenance;
   canEdit?: boolean;
@@ -994,6 +999,7 @@ export interface Expense {
 export type ExpenseCategory = string;
 export type ExpenseSettingKind = "category" | "name" | "payment_method" | "payer";
 export interface ExpenseSetting {
+  accessorials?: boolean;
   id: string;
   kind: ExpenseSettingKind;
   categoryId: string | null;
@@ -1094,6 +1100,7 @@ export interface AccessData {
 }
 
 export interface ExpenseCategoryAccess {
+  accessorials?: boolean;
   categoryId: string;
   canView: boolean;
   canCreate: boolean;
@@ -1267,7 +1274,7 @@ export interface DriverPayAdjustment {
 export interface ExpenseDeduction {
 	mode?: "auto" | "fixed" | "skip";
 	liveBalance?: boolean;
-  source?: "escrow" | "reimburse";
+  source?: "escrow" | "reimburse" | "accessorial";
   category?: ExpenseCategory;
   expenseId: string;
   name: string;

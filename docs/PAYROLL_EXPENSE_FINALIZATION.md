@@ -16,6 +16,29 @@ by an ordinary expense choice. Frozen statement JSON and historical receipts rem
 authoritative. A fixed choice exceeding the current available amount stays visible
 for correction; finalization rejects it rather than silently reducing it.
 
+## Accessorials and owner reimbursements
+
+Accessorials, including DOT inspection bonuses, are entered through the ordinary
+expense form or directly from Driver Pay. The expense date does not assign a
+payroll week. Driver credits follow the ordinary unpaid balance and draft choice
+rules; finalization writes the separate accessorial payout ledger and reopening
+reverses the exact statement receipt. Truck Owner coverage creates an independent
+owner collection against the same source expense. Both rows can appear on one
+owner-operator statement and have distinct choices.
+
+New Truck Owner reimbursements have independent owner collections; their driver
+payout still uses the existing reimbursement window and reservations. Existing
+records retain the previous mirror behavior and appear in the read-only Owner
+reimbursement review filter. The migration creates no historical owner debt.
+The export counts accessorials and reimbursements in separate breakdown columns.
+Generic external settlement and balance correction are disabled for linked
+expenses to avoid applying them to the wrong side.
+
+Install the updated deploy helper before migration 203. It pauses writers and
+requires the binary capability `accessorial-expenses-v1` once the ledger exists.
+Run `TestAccessorialPayrollDatabase` using the disposable payroll test database,
+then `frontend/scripts/test-payroll-expenses.mjs` against a `/api` build.
+
 ## Review and transaction boundaries
 
 Prepared Driver Pay reads overlay current driver-paid ordinary expenses in one

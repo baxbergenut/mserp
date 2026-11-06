@@ -48,6 +48,7 @@ func main() {
 	payrollRetire := flag.String("retire-payroll-before", "", "retire explicitly reviewed old draft payroll weeks with writers stopped; retain allocations and verify remaining reports")
 	resetGrossBoardBalances := flag.Bool("initialize-gross-board-rate-balances", false, "reset all driver rate balances to zero once and exit")
 	routingCapability := flag.Bool("board-routing-usage-capability", false, "print routing usage schema support and exit without opening a database")
+	accessorialCapability := flag.Bool("accessorial-expenses-capability", false, "print accessorial payroll support and exit")
 	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
 	scaleCarryCapability := flag.Bool("payroll-scale-carry-capability", false, "print cross-week CAT Scale collection support and exit without opening a database")
 	scalePartialCapability := flag.Bool("payroll-scale-partial-capability", false, "print partial CAT Scale collection support and exit without opening a database")
@@ -58,6 +59,10 @@ func main() {
 	}
 	if *scaleCarryCapability {
 		fmt.Println("payroll-scale-carry-v1")
+		return
+	}
+	if *accessorialCapability {
+		fmt.Println("accessorial-expenses-v1")
 		return
 	}
 	if *expenseDraftCapability {
@@ -340,7 +345,7 @@ func main() {
 	handler := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.FrontendOrigin},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key"},
 		AllowCredentials: true,
 	})(router)
 

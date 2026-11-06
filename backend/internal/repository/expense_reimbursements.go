@@ -20,6 +20,7 @@ func readOwnerReimbursementCharges(ctx context.Context, tx pgx.Tx, week string) 
  FROM expense_reimbursement_payments p JOIN expenses e ON e.id=p.expense_id
  JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
  WHERE p.week_start=$1::date AND p.amount>0 AND lower(btrim(e.payment_type))='reimburse'
+ AND NOT coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)
  AND lower(btrim(e.covered_by))='truck owner' AND e.owner_id<>'`+CompanyOwnerID+`'
  ORDER BY e.expense_date,e.id`, week, payrollTruckIDs(ctx))
 	if err != nil {
@@ -44,7 +45,8 @@ func validateOwnerReimbursementPayments(ctx context.Context, tx pgx.Tx, week str
  JOIN expenses e ON e.id=v.id
  JOIN investor_pay_weeks w ON w.week_start=$1::date AND w.truck_id=e.truck_id AND w.owner_id=e.owner_id AND w.finalized
  LEFT JOIN expense_reimbursement_payments p ON p.expense_id=e.id AND p.week_start=w.week_start
- WHERE lower(btrim(e.covered_by))='truck owner' AND e.owner_id<>'`+CompanyOwnerID+`'
+ WHERE NOT coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)
+ AND lower(btrim(e.covered_by))='truck owner' AND e.owner_id<>'`+CompanyOwnerID+`'
  AND v.amount::numeric<>coalesce(p.amount,0))`, week, ids, amounts).Scan(&frozen)
 	if err != nil {
 		return err
@@ -57,10 +59,20 @@ func validateOwnerReimbursementPayments(ctx context.Context, tx pgx.Tx, week str
 
 func (r *ExpenseRepository) loadReimbursementBalances(ctx context.Context, values []Expense) error {
 	ids := []string{}
-	for _, e := range values {
+	accessorialIDs := []string{}
+	for i, e := range values {
+		if (e.OwnerRecovery || normalizedExpenseText(e.PaymentType) == "driver payroll") && normalizedExpenseText(e.CoveredBy) == "truck owner" {
+			values[i].OwnerCollectionPaid, values[i].OwnerCollectionRemaining = e.PaidAmount, e.RemainingAmount
+		}
+		if normalizedExpenseText(e.PaymentType) == "driver payroll" {
+			accessorialIDs = append(accessorialIDs, e.ID)
+		}
 		if e.PaymentType != nil && strings.EqualFold(strings.TrimSpace(*e.PaymentType), "reimburse") {
 			ids = append(ids, e.ID)
 		}
+	}
+	if err := r.loadAccessorialBalances(ctx, values, accessorialIDs); err != nil {
+		return err
 	}
 	if len(ids) == 0 {
 		return nil
@@ -87,6 +99,7 @@ func (r *ExpenseRepository) loadReimbursementBalances(ctx context.Context, value
 		}
 		for i := range values {
 			if values[i].ID == id {
+				values[i].DriverPayoutPaid, values[i].DriverPayoutRemaining = &paid, &left
 				values[i].PaidAmount = &paid
 				values[i].RemainingAmount = &left
 				values[i].Payments = payments

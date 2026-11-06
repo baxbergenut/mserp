@@ -431,7 +431,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 			for _, g := range groups {
 				if !g.ownerOnly {
 					for _, x := range g.card.Edits.ExpenseDeductions {
-						if x.ExpenseID == e.ExpenseID {
+						if x.ExpenseID == e.ExpenseID && x.Source == e.Source {
 							routed = true
 						}
 					}

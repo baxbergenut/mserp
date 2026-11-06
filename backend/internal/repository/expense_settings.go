@@ -16,7 +16,7 @@ var ErrExpenseSettingPermanent = errors.New("Reimburse is a permanent payment me
 
 // Existing entries may retain a historical method, but new selections use the catalog.
 func (r *ExpenseRepository) ValidateExpensePaymentMethod(ctx context.Context, method, saved *string) error {
-	if method == nil || *method == "" || (saved != nil && *method == *saved) {
+	if method == nil || *method == "" || *method == "Driver payroll" || (saved != nil && *method == *saved) {
 		return nil
 	}
 	var allowed bool
@@ -30,17 +30,18 @@ func (r *ExpenseRepository) ValidateExpensePaymentMethod(ctx context.Context, me
 }
 
 type ExpenseSetting struct {
-	ID         string  `json:"id"`
-	Kind       string  `json:"kind"`
-	CategoryID *string `json:"categoryId"`
-	Name       string  `json:"name"`
-	Active     bool    `json:"active"`
-	Version    int     `json:"version"`
-	DriverOnly bool    `json:"driverOnly"`
+	ID           string  `json:"id"`
+	Kind         string  `json:"kind"`
+	CategoryID   *string `json:"categoryId"`
+	Name         string  `json:"name"`
+	Active       bool    `json:"active"`
+	Version      int     `json:"version"`
+	DriverOnly   bool    `json:"driverOnly"`
+	Accessorials bool    `json:"accessorials,omitempty"`
 }
 
 func (r *ExpenseRepository) ListExpenseSettings(ctx context.Context) ([]ExpenseSetting, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id,kind,category_id,name,active,version,driver_only FROM expense_settings ORDER BY lower(name),id`)
+	rows, err := r.pool.Query(ctx, `SELECT id,kind,category_id,name,active,version,driver_only,coalesce((to_jsonb(expense_settings)->>'accessorials')::boolean,false) FROM expense_settings ORDER BY lower(name),id`)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +49,7 @@ func (r *ExpenseRepository) ListExpenseSettings(ctx context.Context) ([]ExpenseS
 	result := []ExpenseSetting{}
 	for rows.Next() {
 		var v ExpenseSetting
-		if err = rows.Scan(&v.ID, &v.Kind, &v.CategoryID, &v.Name, &v.Active, &v.Version, &v.DriverOnly); err != nil {
+		if err = rows.Scan(&v.ID, &v.Kind, &v.CategoryID, &v.Name, &v.Active, &v.Version, &v.DriverOnly, &v.Accessorials); err != nil {
 			return nil, err
 		}
 		result = append(result, v)
@@ -91,12 +92,12 @@ func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, i
 		}
 	}
 	if id == "" {
-		row = tx.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version,driver_only`, input.Kind, input.CategoryID, input.Name, input.Active)
+		row = tx.QueryRow(ctx, `INSERT INTO expense_settings(kind,category_id,name,active) VALUES($1,$2,$3,$4) RETURNING id,kind,category_id,name,active,version,driver_only,coalesce((to_jsonb(expense_settings)->>'accessorials')::boolean,false)`, input.Kind, input.CategoryID, input.Name, input.Active)
 	} else {
-		row = tx.QueryRow(ctx, `UPDATE expense_settings SET category_id=$3,name=$4,active=$5,version=version+1 WHERE id=$1 AND kind=$2 AND version=$6 RETURNING id,kind,category_id,name,active,version,driver_only`, id, input.Kind, input.CategoryID, input.Name, input.Active, input.Version)
+		row = tx.QueryRow(ctx, `UPDATE expense_settings SET category_id=$3,name=$4,active=$5,version=version+1 WHERE id=$1 AND kind=$2 AND version=$6 RETURNING id,kind,category_id,name,active,version,driver_only,coalesce((to_jsonb(expense_settings)->>'accessorials')::boolean,false)`, id, input.Kind, input.CategoryID, input.Name, input.Active, input.Version)
 	}
 	var result ExpenseSetting
-	err = row.Scan(&result.ID, &result.Kind, &result.CategoryID, &result.Name, &result.Active, &result.Version, &result.DriverOnly)
+	err = row.Scan(&result.ID, &result.Kind, &result.CategoryID, &result.Name, &result.Active, &result.Version, &result.DriverOnly, &result.Accessorials)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrExpenseSettingConflict
 	}

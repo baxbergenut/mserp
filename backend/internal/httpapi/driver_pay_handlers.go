@@ -90,11 +90,12 @@ func validateDriverPayEdits(e *repository.DriverPayEdits, first ...string) error
 	}
 	expenseIDs := map[string]bool{}
 	for _, item := range e.ExpenseDeductions {
-		if !isUUID(item.ExpenseID) || expenseIDs[item.ExpenseID] || item.Version < 1 ||
+		key := item.Source + ":" + item.ExpenseID
+		if !isUUID(item.ExpenseID) || expenseIDs[key] || (item.Source != "" && item.Source != "escrow" && item.Source != "reimburse" && item.Source != "accessorial") || item.Version < 1 ||
 			!expenseAmountPattern.MatchString(item.Amount) || strings.HasPrefix(item.Amount, "-") {
 			return errors.New("expense deductions need unique expense ids, a valid version and a nonnegative amount with at most two decimals")
 		}
-		expenseIDs[item.ExpenseID] = true
+		expenseIDs[key] = true
 	}
 	seen := map[string]bool{}
 	for i := range e.Adjustments {

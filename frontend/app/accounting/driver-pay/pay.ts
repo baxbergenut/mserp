@@ -82,7 +82,7 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
     amount: edits.scaleDeductions?.[row.source] ?? edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? (driver.settlement?.finalized ? row.amount : row.scaleDue ?? row.amount),
   }));
   const generated = [...(edits.generatedCharges ?? []), ...autoCharges, ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
-  const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + (row.source === "reimburse" ? -hundredths(row.amount) : hundredths(row.amount)), BigInt(0));
+  const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + ((row.source === "reimburse" || row.source === "accessorial") ? -hundredths(row.amount) : hundredths(row.amount)), BigInt(0));
   const salaryCarry = hundredths(driver.salaryCarry ?? "0");
   const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, salaryCarry, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses - salaryCarry };
   if (driver.summary) return { ...totals, fee: hundredths(driver.summary.fee), payable: hundredths(driver.summary.payable), missingFees: driver.summary.missingFees, review: driver.summary.review };
@@ -172,8 +172,8 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
       return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...committed, amount: row.amount };
     }),
     expenseDeductions: result[saved.driverId].expenseDeductions?.map(row => {
-      const committed = saved.expenseDeductions?.find(r => r.expenseId === row.expenseId);
-      const submitted = snapshot.expenseDeductions?.find(r => r.expenseId === row.expenseId);
+      const committed = saved.expenseDeductions?.find(r => r.expenseId === row.expenseId && r.source === row.source);
+      const submitted = snapshot.expenseDeductions?.find(r => r.expenseId === row.expenseId && r.source === row.source);
       if (!committed) return row;
       return JSON.stringify(row) === JSON.stringify(submitted) ? committed : { ...row, version: committed.version, available: committed.available, openingBalance: committed.openingBalance };
     }),
@@ -210,7 +210,7 @@ export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {
   return { ...payload,
     // Ordinary expenses persist only explicit draft choices. Credits and escrow
     // retain their existing save behavior.
-    ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => !row.source || row.saved ? row : { ...row, apply: true }) }),
+    ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => !row.source || row.source === "accessorial" || row.saved ? row : { ...row, apply: true }) }),
     adjustments: edits.adjustments.filter(item => item.name.trim() !== "" || item.amount.trim() !== "" || item.kind === "deduction"),
   };
 }

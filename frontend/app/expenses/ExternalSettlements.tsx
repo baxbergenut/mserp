@@ -11,6 +11,7 @@ export function ExternalSettlements({expense,onSaved}:{expense:Expense;onSaved:(
  const [entries,setEntries]=useState<ExternalExpenseSettlement[]>([]),[open,setOpen]=useState(false),[amount,setAmount]=useState(""),[date,setDate]=useState(""),[reference,setReference]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false),[reverse,setReverse]=useState<ExternalExpenseSettlement|null>(null);
  const [request,setRequest]=useState<{fingerprint:string;id:string}|null>(null);
  useEffect(()=>{const c=new AbortController();fetchExternalSettlements(expense.id,c.signal).then(setEntries).catch(e=>{if(!c.signal.aborted)setError(e.message)});return()=>c.abort()},[expense.id]);
+ if(expense.ownerRecovery || expense.paymentType === "Driver payroll") return null;
  if(expense.managedInSheets)return <p className="mt-4 rounded-lg border border-zinc-700 p-3 text-sm text-amber-200">Managed in Sheets · historical balances are excluded from Clustie payroll.</p>;
  async function save(){
   const values={amount:reverse?.amount??amount,settledOn:date,reference,reversesId:reverse?.id??"",version:expense.balanceVersion};const fingerprint=JSON.stringify(values),id=request?.fingerprint===fingerprint?request.id:crypto.randomUUID();setRequest({fingerprint,id});setBusy(true);setError("");
