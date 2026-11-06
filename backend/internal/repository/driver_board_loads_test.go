@@ -288,8 +288,8 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	e.CurrentLoad = ""
 	e.Destination = "stale manual destination"
 	save()
-	if e.Destination != "" || view().Current != nil || view().DestinationSource {
-		t.Fatal("clear retained location or source")
+	if e.Status != "READY" || e.Destination != "" || view().Current != nil || view().DestinationSource {
+		t.Fatal("cell clear did not reset status and location")
 	}
 	h, err := repo.History(ctx, []string{d.ID}, 0)
 	if err != nil {
@@ -310,8 +310,8 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	save()
 	v = view()
 	cleared, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, Revision: v.Revision, FromDate: v.FromDate, Action: "clear"}, "")
-	if err != nil || cleared.Entry.Destination != "" || cleared.Loads.Current != nil {
-		t.Fatal("drawer clear retained location", err)
+	if err != nil || cleared.Entry.Status != "READY" || cleared.Entry.Destination != "" || cleared.Loads.Current != nil {
+		t.Fatal("drawer clear did not reset status and location", err)
 	}
 	e = cleared.Entry
 	// Distinct imported loads sharing a plan number must not be guessed.

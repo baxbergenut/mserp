@@ -180,6 +180,9 @@ func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver strin
 			// Undo the load change without reapplying a fleet restriction.
 			// The status trigger projects any restriction currently in force.
 			entry.Status = ""
+			if before["status"] == "HOME" || before["status"] == "HOME (YARD)" {
+				entry.clearReturnedHomeTime(true, boardLoadToday(r.now()))
+			}
 		}
 	}
 	if err = setBoardActor(ctx, tx, actor, "undo"); err != nil {
@@ -188,7 +191,7 @@ func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver strin
 	if _, err = tx.Exec(ctx, `SELECT set_config('mserp.board_undo',$1,true)`, strconv.FormatInt(id, 10)); err != nil {
 		return entry, err
 	}
-	saved, err := saveDriverBoardEntries(ctx, tx, []DriverBoardEntry{entry})
+	saved, err := saveDriverBoardEntries(ctx, tx, []DriverBoardEntry{entry}, "", false)
 	if err != nil {
 		return entry, err
 	}

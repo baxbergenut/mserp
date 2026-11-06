@@ -290,7 +290,7 @@ func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardE
 	if err = setBoardActor(ctx, tx, user, "board"); err != nil {
 		return nil, err
 	}
-	entries, err = saveDriverBoardEntries(ctx, tx, entries, boardLoadToday(r.now()))
+	entries, err = saveDriverBoardEntries(ctx, tx, entries, boardLoadToday(r.now()), true)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardE
 	return entries, tx.Commit(ctx)
 }
 
-func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry, matchDate ...string) ([]DriverBoardEntry, error) {
+func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoardEntry, today string, matchCurrentLoad bool) ([]DriverBoardEntry, error) {
 	var err error
 	entries = append([]DriverBoardEntry(nil), entries...)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].DriverID < entries[j].DriverID })
@@ -319,8 +319,8 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			return nil, err
 		}
 		e.UndoID = 0
-		var active bool
-		err = tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).Scan(&active)
+		var active, wasHome bool
+		err = tx.QueryRow(ctx, `SELECT active,fleet_status_enabled() AND availability_status='home' FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).Scan(&active, &wasHome)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrDriverBoardConflict
 		}
@@ -348,8 +348,8 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			return nil, readErr
 		}
 		if strings.TrimSpace(e.CurrentLoad) != "" &&
-			(!strings.EqualFold(strings.TrimSpace(e.CurrentLoad), strings.TrimSpace(old.CurrentLoad)) || (len(matchDate) > 0 && e.ResolveCurrentLoad)) {
-			if len(matchDate) > 0 {
+			(!strings.EqualFold(strings.TrimSpace(e.CurrentLoad), strings.TrimSpace(old.CurrentLoad)) || (matchCurrentLoad && e.ResolveCurrentLoad)) {
+			if matchCurrentLoad {
 				explicitStatus := ""
 				if e.StatusEdited {
 					explicitStatus = e.Status
@@ -379,18 +379,21 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		// Normal text autosave resolves against the whole current week, independent
 		// of the date/status filters used by the Next loads queue. Explicit drawer
 		// actions and undo restore their own selection without this inference.
-		if len(matchDate) > 0 && (old.CurrentLoad != e.CurrentLoad || e.ResolveCurrentLoad) {
+		if matchCurrentLoad && (old.CurrentLoad != e.CurrentLoad || e.ResolveCurrentLoad) {
 			if !e.StatusEdited {
-				e.Status = ""
-				if strings.TrimSpace(e.CurrentLoad) != "" {
-					e.Status = "DISPATCHED"
+				e.Status = "DISPATCHED"
+				if strings.TrimSpace(e.CurrentLoad) == "" {
+					e.Status, err = boardClearedLoadStatus(ctx, tx, e.DriverID)
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 			if strings.TrimSpace(e.CurrentLoad) == "" || e.Destination == old.Destination {
 				e.Destination = ""
 			}
 			if strings.TrimSpace(e.CurrentLoad) != "" {
-				views, err := readBoardLoads(ctx, tx, []string{e.DriverID}, matchDate[0])
+				views, err := readBoardLoads(ctx, tx, []string{e.DriverID}, today)
 				if err != nil {
 					return nil, err
 				}
@@ -417,7 +420,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 				}
 			}
 		}
-		if len(matchDate) > 0 && !e.ResolveCurrentLoad && old.CurrentLoad == e.CurrentLoad && e.StatusEdited && loadStateValue.Current != nil {
+		if matchCurrentLoad && !e.ResolveCurrentLoad && old.CurrentLoad == e.CurrentLoad && e.StatusEdited && loadStateValue.Current != nil {
 			if e.Status == "DISPATCHED" {
 				useBoardStop(&loadStateValue, "pickup")
 				e.Destination = ""
@@ -468,6 +471,17 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if err = tx.QueryRow(ctx, `SELECT status,version FROM driver_board WHERE driver_id=$1`, e.DriverID).Scan(&e.Status, &e.Version); err != nil {
 			return nil, err
 		}
+		if today != "" && (e.HomeTime != "" || (e.LeavePlan != nil && e.LeavePlan.HomeStart != "")) {
+			var stillHome bool
+			if err = tx.QueryRow(ctx, `SELECT CASE WHEN fleet_status_enabled() THEN availability_status='home' ELSE $2 IN ('HOME','HOME (YARD)') END FROM drivers WHERE id=$1`, e.DriverID, e.Status).Scan(&stillHome); err != nil {
+				return nil, err
+			}
+			if !stillHome && e.clearReturnedHomeTime(wasHome || old.Status == "HOME" || old.Status == "HOME (YARD)", today) {
+				if err = tx.QueryRow(ctx, `UPDATE driver_board SET home_time=$2,leave_plan=$3,version=version+1,updated_at=now() WHERE driver_id=$1 RETURNING version`, e.DriverID, e.HomeTime, e.LeavePlan).Scan(&e.Version); err != nil {
+					return nil, err
+				}
+			}
+		}
 		e.EffectiveAt = nil
 		e.StatusReason = ""
 		if stateChanged {
@@ -475,8 +489,8 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 				return nil, err
 			}
 		}
-		if len(matchDate) > 0 && (old.ETA != e.ETA || old.CurrentLoad != e.CurrentLoad || stateChanged) {
-			views, readErr := readBoardLoads(ctx, tx, []string{e.DriverID}, matchDate[0])
+		if matchCurrentLoad && (old.ETA != e.ETA || old.CurrentLoad != e.CurrentLoad || stateChanged) {
+			views, readErr := readBoardLoads(ctx, tx, []string{e.DriverID}, today)
 			if readErr != nil {
 				return nil, readErr
 			}

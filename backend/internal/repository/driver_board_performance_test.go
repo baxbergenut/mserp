@@ -294,12 +294,25 @@ func TestStatusBoardLoadReturnToServiceDatabase(t *testing.T) {
 		}
 
 		entry := setStatus(DriverBoardEntry{DriverID: projectionDriver}, "SHOP")
+		today, err := time.Parse(time.DateOnly, boardLoadToday(board.now()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		entry.LeavePlan = &DriverLeavePlan{
+			HomeStart: today.Format(time.DateOnly), HomeEnd: today.AddDate(0, 0, 3).Format(time.DateOnly),
+			VacationReturn: today.AddDate(0, 1, 0).Format("2006-01"),
+		}
+		entry.HomeTime = "Legacy home time"
 		home := setStatus(entry, "HOME")
 		assertStatus(home, "HOME", "home", "shop")
 		entry = home
 		entry.CurrentLoad = "NEW-CURRENT"
 		entry = save(entry)
 		assertStatus(entry, "DISPATCHED", "active", "in_use")
+		if entry.HomeTime != "" || entry.LeavePlan.HomeStart != "" || entry.LeavePlan.HomeEnd != "" ||
+			entry.LeavePlan.VacationReturn != home.LeavePlan.VacationReturn {
+			t.Fatalf("return did not clear only home time: %+v", entry.LeavePlan)
+		}
 		if _, err := board.Save(ctx, []DriverBoardEntry{home}); !errors.Is(err, ErrDriverBoardConflict) {
 			t.Fatal("stale save after return to service", err)
 		}
@@ -308,6 +321,9 @@ func TestStatusBoardLoadReturnToServiceDatabase(t *testing.T) {
 			t.Fatalf("undo load assignment: %+v %v", undone, err)
 		}
 		assertStatus(undone, "", "active", "in_use")
+		if undone.HomeTime != "" || undone.LeavePlan.HomeStart != "" {
+			t.Fatal("load undo restored completed home time")
+		}
 
 		entry = undone
 		for _, status := range []string{"NEW DRIVER", "VACATION", "Family issue", "Health issue"} {
@@ -329,9 +345,14 @@ func TestStatusBoardLoadReturnToServiceDatabase(t *testing.T) {
 		if added.Entry.CurrentLoad != "" || len(added.Loads.Next) != 1 {
 			t.Fatal("queue addition changed current load or did not save the next load")
 		}
-		entry = setStatus(setStatus(added.Entry, "SHOP"), "NEW DRIVER")
+		entry = setStatus(added.Entry, "SHOP")
+		entry.LeavePlan = &DriverLeavePlan{HomeStart: today.Format(time.DateOnly)}
+		entry = setStatus(entry, "HOME")
 		selected := action(entry, "select", "", added.Loads.Next[0].PlanID)
 		assertStatus(selected.Entry, "DISPATCHED", "active", "in_use")
+		if selected.Entry.LeavePlan.HomeStart != "" {
+			t.Fatal("drawer assignment retained home time with an unknown return")
+		}
 		if selected.Entry.CurrentLoad != "QUEUED-RETURN" {
 			t.Fatal("drawer did not assign the selected load")
 		}
