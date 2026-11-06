@@ -114,9 +114,9 @@ dated payer, and an investor statement needs an active agreement for that same
 owner. A carried ticket does not change which statement gets the truck's Fuel,
 Toll or wages. Owner-only weeks continue routing those items to Driver Pay.
 
-In Driver Pay, enter zero to defer the full ticket on that statement. The next
-eligible open week still defaults to the full amount. Enter the full amount to
-collect it on the current week. Investor Pay tickets are read-only.
+In Driver or Investor Pay, enter zero to defer the full ticket on that statement.
+The next eligible open week still defaults to the full amount. Enter the full
+amount to collect it on the current week.
 
 Finalization records collected tickets in the frozen statement. Each collected
 ticket disappears from all other open weeks. Reopening releases the collection.
@@ -127,8 +127,9 @@ frozen statement remains intact. Link corrections protect the statement that
 collected the ticket, including a statement from a different week. No expense
 directory row is created.
 
-Migration 202 adds the statement-local choices to `driver_pay_weeks`. Once
-deferrals are saved, use a release that understands these choices for payroll writes.
+Migration 202 adds the statement-local driver choices to `driver_pay_weeks`.
+Investor choices use the existing statement edits JSON. Once deferrals are saved,
+use a release that understands these choices for payroll writes.
 
 Install the updated deploy helper before releasing cross-week CAT Scale.
 Once a ticket has been collected on a different week, the helper requires

@@ -11,9 +11,6 @@ import (
 )
 
 func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverPayEdits, actor string) (DriverPayEdits, error) {
-	if len(edits.ScaleDeductions) > 0 {
-		return edits, chargeInvalid("CAT Scale deductions can only be edited in Driver Pay")
-	}
 	edits.InputRevision = ""
 	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, edits.RequestID, edits.ExpectedStatementRevision, "truck:"+edits.DriverID)
 	if err != nil {
@@ -80,6 +77,10 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	}
 	if len(edits.GeneratedCharges) > 0 {
 		return edits, chargeInvalid("Manage recurring truck fees on Charges")
+	}
+	edits.ScaleDeductions, err = reviewScaleDeductions(*card, edits.ScaleDeductions)
+	if err != nil {
+		return edits, err
 	}
 	choiceRows, err := readPayrollExpenseChoices(ctx, tx, "investor", edits.WeekStart, []string{edits.DriverID})
 	if err != nil {

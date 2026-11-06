@@ -47,7 +47,7 @@ func reviewScaleDeductions(card DriverPayDriver, input map[string]string) (map[s
 
 // Frozen AutoCharges are the collection receipts. Keep deferred ticket
 // details separate so a zero can never be mistaken for a collection.
-func applyDriverScaleDeductions(card *DriverPayDriver) {
+func applyScaleDeductions(card *DriverPayDriver) {
 	if len(card.Edits.ScaleDeductions) == 0 && len(card.DeferredScaleCharges) == 0 {
 		return
 	}
@@ -91,7 +91,6 @@ func readDriverScaleDeductions(ctx context.Context, tx pgx.Tx, report *DriverPay
 		}
 		card := cards[id]
 		card.Edits.ScaleDeductions = choices
-		applyDriverScaleDeductions(card)
 	}
 	return rows.Err()
 }

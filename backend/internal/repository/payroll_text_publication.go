@@ -97,8 +97,8 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
 	d.Edits = edits
 	stripPayCommandMetadata(&d.Edits)
 	d.Edits.InputRevision = ""
+	applyScaleDeductions(&d)
 	if kind == "driver" {
-		applyDriverScaleDeductions(&d)
 		// A choice changes the reviewed expense set even though it posts no
 		// balance. Return its new token in the save receipt, so immediate
 		// finalization does not require a separate refresh.

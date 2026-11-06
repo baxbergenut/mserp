@@ -88,6 +88,12 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 			return err
 		}
 	}
+	for i := range report.Drivers {
+		card := &report.Drivers[i]
+		if card.Settlement == nil || !card.Settlement.Finalized {
+			applyScaleDeductions(card)
+		}
+	}
 	if err := applyCostStartDisplay(ctx, tx, report); err != nil {
 		return err
 	}

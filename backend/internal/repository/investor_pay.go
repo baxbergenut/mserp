@@ -530,16 +530,7 @@ func readInvestorEdits(ctx context.Context, tx pgx.Tx, d *DriverPayDriver) error
 		return err
 	}
 	if finalized {
-		if err = json.Unmarshal(frozen, d); err != nil {
-			return err
-		}
-		meta.Finalized = true
-		if d.Settlement != nil {
-			meta.Override = d.Settlement.Override
-			meta.Reason = d.Settlement.Reason
-		}
-		d.Settlement = &meta
-		return nil
+		return applyFrozenInvestorStatement(d, frozen, meta)
 	}
 	expenses := d.Edits.ExpenseDeductions
 	d.Edits = DriverPayEdits{}
@@ -550,6 +541,23 @@ func readInvestorEdits(ctx context.Context, tx pgx.Tx, d *DriverPayDriver) error
 	d.Edits.ExpenseDeductions = expenses
 	return nil
 }
+
+func applyFrozenInvestorStatement(d *DriverPayDriver, body []byte, meta PayrollSettlement) error {
+	// Frozen JSON can omit empty charge lists. Do not retain live tickets
+	// when a finalized statement deferred every charge.
+	d.AutoCharges, d.DeferredScaleCharges = nil, nil
+	if err := json.Unmarshal(body, d); err != nil {
+		return err
+	}
+	meta.Finalized = true
+	if d.Settlement != nil {
+		meta.Override = d.Settlement.Override
+		meta.Reason = d.Settlement.Reason
+	}
+	d.Settlement = &meta
+	return nil
+}
+
 func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, targetTruck ...string) (DriverPayWeek, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {

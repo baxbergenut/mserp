@@ -109,22 +109,17 @@ try {
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
     const scale = region.getByRole('textbox', { name: `Grid Test, ${scaleTicket.name}, deduction`, exact: true });
-    if (investor) {
-      await expect(region.getByText(scaleTicket.name, { exact: true })).toBeVisible();
-      await expect(scale).toHaveCount(0);
-    } else {
-      await expect(scale).toHaveValue('-15.25');
-      const saved = page.waitForResponse(response => response.request().method() === 'PUT' && response.ok());
-      await scale.fill('0');
-      await scale.press('Tab');
-      expect((await saved).request().postDataJSON().scaleDeductions[scaleTicket.source]).toBe('-0');
-      driver.edits.scaleDeductions[scaleTicket.source] = '0.00';
-      driver.autoCharges = [];
-      driver.deferredScaleCharges = [scaleTicket];
-      await page.reload();
-      await expect(scale).toHaveValue('0.00');
-      await expect(region.getByText('Deferred', { exact: true })).toBeVisible();
-    }
+    await expect(scale).toHaveValue('-15.25');
+    const scaleSave = page.waitForResponse(response => response.request().method() === 'PUT' && response.ok());
+    await scale.fill('0');
+    await scale.press('Tab');
+    expect((await scaleSave).request().postDataJSON().scaleDeductions[scaleTicket.source]).toBe('-0');
+    driver.edits.scaleDeductions[scaleTicket.source] = '0.00';
+    driver.autoCharges = driver.autoCharges.filter(row => row.source !== scaleTicket.source);
+    driver.deferredScaleCharges = [scaleTicket];
+    await page.reload();
+    await expect(scale).toHaveValue('0.00');
+    await expect(region.getByText('Deferred', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Broker reimbursement reminders')).toContainText('Broker reimbursement expected · Load L0 · $100.00');
     await page.screenshot({path:join(tmpdir(),investor ? 'mserp-broker-investor-reminder.png':'mserp-broker-driver-reminder.png'),fullPage:true,animations:'disabled'});
     expect(costReads).toEqual([]);
@@ -272,7 +267,7 @@ try {
     driver.settlement={finalized:true,version:1,finalizedAt:'2026-10-01T00:00:00Z',finalizedBy:'Test',reason:''};
     await page.reload();
     await expect(fuelRow.getByRole('textbox')).toBeDisabled();
-    if (!investor) await expect(scale).toBeDisabled();
+    await expect(scale).toBeDisabled();
     await fuelRow.getByRole('button',{name:'Grid Test, Fuel transactions',exact:true}).click();
     costsDialog=page.getByRole('dialog',{name:'Fuel transactions',exact:true});
     await expect(costsDialog.getByText('Carried from 09/21',{exact:true})).toBeVisible();

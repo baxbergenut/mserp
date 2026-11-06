@@ -155,15 +155,7 @@ func (v truckPayInputs) applyEdits(d *DriverPayDriver) error {
 		return nil
 	}
 	if w.meta.Finalized {
-		if e := json.Unmarshal(w.report, d); e != nil {
-			return e
-		}
-		if d.Settlement != nil {
-			w.meta.Override = d.Settlement.Override
-			w.meta.Reason = d.Settlement.Reason
-		}
-		d.Settlement = &w.meta
-		return nil
+		return applyFrozenInvestorStatement(d, w.report, w.meta)
 	}
 	expenses := d.Edits.ExpenseDeductions
 	// Decoding into the populated struct can reuse the live deduction slice and
