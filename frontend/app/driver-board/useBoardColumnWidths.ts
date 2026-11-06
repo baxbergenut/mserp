@@ -48,12 +48,13 @@ export function useBoardColumnWidths(table: RefObject<HTMLTableElement | null>, 
 }
 
 export function boardColumnWidths(measured: ColumnWidths, available: number, overrides: ColumnWidths) {
-  const flexible = [...growing].filter(column => overrides[column] === undefined);
-  const widths = { ...measured, ...overrides };
-  const minimumWidth = defaultColumnOrder.reduce((sum, column) => sum + (widths[column] ?? boardColumns[column][1]), 0);
-  const extra = flexible.length ? Math.max(0, available - minimumWidth) / flexible.length : 0;
+  const naturalWidth = (column: BoardColumn) => measured[column] ?? boardColumns[column][1];
+  const minimumWidth = defaultColumnOrder.reduce((sum, column) => sum + naturalWidth(column), 0);
+  // Share spare space using the automatic layout. Manual widths must never resize a neighbor.
+  const extra = Math.max(0, available - minimumWidth) / growing.size;
+  const columnWidth = (column: BoardColumn) => overrides[column] ?? naturalWidth(column) + (growing.has(column) ? extra : 0);
   return {
-    tableWidth: minimumWidth + extra * flexible.length,
-    columnWidth: (column: BoardColumn) => (widths[column] ?? boardColumns[column][1]) + (flexible.includes(column) ? extra : 0),
+    tableWidth: defaultColumnOrder.reduce((sum, column) => sum + columnWidth(column), 0),
+    columnWidth,
   };
 }

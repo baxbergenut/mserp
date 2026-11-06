@@ -70,7 +70,7 @@ export function StatusBoardScrollArea({ children, loading, headerPinned }: {
     };
   }, [headerPinned]);
   return <div ref={ref} data-status-board-scroll className="flex min-h-0 flex-col">
-    <div ref={tableRef} data-scroll-key="driver-board" className="relative min-h-0 flex-1 overflow-auto overscroll-contain rounded-xl border border-zinc-800" aria-busy={loading}>
+    <div ref={tableRef} data-scroll-key="driver-board" className="relative min-h-0 flex-1 overflow-auto overscroll-contain rounded-xl border border-zinc-800 after:block after:h-0 after:w-[var(--board-resize-scroll-width,0px)]" aria-busy={loading}>
       {children}
     </div>
   </div>;

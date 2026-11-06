@@ -38,10 +38,12 @@ export function useBoardColumnLayout(values: string) {
   const [layout, setLayout] = useState(() => readLayout(key));
   const table = useRef<HTMLTableElement>(null);
   const cancel = useRef<(() => void) | null>(null);
+  const releaseResizeSpace = useRef<(() => void) | null>(null);
   const { measured, available } = useBoardColumnWidths(table, values);
   const dimensions = useMemo(() => boardColumnWidths(measured, available, layout.widths), [measured, available, layout.widths]);
   // A new layout or new measured widths invalidate the captured header geometry.
   useLayoutEffect(() => () => cancel.current?.(), [layout, dimensions]);
+  useLayoutEffect(() => () => releaseResizeSpace.current?.(), []);
 
   function save(next: Layout) {
     try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* Keep the layout usable in this tab. */ }
@@ -87,13 +89,15 @@ export function useBoardColumnLayout(values: string) {
     const initialX = event.clientX;
     const initialScroll = area.scrollLeft;
     const scrollLimit = area.scrollWidth - area.clientWidth;
+    const resizeScrollWidth = resizing && initialScroll > 0 ? Math.ceil(initialScroll + area.clientWidth) : 0;
     const source = layout.order.indexOf(column);
     const width = header.cells[source].getBoundingClientRect().width;
-    const cols = Array.from(grid.querySelectorAll("col"));
+    const resizeCol = grid.querySelector<HTMLTableColElement>(`colgroup > col:nth-child(${source + 1})`);
     const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180;
     const transition = `translate ${duration}ms cubic-bezier(.2,.8,.2,1)`;
     let x = initialX, frame = 0, timer = 0, active = false, lastFrame = performance.now();
     let nextWidth = width;
+    let committedWidth = dimensions.tableWidth;
     let order = [...layout.order];
     let columns: { column: BoardColumn; left: number; width: number; cells: HTMLTableCellElement[] }[] = [];
     const edge = 36;
@@ -102,7 +106,11 @@ export function useBoardColumnLayout(values: string) {
       active = true;
       grid!.setPointerCapture(pointer);
       grid!.dataset.columnGesture = resizing ? "resize" : "move";
-      if (resizing) return;
+      if (resizing) {
+        releaseResizeSpace.current?.();
+        if (resizeScrollWidth) area!.style.setProperty("--board-resize-scroll-width", `${resizeScrollWidth}px`);
+        return;
+      }
       const viewport = area!.getBoundingClientRect();
       const rows = Array.from(grid!.tBodies[0].rows).filter(row => {
         if (!row.matches("[data-driver-id], [data-pending-intake-id]")) return false;
@@ -138,9 +146,8 @@ export function useBoardColumnLayout(values: string) {
     function paint(delta: number, settle = false) {
       if (resizing) {
         nextWidth = manualWidth(width + delta);
-        const preview = boardColumnWidths(measured, available, { ...layout.widths, [column]: nextWidth });
-        grid!.style.setProperty("--board-preview-width", `${preview.tableWidth}px`);
-        for (const [i, col] of cols.entries()) col.style.setProperty("--board-preview-column-width", `${preview.columnWidth(layout.order[i])}px`);
+        grid!.style.setProperty("--board-preview-width", `${tableWidthFor(nextWidth)}px`);
+        resizeCol?.style.setProperty("--board-preview-column-width", `${nextWidth}px`);
         return;
       }
       const moving = columns[source], others = columns.filter(item => item !== moving);
@@ -177,8 +184,33 @@ export function useBoardColumnLayout(values: string) {
           frame = requestAnimationFrame(tick);
         }
       }
-      paint(x - initialX + area.scrollLeft - initialScroll);
+      paint(x - initialX + (resizing ? 0 : area.scrollLeft - initialScroll));
     };
+
+    function tableWidthFor(width: number) {
+      return dimensions.tableWidth + width - dimensions.columnWidth(column);
+    }
+
+    function releaseScrollSpaceWhenSafe() {
+      // Keep the left edge anchored after drop until the user scrolls back into the table.
+      const property = "--board-resize-scroll-width";
+      if (committedWidth >= resizeScrollWidth) {
+        area!.style.removeProperty(property);
+        return;
+      }
+      const release = () => {
+        area!.style.removeProperty(property);
+        area!.removeEventListener("scroll", onScroll);
+        window.removeEventListener("resize", release);
+        releaseResizeSpace.current = null;
+      };
+      const onScroll = () => {
+        if (area!.scrollLeft <= Math.max(0, grid!.offsetWidth - area!.clientWidth)) release();
+      };
+      area!.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", release);
+      releaseResizeSpace.current = release;
+    }
 
     function stopListening() {
       cancelAnimationFrame(frame);
@@ -200,7 +232,8 @@ export function useBoardColumnLayout(values: string) {
       delete grid!.dataset.columnGesture;
       if (resizing) {
         grid!.style.removeProperty("--board-preview-width");
-        cols.forEach(col => col.style.removeProperty("--board-preview-column-width"));
+        resizeCol?.style.removeProperty("--board-preview-column-width");
+        if (resizeScrollWidth) releaseScrollSpaceWhenSafe();
       }
       for (const item of columns) {
         for (const cell of item.cells) {
@@ -226,10 +259,11 @@ export function useBoardColumnLayout(values: string) {
     function onUp(e: PointerEvent) {
       if (e.pointerId !== pointer) return;
       if (!active) { cleanup(); return; }
-      const delta = e.clientX - initialX + area!.scrollLeft - initialScroll;
+      const delta = e.clientX - initialX + (resizing ? 0 : area!.scrollLeft - initialScroll);
       stopListening();
       if (resizing) {
         paint(delta);
+        committedWidth = tableWidthFor(nextWidth);
         cleanup();
         resize(column, nextWidth);
         return;

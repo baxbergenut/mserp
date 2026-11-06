@@ -111,6 +111,52 @@ try {
   await page.reload();
   await expect.poll(columnOrder).toEqual(defaults);
 
+  const resizePage = await browser.newPage({ viewport: { width: 2400, height: 900 } });
+  await setup(resizePage);
+  const scrollArea = resizePage.locator('[data-scroll-key="driver-board"]');
+  const snapshot = () => scrollArea.evaluate(area => ({
+    scroll: area.scrollLeft,
+    headers: Object.fromEntries(Array.from(area.querySelectorAll('thead th'), th => {
+      const { x, width } = th.getBoundingClientRect();
+      return [th.dataset.boardColumn, { x, width }];
+    })),
+  }));
+  const dragEdge = async (column, dx) => {
+    const edge = await resizePage.locator(`thead [data-board-column="${column}"] span`).boundingBox();
+    await resizePage.mouse.move(edge.x + 3, edge.y + 12);
+    await resizePage.mouse.down();
+    await resizePage.mouse.move(edge.x + 3 + dx, edge.y + 12, { steps: 8 });
+  };
+  // Zooming out or widening the window gives automatic columns spare width.
+  await expect.poll(async () => (await snapshot()).headers.currentLoad.width).toBeGreaterThan(90);
+  let before = await snapshot();
+  await dragEdge('notes', 60);
+  const notesDelta = async () => (await snapshot()).headers.notes.width - before.headers.notes.width;
+  await expect.poll(notesDelta).toBe(60);
+  await resizePage.mouse.up();
+  await expect.poll(notesDelta).toBe(60);
+  const after = await snapshot();
+  expect(after.headers.notes.x).toBeCloseTo(before.headers.notes.x, 0);
+  for (const column of defaults.filter(column => column !== 'notes')) {
+    expect(after.headers[column].width).toBeCloseTo(before.headers[column].width, 0);
+  }
+
+  await resizePage.setViewportSize({ width: 1100, height: 900 });
+  await expect.poll(async () => (await snapshot()).headers.currentLoad.width).toBe(90);
+  await scrollArea.evaluate(area => { area.scrollLeft = area.scrollWidth; });
+  before = await snapshot();
+  await dragEdge('driverAddress', -60);
+  const addressDelta = async () => (await snapshot()).headers.driverAddress.width - before.headers.driverAddress.width;
+  await expect.poll(addressDelta).toBe(-60);
+  await resizePage.mouse.up();
+  await expect.poll(addressDelta).toBe(-60);
+  const anchored = await snapshot();
+  expect(anchored.scroll).toBe(before.scroll);
+  expect(anchored.headers.driverAddress.x).toBeCloseTo(before.headers.driverAddress.x, 0);
+  await scrollArea.evaluate(area => { area.scrollLeft = 0; });
+  await expect.poll(() => scrollArea.evaluate(area => area.style.getPropertyValue('--board-resize-scroll-width'))).toBe('');
+  await resizePage.close();
+
   // Typical addresses size the column; a single long address cannot stretch it.
   entries.slice(0, 10).forEach(entry => { entry.destination = 'Indianapolis, IN'; });
   await page.reload();
