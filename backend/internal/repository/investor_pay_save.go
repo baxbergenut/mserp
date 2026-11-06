@@ -11,6 +11,9 @@ import (
 )
 
 func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverPayEdits, actor string) (DriverPayEdits, error) {
+	if len(edits.ScaleDeductions) > 0 {
+		return edits, chargeInvalid("CAT Scale deductions can only be edited in Driver Pay")
+	}
 	edits.InputRevision = ""
 	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, edits.RequestID, edits.ExpectedStatementRevision, "truck:"+edits.DriverID)
 	if err != nil {

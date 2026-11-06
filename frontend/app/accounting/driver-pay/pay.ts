@@ -24,7 +24,21 @@ export function validSourceAmount(value: string, source: string) {
   return limit < BigInt(0) ? amount >= limit && amount <= BigInt(0) : amount >= BigInt(0) && amount <= limit;
 }
 
+export function isScaleTicket(row: { source: string }) {
+  return row.source.startsWith("weighmytruck:");
+}
+
+export function scaleTicketAmountValid(amount: string, full: string) {
+  if (!amount.trim() || !validDecimal(amount)) return false;
+  const cents = hundredths(amount);
+  return cents === BigInt(0) || cents === hundredths(full);
+}
+
 export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver): string | undefined {
+  for (const row of [...(driver?.autoCharges ?? []).filter(isScaleTicket), ...(driver?.deferredScaleCharges ?? [])]) {
+    const amount = edits.scaleDeductions?.[row.source];
+    if (amount !== undefined && !scaleTicketAmountValid(amount, row.amount)) return `${row.name}: enter zero or the full ticket amount.`;
+  }
   for (const row of edits.sourceCharges ?? []) {
     if (row.source.startsWith("investor_cost:") && driver?.investorId) continue;
     if (!validSourceAmount(row.amount, row.due)) return `${row.name}: enter an amount from zero to ${decimalDisplay(hundredths(row.due), true)}, including carry. Its charge or credit direction is fixed.`;
@@ -61,7 +75,11 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   }), { original: BigInt(0), gross: BigInt(0), totalMiles: BigInt(0), loadedMiles: BigInt(0), deadheadMiles: BigInt(0), fee: BigInt(0), missingFees: 0, review: 0 });
   const adjustments = adjustmentTotals(edits.adjustments);
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
-  const generated = [...(edits.generatedCharges ?? []), ...(driver.autoCharges ?? []).map(row => ({ ...row, amount: edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? row.amount })), ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
+  const autoCharges = [...(driver.autoCharges ?? []), ...(driver.deferredScaleCharges ?? [])].map(row => ({
+    ...row,
+    amount: edits.scaleDeductions?.[row.source] ?? edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? row.amount,
+  }));
+  const generated = [...(edits.generatedCharges ?? []), ...autoCharges, ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + (row.source === "reimburse" ? -hundredths(row.amount) : hundredths(row.amount)), BigInt(0));
   const salaryCarry = hundredths(driver.salaryCarry ?? "0");
   const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, salaryCarry, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses - salaryCarry };
@@ -167,6 +185,10 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
   if (!current[saved.driverId]?.generatedCharges && result[saved.driverId]) delete result[saved.driverId].generatedCharges;
   if (!current[saved.driverId]?.expenseDeductions && result[saved.driverId]) delete result[saved.driverId].expenseDeductions;
   if (!current[saved.driverId]?.sourceCharges && result[saved.driverId]) delete result[saved.driverId].sourceCharges;
+  if (result[saved.driverId] && JSON.stringify(result[saved.driverId].scaleDeductions) === JSON.stringify(snapshot.scaleDeductions)) {
+    if (saved.scaleDeductions) result[saved.driverId].scaleDeductions = saved.scaleDeductions;
+    else delete result[saved.driverId].scaleDeductions;
+  }
   return result;
 }
 

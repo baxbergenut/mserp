@@ -73,6 +73,12 @@ conversion used that faulty check and created duplicate slots.
 
 ## Pay-page actions
 
+Driver Pay accepts zero or the full amount for imported CAT Scale tickets.
+Migration 202 stores zero choices per driver statement. Deferred tickets stay
+visible on the frozen statement, outside its collection receipts, and remain
+available on other eligible open weeks. The dated payer stays authoritative.
+See `docs/integrations/WEIGHMYTRUCK.md`.
+
 Driver, Investor and Dispatcher Pay reopen without a note. Finalize/reopen and
 routine pay-page edits do not append action-history snapshots; driver profiles
 show weekly statements without an action log. The settlement-history endpoint

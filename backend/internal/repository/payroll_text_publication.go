@@ -37,6 +37,7 @@ func payrollStatementLocalSave(before, after DriverPayEdits) bool {
 	}
 	normalize := func(e DriverPayEdits) []byte {
 		e.Adjustments, e.ExpenseDeductions, e.Costs = nil, nil, nil
+		e.ScaleDeductions = nil
 		return payrollFinancialEdits(e)
 	}
 	return bytes.Equal(normalize(before), normalize(after))
@@ -97,6 +98,7 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
 	stripPayCommandMetadata(&d.Edits)
 	d.Edits.InputRevision = ""
 	if kind == "driver" {
+		applyDriverScaleDeductions(&d)
 		// A choice changes the reviewed expense set even though it posts no
 		// balance. Return its new token in the save receipt, so immediate
 		// finalization does not require a separate refresh.

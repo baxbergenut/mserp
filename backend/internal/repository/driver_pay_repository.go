@@ -71,6 +71,7 @@ type DriverPayEdits struct {
 	AffectedStatements        []PayrollStatementIdentity `json:"affectedStatements,omitempty"`
 	InputRevision             string                     `json:"inputRevision,omitempty"`
 	SourceCharges             []PaySourceCharge          `json:"sourceCharges,omitempty"`
+	ScaleDeductions           map[string]string          `json:"scaleDeductions,omitempty"`
 	LayoverExcludedDates      []string                   `json:"layoverExcludedDates,omitempty"`
 	Costs                     *DriverPayCosts            `json:"costs,omitempty"`
 	ExpenseDeductions         []ExpenseDeduction         `json:"expenseDeductions,omitempty"`
@@ -146,6 +147,7 @@ type DriverPayDriver struct {
 	ProfileDriverID        string               `json:"profileDriverId,omitempty"`
 	TruckID                string               `json:"truckId,omitempty"`
 	AutoCharges            []PayAutoCharge      `json:"autoCharges,omitempty"`
+	DeferredScaleCharges   []PayAutoCharge      `json:"deferredScaleCharges,omitempty"`
 	Issues                 []string             `json:"issues,omitempty"`
 	Settlement             *PayrollSettlement   `json:"settlement,omitempty"`
 	ID                     string               `json:"id"`
@@ -579,6 +581,14 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	// Retired exclusions are read-only compatibility data, including for old clients.
 	edits.LayoverExcludedDates = costDriver.Edits.LayoverExcludedDates
+	edits.ScaleDeductions, err = reviewScaleDeductions(costDriver, edits.ScaleDeductions)
+	if err != nil {
+		return edits, err
+	}
+	scaleBody, err := json.Marshal(edits.ScaleDeductions)
+	if err != nil {
+		return edits, err
+	}
 	choiceRows, err := readPayrollExpenseChoices(ctx, tx, "driver", edits.WeekStart, []string{edits.DriverID})
 	if err != nil {
 		return edits, err
@@ -653,11 +663,11 @@ func (r *DriverPayRepository) Save(ctx context.Context, edits DriverPayEdits, ac
 	}
 	var version int
 	if edits.Version == 0 {
-		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override,expense_choices)
- VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric,$8) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride, choiceBody).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO driver_pay_weeks(driver_id,week_start,notes,comments,adjustments,fuel_override,toll_override,expense_choices,scale_deductions)
+ VALUES($1,$2::date,$3,$4,$5,$6::numeric,$7::numeric,$8,$9) ON CONFLICT DO NOTHING RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.FuelOverride, edits.TollOverride, choiceBody, scaleBody).Scan(&version)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,expense_choices=$9,version=version+1,updated_at=now()
- WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride, choiceBody).Scan(&version)
+		err = tx.QueryRow(ctx, `UPDATE driver_pay_weeks SET notes=$3,comments=$4,adjustments=$5,fuel_override=$7::numeric,toll_override=$8::numeric,expense_choices=$9,scale_deductions=$10,version=version+1,updated_at=now()
+ WHERE driver_id=$1 AND week_start=$2::date AND version=$6 RETURNING version`, edits.DriverID, edits.WeekStart, edits.Notes, comments, adjustments, edits.Version, edits.FuelOverride, edits.TollOverride, choiceBody, scaleBody).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return edits, ErrDriverPayConflict

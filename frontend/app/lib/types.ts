@@ -1311,6 +1311,7 @@ export interface DriverPayEdits {
 	affectedStatements?: { kind: "driver" | "investor"; id: string; weekStart: string }[];
   inputRevision?: string;
   sourceCharges?: PaySourceCharge[];
+  scaleDeductions?: Record<string, string>;
   /** Read-only exclusions retained for legacy finalized statements. */
   layoverExcludedDates?: string[];
   costs?: { revision: string; fuelCarry: string; tollCarry: string; fuelDue: string; tollDue: string };
@@ -1423,6 +1424,7 @@ export interface DriverPayDriver {
   profileDriverId?: string;
   truckId?: string;
   autoCharges?: { name: string; amount: string; source: string; expenseDate?: string }[];
+  deferredScaleCharges?: { name: string; amount: string; source: string }[];
   issues?: string[];
  settlement?: PayrollSettlement;
   id: string;

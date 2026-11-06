@@ -7,6 +7,9 @@ export function restorePayEdit(current: DriverPayEdits, before: DriverPayEdits, 
   for (const key of ["notes", "fuelOverride", "tollOverride", "comments", "adjustments"] as const) {
     if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) Object.assign(restored, { [key]: before[key] });
   }
+  if (JSON.stringify(before.scaleDeductions) !== JSON.stringify(after.scaleDeductions)) {
+    restored.scaleDeductions = before.scaleDeductions ?? {};
+  }
   restored.generatedCharges = current.generatedCharges?.map(row => {
     const previous = before.generatedCharges?.find(item => item.scheduleId === row.scheduleId);
     const next = after.generatedCharges?.find(item => item.scheduleId === row.scheduleId);

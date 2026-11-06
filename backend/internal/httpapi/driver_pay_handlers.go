@@ -82,6 +82,12 @@ func validateDriverPayEdits(e *repository.DriverPayEdits, first ...string) error
 	if len(e.ExpenseDeductions) > 500 {
 		return errors.New("too many expense deductions")
 	}
+	for source, amount := range e.ScaleDeductions {
+		id, ok := strings.CutPrefix(source, "weighmytruck:")
+		if !ok || !isUUID(id) || !grossBoardDecimal.MatchString(amount) {
+			return errors.New("invalid CAT Scale ticket amount or identity")
+		}
+	}
 	expenseIDs := map[string]bool{}
 	for _, item := range e.ExpenseDeductions {
 		if !isUUID(item.ExpenseID) || expenseIDs[item.ExpenseID] || item.Version < 1 ||

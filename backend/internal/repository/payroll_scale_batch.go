@@ -68,7 +68,7 @@ func readPayrollScaleWeeks(ctx context.Context, tx pgx.Tx, weeks []string) (map[
 		if err != nil {
 			return nil, err
 		}
-		charge := PayAutoCharge{Name: "CAT Scale · " + date + " · " + ticket, Amount: chargeMoney(-n), Source: "weighmytruck:" + id, scaleCollected: collected, scaleTicketWeek: ticketWeek}
+		charge := PayAutoCharge{Name: "CAT Scale · " + date + " · " + ticket, Amount: chargeMoney(-n), Source: payrollScaleSourcePrefix + id, scaleCollected: collected, scaleTicketWeek: ticketWeek}
 		value := values[week]
 		if payer == "driver" {
 			value[0][driver] = append(value[0][driver], charge)
@@ -98,7 +98,7 @@ const payrollScaleEdgesSQL = `SELECT 'driver:'||t.driver_id,'truck:'||t.truck_id
 func validatePayrollScaleCollection(ctx context.Context, tx pgx.Tx, charges []PayAutoCharge) error {
 	var ids, amounts []string
 	for _, charge := range charges {
-		if id, ok := strings.CutPrefix(charge.Source, "weighmytruck:"); ok {
+		if id, ok := strings.CutPrefix(charge.Source, payrollScaleSourcePrefix); ok {
 			ids = append(ids, id)
 			amounts = append(amounts, charge.Amount)
 		}
