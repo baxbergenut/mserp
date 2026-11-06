@@ -878,6 +878,10 @@ positive Reimburse-method expense credits already included in net payable.
   GPS position was within five straight-line miles of the selected stop,
   including stops without a provider schedule.
   Fresh automatic markers are red; stale last-known markers are amber.
+  A typed Destination uses a budgeted Google Routes address waypoint. It keeps
+  the selected stop's PU/DEL schedule and suspends that stop's arrival marker.
+  Clearing the address restores source-stop routing. Paid custom routing requires
+  BOARD_ROUTES_PAID_PROVIDER=google.
   ETA is automatic while its entry is blank; a typed
   time or mileage overrides it until cleared. The ETA popup has a blank optional
   manual PU/DEL time for the selected load stop, overriding only the displayed

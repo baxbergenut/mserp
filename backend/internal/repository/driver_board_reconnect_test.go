@@ -123,7 +123,7 @@ func testBoardLoadReconnection(t *testing.T, ctx context.Context, pool *pgxpool.
 					t.Fatalf("load identity or stop lost on reconnection: %+v", v)
 				}
 				if scenario == "manual destination" {
-					if v.DestinationSource || v.Automation.Appointment != nil {
+					if v.DestinationSource || !v.Automation.CustomDestination || v.Automation.Appointment == nil || v.Automation.Appointment.Label != schedule {
 						t.Fatal("manual destination overwritten", v)
 					}
 				} else {

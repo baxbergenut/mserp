@@ -103,8 +103,25 @@ type Estimate struct {
 }
 
 var ErrRouteUnavailable = errors.New("route unavailable")
+var ErrAddressUnmatched = errors.New("Enter a complete destination address for automatic ETA")
 
 func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Estimate, error) {
+	return c.route(ctx, lat, lng, toLat, toLng, "")
+}
+
+func (c *Client) RouteAddress(ctx context.Context, lat, lng float64, address string) (Estimate, error) {
+	return c.route(ctx, lat, lng, 0, 0, address)
+}
+
+func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, address string) (Estimate, error) {
+	options := c.Options
+	if address != "" {
+		// Google resolves address waypoints in the same metered route request.
+		if options.APIKey == "" {
+			return Estimate{}, errors.New("Custom destination routing requires Google Routes")
+		}
+		options.TomTomAPIKey = ""
+	}
 	if c.Budget == nil {
 		return Estimate{}, errors.New("routing usage accounting unavailable")
 	}
@@ -134,7 +151,7 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Est
 	case <-timer.C:
 	}
 	// Commit the reservation before sending; failed/unknown outcomes are not refunded.
-	provider, err := c.Budget.Reserve(ctx, c.Options)
+	provider, err := c.Budget.Reserve(ctx, options)
 	if err != nil {
 		return Estimate{}, err
 	}
@@ -143,14 +160,20 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Est
 		point := func(a, b float64) any {
 			return map[string]any{"location": map[string]any{"latLng": map[string]float64{"latitude": a, "longitude": b}}}
 		}
-		body, _ := json.Marshal(map[string]any{"origin": point(lat, lng), "destination": point(toLat, toLng), "travelMode": TravelMode, "routingPreference": "TRAFFIC_UNAWARE"})
+		destination := point(toLat, toLng)
+		fields := "routes.duration,routes.distanceMeters"
+		if address != "" {
+			destination = map[string]string{"address": address}
+			fields += ",geocodingResults.destination"
+		}
+		body, _ := json.Marshal(map[string]any{"origin": point(lat, lng), "destination": destination, "travelMode": TravelMode, "routingPreference": "TRAFFIC_UNAWARE"})
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(body))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Goog-Api-Key", c.Options.APIKey)
-			req.Header.Set("X-Goog-FieldMask", "routes.duration,routes.distanceMeters")
+			req.Header.Set("X-Goog-FieldMask", fields)
 		}
-	} else if provider == "tomtom" {
+	} else if provider == "tomtom" && address == "" {
 		q := url.Values{"key": {c.Options.TomTomAPIKey}, "traffic": {"true"}, "departAt": {"now"}, "travelMode": {"car"}, "routeType": {"fastest"}, "routeRepresentation": {"summaryOnly"}, "maxAlternatives": {"0"}}
 		endpoint := fmt.Sprintf("%s/%.7f,%.7f:%.7f,%.7f/json?%s", c.TomTomURL, lat, lng, toLat, toLng, q.Encode())
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -201,6 +224,15 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Est
 		return Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: "TomTom traffic-aware " + EstimateAssumptions}, nil
 	}
 	var response struct {
+		GeocodingResults struct {
+			Destination struct {
+				PlaceID      string `json:"placeId"`
+				PartialMatch bool   `json:"partialMatch"`
+				Status       struct {
+					Code int `json:"code"`
+				} `json:"geocoderStatus"`
+			} `json:"destination"`
+		} `json:"geocodingResults"`
 		Routes []struct {
 			Duration string `json:"duration"`
 			Meters   *int   `json:"distanceMeters"`
@@ -208,6 +240,12 @@ func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Est
 	}
 	if err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&response); err != nil {
 		return Estimate{}, ErrRouteUnavailable
+	}
+	if address != "" {
+		match := response.GeocodingResults.Destination
+		if match.PartialMatch || match.Status.Code != 0 || match.PlaceID == "" {
+			return Estimate{}, ErrAddressUnmatched
+		}
 	}
 	if len(response.Routes) == 0 {
 		return Estimate{}, ErrRouteUnavailable

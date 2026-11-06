@@ -587,9 +587,34 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	var routeCalls atomic.Int32
+	const customAddress = "123 Main Street, Newark, NJ 07102"
+	const invalidAddress = "Incomplete street"
+	var customCalls, routeCalls atomic.Int32
 	routeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		routeCalls.Add(1)
+		var request struct {
+			Destination struct {
+				Address string `json:"address"`
+			} `json:"destination"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		if address := request.Destination.Address; address != "" {
+			customCalls.Add(1)
+			if !strings.Contains(req.Header.Get("X-Goog-FieldMask"), "geocodingResults.destination") {
+				t.Error("missing address verification fields")
+			}
+			switch address {
+			case customAddress:
+				_, _ = w.Write([]byte(`{"geocodingResults":{"destination":{"placeId":"fixture"}},"routes":[{"duration":"7200s","distanceMeters":321868}]}`))
+			case invalidAddress:
+				_, _ = w.Write([]byte(`{"geocodingResults":{"destination":{"placeId":"fixture","partialMatch":true}},"routes":[{"duration":"3600s","distanceMeters":160934}]}`))
+			default:
+				t.Errorf("unexpected address routed: %q", address)
+			}
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"routes":[{"duration":"3600s","distanceMeters":160934,"travelAdvisory":{"routeRestrictionsPartiallyIgnored":false}}]}`))
 	}))
@@ -738,6 +763,87 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal("skipped poll changed the successful route baseline or timer", cached, err)
 	}
 	repo.now = originalClock
+
+	entry = saved[0]
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Automation.Appointment == nil {
+		t.Fatal("source appointment unavailable", err, view)
+	}
+	stopKey, appointment := view.StopKey, view.Automation.Appointment.Label
+	setAddress := func(address string) BoardLoads {
+		t.Helper()
+		entry.Destination = address
+		entries, err := repo.Save(ctx, []DriverBoardEntry{entry})
+		if err != nil {
+			t.Fatal(err)
+		}
+		entry = entries[0]
+		view, err := repo.Loads(ctx, d.ID, "")
+		if err != nil || view.StopKey != stopKey || view.Automation.Appointment == nil || view.Automation.Appointment.Label != appointment {
+			t.Fatal("destination edit changed the appointment or selected stop", err, view)
+		}
+		return view
+	}
+	runCustomRoute := func() BoardLoads {
+		t.Helper()
+		if _, err := pool.Exec(ctx, `UPDATE driver_board_automation SET route_not_before=now()-interval '1 minute' WHERE driver_id=$1`, d.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.ReconcileAutomation(ctx, routes, eld, "fixture"); err != nil {
+			t.Fatal(err)
+		}
+		view, err := repo.Loads(ctx, d.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return view
+	}
+
+	trackingAt = time.Now().UTC()
+	if _, err := pool.Exec(ctx, `UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, trackingAt); err != nil {
+		t.Fatal(err)
+	}
+	// Address waypoints use the Google allowance even while TomTom is preferred.
+	coordinateOptions := routes.Options
+	routes.Options.TomTomAPIKey = "fixture"
+	routes.Options.TomTomMonthlyFree = 20000
+	routes.Options.PaidProvider = "tomtom"
+	routes.TomTomURL = routeServer.URL
+	view = setAddress(customAddress)
+	if !view.Automation.CustomDestination || view.Automation.TravelValue != "" || view.Automation.Arrived {
+		t.Fatal("previous destination evidence carried over", view.Automation)
+	}
+	view = runCustomRoute()
+	if customCalls.Load() != 1 || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || view.Automation.TravelArrivalAt != trackingAt.Add(2*time.Hour).Round(15*time.Minute).Format(time.RFC3339) {
+		t.Fatal("custom address did not drive the ETA", view.Automation)
+	}
+	updated, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: entry.Version, Revision: view.Revision, Action: "stop_time", ManualStopTime: "16:00 SAT"}, "")
+	if err != nil || updated.Loads.Automation.Appointment.Label != "DEL 16:00 SAT" || updated.Loads.Automation.Context != view.Automation.Context {
+		t.Fatal("stop time could not be edited independently", err, updated)
+	}
+	entry, appointment = updated.Entry, "DEL 16:00 SAT"
+	setAddress(invalidAddress)
+	view = runCustomRoute()
+	if view.Automation.TravelValue != "" || !strings.Contains(view.Automation.Reason, "complete destination address") {
+		t.Fatal("partial address produced an estimate", view.Automation)
+	}
+	workerNow = time.Now().Add(boardRouteRetryInterval + time.Minute)
+	repo.now = func() time.Time { return workerNow }
+	runCustomRoute()
+	repo.now = originalClock
+	if customCalls.Load() != 2 {
+		t.Fatal("rejected address was sent again", customCalls.Load())
+	}
+	routes.Options = coordinateOptions
+	view = setAddress("")
+	if !view.DestinationSource || view.Automation.CustomDestination || view.SourceDestination != "South River, NJ" {
+		t.Fatal("clearing the custom address did not restore the selected stop", view)
+	}
+	view = runCustomRoute()
+	if !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || customCalls.Load() != 2 {
+		t.Fatal("source stop routing did not resume", view.Automation)
+	}
+
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
 	board, err := repo.Get(ctx, now)
 	if err != nil {

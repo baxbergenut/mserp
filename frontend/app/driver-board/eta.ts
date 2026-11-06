@@ -26,6 +26,9 @@ function manualArrival(value: string, clock: string, now: Date) {
 }
 
 export function facilityETATitle(value: string, automation?: BoardAutomation, stop?: BoardStop, now = new Date()) {
+  if (automation?.customDestination) {
+    return (!value || automation.manualETAValid === false) && !automation.travelValue ? automation.reason || "Waiting for custom destination ETA" : "";
+  }
   if (automation?.arrived || stop?.latitude == null || stop.longitude == null) return "";
   const manual = value && parseETA(value);
   let arrival: Date;

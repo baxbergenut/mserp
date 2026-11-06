@@ -165,6 +165,30 @@ try {
   await expect.poll(() => entry.eta).toBe('');
   await expect(cell).toHaveText('DEL 24/7 FRI ETA 13:00');
   expect(entry.notes).toBe('Human notes stay');
+
+  const destination = page.getByRole('textbox', { name: 'Appointment Driver · Destination', exact: true });
+  await destination.fill('123 Main Street, Newark, NJ 07102');
+  await expect.poll(() => entry.destination).toBe('123 Main Street, Newark, NJ 07102');
+  loads.destinationSource = false;
+  Object.assign(loads.automation, { customDestination: true, travelValue: 'ETA 15:00', travelArrivalAt: '2026-10-20T19:00:00Z' });
+  await page.reload();
+  await expect(destination).toHaveValue(entry.destination);
+  await expect(cell).toHaveText('DEL 24/7 FRI ETA 15:00');
+  await expect(cell).toHaveAttribute('title', '');
+  await cell.click();
+  await expect(page.getByLabel('Manual delivery time', { exact: true })).toBeEmpty();
+  await page.keyboard.press('Escape');
+  loads.automation.travelValue = '';
+  loads.automation.reason = 'Enter a complete destination address for automatic ETA';
+  await page.reload();
+  await expect(cell).toHaveText('DEL 24/7 FRI');
+  await cell.click();
+  await expect(page.getByRole('dialog').getByText(loads.automation.reason)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await destination.fill('');
+  await expect.poll(() => entry.destination).toBe('');
+  loads.destinationSource = true;
+  delete loads.automation.customDestination;
   stop.type = 'pickup'; loads.automation.stopType = 'pickup'; loads.automation.appointment = null;
   loads.automation.arrived = true; loads.automation.arrivalOverride = 'auto';
   loads.automation.stale = true; loads.automation.travelMode = 'auto'; loads.automation.travelValue = '1mi';
@@ -190,5 +214,5 @@ try {
   const [copyBox, expandBox] = await Promise.all([copy.boundingBox(), expand.boundingBox()]);
   expect(copyBox.x).toBeGreaterThanOrEqual(expandBox.x + expandBox.width);
   expect(errors).toEqual([]);
-  console.log('Appointment board passed: next-pickup hover/editor, explicit plan/stop targeting, save/clear/reload/conflict recovery, queue access, permissions, rounded ETA, facility-local hover, live/stale colors, manual current-stop overrides and load-number copy.');
+  console.log('Appointment board passed: next-pickup hover/editor, explicit plan/stop targeting, save/clear/reload/conflict recovery, queue access, permissions, rounded ETA, facility-local hover, live/stale colors, manual current-stop overrides, custom destination ETA and load-number copy.');
 } finally { await browser.close(); await new Promise(done => server.close(done)); }

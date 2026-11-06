@@ -27,7 +27,7 @@ continue to discard results from an obsolete selection.
 Current load resolves a unique exact imported DataTruck number, including loads
 without a Gross Board plan. Ambiguous plan identities remain blocked; no synthetic
 plans, assignments, payroll changes, or provider writes are made. The selected
-stop drives Destination, appointment and arrival together. DISPATCHED defaults to
+stop supplies the default destination and the pickup or delivery appointment. DISPATCHED defaults to
 pickup; ENROUTE/RESERVED default to delivery. The Loads panel selects intermediate
 stops. Entering a uniquely matched load is the dispatcher's operational assignment,
 even when DataTruck lists another driver or truck: status defaults to DISPATCHED and pickup
@@ -215,11 +215,20 @@ checked against shared cached Five ELD coordinates before any tracking request,
 then checked again against the actual tracking point before calling the route provider.
 Unchanged or sub-mile positions reuse the cached distance, even after a long rest.
 
-A changed load, selected stop, destination coordinates, assigned truck/crew/VIN
-or trailer bypasses the timer and movement threshold on the next minute pass.
-Changed contexts take queue priority over routine refreshes. The updated
-destination must still resolve to valid source coordinates; arbitrary text is
-not geocoded. Fresh movement of at least one mile can immediately replace a
+A changed load, selected stop, destination address or coordinates, assigned
+truck/crew/VIN or trailer bypasses the timer and movement threshold on the next
+minute pass. Changed contexts take queue priority over routine refreshes.
+Typing a custom destination routes to that address while keeping the selected
+stop's DataTruck appointment and manual pickup/delivery time. The source-stop
+arrival marker is suspended during the override. Clearing the address restores
+the selected stop as the routing destination.
+
+Custom addresses use a Google Routes address waypoint under the existing Google
+allowance. Once that allowance is exhausted, paid custom routes require
+`BOARD_ROUTES_PAID_PROVIDER=google`. Partial or unmatched addresses produce
+an address correction message and wait for a changed routing context before
+retrying. Custom address ETA is shown in New York time. Fresh movement of at
+least one mile can immediately replace a
 bootstrapped stale-position distance. Failed attempts retain a five-minute
 retry fence. Migration from old truck-route caches establishes a new DRIVE
 baseline once; no database migration is needed.

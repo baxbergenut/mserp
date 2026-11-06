@@ -11,7 +11,7 @@ export function appointmentCellText(value: string, automation?: BoardAutomation)
   const prefix = schedule && automation?.arrived ? "@" : "";
   const manual = parseETA(value);
   const travel = automation?.arrived ? "" : value && manual && automation?.manualETAValid !== false ?
-    manual.miles ? `${manual.miles}mi` : `ETA ${roundETAClock(manual.time)}` : automation?.travelMode === "auto" ? automation.travelValue.replace(/^ETA (\d{2}:\d{2})$/, (_, clock) => `ETA ${roundETAClock(clock)}`) : value;
+    manual.miles ? `${manual.miles}mi` : `ETA ${roundETAClock(manual.time)}` : automation?.travelMode === "auto" ? automation.travelValue.replace(/^ETA (\d{2}:\d{2})$/, (_, clock) => `ETA ${roundETAClock(clock)}`) : automation?.manualETAValid === false ? "" : value;
   return { schedule: prefix + schedule, travel, full: [prefix + schedule, travel].filter(Boolean).join(" ") };
 }
 

@@ -25,6 +25,7 @@ type BoardTravel struct {
 	Motion            string              `json:"motion"`
 	Error             string              `json:"error"`
 	Assumptions       string              `json:"assumptions,omitempty"`
+	AddressRejected   bool                `json:"addressRejected,omitempty"`
 	LastKnownPosition bool                `json:"lastKnownPosition,omitempty"`
 	Position          *boardRoutePosition `json:"position,omitempty"`
 	Mode              string              `json:"mode,omitempty"`
@@ -82,7 +83,7 @@ func (t BoardTravel) display(key string, now, gpsAt time.Time) (value, reason st
 		return "", "Automatic travel estimates are not enabled"
 	}
 	if t.Context != key || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || t.CalculatedAt.IsZero() || t.CalculatedAt.After(now) {
-		if t.Error != "" {
+		if t.Context == key && t.Error != "" {
 			return "", t.Error
 		}
 		return "", "Automatic estimate unavailable or stale"
@@ -205,7 +206,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			}
 		}
 		evidence := a.Evidence
-		if a.Context == "" || a.RequiresConfirmation || !a.TelemetrySafe {
+		if a.Context == "" || a.CustomDestination || a.RequiresConfirmation || !a.TelemetrySafe {
 			evidence = ArrivalEvidence{}
 		} else {
 			evidence = evaluateArrival(evidence, a.Context, d.Location, stop, now)
@@ -239,11 +240,15 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		if routeNotBefore != nil && now.Before(*routeNotBefore) {
 			continue
 		}
+		if t.Context == a.Context && t.AddressRejected && t.Enabled {
+			continue
+		}
 		unavailable := ""
+		missingStopCoordinates := !a.CustomDestination && (stop.Latitude == nil || stop.Longitude == nil)
 		switch {
 		case !a.TelemetrySafe:
 			unavailable = "GPS automation requires a unique assigned truck VIN"
-		case stop.Latitude == nil || stop.Longitude == nil:
+		case missingStopCoordinates:
 			unavailable = "Selected stop coordinates are unavailable"
 		case d.Location == nil:
 			unavailable = "Truck GPS location is unavailable"
@@ -255,7 +260,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				t = BoardTravel{Context: a.Context}
 			}
 			t.Enabled, t.Error = true, unavailable
-			if !a.TelemetrySafe || stop.Latitude == nil || stop.Longitude == nil {
+			if !a.TelemetrySafe || missingStopCoordinates {
 				t.CalculatedAt = time.Time{}
 			}
 			// Do not mark this as a route attempt: fresh GPS should queue immediately.
@@ -334,10 +339,17 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			point = nil
 		}
 		if point != nil {
-			estimate, e := routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude)
+			var estimate boardroutes.Estimate
+			var e error
+			if a.CustomDestination {
+				estimate, e = routes.RouteAddress(ctx, point.Coordinates.Lat, point.Coordinates.Lng, a.routeAddress)
+			} else {
+				estimate, e = routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude)
+			}
 			if e != nil {
 				t.Error = e.Error()
-				if errors.Is(e, boardroutes.ErrRouteUnavailable) {
+				t.AddressRejected = errors.Is(e, boardroutes.ErrAddressUnmatched)
+				if t.AddressRejected || errors.Is(e, boardroutes.ErrRouteUnavailable) {
 					t.CalculatedAt = time.Time{}
 				}
 			} else {

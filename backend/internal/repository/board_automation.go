@@ -127,7 +127,10 @@ type BoardAutomation struct {
 	RoutingEnabled       bool            `json:"routingEnabled"`
 	ManualETAValid       bool            `json:"manualETAValid"`
 	TelemetrySafe        bool            `json:"telemetrySafe"`
+	CustomDestination    bool            `json:"customDestination,omitempty"`
 	Evidence             ArrivalEvidence `json:"-"`
+
+	routeAddress string
 }
 
 type ArrivalEvidence struct {
@@ -210,7 +213,7 @@ func importedBoardLoad(ctx context.Context, tx pgx.Tx, number string) (*BoardLoa
 }
 
 // Read cached evidence only; displaying the board never advances the detector.
-func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]BoardLoads, states map[string]boardLoadState) error {
+func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]BoardLoads, states map[string]boardLoadState, entries map[string]DriverBoardEntry) error {
 	ids := make([]string, 0, len(views))
 	for id := range views {
 		ids = append(ids, id)
@@ -238,7 +241,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		v := views[id]
 		s := states[id]
 		var stop *BoardStop
-		if v.Current != nil && v.DestinationSource {
+		if v.Current != nil {
 			for i := range v.Current.Stops {
 				if v.Current.Stops[i].Key == v.StopKey {
 					stop = &v.Current.Stops[i]
@@ -246,14 +249,32 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 				}
 			}
 		}
-		key := boardAutomationContext(v.Current, stop, truck)
+		stopContext := boardAutomationContext(v.Current, stop, truck)
 		selectionInvalid := v.Current != nil && (strings.Contains(v.Current.Warning, "removed, replaced or reassigned") || strings.Contains(v.Current.Warning, "load match changed") || strings.Contains(v.Current.Warning, "text differs"))
 		if selectionInvalid {
-			key = ""
+			stopContext = ""
 		}
-		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key}
+		key := ""
+		if v.DestinationSource {
+			key = stopContext
+		}
+		entry := entries[id]
+		address := strings.TrimSpace(entry.Destination)
+		switch entry.Status {
+		case "HOME", "HOME (YARD)", "VACATION":
+			address = ""
+		}
+		if v.DestinationSource {
+			address = ""
+		}
+		if address != "" {
+			body, _ := json.Marshal([]string{"address", address, entry.CurrentLoad, stopContext, truck})
+			sum := sha256.Sum256(body)
+			key = hex.EncodeToString(sum[:])
+		}
+		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key, CustomDestination: address != "", routeAddress: address}
 		a.TelemetrySafe = telemetrySafe
-		if selectionInvalid {
+		if selectionInvalid && address == "" {
 			a.Reason = "Review the changed current load selection before automation resumes"
 		}
 		if travel.Enabled && (eta == "" || !a.ManualETAValid) {
@@ -262,7 +283,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		// The Status Board selection is the dispatcher's operational assignment.
 		// DataTruck's driver may lag behind it; no second confirmation is needed.
 		// Keep requiresConfirmation false for older clients during deployment.
-		if key != "" {
+		if stopContext != "" {
 			a.Appointment = stop.Schedule
 			a.StopType = stop.Type
 			if v.Current != nil {
@@ -275,7 +296,9 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 					a.Appointment = &BoardSchedule{Kind: "manual", Label: prefix + " " + a.ManualStopTime, Detail: "Manual stop time entered on Status Board"}
 				}
 			}
-			if evidence.Context == key && telemetrySafe && sameTelemetrySource(evidence.Source, telemetrySource) {
+		}
+		if key != "" {
+			if address == "" && evidence.Context == key && telemetrySafe && sameTelemetrySource(evidence.Source, telemetrySource) {
 				a.Arrived = evidence.Arrived
 				a.ObservedAt = evidence.LastAt
 				a.Stale = evidence.LastAt.IsZero() || time.Since(evidence.LastAt) > 10*time.Minute

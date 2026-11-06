@@ -607,7 +607,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		}
 		result[id] = view
 	}
-	if err := enrichBoardAutomation(ctx, tx, result, states); err != nil {
+	if err := enrichBoardAutomation(ctx, tx, result, states, entries); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -717,7 +717,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 					break
 				}
 			}
-		} else if !view.DestinationSource || view.Automation == nil || view.Automation.Context == "" {
+		} else if view.Automation == nil || view.Automation.StopType == "" {
 			return result, ErrBoardLoadSelection
 		}
 		if target == nil || target.LoadID == nil || stopKey == "" {
