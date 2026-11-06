@@ -60,8 +60,8 @@ try {
   const defaults = await columnOrder();
   const firstRow = grid.locator('tr[data-driver-id]').first();
   const grossCell = (i, column) => grid.locator(`tr[data-driver-id="driver-${i}"] [data-board-column="${column}"]`);
-  const transparent = 'rgba(0, 0, 0, 0)';
-  const grossBackgrounds = [transparent, 'rgb(255, 255, 0)', 'rgb(0, 255, 0)', 'rgb(0, 255, 255)', transparent];
+  const untieredPink = 'rgb(244, 204, 204)';
+  const grossBackgrounds = [untieredPink, 'rgb(255, 255, 0)', 'rgb(0, 255, 0)', 'rgb(0, 255, 255)', untieredPink];
   for (const [i, color] of grossBackgrounds.entries()) {
     for (const column of ['originalGross', 'driverGross']) {
       await expect(grossCell(i, column)).toHaveCSS('background-color', color);
