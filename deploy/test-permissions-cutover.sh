@@ -30,10 +30,12 @@ payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
 mock_routing_usage=f
 mock_expense_drafts=f
+mock_accessorials=f
 mock_scale_carry=f
 mock_scale_partial=f
 runuser() {
     local result=$mock
+    if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
     if [[ $* == *public.accounting_cutover* ]]; then result=$mock_accounting; fi
     if [[ $* == *"to_regclass('public.payroll_cost_start')"* ]]; then result=$mock_cost_installed; fi
@@ -270,3 +272,14 @@ mock_expense_drafts=error
 if compatible_release "$test_root/new"; then echo 'Expense draft schema query failure allowed rollback' >&2; exit 1; fi
 mock_expense_drafts=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown expense draft schema allowed rollback' >&2; exit 1; fi
+
+mock_expense_drafts=t
+mock_accessorials=t
+if compatible_release "$test_root/new"; then echo 'Accessorials allowed an incompatible payroll binary' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\ncase "$1" in -accessorial-expenses-capability) echo accessorial-expenses-v1;; -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_accessorials=error
+if compatible_release "$test_root/new"; then echo 'Accessorial schema query failure allowed rollback' >&2; exit 1; fi
+mock_accessorials=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown accessorial schema allowed rollback' >&2; exit 1; fi
+echo 'Accessorial compatibility checks passed'
