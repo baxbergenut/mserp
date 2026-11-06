@@ -73,6 +73,12 @@ html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-log
 .mserp-ui :where(textarea) { font-size: var(--ui-font-size); line-height: 20px; border-radius: var(--ui-radius); }
 .mserp-ui :where(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 .mserp-ui [data-status-board-grid] .truck-assignment-select { border-radius: 0; }
+[data-status-board-grid] [data-dragged-column] {
+  position: relative;
+  z-index: 15;
+  cursor: grabbing;
+}
+[data-status-board-grid] [data-dragged-column="opaque"] { background-color: var(--color-zinc-950); }
 .mserp-ui [data-status-board-grid] .truck-assignment-select:focus {
   outline: 2px solid var(--ui-focus);
   outline-offset: -2px;

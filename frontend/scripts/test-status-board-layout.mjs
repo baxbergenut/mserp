@@ -23,6 +23,8 @@ const drivers = Array.from({ length: 100 }, (_, i) => ({ id: `driver-${i}`, full
 let entries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: 'ENROUTE', destination: '', eta: d.id === 'driver-0' ? '13:00 · 300 mi' : '', notes: '', homeTime: '', version: 1 }));
 const loads = { current: null, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: '2026-10-12', revision: 'fixture', customOrder: false };
 const errors = [];
+let account = 'scroll';
+let peers = [{ clientId: 'peer-client', userId: 'peer-user', userName: 'Peer dispatcher', driverId: drivers[0].id, column: 'currentLoad' }];
 async function setup(page) {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
@@ -35,8 +37,10 @@ async function setup(page) {
       return route.fulfill({ json: committed });
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'scroll', username: 'Scroll Test', permissions: ['driver_board.read', 'driver_board.write'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: account, username: 'Scroll Test', permissions: ['driver_board.read', 'driver_board.write'] }, csrfToken: 'fixture' },
       '/driver-board': { weekStart: '2026-10-12', drivers, entries, grossEntries: [], loads: Object.fromEntries(drivers.map(d => [d.id, loads])), eld: { configured: false } },
+      '/driver-board/history': { items: [], nextCursor: 0 },
+      '/driver-board/presence': peers,
       '/tasks/count': { count: 0 }, '/sidebar-counts': {},
     };
     await route.fulfill({ json: path.startsWith('/driver-board/loads/') ? loads : fixtures[path] ?? [] });
@@ -47,6 +51,66 @@ async function setup(page) {
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await setup(page);
+  const grid = page.locator('[data-status-board-grid]');
+  const header = column => grid.locator(`thead [data-board-column="${column}"]`);
+  const columnOrder = () => grid.locator('thead th').evaluateAll(cells => cells.map(cell => cell.dataset.boardColumn));
+  const defaults = await columnOrder();
+  const firstRow = grid.locator('tr[data-driver-id]').first();
+  const writes = [];
+  const trackWrites = request => {
+    if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/driver-board')) writes.push(request.url());
+  };
+  page.on('request', trackWrites);
+  await expect(header('driver')).toHaveCSS('cursor', 'grab');
+  const driverHeader = await header('driver').boundingBox();
+  const currentLoadHeader = await header('currentLoad').boundingBox();
+  await page.mouse.move(driverHeader.x + 20, driverHeader.y + 15);
+  await page.mouse.down();
+  await page.mouse.move(currentLoadHeader.x + 18, driverHeader.y + 15, { steps: 8 });
+  await expect(grid).toHaveAttribute('data-column-gesture', 'move');
+  await expect.poll(() => firstRow.locator('[data-board-column="driver"]').evaluate(cell => getComputedStyle(cell).translate)).not.toBe('none');
+  await expect.poll(columnOrder).toEqual(defaults); // The full grid stays mounted and ordered while dragging.
+  await page.mouse.up();
+  const reordered = [defaults[1], defaults[0], ...defaults.slice(2)];
+  await expect.poll(columnOrder).toEqual(reordered);
+  await expect.poll(() => firstRow.locator(':scope > *').evaluateAll(cells => cells.map(cell => cell.dataset.boardColumn))).toEqual(reordered);
+  const currentLoad = firstRow.locator('[data-board-column="currentLoad"]');
+  const peer = page.locator('[data-board-presence="Peer dispatcher"]');
+  await expect(peer).toHaveAttribute('aria-label', /Scroll Driver 0.*Current load/);
+  await expect.poll(async () => Math.abs((await peer.boundingBox()).x - (await currentLoad.boundingBox()).x)).toBeLessThan(1);
+
+  const resizeEdge = header('driver').locator('span');
+  const resizeBox = await resizeEdge.boundingBox();
+  await page.mouse.move(resizeBox.x + 3, resizeBox.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(resizeBox.x + 63, resizeBox.y + 12, { steps: 10 });
+  await expect(grid).toHaveAttribute('data-column-gesture', 'resize');
+  await expect.poll(async () => (await header('driver').boundingBox()).width).toBe(driverHeader.width + 60);
+  await page.mouse.up();
+  await expect(grid).not.toHaveAttribute('data-column-gesture', /./);
+  expect(writes).toEqual([]);
+  page.off('request', trackWrites);
+
+  await page.reload();
+  await expect.poll(columnOrder).toEqual(reordered);
+  await expect.poll(async () => (await header('driver').boundingBox()).width).toBe(driverHeader.width + 60);
+  await resizeEdge.dblclick();
+  await expect.poll(async () => (await header('driver').boundingBox()).width).toBe(driverHeader.width);
+  await currentLoad.click({ button: 'right' });
+  await expect(page.getByLabel('History column')).toHaveValue('currentLoad');
+  await page.getByRole('button', { name: 'Close history' }).click();
+
+  await header('originalGross').press('ArrowLeft');
+  await expect.poll(async () => (await columnOrder()).indexOf('originalGross')).toBe(3);
+  const gross = await header('originalGross').boundingBox();
+  const grossTotal = await grid.locator('tr[data-dispatcher-id="dispatch"] [data-board-column="originalGross"]').boundingBox();
+  expect(Math.abs(grossTotal.x - gross.x)).toBeLessThan(1);
+  await expect(page.getByRole('switch', { name: 'Auto-order for Dispatch', exact: true })).toBeEnabled();
+  account = 'other-account';
+  peers = [];
+  await page.reload();
+  await expect.poll(columnOrder).toEqual(defaults);
+
   // Typical addresses size the column; a single long address cannot stretch it.
   entries.slice(0, 10).forEach(entry => { entry.destination = 'Indianapolis, IN'; });
   await page.reload();

@@ -1584,8 +1584,8 @@ assignment lookup lists.
   Status labels are centered in the space left of the chevron, in sentence case without changing stored status values,
   and match trailer text size. Status fits the widest displayed label plus its
   chevron and padding (70px minimum), without taking spare viewport width.
-  Gross columns are centered fixed 110px widths;
-  phone is fixed 124px. Current load, truck, destination, ETA and next load grow
+  Default gross columns are centered at 110px each and phone is 124px.
+  Current load, truck, destination, ETA and next load grow
   to measured content. Destination uses the 80th percentile of nonempty displayed
   addresses, between 160px and 280px, and never shares spare viewport width.
   Next load grows to fit its number and pickup details, aligned together on the
@@ -1596,6 +1596,9 @@ assignment lookup lists.
   headings, column headings and all driver cells scroll horizontally together;
   only the table header stays pinned vertically. Expanded sidebar
   width is 208px. Check scripts/test-status-board-stops-e2e.mjs against review-local.
+  Drag column headers to reorder or drag their right edges to resize. Widths and
+  order are stored by account in the browser. Column IDs stay stable for history
+  and live presence, and dispatcher gross totals follow their columns.
   Queue mutations lock the driver, check board versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream
   records change. History loadPlan values contain operational snapshots, formatted

@@ -44,7 +44,7 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
   }, [isOpen]);
   useEffect(() => { if (open?.focus) popup.current?.querySelector<HTMLElement>(open.kind === "menu" ? "button" : "textarea")?.focus({ preventScroll: true }); }, [open?.kind, open?.focus]);
   const menuButton = "block min-h-8 w-full rounded px-2 text-left hover:bg-zinc-800 focus:bg-zinc-800 focus:outline-none";
-  return <td ref={cell} className={`relative overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80 ${trailerColor}`}
+  return <td ref={cell} data-board-column="trailerNumber" className={`relative overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80 ${trailerColor}`}
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); show("menu", true); }}
     onKeyDown={event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); event.stopPropagation(); show("menu", true); } }}
     onMouseEnter={() => { cancel(); if (!open && entry.trailerNote?.trim() && entry.trailerNumber.trim()) show("note"); }} onMouseLeave={leave}>

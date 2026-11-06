@@ -367,6 +367,8 @@ export function useDriverBoard(lockedDriverId?: string) {
     void undoLatestRef.current().catch(err => setError(err instanceof Error ? err.message : "Unable to undo this change."));
   }, [saving, dirty, error]);
 
-  const entries = Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) }]));
+  const entries = useMemo(() => Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [
+    id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) },
+  ])), [saved, changes, board?.statusSyncEnabled, board?.loads]);
   return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink };
 }
