@@ -84,14 +84,24 @@ try {
   await open();
   await field(week, 'total gross', 1).click(); await page.keyboard.press('Delete'); await page.keyboard.press('Enter');
   await field(week, 'miles', 1).click(); await page.keyboard.press('Delete'); await page.keyboard.press('Enter');
-  await field(week, 'driver rate', 1).focus();
+  await field(week, 'driver rate', 1).click(); await page.keyboard.press('Delete'); await page.keyboard.press('Enter');
   await expect(field(week, 'total gross', 1)).toHaveValue('$1,000.00');
   await expect(field(week, 'miles', 1)).toHaveValue('500.00');
-  await expect(field(week, 'driver rate', 1)).toHaveValue('800');
-  await apply(); await expect.poll(() => saved(week, 1).miles).toBe('500.00');
+  await expect(field(week, 'driver rate', 1)).toHaveValue('$750.00');
+  await apply();
+  await expect.poll(() => saved(week, 1).driverRate).toBe('750.00');
+  expect(saved(week, 1).miles).toBe('500.00');
   await page.reload(); await open();
   await expect(field(week, 'total gross', 1)).toHaveValue('$1,000.00');
+  await expect(field(week, 'driver rate', 1)).toHaveValue('$750.00');
   await daily.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  // An inline clear autosaves only Driver Gross for the linked load.
+  const inlineDriverGross = page.getByLabel(`Daily Driver, ${secondDay}, driver rate`, { exact: true });
+  await inlineDriverGross.click(); await page.keyboard.press('Delete'); await page.keyboard.press('Enter');
+  await expect(inlineDriverGross).toHaveValue('$750.00');
+  await expect.poll(() => saved(secondDay).driverRate).toBe('750.00');
+  expect(writes.at(-1)[0].fields).toEqual(['driverRate']);
 
   // Reuse two removed slots in one editor, matching the reported disappearing loads.
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
