@@ -130,11 +130,16 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
 									var ownerCharge string
 									for _, charge := range row.AutoCharges {
 										if charge.Source == "expense-reimburse:18200000-0000-0000-0000-000000001003" {
+											t.Fatal("new reimbursement was charged through the historical payout mirror")
+										}
+									}
+									for _, charge := range row.Edits.ExpenseDeductions {
+										if charge.ExpenseID == "18200000-0000-0000-0000-000000001003" && charge.Source == "" {
 											ownerCharge = charge.Amount
 										}
 									}
-									if ownerCharge != "-18.00" {
-										t.Fatal("prepared investor statement did not mirror the driver payout", ownerCharge)
+									if ownerCharge != "25.00" {
+										t.Fatal("prepared investor statement did not retain the full independent charge", ownerCharge)
 									}
 								}
 								trip, miles, gross := 102, int64(30000), int64(110000)
@@ -222,6 +227,7 @@ func TestPreparedPayrollFinancialParityDatabase(t *testing.T) {
 								if kind == "investor" {
 									check = `SELECT
  EXISTS(SELECT 1 FROM expense_payments WHERE expense_id='18200000-0000-0000-0000-000000001002' AND week_start='2026-10-05' AND amount=105) AND
+ EXISTS(SELECT 1 FROM expense_payments WHERE expense_id='18200000-0000-0000-0000-000000001003' AND week_start='2026-10-05' AND amount=25) AND
  EXISTS(SELECT 1 FROM pay_source_collections WHERE source='investor_cost:18200000-0000-0000-0000-000000000002:toll' AND week_start='2026-10-05' AND amount=-40) AND
  EXISTS(SELECT 1 FROM pay_source_collections WHERE source='truck_charge:18200000-0000-0000-0000-000000000002:18200000-0000-0000-0000-000000001006' AND week_start='2026-10-05' AND amount=-20)`
 								}

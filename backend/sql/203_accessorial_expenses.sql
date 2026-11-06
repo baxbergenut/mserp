@@ -112,7 +112,7 @@ CREATE TRIGGER accessorial_payment_guard BEFORE INSERT OR UPDATE OR DELETE ON ex
 CREATE OR REPLACE FUNCTION protect_active_expense_payment() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE e expenses%ROWTYPE; used numeric; total numeric; external_paid numeric;
 BEGIN
- PERFORM pg_advisory_xact_lock(736281940);
+ PERFORM payroll_financial_gate(false);
  SELECT * INTO e FROM expenses WHERE id=NEW.expense_id FOR UPDATE;
  IF NOT accounting_live_source('expense',e.id,e.expense_date) THEN RAISE EXCEPTION 'This expense is managed in Sheets' USING ERRCODE='23514'; END IF;
  IF (e.owner_recovery OR e.payment_type='Driver payroll') AND TG_TABLE_NAME='expense_payments' AND

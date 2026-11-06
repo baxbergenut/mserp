@@ -39,7 +39,7 @@ func expenseAccessorialCredits(ctx context.Context, tx pgx.Tx, drivers []string,
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, payrollExpenseBalanceBatchSQL("accessorial"), body)
+	rows, err := tx.Query(ctx, payrollExpenseBalanceBatchSQL("accessorial"), string(body))
 	if err != nil {
 		return nil, err
 	}

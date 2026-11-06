@@ -44,6 +44,10 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	accessorial, err := os.ReadFile("../../sql/203_accessorial_expenses.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, upgrade := range []bool{false, true} {
 		t.Run(fmt.Sprint(upgrade), func(t *testing.T) {
 			schema := fmt.Sprintf("penalties_%d", time.Now().UnixNano())
@@ -62,6 +66,7 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 				sql = strings.Replace(sql, strings.ReplaceAll(string(balance), "\r\n", "\n"), "", 1)
 				// Receipt archival in turn requires the balance-correction table.
 				sql = strings.Replace(sql, strings.ReplaceAll(string(archive), "\r\n", "\n"), "", 1)
+				sql = strings.Replace(sql, strings.ReplaceAll(string(accessorial), "\r\n", "\n"), "", 1)
 			}
 			exec(sql)
 			if upgrade {
@@ -69,6 +74,7 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 				exec(string(migration))
 				exec(string(balance))
 				exec(string(archive))
+				exec(string(accessorial))
 				var amount, payer, covered string
 				if err := admin.QueryRow(ctx, `SELECT amount::text,paid_by,covered_by FROM expenses WHERE expense_type='Old penalty'`).Scan(&amount, &payer, &covered); err != nil || amount != "125.00" || payer != "Historical payer" || covered != "Company" {
 					t.Fatalf("legacy row changed: %s %s %s %v", amount, payer, covered, err)

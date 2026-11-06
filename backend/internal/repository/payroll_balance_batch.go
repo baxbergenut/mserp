@@ -52,7 +52,7 @@ func payrollBalanceBatchContext(ctx context.Context, tx pgx.Tx, scopes []payroll
 	}
 	parts = append(parts, struct{ source, query string }{"escrow", payrollEscrowBalanceBatchSQL})
 	for _, part := range parts {
-		rows, err := tx.Query(ctx, part.query, body)
+		rows, err := tx.Query(ctx, part.query, string(body))
 		if err != nil {
 			return ctx, err
 		}
