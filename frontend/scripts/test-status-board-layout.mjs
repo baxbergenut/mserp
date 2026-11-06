@@ -111,6 +111,30 @@ try {
   await page.reload();
   await expect.poll(columnOrder).toEqual(defaults);
 
+  account = 'scroll';
+  await page.reload();
+  await expect.poll(async () => (await columnOrder()).indexOf('originalGross')).toBe(3);
+  page.on('request', trackWrites);
+  await header('driver').press('Shift+ArrowRight');
+  await expect.poll(async () => (await header('driver').boundingBox()).width).toBe(driverHeader.width + 12);
+  const resetItem = page.getByRole('menuitem', { name: 'Reset column layout', exact: true });
+  await header('truck').press('Shift+F10');
+  await expect(resetItem).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(resetItem).toBeHidden();
+  await expect(header('truck')).toBeFocused();
+  await header('status').click({ button: 'right' });
+  await expect(resetItem).toBeVisible();
+  await resetItem.click();
+  await expect(resetItem).toBeHidden();
+  await expect.poll(columnOrder).toEqual(defaults);
+  await expect.poll(async () => (await header('driver').boundingBox()).width).toBe(driverHeader.width);
+  expect(writes).toEqual([]);
+  page.off('request', trackWrites);
+  await page.reload();
+  await expect.poll(columnOrder).toEqual(defaults);
+  await expect.poll(async () => (await header('driver').boundingBox()).width).toBe(driverHeader.width);
+
   const resizePage = await browser.newPage({ viewport: { width: 2400, height: 900 } });
   await setup(resizePage);
   const scrollArea = resizePage.locator('[data-scroll-key="driver-board"]');
@@ -169,7 +193,7 @@ try {
   expect(await destinationColumnWidth()).toBeLessThanOrEqual(280);
   entries.slice(0, 10).forEach(entry => { entry.destination = ''; });
   await page.reload();
-  expect((await page.locator('thead th').allTextContents()).slice(-2)).toEqual(['Home time', 'Driver address']);
+  await expect.poll(async () => (await page.locator('thead th').allTextContents()).slice(-2)).toEqual(['Home time', 'Driver address']);
   await expect(page.getByLabel('Scroll Driver 0 · Driver address', { exact: true })).toHaveText('Louisville, KY');
   await expect(page.getByLabel('Scroll Driver 1 · Driver address', { exact: true })).toHaveText('—');
   const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'At PU', 'Health issue', 'At DEL', 'HOME (YARD)', 'NEW DRIVER', '34 RESET', 'ACCIDENT'];

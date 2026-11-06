@@ -50,6 +50,13 @@ export function useBoardColumnLayout(values: string) {
     setLayout(next);
   }
 
+  function reset() {
+    cancel.current?.();
+    releaseResizeSpace.current?.();
+    try { localStorage.removeItem(key); } catch { /* Reset the layout in this tab. */ }
+    setLayout(defaultLayout);
+  }
+
   function resize(column: BoardColumn, width?: number) {
     const widths = { ...layout.widths };
     if (width === undefined) {
@@ -297,5 +304,5 @@ export function useBoardColumnLayout(values: string) {
     window.addEventListener("resize", cleanup);
   }
 
-  return { table, order: layout.order, ...dimensions, start, resize, onHeaderKey };
+  return { table, order: layout.order, ...dimensions, start, resize, reset, onHeaderKey };
 }

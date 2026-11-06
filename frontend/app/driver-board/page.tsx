@@ -2,7 +2,7 @@
 
 
 import dynamic from "next/dynamic";
-import { Fragment, memo, useCallback, useContext, useMemo, useState, type ReactElement } from "react";
+import { Fragment, memo, useCallback, useContext, useMemo, useRef, useState, type ReactElement } from "react";
 import {fetchDriver,fetchFleetStatusCatalog,fetchTruckAssignmentChoices} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
 import { DriverIntakeSetup } from "../drivers/DriverIntakeSetup";
@@ -127,7 +127,19 @@ export default function DriverBoardPage() {
       loadPlan: [next?.number, pickup?.schedule?.label || (pickup ? "PU —" : "")].filter(Boolean).join("  "),
     };
   })), [renderedDrivers, entries, board?.loads, savedEntries]);
-  const { table, order: columns, tableWidth, columnWidth, start: startColumn, resize: resizeColumn, onHeaderKey } = useBoardColumnLayout(widthValues);
+  const { table, order: columns, tableWidth, columnWidth, start: startColumn, resize: resizeColumn, reset: resetColumns, onHeaderKey } = useBoardColumnLayout(widthValues);
+  const columnMenu = useRef<HTMLDivElement>(null);
+  const columnMenuHeader = useRef<HTMLTableCellElement>(null);
+  function openColumnMenu(header: HTMLTableCellElement, x: number, y: number) {
+    const menu = columnMenu.current;
+    if (!menu) return;
+    columnMenuHeader.current = header;
+    header.focus({ preventScroll: true });
+    menu.showPopover();
+    menu.style.left = `${Math.max(8, Math.min(x, innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8))}px`;
+    menu.querySelector("button")?.focus({ preventScroll: true });
+  }
   const groupColumns = useMemo(() => {
     const runs: { total?: "originalGross" | "driverGross"; span: number; width: number }[] = [];
     for (const column of columns) {
@@ -276,7 +288,16 @@ export default function DriverBoardPage() {
         <thead className="sticky top-0 z-20"><tr>{columns.map(column => <th key={column} scope="col" tabIndex={0}
           data-board-column={column} onPointerDown={event => { if (!loading && !rowDrag.active) startColumn(event, column); }}
           onClick={event => event.stopPropagation()}
-          onKeyDown={event => { if (!loading && !rowDrag.active) onHeaderKey(event, column); }}
+          onContextMenu={event => { event.preventDefault(); openColumnMenu(event.currentTarget, event.clientX, event.clientY); }}
+          onKeyDown={event => {
+            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              openColumnMenu(event.currentTarget, rect.left, rect.bottom);
+              return;
+            }
+            if (!loading && !rowDrag.active) onHeaderKey(event, column);
+          }}
           className={`relative h-8 touch-pan-y select-none cursor-grab overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-700 bg-zinc-900 px-1.5 ${["originalGross", "driverGross", "status"].includes(column) ? "text-center" : "text-left"} font-medium leading-4 text-zinc-400 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-400`}>
           {boardColumns[column][0]}
           <span aria-hidden="true" className="absolute inset-y-0 right-0 w-2 cursor-col-resize"
@@ -372,6 +393,18 @@ export default function DriverBoardPage() {
           {!loading && drivers.length === 0 && pendingDrivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
         </tbody>
       </table>
+      <div ref={columnMenu} popover="auto" role="menu" aria-label="Column layout actions" data-grid-ignore
+        className="fixed inset-auto m-0 w-48 max-w-[calc(100vw-16px)] rounded-lg border border-zinc-700 bg-zinc-900 p-1 ui-popover"
+        onContextMenu={event => event.preventDefault()}>
+        <button type="button" role="menuitem" className="w-full rounded px-3 py-2 text-left text-xs text-zinc-200 hover:bg-zinc-800 focus:bg-zinc-800 focus:outline-none"
+          onClick={() => {
+            const header = columnMenuHeader.current;
+            columnMenu.current?.hidePopover();
+            resetColumns();
+            setOrderNotice("Column layout reset to default.");
+            requestAnimationFrame(() => header?.focus({ preventScroll: true }));
+          }}>Reset column layout</button>
+      </div>
     </StatusBoardScrollArea>
     <CellPresence peers={state.peers} />
     {nextStop && <NextStopDialog name={nextStop.name} status={nextStop.status} loads={nextStop.loads}

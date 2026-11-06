@@ -1597,7 +1597,8 @@ assignment lookup lists.
   only the table header stays pinned vertically. Expanded sidebar
   width is 208px. Check scripts/test-status-board-stops-e2e.mjs against review-local.
   Drag column headers to reorder or drag their right edges to resize. Widths and
-  order are stored by account in the browser. Column IDs stay stable for history
+  order are stored by account in the browser. Right-click any column header to
+  reset the full column layout to its defaults. Column IDs stay stable for history
   and live presence, and dispatcher gross totals follow their columns.
   Queue mutations lock the driver, check board versions plus source revision,
   share transactional history and support undo. No financial dates/rates or upstream
