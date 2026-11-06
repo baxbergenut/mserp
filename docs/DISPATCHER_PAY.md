@@ -34,6 +34,18 @@ Default gross tiers: 7,500 / 9,000 / 11,000. RPM/rate tables:
 | 9,000 | 2.40 / 2.61 / 2.90 | 1 / 1.5 / 1.75 |
 | 11,000 | 2.50 / 2.71 / 2.90 | 1.25 / 1.75 / 2 |
 
+The production rule revision effective November 2, 2026 uses two gross tiers.
+Each RPM minimum is inclusive.
+
+| Gross minimum | RPM minimums | Percentages |
+| --- | --- | --- |
+| 10,000 | 2.60 / 2.81 / 3.00 | 1 / 1.5 / 1.75 |
+| 12,000 | 2.70 / 2.91 / 3.10 | 1.25 / 1.75 / 2 |
+
+For a two-tier rule, the Status Board colors both driver gross cells pink below
+the first threshold, green from the first threshold, and blue from the second.
+The colors use actual weekly Total Gross before any home-day credit.
+
 Home-day credit defaults to $1,100 with maximum promotion one tier. Higher tiers
 have stricter RPM thresholds: home days CAN reduce or eliminate commission, as
 the customer explicitly confirmed. There is no earnings protection or fallback
