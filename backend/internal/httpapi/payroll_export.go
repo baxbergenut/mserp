@@ -21,13 +21,12 @@ func registerPayrollExport(r chi.Router, path, kind string, repo *repository.Dri
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		params := r.URL.Query()
-		query := repository.PayPageQuery{
-			Pagination:   repository.Pagination{PageSize: 2147483647},
-			Search:       params.Get("search"),
-			DispatcherID: params.Get("dispatcherId"),
-			ID:           params.Get("statementId"),
+		query, err := payPageFilters(r, kind)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
 		}
+		query.PageSize = 2147483647
 		if query.ID != "" && !isUUID(query.ID) {
 			writeAPIError(w, http.StatusBadRequest, "Invalid statement")
 			return

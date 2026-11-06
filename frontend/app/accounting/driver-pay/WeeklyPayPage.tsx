@@ -6,6 +6,7 @@ import { TableFilters } from "@/app/components/management/TableFilters";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 import { usePermissions } from "@/app/lib/access";
+import { employmentTypeLabel } from "@/app/lib/driverType";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,7 +15,7 @@ import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, CloudCheck, Download, RefreshCw, UserRound } from "lucide-react";
 import { APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
-import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, PayrollAvailability } from "@/app/lib/types";
+import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
 import { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } from "../payrollWeek";
 import { useLatestPayrollWeek } from "../components/useLatestPayrollWeek";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -32,6 +33,8 @@ import { restorePayEdit } from "./payUndo";
 import { isPayReplacementInput } from "./payGrid";
 
 type SettlementReview = { driverId?: string; reopen: boolean; blockedIssue?: string };
+
+const driverTypes: EmploymentType[] = ["company", "owner_operator", "investor_driver", "unassigned"];
 
 type PayUndoAction = { kind: "edit"; id: string; before: DriverPayEdits; after: DriverPayEdits; group: number } | { kind: "source"; id: string; statementId: string };
 
@@ -108,7 +111,14 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const [search, setSearch] = useViewState("page:search", "", targetId && !restoringView ? "" : undefined);
   const [headerPinned, setHeaderPinned] = useViewState("page:headerPinned", false);
   const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", targetId && !restoringView ? "all" : undefined);
+  const [driverType, setDriverType] = useViewState<EmploymentType | "">("page:driverType", "", targetId && !restoringView ? "" : undefined);
   const debouncedSearch = useDebouncedValue(search, 16);
+  const filters = useMemo<PayPageFilters>(() => ({
+    search: debouncedSearch,
+    dispatcherId: dispatcher === "all" ? "" : dispatcher,
+    statementId: driverFilter,
+    driverType: investor ? undefined : driverType,
+  }), [debouncedSearch, dispatcher, driverFilter, investor, driverType]);
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId && !restoringView ? new Set([targetId]) : undefined);
   const openedRef = useRef(opened);
   useLayoutEffect(() => { openedRef.current = opened; }, [opened]);
@@ -118,13 +128,13 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     const earliest = bounds.firstWeek || "2000-01-03";
     setFirstWeek(earliest);
     selectedWeek = selectedWeek < earliest ? earliest : selectedWeek;
-    const query = { summary: "1", detailIds: [...openedRef.current].slice(0, 100).join(","), page, pageSize, search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter };
-    return investor ? fetchInvestorPay(selectedWeek, driverFilter || undefined, signal, query) : fetchDriverPay(selectedWeek, signal, query);
-  }, [investor, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
+    const query = { summary: "1", detailIds: [...openedRef.current].slice(0, 100).join(","), page, pageSize, ...filters };
+    return investor ? fetchInvestorPay(selectedWeek, filters.statementId || undefined, signal, query) : fetchDriverPay(selectedWeek, signal, query);
+  }, [investor, page, pageSize, filters]);
   const [refreshRequest, setRefreshRequest] = useState(0);
   const refreshedRequest = useRef(0);
   const loadedQuery = useRef("");
-  const queryKey = JSON.stringify([week, page, pageSize, debouncedSearch, dispatcher, driverFilter]);
+  const queryKey = JSON.stringify([week, page, pageSize, filters]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -457,7 +467,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     setExporting(true);
     setExportError("");
     try {
-      const blob = await fetchPayStatementExport(kind, week, { search: debouncedSearch, dispatcherId: dispatcher === "all" ? "" : dispatcher, statementId: driverFilter });
+      const blob = await fetchPayStatementExport(kind, week, filters);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -477,7 +487,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     ...setupRequired.map(truck => ({ kind: "setup" as const, id: truck.truckId, name: truck.ownerName, unit: truck.truckUnit, truck })),
   ].sort((a, b) => Number(a.kind === "statement" && !!a.driver.settlement?.finalized) - Number(b.kind === "statement" && !!b.driver.settlement?.finalized) || (rowOrder.size ? (rowOrder.get(a.id) ?? 0) - (rowOrder.get(b.id) ?? 0) : a.name.localeCompare(b.name) || a.unit.localeCompare(b.unit, undefined, { numeric: true })));
   const switchWeek = (next: string) => { if (next >= firstWeek && next <= latestPayrollWeek() && next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
-  return <OutgoingTransfers key={`${investor}:${week}`} investor={investor} week={week} statementId={driverFilter} search={debouncedSearch} dispatcherId={dispatcher === "all" ? "" : dispatcher} refreshKey={report} canEdit={canEdit} disabled={finalizing || busy || dirty || saving} onReturned={() => { undoStack.current = []; setRefreshRequest(value => value+1); setMessage("Load returned to original date"); }}><div className="space-y-5 animate-fade-in">
+  return <OutgoingTransfers key={`${investor}:${week}`} investor={investor} week={week} filters={filters} refreshKey={report} canEdit={canEdit} disabled={finalizing || busy || dirty || saving} onReturned={() => { undoStack.current = []; setRefreshRequest(value => value+1); setMessage("Load returned to original date"); }}><div className="space-y-5 animate-fade-in">
     <PageHeader><div><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">{investor ? "Investor pay" : "Driver pay"}</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : report?.pagination?.total ?? rows.length}</span></div></div></PageHeader>
     <PinnablePageHeader pinned={headerPinned}>
     <div className="grid gap-3 md:grid-cols-3"><MetricCard loading={loading} compact label={investor ? "Investor share" : "Earned pay"} value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Total payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /><FinalizationCard loading={loading} finalized={report?.pagination?.finalized ?? drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length} total={report?.pagination?.statements ?? drivers.filter(d => !d.truckInactive).length} /></div>
@@ -490,6 +500,13 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       </select>
       <span className="text-xs text-zinc-500">{payrollWeekLabel(week).year}</span><button className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
+          {!investor && <select aria-label="Driver type" className={controlClass} value={driverType} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
+            setDriverType(driverTypes.find(type => type === event.target.value) ?? "");
+            setPage(1);
+          }}>
+            <option value="">All driver types</option>
+            {driverTypes.map(type => <option key={type} value={type}>{employmentTypeLabel(type)}</option>)}
+          </select>}
           <select aria-label="Dispatcher" className={`${controlClass} !w-44`} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select>
         </TableFilters><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>
     <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><button type="button" className={payButtonClass} disabled={exporting || !report || !preparedReady || finalizing || busy || dirty || saving || editingDraft} onClick={() => void exportStatements()}><Download className="h-3.5 w-3.5" />{exporting ? "Exporting…" : "Export statements"}</button><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts are reimbursements; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${refreshing || report?.preparation?.state === "updating" ? "invisible" : ""} ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!preparedReady ? (report?.preparation?.state === "failed" ? "Preparation failed" : report?.preparation?.state === "preparing" ? "Preparing…" : "") : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span><button className={payButtonClass} disabled={finalizing || saving || loading || refreshing} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button hidden={!canEdit || investor} className={payButtonClass} disabled={finalizing || saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>

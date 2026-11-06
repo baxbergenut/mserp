@@ -1454,14 +1454,17 @@ export interface PaySourceAcceptance extends PayrollCommandMetadata {
   originalRate: string;
   miles: string;
 }
-export interface PayPageQuery {
+export interface PayPageFilters {
+  search: string;
+  dispatcherId: string;
+  statementId: string;
+  driverType?: EmploymentType | "";
+}
+export interface PayPageQuery extends PayPageFilters {
   summary?: string;
   detailIds?: string;
   page: number;
   pageSize: number;
-  search: string;
-  dispatcherId: string;
-  statementId: string;
 }
 export interface PayPageInfo {
   page: number;

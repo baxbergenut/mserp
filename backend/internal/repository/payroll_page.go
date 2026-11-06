@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 type PayPageQuery struct {
 	Pagination
 	Search, DispatcherID, ID string
+	DriverType               string
 	Summary                  bool
 	Interactive              bool // Current HTTP page reads briefly prioritize their week.
 	DetailIDs                map[string]bool
@@ -79,6 +81,20 @@ type PayPageInfo struct {
 	Payable     string      `json:"payable"`
 }
 
+func (d DriverPayDriver) matchesDriverType(driverType string) bool {
+	if len(d.DisplayEmploymentTypes) > 0 {
+		return slices.Contains(d.DisplayEmploymentTypes, driverType)
+	}
+	if d.EmploymentType != "" {
+		return d.EmploymentType == driverType
+	}
+	// Older frozen statements can predate the employment type field.
+	if d.IsOwnerOperator {
+		return driverType == "owner_operator"
+	}
+	return driverType == "company"
+}
+
 // Page the shared consistent report after routing, carry and frozen settlement
 // overlays. Filtering before those calculations would change financial results.
 func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
@@ -102,6 +118,9 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 		}
 		for _, p := range d.Dispatchers {
 			names[p.ID] = p.Name
+		}
+		if query.DriverType != "" && !d.matchesDriverType(query.DriverType) {
+			continue
 		}
 		if !d.TruckInactive {
 			info.Statements++

@@ -208,18 +208,19 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		query, queryErr := payPageQuery(r)
+		query, queryErr := payPageQuery(r, "driver")
 		if queryErr != nil {
 			writeAPIError(w, 400, queryErr.Error())
 			return
 		}
 		var result repository.DriverPayWeek
+		paged := r.URL.Query().Has("page") || r.URL.Query().Has("pageSize")
+		if !paged {
+			query.PageSize = 2147483647
+		}
 		if repo.PreparedReadsEnabled() {
-			if !r.URL.Query().Has("page") && !r.URL.Query().Has("pageSize") {
-				query.PageSize = 2147483647
-			}
 			result, err = repo.PreparedPayroll(r.Context(), "driver", week, query, r.URL.Query().Get("prepared") == "1")
-		} else if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+		} else if paged || query.DriverType != "" {
 			result, err = repo.PayrollPage(r.Context(), "driver", week, query)
 		} else {
 			result, err = repo.Get(r.Context(), week)

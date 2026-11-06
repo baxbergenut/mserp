@@ -116,7 +116,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeAPIError(w, 400, "Invalid truck")
 			return
 		}
-		query, queryErr := payPageQuery(r)
+		query, queryErr := payPageQuery(r, "investor")
 		if queryErr != nil {
 			writeAPIError(w, 400, queryErr.Error())
 			return

@@ -33,7 +33,7 @@ export const fetchDriverTeam = (id: string) => apiRequest<DriverTeam>(`/drivers/
 export const saveDriverTeam = (id: string, input: DriverTeamInput) => apiRequest<DriverTeam>(`/drivers/${id}/team`, { method: "PUT", body: JSON.stringify(input) });
 import { ReadRequests } from "./readRequests";
 import type { Updater, UpdaterInput } from "./types";
-import type { DriverStatusChange, PaySourceAcceptance, PayPageQuery } from "./types";
+import type { DriverStatusChange, PaySourceAcceptance, PayPageFilters, PayPageQuery } from "./types";
 import type { ProfileNote, InvestorStatementWeek } from "./types";
 
 export const fetchProfileNotes = (kind: "drivers" | "trucks", id: string) => apiRequest<ProfileNote[]>(`/${kind}/${id}/notes`);
@@ -578,10 +578,10 @@ export const deleteExpense = (id: string) =>
 export const fetchPayStatement = (investor: boolean, weekStart: string, id: string, signal?: AbortSignal, revision?: string) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/statements/${encodeURIComponent(id)}`, { weekStart, prepared: "1", revision }), { signal });
 export const fetchPaySettlementPreview = (investor: boolean, weekStart: string, signal?: AbortSignal) => apiRequest<DriverPayWeek>(withQuery(`/${investor ? "investor" : "driver"}-pay/settlement-preview`, { weekStart, prepared: "1" }), { signal });
 export const fetchDriverPay = (weekStart: string, signal?: AbortSignal, query?: PayPageQuery) => apiRequest<DriverPayWeek>(withQuery("/driver-pay", { weekStart, prepared: "1", ...query }), { signal });
-export const fetchPayStatementExport = (kind: "driver" | "investor", weekStart: string, query: Pick<PayPageQuery, "search" | "dispatcherId" | "statementId">) =>
+export const fetchPayStatementExport = (kind: "driver" | "investor", weekStart: string, query: PayPageFilters) =>
   performRequest(withQuery(`/${kind}-pay/export`, { weekStart, ...query }), undefined, response => response.blob());
 export const fetchPayrollAvailability = (investor = false) => apiRequest<import("./types").PayrollAvailability>(investor ? "/investor-pay/availability" : "/driver-pay/availability");
-export const fetchOutgoingLoadTransfers = (investor: boolean, weekStart: string, query: { statementId: string; search: string; dispatcherId: string }, signal?: AbortSignal) => apiRequest<{ transfers: import("./types").OutgoingLoadTransfer[] }>(withQuery(`/${investor ? "investor" : "driver"}-pay/outgoing-transfers`, { weekStart, ...query }), { signal });
+export const fetchOutgoingLoadTransfers = (investor: boolean, weekStart: string, query: PayPageFilters, signal?: AbortSignal) => apiRequest<{ transfers: import("./types").OutgoingLoadTransfer[] }>(withQuery(`/${investor ? "investor" : "driver"}-pay/outgoing-transfers`, { weekStart, ...query }), { signal });
 export const fetchPayCostTransactions = (kind: "driver" | "investor", id: string, weekStart: string, cost: "fuel" | "toll", signal?: AbortSignal, revision?: string) => apiRequest<import("./types").PayCostTransactions>(withQuery(`/${kind}-pay/${id}/cost-transactions`, { weekStart, cost, revision }), { signal });
 export const acceptPaySystemValues = (investor: boolean, input: PaySourceAcceptance) => payrollMutationRequest<import("./types").PaySourceReceipt>(`/${investor ? "investor-pay" : "driver-pay"}/accept-system?undoReceipt=1`, input);
 export const transferPayLoadWeek = (investor: boolean, input: { driverId: string; date: string; slot: number; boardVersion: number; transferVersion: number; mode: import("./types").LoadWeekTransferMode } & import("./types").PayrollCommandMetadata) => payrollMutationRequest<import("./types").PayrollSourceCommandReceipt | void>(`/${investor ? "investor-pay" : "driver-pay"}/transfer-load`, input);

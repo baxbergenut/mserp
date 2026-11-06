@@ -2,15 +2,15 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { fetchOutgoingLoadTransfers } from "@/app/lib/api";
-import type { OutgoingLoadTransfer } from "@/app/lib/types";
+import type { OutgoingLoadTransfer, PayPageFilters } from "@/app/lib/types";
 import { shortDate } from "@/app/gross-board/board";
 import { returnLoadKey, useReturnLoad } from "./useReturnLoad";
 
 const TransferContext = createContext<{ rows: OutgoingLoadTransfer[]; canEdit: boolean; disabled: boolean; returnLoad: (row: OutgoingLoadTransfer) => void; returnError: { key: string; message: string } | null }>({ rows: [], canEdit: false, disabled: true, returnLoad: () => {}, returnError: null });
 export const useOutgoingTransfers = () => useContext(TransferContext);
 
-export function OutgoingTransfers({ investor, week, statementId, search, dispatcherId, refreshKey, canEdit, disabled, onReturned, children }: {
-  investor: boolean; week: string; statementId: string; search: string; dispatcherId: string;
+export function OutgoingTransfers({ investor, week, filters, refreshKey, canEdit, disabled, onReturned, children }: {
+  investor: boolean; week: string; filters: PayPageFilters;
   refreshKey: unknown; canEdit: boolean; disabled: boolean; onReturned: () => void; children: ReactNode;
 }) {
   const [result, setResult] = useState<{ key: string; rows: OutgoingLoadTransfer[] } | null>(null);
@@ -20,14 +20,14 @@ export function OutgoingTransfers({ investor, week, statementId, search, dispatc
     setRetry(value => value + 1);
     onReturned();
   });
-  const key = JSON.stringify([investor,week,statementId,search,dispatcherId]);
+  const key = JSON.stringify([investor, week, filters]);
   useEffect(() => {
     const abort = new AbortController();
-    fetchOutgoingLoadTransfers(investor, week, { statementId, search, dispatcherId }, abort.signal).then(value => {
+    fetchOutgoingLoadTransfers(investor, week, filters, abort.signal).then(value => {
       if (!abort.signal.aborted) { setResult({ key, rows: value.transfers ?? [] }); setError(""); }
     }).catch(err => { if (!abort.signal.aborted) setError(err instanceof Error ? err.message : "Unable to load transferred loads"); });
     return () => abort.abort();
-  }, [investor,week,statementId,search,dispatcherId,key,refreshKey,retry]);
+  }, [investor, week, filters, key, refreshKey, retry]);
   const value = { rows: result?.key === key ? result.rows : [], canEdit, disabled: disabled || pending || !!error, returnLoad, returnError };
   return <TransferContext.Provider value={value}>{children}
     {error && <p role="alert" className="text-xs text-red-300">{error} <button type="button" onClick={() => setRetry(value => value+1)} className="underline">Retry transferred loads</button></p>}

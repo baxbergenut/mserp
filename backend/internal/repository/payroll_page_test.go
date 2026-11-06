@@ -80,6 +80,26 @@ func TestPayPaginationFiltersBeforePagingAndPreservesRevision(t *testing.T) {
 	}
 }
 
+func TestPayPageFiltersByStatementDriverType(t *testing.T) {
+	report := DriverPayWeek{Drivers: []DriverPayDriver{
+		{ID: "unassigned", FullName: "Alpha", EmploymentType: "unassigned"},
+		summarizePayStatement(DriverPayDriver{
+			ID: "mixed", FullName: "Beta", EmploymentType: "owner_operator",
+			DisplayEmploymentTypes: []string{"company", "investor_driver"},
+			Loads:                  []DriverPayLoad{{Fee: "100.00"}},
+		}),
+		{ID: "legacy", FullName: "Gamma", IsOwnerOperator: true, Settlement: &PayrollSettlement{Finalized: true}},
+	}}
+	company := PaginatePay(report, PayPageQuery{DriverType: "company", Pagination: Pagination{Page: 1, PageSize: 1}})
+	if len(company.Drivers) != 1 || company.Drivers[0].ID != "mixed" || company.Pagination.Total != 1 || company.Pagination.Payable != "100.00" {
+		t.Fatalf("dated type should match the compact statement before pagination: %+v", company.Pagination)
+	}
+	owners := PaginatePay(report, PayPageQuery{DriverType: "owner_operator"})
+	if len(owners.Drivers) != 1 || owners.Drivers[0].ID != "legacy" || owners.Pagination.Finalized != 1 || owners.Pagination.Statements != 1 {
+		t.Fatalf("owner operators should use displayed types or the legacy fallback: %+v", owners.Pagination)
+	}
+}
+
 func TestEscrowReviewOutcomeFromActualReleasedFunds(t *testing.T) {
 	for _, test := range []struct {
 		held, released int64

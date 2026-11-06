@@ -49,7 +49,7 @@ func TestPayrollDetailIDs(t *testing.T) {
 		{"", false}, {id, false}, {id + "," + id, false}, {"not-an-id", true},
 		{id + ",", true}, {strings.Repeat(id+",", 100) + id, true},
 	} {
-		q, err := payPageQuery(httptest.NewRequest("GET", "/driver-pay?summary=1&page=1&pageSize=25&detailIds="+test.raw, nil))
+		q, err := payPageQuery(httptest.NewRequest("GET", "/driver-pay?summary=1&page=1&pageSize=25&detailIds="+test.raw, nil), "driver")
 		if (err != nil) != test.bad {
 			t.Fatalf("detailIds %q: %v", test.raw, err)
 		}

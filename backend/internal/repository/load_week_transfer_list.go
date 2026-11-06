@@ -38,7 +38,8 @@ func (r *DriverPayRepository) OutgoingLoadTransfers(ctx context.Context, kind st
  AND ($3='' OR (CASE WHEN $2 THEN t.truck_id ELSE payroll_driver_at(t.driver_id,$1::date) END)::text=$3)
  AND ($4='' OR t.dispatcher_id=$4)
  AND ($5='' OR strpos(lower(concat_ws(' ',d.full_name,tr.unit_number,e.load_number)),lower($5))>0)
- ORDER BY d.full_name,t.source_date,t.source_slot`, week.Format(time.DateOnly), kind == "investor", query.ID, query.DispatcherID, strings.TrimSpace(query.Search))
+ AND ($6='' OR driver_employment_type(t.driver_id,t.source_date)=$6)
+ ORDER BY d.full_name,t.source_date,t.source_slot`, week.Format(time.DateOnly), kind == "investor", query.ID, query.DispatcherID, strings.TrimSpace(query.Search), query.DriverType)
 	if err != nil {
 		return nil, err
 	}

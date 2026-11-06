@@ -24,13 +24,31 @@ func availablePayrollWeek(raw string, first ...string) (time.Time, error) {
 	return week, err
 }
 
-func payPageQuery(r *http.Request) (repository.PayPageQuery, error) {
-	p, err := parsePagination(r)
+func payPageFilters(r *http.Request, kind string) (repository.PayPageQuery, error) {
 	q := r.URL.Query()
-	result := repository.PayPageQuery{Pagination: p, Search: q.Get("search"), DispatcherID: q.Get("dispatcherId"), ID: q.Get("statementId"), Summary: q.Get("summary") == "1", Interactive: true}
+	result := repository.PayPageQuery{Search: q.Get("search"), DispatcherID: q.Get("dispatcherId"), ID: q.Get("statementId")}
+	if kind == "driver" {
+		result.DriverType = q.Get("driverType")
+		switch result.DriverType {
+		case "", "company", "owner_operator", "investor_driver", "unassigned":
+		default:
+			return result, errors.New("Invalid driver type")
+		}
+	}
+	return result, nil
+}
+
+func payPageQuery(r *http.Request, kind string) (repository.PayPageQuery, error) {
+	result, err := payPageFilters(r, kind)
 	if err != nil {
 		return result, err
 	}
+	result.Pagination, err = parsePagination(r)
+	if err != nil {
+		return result, err
+	}
+	q := r.URL.Query()
+	result.Summary, result.Interactive = q.Get("summary") == "1", true
 	if raw := q.Get("detailIds"); raw != "" {
 		ids := strings.Split(raw, ",")
 		if len(ids) > 100 {
@@ -54,14 +72,14 @@ func registerPaySourceAcceptance(r chi.Router, path string, repo *repository.Dri
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		query, err := payPageQuery(r)
-		if err != nil {
-			writeAPIError(w, 400, err.Error())
-			return
-		}
 		kind := "driver"
 		if path == "/investor-pay" {
 			kind = "investor"
+		}
+		query, err := payPageQuery(r, kind)
+		if err != nil {
+			writeAPIError(w, 400, err.Error())
+			return
 		}
 		transfers, err := repo.OutgoingLoadTransfers(r.Context(), kind, week, query)
 		if err != nil {
