@@ -2915,8 +2915,9 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 - Save responses include read-only fleetStatus evidence from the committing
   transaction. The UI updates profile status badges immediately and refreshes load
   details separately, fencing late responses by entry version and pending edits.
-  Blank board statuses retain canonical Home/Vacation and truck restrictions.
-  The migration repairs derived labels only, preserving canonical profiles.
+  Clearing the current load by cell edit, drawer action or final delivery
+  defaults to Ready. Canonical availability and truck restrictions retain their
+  existing precedence. A queued successor still becomes Dispatched.
 - Assigning a current Status Board load returns employed drivers from any
   availability to Active and releases manual Shop in the same audited save.
   Queue-only additions and restores keep their existing Home/Rest/34 Reset
@@ -3503,7 +3504,11 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - A startup/minute cache-only driver-leave-tasks worker creates one overdue task
   per still-Home/Vacation driver beginning the next New York day after return.
   Month-only vacation returns expire at month end; unknown dates create no task.
-  Return, extension, unknown dates or termination resolve reminders automatically.
+  Returning from Home clears the started home plan and legacy home-time text.
+  A current load assignment counts as a return. Future home plans and vacation
+  return dates stay separate. Completed dated plans from older records clear on
+  the next board save. Return, extension, unknown dates or termination resolve
+  reminders automatically.
   Only the assigned dispatcher's active account and Administrators see them;
   reassignments move visibility. Unassigned cases remain visible to Administrators.
 - Dispatcher creation requires dispatchers.create plus access.manage, valid email

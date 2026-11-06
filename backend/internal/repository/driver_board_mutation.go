@@ -24,6 +24,18 @@ func attachBoardFleetStatus(ctx context.Context, tx pgx.Tx, entry *DriverBoardEn
  FROM drivers d LEFT JOIN trucks t ON t.id=fleet_status_driver_truck(d.id) WHERE d.id=$1`, entry.DriverID).Scan(&s.AvailabilityStatus, &s.StatusVersion, &s.TruckID, &s.TruckOperatingStatus)
 }
 
+// Let the existing blank-status trigger retain any fleet restrictions.
+func boardClearedLoadStatus(ctx context.Context, tx pgx.Tx, driver string) (string, error) {
+	var ready bool
+	err := tx.QueryRow(ctx, `SELECT NOT fleet_status_enabled() OR (
+ fleet_status_personal_label(availability_status)='' AND coalesce(fleet_truck_operating_status(fleet_status_driver_truck(id)),'ready') IN ('ready','in_use')
+ ) FROM drivers WHERE id=$1`, driver).Scan(&ready)
+	if ready {
+		return "READY", err
+	}
+	return "", err
+}
+
 const boardLoadReturnReason = "Load assigned from Status Board"
 
 // Return the existing crew to service as part of an explicit load assignment.

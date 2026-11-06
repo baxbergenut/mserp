@@ -115,7 +115,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     const baseline = savedRef.current[id];
     const next = { ...(current[id] ?? baseline), [field]: value, ...patch };
     if (field === "trailerNumber" && value !== (current[id] ?? baseline).trailerNumber) next.trailerNote = "";
-    if (field === "currentLoad") { next.destination = ""; next.eta = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : ""; }
+    if (field === "currentLoad") { next.destination = ""; next.eta = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : "READY"; }
     if (field === "status") next.statusEdited = true;
     const result = { ...current, [id]: next };
     // While saving, a revert must still be sent after the first write finishes.

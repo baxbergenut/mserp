@@ -923,6 +923,12 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	default:
 		return result, ErrBoardLoadSelection
 	}
+	if e.CurrentLoad == "" && (a.Action == "clear" || a.Action == "advance") {
+		e.Status, err = boardClearedLoadStatus(ctx, tx, a.DriverID)
+		if err != nil {
+			return result, err
+		}
+	}
 	if err = setBoardActor(ctx, tx, actor, "board"); err != nil {
 		return result, err
 	}
@@ -963,7 +969,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		}
 		e.Status = boardProgressStatus(e.Status, next)
 	}
-	saved, err := saveDriverBoardEntries(ctx, tx, []DriverBoardEntry{e})
+	saved, err := saveDriverBoardEntries(ctx, tx, []DriverBoardEntry{e}, boardLoadToday(r.now()), false)
 	if err != nil {
 		return result, err
 	}

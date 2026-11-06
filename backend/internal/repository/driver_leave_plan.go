@@ -10,6 +10,22 @@ type DriverLeavePlan struct {
 	VacationReturn string `json:"vacationReturn,omitempty"`
 }
 
+// An actual return ends home time even if it was early or the end was unknown.
+func (e *DriverBoardEntry) clearReturnedHomeTime(returned bool, today string) bool {
+	changed := returned && e.HomeTime != ""
+	if p := e.LeavePlan; p != nil && p.HomeStart != "" && p.HomeStart <= today &&
+		(returned || (p.HomeEnd != "" && p.HomeEnd < today)) {
+		plan := *p
+		plan.HomeStart, plan.HomeEnd = "", ""
+		e.LeavePlan = &plan
+		changed = true
+	}
+	if changed {
+		e.HomeTime = ""
+	}
+	return changed
+}
+
 func (p *DriverLeavePlan) Validate() error {
 	if p == nil {
 		return nil

@@ -113,7 +113,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 		t.Fatal("pickup without next", lastPickup)
 	}
 	finished := act(BoardLoadAction{Action: "advance"})
-	if e.Status != "" || e.CurrentLoad != "" || e.Destination != "" || finished.Loads.Current != nil || len(finished.Loads.Next) != 0 || len(view().Next) != 0 {
+	if e.Status != "READY" || e.CurrentLoad != "" || e.Destination != "" || finished.Loads.Current != nil || len(finished.Loads.Next) != 0 || len(view().Next) != 0 {
 		t.Fatal("last delivery should clear without NO LOAD", finished)
 	}
 	undo(finished.Entry.UndoID)
