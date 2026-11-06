@@ -27,6 +27,7 @@ type BoardStop struct {
 	Key            string         `json:"key"`
 	Type           string         `json:"type"`
 	Location       string         `json:"location"`
+	StreetAddress  string         `json:"streetAddress,omitempty"`
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
@@ -217,11 +218,15 @@ func boardStops(raw []byte) []BoardStop {
 			}
 		}
 		location := strings.Join(parts, ", ")
+		streetAddress := strings.TrimSpace(s.Location.Address)
 		if location == "" {
-			location = strings.TrimSpace(s.Location.Address)
+			location = streetAddress
 		}
 		hash := sha256.Sum256([]byte(fmt.Sprintf("%d/%s/%s/%s", s.Ordering, s.StopType, location, s.Location.Address)))
 		stop := BoardStop{Key: hex.EncodeToString(hash[:12]), Type: s.StopType, Location: location}
+		if streetAddress != location {
+			stop.StreetAddress = streetAddress
+		}
 		stop.ProviderID = s.ID
 		stop.Schedule = boardSchedule(s)
 		stop.Latitude, stop.Longitude = boardStopCoordinates(s)
@@ -752,7 +757,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			if e.Status != "DISPATCHED" && e.Status != "ENROUTE" && e.Status != "RESERVED" {
 				return result, ErrBoardLoadSelection
 			}
-			status, err := applyBoardProgressStop(&s, view, a.StopKey, e.Status != "DISPATCHED")
+			status, err := applyBoardProgressStop(&s, view, a.StopKey, e.Status == "DISPATCHED")
 			if err != nil {
 				return result, err
 			}
@@ -761,18 +766,13 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		}
 		switch e.Status {
 		case "DISPATCHED":
-			e.Status = boardProgressStatus("ENROUTE", view.Next)
-			s.Current = view.Current
-			if _, err := advanceBoardDelivery(&s, view, a.StopKey, false); err != nil {
-				return result, err
+			if !advanceBoardStop(&s, view, "pickup", true) {
+				advanceBoardStop(&s, view, "delivery", false)
+				e.Status = boardProgressStatus("ENROUTE", view.Next)
 			}
 			e.Destination = ""
 		case "ENROUTE", "RESERVED":
-			remaining, err := advanceBoardDelivery(&s, view, a.StopKey, true)
-			if err != nil {
-				return result, err
-			}
-			if remaining {
+			if advanceBoardStop(&s, view, "delivery", true) {
 				e.Status = boardProgressStatus("ENROUTE", view.Next)
 				e.Destination = ""
 				break

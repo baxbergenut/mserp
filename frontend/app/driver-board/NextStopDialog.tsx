@@ -3,14 +3,14 @@
 import { useState } from "react";
 import type { BoardLoads } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
-import { nextDeliveryStops } from "./board";
+import { boardProgressChoice } from "./board";
 
 export function NextStopDialog({ name, status, loads, onApply, onClose }: {
   name: string; status: string; loads: BoardLoads;
   onApply: (stopKey: string) => Promise<unknown>; onClose: () => void;
 }) {
   const stops = loads.current?.stops ?? [];
-  const [selected, setSelected] = useState(nextDeliveryStops(status, loads)[0]?.key ?? loads.stopKey);
+  const [selected, setSelected] = useState(boardProgressChoice(status, loads)?.key ?? loads.stopKey);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <Modal title={`Next stop · ${name}`} isSaving={busy} submitLabel="Apply destination" submitDisabled={!selected}
@@ -23,10 +23,13 @@ export function NextStopDialog({ name, status, loads, onApply, onClose }: {
     }}>
     <fieldset className="space-y-2" disabled={busy}>
       <legend className="mb-3 text-sm text-zinc-400">Choose the current destination for {loads.current?.number}.</legend>
-      {stops.map(stop => <label key={stop.key} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-700 p-3 hover:bg-zinc-800">
-        <input type="radio" aria-label={stop.location || "Address unavailable"} name="next-stop" value={stop.key} checked={selected === stop.key} onChange={() => setSelected(stop.key)} className="mt-0.5" />
-        <span className="min-w-0 text-sm text-zinc-200"><span className="mb-1 block text-xs text-zinc-400">{stop.type.toLowerCase() === "pickup" ? "Pickup" : "Delivery"}{stop.key === loads.stopKey ? " · Current destination" : loads.completedStopKeys?.includes(stop.key) ? " · Completed" : ""}</span>{stop.location || "Address unavailable"}{stop.schedule?.label && <span className="mt-1 block text-xs text-zinc-400">{stop.schedule.label}</span>}</span>
-      </label>)}
+      {stops.map(stop => {
+        const address = [stop.streetAddress, stop.location].filter(Boolean).join(", ") || "Address unavailable";
+        return <label key={stop.key} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-700 p-3 hover:bg-zinc-800">
+          <input type="radio" aria-label={address} name="next-stop" value={stop.key} checked={selected === stop.key} onChange={() => setSelected(stop.key)} className="mt-0.5" />
+          <span className="min-w-0 text-sm text-zinc-200"><span className="mb-1 block text-xs text-zinc-400">{stop.type.toLowerCase() === "pickup" ? "Pickup" : "Delivery"}{stop.key === loads.stopKey ? " · Current destination" : loads.completedStopKeys?.includes(stop.key) ? " · Completed" : ""}</span>{address}{stop.schedule?.label && <span className="mt-1 block text-xs text-zinc-400">{stop.schedule.label}</span>}</span>
+        </label>;
+      })}
     </fieldset>
     {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
   </Modal>;

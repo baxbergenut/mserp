@@ -2,10 +2,22 @@ package repository
 
 import "strings"
 
-// Explicit choices may return to a pickup or revisit any delivery. Returning to
-// pickup does not complete the delivery being left; revisiting a delivery reopens
-// that stop while retaining the other load-scoped completion receipts.
-func applyBoardProgressStop(state *boardLoadState, view BoardLoads, chosen string, complete bool) (string, error) {
+func hasMultipleBoardPickups(stops []BoardStop) bool {
+	found := false
+	for _, stop := range stops {
+		if strings.EqualFold(stop.Type, "pickup") {
+			if found {
+				return true
+			}
+			found = true
+		}
+	}
+	return false
+}
+
+// Explicit choices may revisit a stop. Returning to a pickup leaves the
+// delivery being left open, while leaving a pickup can complete that pickup.
+func applyBoardProgressStop(state *boardLoadState, view BoardLoads, chosen string, dispatched bool) (string, error) {
 	if view.Current == nil || chosen == "" {
 		return "", ErrBoardLoadSelection
 	}
@@ -21,75 +33,70 @@ func applyBoardProgressStop(state *boardLoadState, view BoardLoads, chosen strin
 		return "", ErrBoardLoadSelection
 	}
 	status := "DISPATCHED"
-	if strings.EqualFold(target.Type, "delivery") {
+	delivery := strings.EqualFold(target.Type, "delivery")
+	if delivery {
 		status = boardProgressStatus("ENROUTE", view.Next)
-		prefix := boardCompletionKey(*view.Current) + "/"
-		if complete && chosen != view.StopKey {
-			for _, stop := range view.Current.Stops {
-				if stop.Key == view.StopKey && strings.EqualFold(stop.Type, "delivery") {
-					if state.CompletedStops == nil {
-						state.CompletedStops = map[string]bool{}
-					}
-					state.CompletedStops[prefix+stop.Key] = true
-				}
-			}
-		}
-		delete(state.CompletedStops, prefix+chosen)
 	}
-	state.Current, state.StopKey = view.Current, chosen
-	state.DestinationSource = strings.TrimSpace(target.Location) != ""
-	state.DestinationManual = false
+	prefix := boardCompletionKey(*view.Current) + "/"
+	if chosen != view.StopKey {
+		if dispatched {
+			completeBoardStop(state, view, "pickup", prefix)
+		} else if delivery {
+			completeBoardStop(state, view, "delivery", prefix)
+		}
+	}
+	delete(state.CompletedStops, prefix+chosen)
+	setBoardProgressStop(state, view.Current, *target)
 	return status, nil
 }
 
-// Complete only the selected delivery. Stop receipts belong to a source load,
-// so a reviewed out-of-order destination never skips the other deliveries.
-func advanceBoardDelivery(state *boardLoadState, view BoardLoads, chosen string, complete bool) (bool, error) {
+func completeBoardStop(state *boardLoadState, view BoardLoads, kind, prefix string) {
+	if view.StopKey == "" {
+		return
+	}
+	// A single pickup has no separate progress to track.
+	if kind == "pickup" && !hasMultipleBoardPickups(view.Current.Stops) {
+		return
+	}
+	for _, stop := range view.Current.Stops {
+		if stop.Key == view.StopKey && strings.EqualFold(stop.Type, kind) {
+			if state.CompletedStops == nil {
+				state.CompletedStops = make(map[string]bool)
+			}
+			state.CompletedStops[prefix+stop.Key] = true
+			return
+		}
+	}
+}
+
+func setBoardProgressStop(state *boardLoadState, load *BoardLoad, stop BoardStop) {
+	state.Current, state.StopKey = load, stop.Key
+	state.DestinationSource = strings.TrimSpace(stop.Location) != ""
+	state.DestinationManual = false
+}
+
+// Complete the active stop and select the first unfinished stop of this kind.
+func advanceBoardStop(state *boardLoadState, view BoardLoads, kind string, complete bool) bool {
 	state.Current = view.Current
 	if view.Current == nil {
-		if chosen != "" {
-			return false, ErrBoardLoadSelection
-		}
-		useBoardStop(state, "delivery")
-		return false, nil
+		useBoardStop(state, kind)
+		return false
+	}
+	if kind == "pickup" && !hasMultipleBoardPickups(view.Current.Stops) {
+		return false
 	}
 	prefix := boardCompletionKey(*view.Current) + "/"
-	remaining := []BoardStop{}
-	completed := ""
+	if complete {
+		completeBoardStop(state, view, kind, prefix)
+	}
 	for _, stop := range view.Current.Stops {
-		if !strings.EqualFold(stop.Type, "delivery") {
-			continue
-		}
-		if complete && stop.Key == view.StopKey {
-			completed = prefix + stop.Key
-			continue
-		}
-		if !state.CompletedStops[prefix+stop.Key] {
-			remaining = append(remaining, stop)
+		if strings.EqualFold(stop.Type, kind) && !(complete && stop.Key == view.StopKey) && !state.CompletedStops[prefix+stop.Key] {
+			setBoardProgressStop(state, view.Current, stop)
+			return true
 		}
 	}
-	var next *BoardStop
-	for i := range remaining {
-		if chosen == "" || remaining[i].Key == chosen {
-			next = &remaining[i]
-			break
-		}
-	}
-	if chosen != "" && next == nil {
-		return false, ErrBoardLoadSelection
-	}
-	if completed != "" {
-		if state.CompletedStops == nil {
-			state.CompletedStops = map[string]bool{}
-		}
-		state.CompletedStops[completed] = true
-	}
-	if next == nil {
-		useBoardStop(state, "delivery")
-		return false, nil
-	}
-	state.StopKey = next.Key
-	state.DestinationSource = strings.TrimSpace(next.Location) != ""
+	state.StopKey = ""
+	state.DestinationSource = false
 	state.DestinationManual = false
-	return true, nil
+	return false
 }

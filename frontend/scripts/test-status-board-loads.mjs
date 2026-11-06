@@ -18,6 +18,11 @@ const browser = await chromium.launch();
 const driver = { id: 'driver-1', fullName: 'Loads Driver', active: true, driverType: 'M', truckId: '', truckUnit: '101', dispatcherId: '', dispatcherName: '', phone: '', location: null };
 const load = number => ({ planId: number, number, date: '2026-10-29', slot: 0, loadId: 1, sourceStatus: 'Active', sourceDriver: '', syncedAt: '', warning: '', stops: [{ key: 'pickup', type: 'pickup', location: 'Atlanta, GA', appointment: '' }] });
 const current = load('CURRENT'), earlier = load('EARLIER'), next = load('NEXT');
+next.stops[0].streetAddress = '100 First Street';
+next.stops.push(
+  { key: 'second-pickup', type: 'pickup', location: 'Atlanta, GA', streetAddress: '200 Second Street', appointment: '' },
+  { key: 'delivery', type: 'delivery', location: 'Dallas, TX', appointment: '' },
+);
 const completed = { ...load('COMPLETED-HERE'), canRestoreToQueue: true };
 const delivered = { ...load('DELIVERED'), sourceStatus: 'Delivered' };
 let full = { current, week: [current, next], next: [next], earlier: [earlier], hidden: [load('HIDDEN')], unavailable: [completed, delivered], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
@@ -44,7 +49,16 @@ try {
         const input = req.postDataJSON();
         expect(input.revision).toBe(full.revision);
         expect(input.version).toBe(entry.version);
-        if (input.action === 'restore_completed') {
+        if (input.action === 'advance') {
+          if (full.stopKey === 'pickup') {
+            expect(input.stopKey).toBe('second-pickup');
+            full = { ...full, stopKey: input.stopKey, completedStopKeys: ['pickup'], destinationSource: true, revision: 'second-pickup' };
+          } else {
+            expect(input.stopKey).toBeUndefined();
+            full = { ...full, stopKey: 'delivery', completedStopKeys: ['pickup', 'second-pickup'], sourceDestination: 'Dallas, TX', revision: 'delivery' };
+            entry = { ...entry, status: 'RESERVED' };
+          }
+        } else if (input.action === 'restore_completed') {
           expect(input.planId).toBe(completed.planId);
           full = { ...full, next: [completed], unavailable: [delivered], revision: 'restored' };
         } else {
@@ -163,8 +177,26 @@ try {
   await expect.poll(() => mutations).toBe(2);
   await expect(sequence.getByRole('button', { name: 'COMPLETED-HERE', exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'NEXT · Current load', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  const advance = page.getByRole('button', { name: 'Loads Driver · Advance load', exact: true });
+  const chooser = page.getByRole('dialog', { name: 'Next stop · Loads Driver' });
+  await advance.click();
+  await expect(chooser.getByRole('radio', { name: '100 First Street, Atlanta, GA' })).toBeVisible();
+  await expect(chooser.getByRole('radio', { name: '200 Second Street, Atlanta, GA' })).toBeChecked();
+  await chooser.getByRole('button', { name: 'Cancel' }).click();
+  expect(mutations).toBe(2);
+  await advance.click();
+  await chooser.getByRole('button', { name: 'Apply destination' }).click();
+  await expect(chooser).toHaveCount(0);
+  await expect(advance).toHaveText('Dispatched');
+  await expect(page.getByLabel('Loads Driver · Current load', { exact: true })).toHaveValue('NEXT');
+  await advance.click();
+  await expect(advance).toHaveText('Reserved');
+  await expect(page.getByLabel('Loads Driver · Destination', { exact: true })).toHaveValue('Dallas, TX');
+  await expect(chooser).toHaveCount(0);
+  expect(mutations).toBe(4);
   expect(errors).toEqual([]);
-  console.log('Status Board loads passed: live history, stale edit guards, failure/retry, versioned saves, close/reopen cancellation, and restoring a board-completed load.');
+  console.log('Status Board loads passed: live history, stale edit guards, failure/retry, versioned saves, restoring a completed load, and multi-pickup progression.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

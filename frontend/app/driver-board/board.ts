@@ -40,10 +40,19 @@ export function statusLabel(status: string) {
   return status.toLowerCase().replace(/[a-z]/, letter => letter.toUpperCase());
 }
 
-export function nextDeliveryStops(status: string, loads: BoardLoads) {
-  return (loads.current?.stops ?? []).filter(stop => stop.type.toLowerCase() === "delivery"
-    && !loads.completedStopKeys?.includes(stop.key)
+export function boardProgressChoice(status: string, loads: BoardLoads) {
+  const stops = loads.current?.stops ?? [];
+  const unfinished = (key: string) => !loads.completedStopKeys?.includes(key);
+  if (status === "DISPATCHED") {
+    const pickups = stops.filter(stop => stop.type.toLowerCase() === "pickup");
+    if (pickups.length > 1) {
+      const nextPickup = pickups.find(stop => stop.key !== loads.stopKey && unfinished(stop.key));
+      if (nextPickup) return nextPickup;
+    }
+  }
+  const deliveries = stops.filter(stop => stop.type.toLowerCase() === "delivery" && unfinished(stop.key)
     && (status === "DISPATCHED" || stop.key !== loads.stopKey));
+  if (deliveries.length > (status === "DISPATCHED" ? 1 : 0)) return deliveries[0];
 }
 
 // Retain legacy history, while the live board shows a single time or mileage.

@@ -27,7 +27,7 @@ import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/drive
 import { StatusCell } from "./StatusCell";
 import type { BoardLoads as BoardLoadsView, BoardStop, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
 import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
-import { statuses, statusColor, statusLabel, nextDeliveryStops, previewCurrentLoad } from "./board";
+import { statuses, statusColor, statusLabel, boardProgressChoice, previewCurrentLoad } from "./board";
 import { NextStopDialog } from "./NextStopDialog";
 import { boardColumns, boardHistoryField, type BoardColumn } from "./boardCells";
 import { useBoardColumnLayout } from "./useBoardColumnLayout";
@@ -361,8 +361,7 @@ export default function DriverBoardPage() {
                   choices={statusChoices} onChange={value => {if(["SHOP","STOP","ACCIDENT"].includes(value)){setRestriction({id:d.id,name:d.fullName,status:value});setRestrictionReason("");return;}if(["HOME","HOME (YARD)","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
                     if (!loads || destinationBusy) return;
                     setDestinationError("");
-                    const remaining = nextDeliveryStops(entry.status, loads);
-                    if ((entry.status === "DISPATCHED" && remaining.length > 1) || (entry.status !== "DISPATCHED" && remaining.length > 0)) {
+                    if (boardProgressChoice(entry.status, loads)) {
                       setNextStop({ id: d.id, name: d.fullName, status: entry.status, loads });
                       return;
                     }

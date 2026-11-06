@@ -1629,10 +1629,13 @@ assignment lookup lists.
   Status-cell labels advance pickup/delivery; only the chevron opens the neutral
   dropdown. Pickup shows delivery and sets RESERVED when Next is nonempty,
   otherwise ENROUTE; these labels also follow queue changes during reads.
-  Multi-delivery progress offers every pickup and delivery in the next-stop chooser,
-  including the current and completed stops. Applying a pickup sets DISPATCHED
-  without completing the delivery being left. Applying the current stop keeps it
-  active; revisiting a completed delivery reopens that stop. Other completion
+  Multi-stop progress offers every pickup and delivery in the next-stop chooser,
+  including the current and completed stops. While DISPATCHED, the pickup chooser
+  opens only on loads with multiple pickups and another unfinished pickup.
+  Switching from one pickup to another records the
+  pickup being left and keeps the load DISPATCHED. Applying a pickup from a
+  delivery leaves that delivery open. Applying the current stop keeps it active;
+  revisiting a completed stop reopens it. Other completion
   receipts survive. The server records each
   completed stop under its source load identity in operational load-state JSON;
   out-of-order choices cannot skip remaining deliveries, including blank addresses.

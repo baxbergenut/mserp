@@ -579,7 +579,7 @@ export interface BoardAutomation {
   travelStale?: boolean; travelArrivalAt?: string;
   requiresConfirmation: boolean; routingEnabled: boolean; manualETAValid: boolean;
 }
-export interface BoardStop { key: string; type: string; location: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule; manualStopTime?: string }
+export interface BoardStop { key: string; type: string; location: string; streetAddress?: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule; manualStopTime?: string }
 export interface BoardLoad {
   canRestoreToQueue?: boolean;
   manual?: boolean;
