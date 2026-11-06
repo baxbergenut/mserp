@@ -140,8 +140,10 @@ export function matchLoad(entry: GrossBoardEntry, load: GrossBoardLoad): GrossBo
 
 // Original revenue and driver gross are independent financial inputs.
 export function editAmount(entry: GrossBoardEntry, field: "originalRate" | "driverRate" | "miles", value: string): GrossBoardEntry {
-  const effective = value === "" && entry.loadRecordId !== null && !entry.tripReview
-    ? field === "originalRate" ? entry.systemOriginalRate ?? "" : field === "miles" ? entry.systemMiles ?? "" : value
+  const systemValue = field === "originalRate" ? entry.systemOriginalRate
+    : field === "driverRate" ? entry.systemDriverRate : entry.systemMiles;
+  const effective = value === "" && entry.loadRecordId !== null && !entry.sourceMissing && !entry.tripReview
+    ? systemValue ?? ""
     : value;
   return { ...entry, [field]: effective, acceptSystemValues: false, acceptDriverGross: false,
     ...(field === "originalRate" ? { enteredOriginalRate: value,
