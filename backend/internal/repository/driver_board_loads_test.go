@@ -277,10 +277,14 @@ func testCurrentLoadAutofill(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		e = rows[0]
 	}
 	e.CurrentLoad = "  auto-a  "
+	if _, err := repo.Save(ctx, []DriverBoardEntry{e}); !errors.Is(err, ErrBoardLoadCompleted) {
+		t.Fatal("delivered weekly match assigned by typing", err)
+	}
+	exec(`UPDATE loads SET status='Dispatched' WHERE id=88021`)
 	save()
 	v := view()
 	if v.Current == nil || !v.DestinationSource || v.SourceDestination != "Atlanta, Georgia, 30303" || len(v.Next) != 0 {
-		t.Fatalf("earlier delivered weekly match/repeated slots: %+v", v)
+		t.Fatalf("earlier weekly match/repeated slots: %+v", v)
 	}
 	if e.Status != "DISPATCHED" || e.ETA != "2026-10-01T15:00" || e.Notes != "Keep notes" {
 		t.Fatal("autofill changed unrelated fields")

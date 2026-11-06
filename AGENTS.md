@@ -1110,7 +1110,10 @@ positive Reimburse-method expense credits already included in net payable.
   restores the source schedule; overrides follow the imported load into current.
   Load revision checks exclude freshness-only syncedAt changes in every load
   group; source identities, stops/schedules, queue state and versions remain fenced.
-  Clicking the number/rest of the cell opens the full queue. Known pickup stops
+  Clicking the number/rest of the cell opens the full queue. It runs upward from
+  the current load, with the first queued load directly above it. Upcoming cards
+  can be dragged by their body, and their move buttons support keyboard operation.
+  Known pickup stops
   without schedules show PU — for manual entry; unresolved loads remain locked.
   Loads > Add next load saves an exact number in the audited load-state JSON,
   independently of Gross Board. Manual queue IDs persist across imports; cached
@@ -1573,9 +1576,11 @@ assignment lookup lists.
   next loads remain inspectable; finished current loads are not auto-cleared.
   DataTruck invoiced loads count as finished for queue eligibility and manual
   queue refresh candidates; explicit current selections stay visible for review.
-  Under Unavailable loads, Restore to queue clears only the selected load's
-  Status Board completion and delivery progress. Missing or terminal provider
-  records remain unavailable. Explicit restores keep the original plan queued
+  Completed loads appear below the current load. DataTruck's Delivered, Completed
+  and Invoiced loads are read-only history and cannot be made current by typing.
+  Missing and canceled source records remain under Unavailable loads.
+  Restore to queue on eligible board-completed loads clears only that load's
+  completion and delivery progress. Explicit restores keep the original plan queued
   across the date cutoff and leave the driver's current load and Gross Board
   placement intact. The correction uses the normal version and undo history.
   Stops come from imported raw_payload. Only first pickup/final delivery inherit

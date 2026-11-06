@@ -415,6 +415,9 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 					}
 				}
 				if chosen != nil {
+					if providerCompletedLoad(chosen.SourceStatus) {
+						return nil, ErrBoardLoadCompleted
+					}
 					loadStateValue.Current = chosen
 					loadStateValue.StopKey = ""
 					loadStateValue.DestinationSource = false

@@ -582,6 +582,7 @@ export interface BoardAutomation {
 }
 export interface BoardStop { key: string; type: string; location: string; streetAddress?: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule; manualStopTime?: string }
 export interface BoardLoad {
+  completed?: boolean;
   canRestoreToQueue?: boolean;
   manual?: boolean;
   planId: string; date: string; slot: number; number: string; loadId: number | null;

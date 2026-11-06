@@ -23,9 +23,11 @@ next.stops.push(
   { key: 'second-pickup', type: 'pickup', location: 'Atlanta, GA', streetAddress: '200 Second Street', appointment: '' },
   { key: 'delivery', type: 'delivery', location: 'Dallas, TX', appointment: '' },
 );
-const completed = { ...load('COMPLETED-HERE'), canRestoreToQueue: true };
-const delivered = { ...load('DELIVERED'), sourceStatus: 'Delivered' };
-let full = { current, week: [current, next], next: [next], earlier: [earlier], hidden: [load('HIDDEN')], unavailable: [completed, delivered], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
+const later = load('LATER');
+const completed = { ...load('COMPLETED-HERE'), completed: true, canRestoreToQueue: true };
+const delivered = { ...load('DELIVERED'), completed: true, sourceStatus: 'Delivered' };
+const canceled = { ...load('CANCELED'), sourceStatus: 'Canceled' };
+let full = { current, week: [current, next, later], next: [next, later], earlier: [earlier], hidden: [load('HIDDEN')], unavailable: [completed, delivered, canceled], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
 let entry = { driverId: driver.id, currentLoad: current.number, trailerNumber: '', trailerNote: '', status: 'DISPATCHED', destination: '', eta: '', notes: '', homeTime: '', version: 1 };
 const overview = () => ({ ...full, detailsOmitted: true, earlier: [], hidden: [], unavailable: [] });
 const board = () => ({ weekStart: '2026-10-26', drivers: [driver], entries: [entry], grossEntries: [], loads: { [driver.id]: overview() }, eld: { configured: false } });
@@ -45,10 +47,16 @@ try {
     const req = route.request(), path = new URL(req.url()).pathname.slice(4);
     if (path === '/driver-board/loads/' + driver.id) {
       if (req.method() === 'POST') {
-        mutations++;
         const input = req.postDataJSON();
         expect(input.revision).toBe(full.revision);
         expect(input.version).toBe(entry.version);
+        if (input.action === 'order') {
+          expect(input.order).toEqual(full.next.map(load => load.planId).reverse());
+          full = { ...full, next: [...full.next].reverse(), revision: `order-${entry.version}`, customOrder: true };
+          entry = { ...entry, version: entry.version + 1 };
+          return route.fulfill({ json: { entry, loads: full } });
+        }
+        mutations++;
         if (input.action === 'advance') {
           if (full.stopKey === 'pickup') {
             expect(input.stopKey).toBe('second-pickup');
@@ -60,7 +68,7 @@ try {
           }
         } else if (input.action === 'restore_completed') {
           expect(input.planId).toBe(completed.planId);
-          full = { ...full, next: [completed], unavailable: [delivered], revision: 'restored' };
+          full = { ...full, next: [load(completed.number)], unavailable: [delivered, canceled], revision: 'restored' };
         } else {
           expect(input.action).toBe('manual');
           full = { ...full, destinationSource: false, revision: 'saved' };
@@ -94,13 +102,19 @@ try {
   await expect(destination).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'CURRENT · Current load', exact: true })).toBeVisible();
   await expect(panel.getByText('Removed from queue (1)', { exact: true })).toBeVisible();
-  await expect(panel.getByText('Unavailable loads (2)', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Unavailable loads (1)', { exact: true })).toBeVisible();
+
+  const sequence = panel.getByRole('region', { name: 'Load sequence' });
+  const cards = sequence.getByRole('button', { name: /^(LATER|NEXT|CURRENT · Current load|DELIVERED · Completed load|COMPLETED-HERE · Completed load|EARLIER)$/ });
+  const historyOrder = [/^CURRENT/, /^DELIVERED/, /^COMPLETED-HERE/, 'EARLIER'];
+  await expect(cards).toHaveText(['LATER', 'NEXT', ...historyOrder]);
+  await expect(sequence.locator('[data-queued-load]')).toHaveCount(2);
+  await expect(sequence.getByRole('button', { name: /^Reorder load / })).toHaveCount(0);
 
   // Identical live snapshots must not refetch, lock controls, or shift the panel.
   holdDetails = true;
   let before = detailReads;
   const beforeBoard = boardReads;
-  const sequence = panel.getByRole('region', { name: 'Load sequence' });
   const originalY = (await sequence.boundingBox()).y;
   await page.evaluate(() => {
     window.loadHistoryFlashes = 0;
@@ -124,10 +138,39 @@ try {
   await expect(destination).toBeEnabled();
   await expect(history).toBeVisible();
 
+  // Only upcoming cards can move. Dragging and the keyboard use the same queue.
+  const laterButton = sequence.getByRole('button', { name: 'LATER', exact: true });
+  const cardBox = await laterButton.boundingBox();
+  const nextBox = await sequence.getByRole('button', { name: 'NEXT', exact: true }).boundingBox();
+  const copyBox = await sequence.getByRole('button', { name: 'Copy load number LATER' }).boundingBox();
+  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + copyBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(copyBox.x + copyBox.width / 2, nextBox.y + nextBox.height - 2, { steps: 5 });
+  await expect(sequence.locator('[data-load-dragging]')).toHaveCount(0);
+  await page.mouse.up();
+  await expect(cards).toHaveText(['LATER', 'NEXT', ...historyOrder]);
+  await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(cardBox.x + cardBox.width / 2, nextBox.y + nextBox.height - 2, { steps: 5 });
+  await expect(sequence.locator('[data-queued-load="LATER"]')).toHaveAttribute('data-load-dragging', 'true');
+  await expect(sequence.locator('[data-queued-load="NEXT"]')).toHaveCSS('transition-duration', '0.18s');
+  await page.mouse.up();
+  await expect(cards).toHaveText(['NEXT', 'LATER', ...historyOrder]);
+  await expect(laterButton).toHaveAttribute('aria-expanded', 'false');
+  await laterButton.click();
+  await sequence.getByRole('button', { name: 'Move LATER up' }).press('Enter');
+  await expect(cards).toHaveText(['LATER', 'NEXT', ...historyOrder]);
+  await sequence.getByRole('button', { name: 'DELIVERED · Completed load' }).click();
+  await expect(sequence.getByText('DataTruck: Delivered', { exact: false })).toBeVisible();
+  await expect(sequence.getByRole('button', { name: 'Set current', exact: true })).toHaveCount(0);
+  await expect(sequence.getByRole('button', { name: 'Restore to queue · DELIVERED' })).toHaveCount(0);
+  await sequence.getByRole('button', { name: 'CURRENT · Current load', exact: true }).click();
+  await expect(destination).toBeEnabled();
+
   // Source changes rehydrate the whole panel, retaining old details during the read.
   holdDetails = true;
   full = { ...full, current: next, next: [], earlier: [earlier, current], revision: 'second' };
-  entry = { ...entry, currentLoad: next.number, version: 2 };
+  entry = { ...entry, currentLoad: next.number, version: entry.version + 1 };
   before = detailReads;
   await push();
   await expect.poll(() => detailReads).toBeGreaterThan(before);
@@ -170,9 +213,9 @@ try {
   await expect(history).toBeVisible();
   await expect(panel.getByRole('button', { name: 'NEXT · Current load', exact: true })).toBeVisible();
   await expect(destination).toBeEnabled();
-  await panel.getByText('Unavailable loads (2)', { exact: true }).click();
-  await expect(panel.getByText('Completed on Status Board', { exact: true })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Restore to queue · DELIVERED', exact: true })).toHaveCount(0);
+  await panel.getByText('Unavailable loads (1)', { exact: true }).click();
+  await expect(panel.getByText('DataTruck: Canceled', { exact: false })).toBeVisible();
+  await sequence.getByRole('button', { name: 'COMPLETED-HERE · Completed load' }).click();
   await panel.getByRole('button', { name: 'Restore to queue · COMPLETED-HERE', exact: true }).click();
   await expect.poll(() => mutations).toBe(2);
   await expect(sequence.getByRole('button', { name: 'COMPLETED-HERE', exact: true })).toBeVisible();
@@ -196,7 +239,7 @@ try {
   await expect(chooser).toHaveCount(0);
   expect(mutations).toBe(4);
   expect(errors).toEqual([]);
-  console.log('Status Board loads passed: live history, stale edit guards, failure/retry, versioned saves, restoring a completed load, and multi-pickup progression.');
+  console.log('Status Board loads passed: animated drag, keyboard reorder, completed history, live refresh, and multi-pickup progression.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

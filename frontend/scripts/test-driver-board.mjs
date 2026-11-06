@@ -31,6 +31,7 @@ assert.equal(previewCurrentLoad(linked, cleared, typed).destinationSource, false
 assert.equal(previewCurrentLoad(linked, cleared, cleared).destinationSource, false); // save finished before load refresh
 assert.equal(previewCurrentLoad({ ...loads, week: [weeklyLoad, { ...weeklyLoad, loadId: 2 }] }, typed, baseline).current, null);
 assert.equal(previewCurrentLoad({ ...loads, week: [weeklyLoad, weeklyLoad] }, typed, baseline).current, weeklyLoad);
+assert.equal(previewCurrentLoad({ ...loads, week: [{ ...weeklyLoad, completed: true }] }, typed, baseline).current, null);
 assert.equal(previewCurrentLoad(loads, { currentLoad: 'EARL', destination: '' }, baseline).current, null);
 assert.equal(previewCurrentLoad(loads, { ...typed, destination: 'Manual' }, baseline).destinationSource, false);
 assert.equal(previewCurrentLoad(linked, { ...typed, resolveCurrentLoad: true }, typed).sourceDestination, 'Atlanta, GA');

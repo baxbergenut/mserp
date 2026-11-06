@@ -31,7 +31,7 @@ export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverB
   const matches = loads.week.filter(p => p.number.trim().toLowerCase() === number);
   const chosen = matches[0];
   const unique = chosen && (matches.length === 1 || (chosen.loadId !== null && matches.every(p => p.loadId === chosen.loadId)));
-  const current = unique ? chosen : null;
+  const current = unique && !chosen.completed ? chosen : null;
   const stop = current?.stops.find(s => s.type.toLowerCase() === "pickup" && s.location.trim());
   return { ...loads, automation: undefined, resolutionWarning: undefined, current, destinationSource: !!stop && !entry.destination, sourceDestination: stop?.location ?? "", stopKey: stop?.key ?? "" };
 }

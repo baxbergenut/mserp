@@ -47,8 +47,8 @@ export async function runManualNextLoadsE2E({ page, base, sql, schema, temp, id 
   const after = await (await page.request.get(`${base}/api/driver-board/loads/${driver}`)).json();
   expect(after.next[1].planId).toBe(lateID);
   expect(after.next[1].loadId).toBe(989012);
-  await panel.getByRole('button', { name: 'Move MANUAL-LATE up', exact: true }).click();
-  await expect(panel.getByLabel('Load sequence').getByRole('article').first()).toContainText('MANUAL-LATE');
+  await panel.getByRole('button', { name: 'Move MANUAL-LATE down', exact: true }).click();
+  await expect(panel.getByLabel('Load sequence').getByRole('button', { name: /^MANUAL-(KNOWN|LATE)$/ })).toHaveText(['MANUAL-KNOWN', 'MANUAL-LATE']);
   await card('MANUAL-LATE').getByRole('button', { name: 'Set current', exact: true }).click();
   await panel.getByRole('button', { name: 'Confirm current load', exact: true }).click();
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);

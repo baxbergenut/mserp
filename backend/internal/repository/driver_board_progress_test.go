@@ -240,16 +240,26 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	restore := BoardLoadAction{Action: "restore_completed", PlanID: next}
 	exec(`UPDATE loads SET status='Invoiced' WHERE id=88122`)
 	v = view()
-	if len(v.Unavailable) != 1 || v.Unavailable[0].CanRestoreToQueue {
-		t.Fatal("provider-finished load offered for restore", v.Unavailable)
+	if len(v.Unavailable) != 1 || !v.Unavailable[0].Completed || v.Unavailable[0].CanRestoreToQueue {
+		t.Fatal("provider-finished load should be read-only history", v.Unavailable)
 	}
 	restore.DriverID, restore.Version, restore.FromDate, restore.Revision = d.ID, e.Version, v.FromDate, v.Revision
 	if _, err := repo.ChangeLoads(ctx, restore, actor); !errors.Is(err, ErrBoardLoadSelection) {
 		t.Fatal("provider-finished load restored", err)
 	}
+	selectCompleted := restore
+	selectCompleted.Action = "select"
+	if _, err := repo.ChangeLoads(ctx, selectCompleted, actor); !errors.Is(err, ErrBoardLoadSelection) {
+		t.Fatal("provider-finished load selected", err)
+	}
+	typedCompleted := e
+	typedCompleted.CurrentLoad = "PROGRESS-B"
+	if _, err := repo.Save(ctx, []DriverBoardEntry{typedCompleted}, actor); !errors.Is(err, ErrBoardLoadCompleted) {
+		t.Fatal("provider-finished load assigned by typing", err)
+	}
 	exec(`UPDATE loads SET status='Dispatched' WHERE id=88122`)
 	before := view()
-	if len(before.Unavailable) != 1 || !before.Unavailable[0].CanRestoreToQueue {
+	if len(before.Unavailable) != 1 || !before.Unavailable[0].Completed || !before.Unavailable[0].CanRestoreToQueue {
 		t.Fatal("board-completed load has no recovery action", before.Unavailable)
 	}
 	requeued := act(restore)

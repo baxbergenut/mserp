@@ -78,10 +78,12 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await todayPlan.getByRole('button', { name: 'TODAY-PLAN', exact: true }).click();
   await todayPlan.getByRole('button', { name: 'Remove from queue', exact: true }).click();
   await card('NEXT-B').getByRole('button', { name: 'NEXT-B', exact: true }).click();
-  await expect(panel.getByRole('button', { name: 'Move NEXT-B up', exact: true })).toBeDisabled();
+  const queued = panel.getByLabel('Load sequence').getByRole('button', { name: /^NEXT-[BC]$/ });
+  await expect(queued).toHaveText(['NEXT-C', 'NEXT-B']);
+  await expect(panel.getByRole('button', { name: 'Move NEXT-B down', exact: true })).toBeDisabled();
   await card('NEXT-C').getByRole('button', { name: 'NEXT-C', exact: true }).click();
-  await panel.getByRole('button', { name: 'Move NEXT-C up', exact: true }).click();
-  await expect(panel.getByLabel('Load sequence').getByRole('article').first().getByRole('button').first()).toHaveText('NEXT-C');
+  await panel.getByRole('button', { name: 'Move NEXT-C down', exact: true }).click();
+  await expect(queued).toHaveText(['NEXT-B', 'NEXT-C']);
   await page.screenshot({ path: join(temp, 'status-board-loads.png'), fullPage: true });
   const history = await (await page.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).json();
   await panel.getByRole('button', { name: 'History', exact: true }).click();
@@ -90,7 +92,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await historyPanel.getByRole('button', { name: 'Undo change', exact: true }).click();
   await expect(historyPanel.getByText(`Reverses change #${history.items[0].id}`, { exact: true })).toBeVisible();
   await historyPanel.getByRole('button', { name: 'Loads', exact: true }).click();
-  await expect(panel.getByLabel('Load sequence').getByRole('article').first().getByRole('button').first()).toHaveText('NEXT-B');
+  await expect(queued).toHaveText(['NEXT-C', 'NEXT-B']);
   await panel.getByLabel('Current load destination source').selectOption('');
   await expect(panel.getByLabel('Current load destination source')).toHaveValue('');
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();

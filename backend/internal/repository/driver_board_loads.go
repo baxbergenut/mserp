@@ -17,6 +17,7 @@ import (
 )
 
 var ErrBoardLoadSelection = errors.New("load plans changed or the selection is unavailable; refresh Loads and review the current plans")
+var ErrBoardLoadCompleted = errors.New("a load completed in DataTruck cannot be made current")
 
 type BoardStop struct {
 	ManualStopTime string         `json:"manualStopTime,omitempty"`
@@ -31,6 +32,7 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
+	Completed         bool        `json:"completed,omitempty"`
 	CanRestoreToQueue bool        `json:"canRestoreToQueue,omitempty"`
 	Manual            bool        `json:"manual,omitempty"`
 	PlanID            string      `json:"planId"`
@@ -241,12 +243,20 @@ func boardStops(raw []byte) []BoardStop {
 	}
 	return result
 }
-func terminalLoad(status string) bool {
+func providerCompletedLoad(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "delivered", "completed", "invoiced", "cancelled", "canceled":
+	case "delivered", "completed", "invoiced":
 		return true
 	}
 	return false
+}
+
+func terminalLoad(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "cancelled", "canceled":
+		return true
+	}
+	return providerCompletedLoad(status)
 }
 func annotateLoad(p *BoardLoad, driver string) {
 	if p.SourceMissing {
@@ -494,6 +504,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		}
 		for _, p := range plans[id] {
 			if !p.Manual && p.PlanID != "" && p.Date >= week && p.Date < weekEnd {
+				p.Completed = !p.SourceMissing && providerCompletedLoad(p.SourceStatus)
 				view.Week = append(view.Week, p)
 			}
 		}
@@ -561,6 +572,10 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			sourceUnavailable := p.SourceMissing || terminalLoad(p.SourceStatus)
 			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID]
 			if sourceUnavailable || completedHere {
+				p.Completed = !p.SourceMissing && (providerCompletedLoad(p.SourceStatus) || completedHere && !sourceUnavailable)
+				if p.Completed && sourceUnavailable {
+					p.Warning = ""
+				}
 				p.CanRestoreToQueue = completedHere && !sourceUnavailable &&
 					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
