@@ -50,7 +50,12 @@ func main() {
 	routingCapability := flag.Bool("board-routing-usage-capability", false, "print routing usage schema support and exit without opening a database")
 	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
 	scaleCarryCapability := flag.Bool("payroll-scale-carry-capability", false, "print cross-week CAT Scale collection support and exit without opening a database")
+	scalePartialCapability := flag.Bool("payroll-scale-partial-capability", false, "print partial CAT Scale collection support and exit without opening a database")
 	flag.Parse()
+	if *scalePartialCapability {
+		fmt.Println("payroll-scale-partial-v1")
+		return
+	}
 	if *scaleCarryCapability {
 		fmt.Println("payroll-scale-carry-v1")
 		return

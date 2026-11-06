@@ -124,6 +124,24 @@ compatible_release() {
         if [[ $scale_carry == t ]]; then
             [[ $("$1/backend/mserp-api" -payroll-scale-carry-capability 2>/dev/null) == payroll-scale-carry-v1 ]] || return 1
         elif [[ $scale_carry != f ]]; then return 1; fi
+        local scale_partial
+        scale_partial=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
+            SELECT EXISTS(
+                SELECT 1 FROM (
+                    SELECT report FROM public.payroll_settlements WHERE finalized
+                    UNION ALL SELECT report FROM public.investor_pay_weeks WHERE finalized
+                ) f
+                CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.report->'autoCharges')='array' THEN f.report->'autoCharges' ELSE '[]'::jsonb END) c
+                WHERE c->>'source' LIKE 'weighmytruck:%' AND c ? 'scaleOriginalAmount'
+                  AND (c->>'scaleOriginalAmount')::numeric<>(c->>'amount')::numeric
+            ) OR EXISTS(
+                SELECT 1 FROM public.driver_pay_weeks w WHERE jsonb_path_exists(to_jsonb(w)->'scale_deductions', '$.* ? (@ != \"0.00\")')
+            ) OR EXISTS(
+                SELECT 1 FROM public.investor_pay_weeks w WHERE jsonb_path_exists(w.edits->'scaleDeductions', '$.* ? (@ != \"0.00\")')
+            )") || return 1
+        if [[ $scale_partial == t ]]; then
+            [[ $("$1/backend/mserp-api" -payroll-scale-partial-capability 2>/dev/null) == payroll-scale-partial-v1 ]] || return 1
+        elif [[ $scale_partial != f ]]; then return 1; fi
     elif [[ $expense_drafts != f ]]; then return 1; fi
     local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata load_availability board_operational pti_operational unrelated_payroll payroll_current
     local routing_usage

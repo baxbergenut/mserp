@@ -70,32 +70,46 @@ var wmtChargeJoins = `
 const wmtStatementReportsSQL = `SELECT 'driver' kind,driver_id destination,week_start,report,finalized FROM payroll_settlements
  UNION ALL SELECT 'investor',truck_id,week_start,report,finalized FROM investor_pay_weeks`
 
-// Frozen reports serve as collection receipts across all weeks. Reopening
-// clears the finalized flag, which releases the ticket for review again.
+// Older receipts collected the entire ticket. New receipts record the original
+// ticket amount alongside the signed portion collected by that statement.
+const wmtCollectionsSQL = `SELECT c->>'source' source, array_agg(DISTINCT f.kind||':'||f.destination) destinations,
+ coalesce(sum((c->>'amount')::numeric),0) amount,
+ bool_or(c->>'scaleOriginalAmount' IS NULL) legacy,
+ min((c->>'scaleOriginalAmount')::numeric) original_min,
+ max((c->>'scaleOriginalAmount')::numeric) original_max
+ FROM (` + wmtStatementReportsSQL + `) f CROSS JOIN LATERAL ` + wmtReportChargeRowsSQL + `
+ WHERE f.finalized AND c->>'source' LIKE 'weighmytruck:%' GROUP BY 1`
+
+// A changed source amount or destination holds the balance for review.
+const wmtBalanceJoinSQL = ` LEFT JOIN scale_paid paid ON paid.source='weighmytruck:'||t.id
+ CROSS JOIN LATERAL (SELECT CASE
+ WHEN paid.source IS NULL THEN -t.amount
+ WHEN NOT paid.legacy AND paid.original_min=-t.amount AND paid.original_max=-t.amount
+  AND paid.destinations=ARRAY[b.payer||':'||CASE WHEN b.payer='driver' THEN pd.driver_id ELSE t.truck_id END]
+  AND paid.amount BETWEEN least(0,-t.amount) AND greatest(0,-t.amount)
+ THEN -t.amount-paid.amount END due) balance `
+
+// Reopening clears the finalized flag and releases only that statement's portion.
 const wmtFrozenJoinSQL = ` LEFT JOIN LATERAL (
  SELECT bool_or(f.kind<>b.payer OR f.destination IS DISTINCT FROM CASE WHEN b.payer='driver' THEN pd.driver_id ELSE t.truck_id END) misplaced,
- bool_or(NOT f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id,'amount',(-t.amount)::text)))) amount_changed
- FROM (` + wmtStatementReportsSQL + `) f
- WHERE f.finalized AND f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id)))
+ bool_or(coalesce(c->>'scaleOriginalAmount',c->>'amount') IS DISTINCT FROM (-t.amount)::text) amount_changed
+ FROM (` + wmtStatementReportsSQL + `) f CROSS JOIN LATERAL ` + wmtReportChargeRowsSQL + `
+ WHERE f.finalized AND c->>'source'='weighmytruck:'||t.id
  ) frozen ON true `
 
 // Carry preserves the ticket's original payer. The receiving investor week
 // must have an active agreement for that same owner.
-var wmtPayrollScaleSQL = `WITH collected AS MATERIALIZED (
- SELECT c->>'source' source, array_agg(DISTINCT f.kind||':'||f.destination) destinations
- FROM (` + wmtStatementReportsSQL + `) f CROSS JOIN LATERAL ` + wmtReportChargeRowsSQL + `
- WHERE f.finalized AND c->>'source' LIKE 'weighmytruck:%' GROUP BY 1
- ) SELECT w.week::text,t.id::text,t.ticket_number,t.transaction_date::text,t.amount::text,
+var wmtPayrollScaleSQL = `WITH scale_paid AS MATERIALIZED (` + wmtCollectionsSQL + `)
+ SELECT w.week::text,t.id::text,t.ticket_number,t.transaction_date::text,(-t.amount)::text,coalesce(balance.due,0)::text,
  coalesce(pd.driver_id::text,''),coalesce(t.truck_id::text,''),b.payer,
- paid.source IS NOT NULL,t.transaction_date>=w.week AND t.transaction_date<w.week+7
- FROM unnest($1::date[]) w(week) CROSS JOIN weighmytruck_transactions t` + wmtChargeJoins + `
- LEFT JOIN collected paid ON paid.source='weighmytruck:'||t.id
+ (paid.source IS NOT NULL AND coalesce(balance.due,0)=0),t.transaction_date>=w.week AND t.transaction_date<w.week+7
+ FROM unnest($1::date[]) w(week) CROSS JOIN weighmytruck_transactions t` + wmtChargeJoins + wmtBalanceJoinSQL + `
  LEFT JOIN LATERAL (
  SELECT * FROM truck_settlement_terms s WHERE s.truck_id=t.truck_id AND s.week_start<=w.week ORDER BY s.week_start DESC LIMIT 1
  ) target ON true
- WHERE (b.payer='driver' AND paid.source IS NULL) OR
+ WHERE (b.payer='driver' AND (paid.source IS NULL OR balance.due<>0)) OR
  (b.payer='investor' AND s.owner_id=i.id AND target.owner_id=i.id
-  AND (paid.source IS NULL OR (paid.destinations=ARRAY['investor:'||t.truck_id] AND t.transaction_date>=w.week AND t.transaction_date<w.week+7))
+  AND (paid.source IS NULL OR balance.due<>0 OR (paid.destinations=ARRAY['investor:'||t.truck_id] AND t.transaction_date>=w.week AND t.transaction_date<w.week+7))
   AND EXISTS(SELECT 1 FROM truck_settlement_terms s WHERE s.truck_id=target.truck_id AND s.week_start=target.week_start AND ` + truckTermCoversWeekSQL("w.week") + `))
  ORDER BY t.transaction_date,t.ticket_number,t.site_number`
 

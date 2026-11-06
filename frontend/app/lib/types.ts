@@ -1401,6 +1401,14 @@ export interface PayLoadPlacementInput extends PayrollCommandMetadata {
 export interface PayLoadPlacementResult {
   choices: {sourceDriverId: string; driverName: string; loadTripId?: number; tripNumber: string; sourceDate: string}[];
 }
+export interface PayAutoCharge {
+  name: string;
+  amount: string;
+  source: string;
+  expenseDate?: string;
+  scaleDue?: string;
+  scaleOriginalAmount?: string;
+}
 export interface DriverPayDriver {
   salaryCarry?: string;
   salaryCarryWeek?: string;
@@ -1423,8 +1431,8 @@ export interface DriverPayDriver {
   investorId?: string;
   profileDriverId?: string;
   truckId?: string;
-  autoCharges?: { name: string; amount: string; source: string; expenseDate?: string }[];
-  deferredScaleCharges?: { name: string; amount: string; source: string }[];
+  autoCharges?: PayAutoCharge[];
+  deferredScaleCharges?: PayAutoCharge[];
   issues?: string[];
  settlement?: PayrollSettlement;
   id: string;

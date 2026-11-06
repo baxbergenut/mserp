@@ -6,7 +6,7 @@ import { extname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const week = '2026-09-28';
-const scaleTicket = { source: 'weighmytruck:ticket', name: 'CAT Scale · 2026-09-28 · 1234', amount: '-15.25' };
+const scaleTicket = { source: 'weighmytruck:ticket', name: 'CAT Scale · 2026-09-28 · 1234', amount: '-15.25', scaleDue: '-15.25', scaleOriginalAmount: '-15.25' };
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
@@ -109,17 +109,29 @@ try {
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
     const scale = region.getByRole('textbox', { name: `Grid Test, ${scaleTicket.name}, deduction`, exact: true });
+    const scaleRow = region.getByRole('row').filter({ has: page.getByText(scaleTicket.name, { exact: true }) });
     await expect(scale).toHaveValue('-15.25');
-    const scaleSave = page.waitForResponse(response => response.request().method() === 'PUT' && response.ok());
-    await scale.fill('0');
-    await scale.press('Tab');
-    expect((await scaleSave).request().postDataJSON().scaleDeductions[scaleTicket.source]).toBe('-0');
+    const saveScale = async (action, amount) => {
+      const response = page.waitForResponse(response => response.request().method() === 'PUT' && response.ok());
+      await action();
+      expect((await response).request().postDataJSON().scaleDeductions[scaleTicket.source]).toBe(amount);
+    };
+    const enterScale = async amount => {
+      await scale.fill(amount);
+      await scale.press('Tab');
+    };
+    await saveScale(() => enterScale('5.25'), '-5.25');
+    await expect(scaleRow.getByText('Left: $10.00')).toBeVisible();
+    await saveScale(() => scaleRow.getByRole('button', { name: /reset to amount due/ }).click(), '-15.25');
+    await expect(scale).toHaveValue('-15.25');
+    await expect(scaleRow.getByText('Left: $0.00')).toBeVisible();
+    await saveScale(() => enterScale('0'), '-0');
     driver.edits.scaleDeductions[scaleTicket.source] = '0.00';
     driver.autoCharges = driver.autoCharges.filter(row => row.source !== scaleTicket.source);
     driver.deferredScaleCharges = [scaleTicket];
     await page.reload();
     await expect(scale).toHaveValue('0.00');
-    await expect(region.getByText('Deferred', { exact: true })).toBeVisible();
+    await expect(scaleRow.getByText('Left: $15.25')).toBeVisible();
     await expect(page.getByLabel('Broker reimbursement reminders')).toContainText('Broker reimbursement expected · Load L0 · $100.00');
     await page.screenshot({path:join(tmpdir(),investor ? 'mserp-broker-investor-reminder.png':'mserp-broker-driver-reminder.png'),fullPage:true,animations:'disabled'});
     expect(costReads).toEqual([]);

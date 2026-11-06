@@ -73,11 +73,13 @@ conversion used that faulty check and created duplicate slots.
 
 ## Pay-page actions
 
-Driver and Investor Pay accept zero or the full amount for imported CAT Scale
-tickets. Driver choices use migration 202 and investor choices use the existing
-statement edits JSON. Deferred tickets stay visible on the frozen statement,
-outside its collection receipts, and remain available on other eligible open
-weeks. The dated payer stays authoritative.
+Driver and Investor Pay accept any CAT Scale deduction up to the unpaid balance.
+Driver choices use migration 202 and investor choices use the existing statement
+edits JSON. Finalization records the amount collected and the original ticket
+amount. Earlier whole-ticket receipts stay authoritative. Zero choices stay
+visible on frozen statements without posting a collection. Reopening releases
+only that statement's payment. The dated payer stays authoritative. Install the
+matching deploy helper to fence rollback after a partial choice or collection.
 See `docs/integrations/WEIGHMYTRUCK.md`.
 
 Driver, Investor and Dispatcher Pay reopen without a note. Finalize/reopen and
@@ -655,8 +657,8 @@ positive Reimburse-method expense credits already included in net payable.
   stored unit aliases resolve trucks. Ambiguity is flagged for manual linking.
   Driver and Investor Pay include unpaid CAT Scale tickets on eligible open
   statements independent of ticket date. Preserve dated payer and investor
-  ownership. Carry never moves Fuel/Toll or wages. Finalization collects
-  non-deferred tickets once across all weeks and reopening releases them. Link writes
+  ownership. Carry never moves Fuel/Toll or wages. Finalization collects the
+  chosen portion and other weeks offer the remaining balance. Link writes
   require payroll.write and protect the original week and any collecting
   statement. Install the matching deploy helper before release so a cross-week
   collection fences older binaries. See docs/integrations/WEIGHMYTRUCK.md.

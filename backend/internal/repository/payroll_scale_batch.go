@@ -59,16 +59,16 @@ func readPayrollScaleWeeks(ctx context.Context, tx pgx.Tx, weeks []string) (map[
 		values[week] = payrollScaleWeek{{}, {}}
 	}
 	for rows.Next() {
-		var week, id, ticket, date, amount, driver, truck, payer string
+		var week, id, ticket, date, original, due, driver, truck, payer string
 		var collected, ticketWeek bool
-		if err = rows.Scan(&week, &id, &ticket, &date, &amount, &driver, &truck, &payer, &collected, &ticketWeek); err != nil {
+		if err = rows.Scan(&week, &id, &ticket, &date, &original, &due, &driver, &truck, &payer, &collected, &ticketWeek); err != nil {
 			return nil, err
 		}
-		n, err := chargeCents(amount)
-		if err != nil {
-			return nil, err
+		charge := PayAutoCharge{
+			Name: "CAT Scale · " + date + " · " + ticket, Source: payrollScaleSourcePrefix + id,
+			Amount: due, ScaleDue: due, ScaleOriginalAmount: original,
+			scaleCollected: collected, scaleTicketWeek: ticketWeek,
 		}
-		charge := PayAutoCharge{Name: "CAT Scale · " + date + " · " + ticket, Amount: chargeMoney(-n), Source: payrollScaleSourcePrefix + id, scaleCollected: collected, scaleTicketWeek: ticketWeek}
 		value := values[week]
 		if payer == "driver" {
 			value[0][driver] = append(value[0][driver], charge)
@@ -96,22 +96,27 @@ const payrollScaleEdgesSQL = `SELECT 'driver:'||t.driver_id,'truck:'||t.truck_id
 // Recheck exact source amounts and all-week collection under the settlement's
 // financial locks before accepting a reviewed scale charge.
 func validatePayrollScaleCollection(ctx context.Context, tx pgx.Tx, charges []PayAutoCharge) error {
-	var ids, amounts []string
+	var ids, amounts, dues, originals []string
 	for _, charge := range charges {
 		if id, ok := strings.CutPrefix(charge.Source, payrollScaleSourcePrefix); ok {
 			ids = append(ids, id)
 			amounts = append(amounts, charge.Amount)
+			dues = append(dues, charge.ScaleDue)
+			originals = append(originals, charge.ScaleOriginalAmount)
 		}
 	}
 	if len(ids) == 0 {
 		return nil
 	}
 	var valid bool
-	err := tx.QueryRow(ctx, `SELECT count(DISTINCT t.id)=$3 FROM unnest($1::uuid[],$2::text[]) reviewed(id,amount)
- JOIN weighmytruck_transactions t ON t.id=reviewed.id AND -t.amount=reviewed.amount::numeric
- WHERE NOT EXISTS(SELECT 1 FROM (`+wmtStatementReportsSQL+`) f WHERE f.finalized
- AND f.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','weighmytruck:'||t.id))) )`,
-		ids, amounts, len(ids)).Scan(&valid)
+	err := tx.QueryRow(ctx, `WITH scale_paid AS MATERIALIZED (`+wmtCollectionsSQL+`)
+ SELECT count(DISTINCT t.id)=cardinality($1::uuid[])
+ FROM unnest($1::uuid[],$2::text[],$3::text[],$4::text[]) reviewed(id,amount,due,original)
+ JOIN weighmytruck_transactions t ON t.id=reviewed.id`+wmtChargeJoins+wmtBalanceJoinSQL+`
+ WHERE -t.amount=nullif(reviewed.original,'')::numeric AND balance.due=nullif(reviewed.due,'')::numeric
+ AND (paid.source IS NULL OR balance.due<>0)
+ AND reviewed.amount::numeric BETWEEN least(0,balance.due) AND greatest(0,balance.due)`,
+		ids, amounts, dues, originals).Scan(&valid)
 	if err == nil && !valid {
 		return ErrDriverPayConflict
 	}

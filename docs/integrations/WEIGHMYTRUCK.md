@@ -114,22 +114,24 @@ dated payer, and an investor statement needs an active agreement for that same
 owner. A carried ticket does not change which statement gets the truck's Fuel,
 Toll or wages. Owner-only weeks continue routing those items to Driver Pay.
 
-In Driver or Investor Pay, enter zero to defer the full ticket on that statement.
-The next eligible open week still defaults to the full amount. Enter the full
-amount to collect it on the current week.
+In Driver or Investor Pay, enter any amount from zero up to the unpaid balance.
+The row shows what will be left after that deduction. Reset restores the full
+unpaid balance. The original ticket amount is shown in the row tooltip.
 
-Finalization records collected tickets in the frozen statement. Each collected
-ticket disappears from all other open weeks. Reopening releases the collection.
-A deferred ticket stays visible at zero in the frozen statement and has no
-collection receipt. Reopening a deferred statement keeps the saved zero.
+Finalization records the amount collected in the frozen statement. Other
+eligible open weeks show the balance after all finalized payments. Reopening
+releases only that statement's payment and keeps its saved choice. A zero
+stays visible on the frozen statement and posts no collection.
+Existing whole-ticket receipts retain their original meaning.
 If a collected ticket changes, Transactions identifies it for review and the
 frozen statement remains intact. Link corrections protect the statement that
 collected the ticket, including a statement from a different week. No expense
 directory row is created.
 
 Migration 202 adds the statement-local driver choices to `driver_pay_weeks`.
-Investor choices use the existing statement edits JSON. Once deferrals are saved,
-use a release that understands these choices for payroll writes.
+Investor choices use the existing statement edits JSON. Install the matching
+deploy helper before releasing partial deductions. It rejects older binaries
+once a partial choice or payment exists.
 
 Install the updated deploy helper before releasing cross-week CAT Scale.
 Once a ticket has been collected on a different week, the helper requires

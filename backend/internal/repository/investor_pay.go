@@ -18,6 +18,8 @@ type PayAutoCharge struct {
 	Amount                          string `json:"amount"`
 	Source                          string `json:"source"`
 	ExpenseDate                     string `json:"expenseDate,omitempty"`
+	ScaleDue                        string `json:"scaleDue,omitempty"`
+	ScaleOriginalAmount             string `json:"scaleOriginalAmount,omitempty"`
 }
 type truckPayGroup struct {
 	term        TruckTerm

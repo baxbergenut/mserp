@@ -28,16 +28,11 @@ export function isScaleTicket(row: { source: string }) {
   return row.source.startsWith("weighmytruck:");
 }
 
-export function scaleTicketAmountValid(amount: string, full: string) {
-  if (!amount.trim() || !validDecimal(amount)) return false;
-  const cents = hundredths(amount);
-  return cents === BigInt(0) || cents === hundredths(full);
-}
-
 export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver): string | undefined {
   for (const row of [...(driver?.autoCharges ?? []).filter(isScaleTicket), ...(driver?.deferredScaleCharges ?? [])]) {
     const amount = edits.scaleDeductions?.[row.source];
-    if (amount !== undefined && !scaleTicketAmountValid(amount, row.amount)) return `${row.name}: enter zero or the full ticket amount.`;
+    const due = row.scaleDue ?? row.amount;
+    if (amount !== undefined && !validSourceAmount(amount, due)) return `${row.name}: enter an amount within the unpaid balance of ${decimalDisplay(hundredths(due), true)}.`;
   }
   for (const row of edits.sourceCharges ?? []) {
     if (row.source.startsWith("investor_cost:") && driver?.investorId) continue;
@@ -77,7 +72,7 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   const costs = hundredths(costAmount(driver, edits, "fuel")) + hundredths(costAmount(driver, edits, "toll"));
   const autoCharges = [...(driver.autoCharges ?? []), ...(driver.deferredScaleCharges ?? [])].map(row => ({
     ...row,
-    amount: edits.scaleDeductions?.[row.source] ?? edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? row.amount,
+    amount: edits.scaleDeductions?.[row.source] ?? edits.sourceCharges?.find(source => source.source === row.source)?.amount ?? (driver.settlement?.finalized ? row.amount : row.scaleDue ?? row.amount),
   }));
   const generated = [...(edits.generatedCharges ?? []), ...autoCharges, ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + (row.source === "reimburse" ? -hundredths(row.amount) : hundredths(row.amount)), BigInt(0));

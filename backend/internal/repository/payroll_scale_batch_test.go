@@ -114,20 +114,22 @@ func TestPayrollScaleCollectionAcrossWeeksDatabase(t *testing.T) {
 						t.Fatal("prepare scale fixture", worked, err)
 					}
 				}
-				read := func(week time.Time, want bool) DriverPayWeek {
+				read := func(week time.Time, want string) DriverPayWeek {
 					t.Helper()
 					page, err := repo.PreparedPayroll(ctx, kind, week, PayPageQuery{ID: statement}, true)
 					if err != nil || page.Preparation.State != "ready" {
 						t.Fatal("read prepared scale fixture", page.Preparation, err)
 					}
-					found := false
+					var amount string
 					for _, d := range page.Drivers {
 						for _, row := range d.AutoCharges {
-							found = found || row.Source == "weighmytruck:"+ticket && row.Amount == "-15.25"
+							if row.Source == "weighmytruck:"+ticket {
+								amount = row.Amount
+							}
 						}
 					}
-					if found != want {
-						t.Fatal("unexpected scale charge", week, page.Drivers)
+					if amount != want {
+						t.Fatal("unexpected scale charge", week, amount, "want", want)
 					}
 					return page
 				}
@@ -142,7 +144,7 @@ func TestPayrollScaleCollectionAcrossWeeksDatabase(t *testing.T) {
 					_, err := settle(WithPayrollReceipt(ctx), week, statement, page.Revision, actor, "", reopen, false, command)
 					return err
 				}
-				first := read(earlier, true)
+				first := read(earlier, "-15.25")
 				source := payrollScaleSourcePrefix + ticket
 				save := func(page DriverPayWeek, amount, request string) (DriverPayEdits, error) {
 					t.Helper()
@@ -156,15 +158,15 @@ func TestPayrollScaleCollectionAcrossWeeksDatabase(t *testing.T) {
 					}
 					return repo.Save(ctx, edits, actor)
 				}
-				if _, err := save(first, "-1.00", "18200000-0000-0000-0000-000000007405"); err == nil {
-					t.Fatal("partial CAT Scale deduction accepted")
+				if _, err := save(first, "-15.26", "18200000-0000-0000-0000-000000007405"); err == nil {
+					t.Fatal("over-limit CAT Scale deduction accepted")
 				}
 				saved, err := save(first, "0", "18200000-0000-0000-0000-000000007406")
 				if err != nil || saved.CommittedStatement == nil || len(saved.CommittedStatement.DeferredScaleCharges) != 1 ||
 					saved.ScaleDeductions[source] != "0.00" {
 					t.Fatal("save CAT Scale deferral", saved, err)
 				}
-				deferred := read(earlier, false)
+				deferred := read(earlier, "")
 				if deferred.Drivers[0].Edits.ScaleDeductions[source] != "0.00" ||
 					len(deferred.Drivers[0].DeferredScaleCharges) != 1 {
 					t.Fatal("deferred ticket missing on reload")
@@ -172,38 +174,43 @@ func TestPayrollScaleCollectionAcrossWeeksDatabase(t *testing.T) {
 				if err := settle(deferred, earlier, "18200000-0000-0000-0000-000000007407", false); err != nil {
 					t.Fatal("finalize with CAT Scale deferred", err)
 				}
-				frozen := read(earlier, false)
+				frozen := read(earlier, "")
 				if frozen.Drivers[0].Settlement == nil || !frozen.Drivers[0].Settlement.Finalized ||
 					len(frozen.Drivers[0].DeferredScaleCharges) != 1 {
 					t.Fatal("finalized statement lost deferral")
 				}
-				if err := settle(read(later, true), later, "18200000-0000-0000-0000-000000007408", false); err != nil {
-					t.Fatal("collect deferred ticket in a later week", err)
-				}
-				if err := settle(read(later, true), later, "18200000-0000-0000-0000-000000007409", true); err != nil {
-					t.Fatal("reopen later collection", err)
-				}
-				if err := settle(read(earlier, false), earlier, "18200000-0000-0000-0000-000000007410", true); err != nil {
+				read(later, "-15.25")
+				if err := settle(read(earlier, ""), earlier, "18200000-0000-0000-0000-000000007410", true); err != nil {
 					t.Fatal("reopen deferred statement", err)
 				}
-				reopened := read(earlier, false)
-				if _, err := save(reopened, "-15.25", "18200000-0000-0000-0000-000000007411"); err != nil {
-					t.Fatal("restore full ticket amount", err)
+				if _, err := save(read(earlier, ""), "-5.25", "18200000-0000-0000-0000-000000007411"); err != nil {
+					t.Fatal("save partial CAT Scale deduction", err)
 				}
-				first, stale := read(earlier, true), read(later, true)
+				first, stale := read(earlier, "-5.25"), read(later, "-15.25")
 				if err := settle(first, earlier, "18200000-0000-0000-0000-000000007402", false); err != nil {
 					t.Fatal("finalize an earlier week with a later ticket", err)
 				}
-				frozen = read(earlier, true)
-				read(later, false)
+				frozen = read(earlier, "-5.25")
+				remaining := read(later, "-10.00")
 				if err := settle(stale, later, "18200000-0000-0000-0000-000000007403", false); !errors.Is(err, ErrDriverPayConflict) {
-					t.Fatal("stale statement could collect the same ticket", err)
+					t.Fatal("stale statement could overcollect the ticket", err)
 				}
+				if err := settle(remaining, later, "18200000-0000-0000-0000-000000007408", false); err != nil {
+					t.Fatal("collect the remainder", err)
+				}
+				if err := settle(read(later, "-10.00"), later, "18200000-0000-0000-0000-000000007409", true); err != nil {
+					t.Fatal("reopen the remainder collection", err)
+				}
+				read(later, "-10.00")
+				frozen = read(earlier, "-5.25")
 				if err := settle(frozen, earlier, "18200000-0000-0000-0000-000000007404", true); err != nil {
 					t.Fatal("reopen collecting statement", err)
 				}
-				read(earlier, true)
-				read(later, true)
+				if _, err := save(read(earlier, "-5.25"), "-15.25", "18200000-0000-0000-0000-000000007412"); err != nil {
+					t.Fatal("reset to full unpaid amount", err)
+				}
+				read(earlier, "-15.25")
+				read(later, "-15.25")
 			})
 		})
 	}
