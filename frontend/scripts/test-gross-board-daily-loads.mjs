@@ -16,13 +16,13 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
-const week = '2026-10-19', secondDay = '2026-10-20', driverId = 'daily-driver';
+const week = '2026-10-19', secondDay = '2026-10-20', clearDay = '2026-10-21', driverId = 'daily-driver';
 const entry = (date, slot = 0) => ({ driverId, date, slot, deleted: false, dayStatus: '', note: '', loadNumber: `LOAD-${date}-${slot}`,
   loadRecordId: 100 + slot, loadTripId: null, split: false, tripReview: false, trips: [], originalRate: '900.00', driverRate: '800.00', miles: '450.00',
   enteredOriginalRate: '900.00', enteredMiles: '450.00', systemOriginalRate: '1000.00', systemDriverRate: '750.00', systemMiles: '500.00', version: 3, duplicate: false, acceptSystemValues: false });
 const removed = slot => ({ ...entry(secondDay, slot), deleted: true, loadNumber: '', loadRecordId: null,
   originalRate: '', driverRate: '', miles: '', enteredOriginalRate: '', enteredMiles: '', version: slot === 1 ? 5 : 10 });
-let entries = [entry(week), entry(week, 1), entry(secondDay), removed(1), removed(2)];
+let entries = [entry(week), entry(week, 1), entry(secondDay), removed(1), removed(2), entry(clearDay)];
 const errors = [], conflicts = [], writes = [];
 let holdNextSave = false, releaseSave;
 let readOnly = false;
@@ -102,6 +102,16 @@ try {
   await expect(inlineDriverGross).toHaveValue('$750.00');
   await expect.poll(() => saved(secondDay).driverRate).toBe('750.00');
   expect(writes.at(-1)[0].fields).toEqual(['driverRate']);
+
+  // Removing the linked load number clears all three amounts in the same save.
+  const clearCell = name => page.getByLabel(`Daily Driver, ${clearDay}, ${name}`, { exact: true });
+  await expect(clearCell('driver rate')).toHaveValue('$800.00');
+  await clearCell('load number or status').fill('');
+  await clearCell('load number or status').blur();
+  for (const name of ['total gross', 'driver rate', 'miles']) await expect(clearCell(name)).toHaveValue('');
+  await expect.poll(() => saved(clearDay)).toMatchObject({ loadNumber: '', loadRecordId: null, originalRate: '', driverRate: '', miles: '' });
+  await page.reload();
+  await expect(clearCell('driver rate')).toHaveValue('');
 
   // Reuse two removed slots in one editor, matching the reported disappearing loads.
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();

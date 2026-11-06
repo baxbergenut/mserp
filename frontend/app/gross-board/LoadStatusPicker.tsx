@@ -105,6 +105,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
             ({ ...current, sourceMissing: false, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: [],
               note: loadNumber.trim().toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
               originalRate: current.loadRecordId !== null ? "" : current.originalRate,
+              driverRate: current.loadRecordId !== null ? "" : current.driverRate,
               miles: current.loadRecordId !== null ? "" : current.miles,
               enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate,
               enteredMiles: current.loadRecordId !== null ? "" : current.enteredMiles,
