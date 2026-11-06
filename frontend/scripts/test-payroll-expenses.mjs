@@ -168,17 +168,30 @@ try {
     const choice = region.getByRole('combobox', {name:'Grid Test, expense Equipment, deduction choice'});
     const deduction = region.getByRole('textbox', {name:'Grid Test, expense Equipment, deduction'});
     await expect(choice).toHaveCount(0);
-    const enterDeduction = async amount => {
+    const enterDeduction = async (amount, expected = amount.replace(/^-/, '')) => {
       const [saved] = await Promise.all([
         page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/' + (investor ? 'investor-pay' : 'driver-pay')),
         (async () => { await deduction.fill(amount); await deduction.press('Tab'); })(),
       ]);
       const input = saved.request().postDataJSON().expenseDeductions.find(row => row.expenseId === 'expense');
-      expect(input.mode).toBe('fixed'); expect(input.apply).toBe(true); expect(input.amount).toBe(amount.replace(/^-/, ''));
+      expect(input.mode).toBe('fixed'); expect(input.apply).toBe(true); expect(input.amount).toBe(expected);
       expect(expense.amount).toBe('100.00');
     };
-    await enterDeduction('0.00');
+    const finalize = page.getByRole('button', { name: /^Finalize Grid Test/ });
+    const deductionRow = region.getByRole('row').filter({ has: page.getByRole('textbox', { name: 'Grid Test, expense Equipment, deduction' }) });
+    const beforeInvalid = payWrites;
+    await deduction.fill('100.01');
+    await deduction.press('Tab');
+    await expect(deductionRow.getByText('Available: $100.00')).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: 'Equipment: enter an amount from zero to $100.00' })).toBeVisible();
+    await expect(finalize).toBeDisabled();
+    expect(payWrites).toBe(beforeInvalid);
+    await enterDeduction(' 0.00 ', '0.00');
     await expect(deduction).toHaveValue('0.00');
+    await expect(deductionRow.getByText('Left: $100.00')).toBeVisible();
+    await expect(finalize).toBeEnabled();
+    await enterDeduction('-.50', '0.50');
+    await expect(deductionRow.getByText('Left: $99.50')).toBeVisible();
     await enterDeduction('-100.00');
     await enterDeduction('-25.00');
 

@@ -24,11 +24,18 @@ export function validSourceAmount(value: string, source: string) {
   return limit < BigInt(0) ? amount >= limit && amount <= BigInt(0) : amount >= BigInt(0) && amount <= limit;
 }
 
+export function validExpenseAmount(amount: string, available: string) {
+  return !!amount.trim() && validDecimal(amount) && hundredths(amount) >= BigInt(0) && hundredths(amount) <= hundredths(available);
+}
+
 export function isScaleTicket(row: { source: string }) {
   return row.source.startsWith("weighmytruck:");
 }
 
 export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver): string | undefined {
+  for (const row of edits.expenseDeductions ?? []) {
+    if (!validExpenseAmount(row.amount, row.available)) return `${row.name}: enter an amount from zero to ${decimalDisplay(hundredths(row.available), true)} with up to two decimal places.`;
+  }
   for (const row of [...(driver?.autoCharges ?? []).filter(isScaleTicket), ...(driver?.deferredScaleCharges ?? [])]) {
     const amount = edits.scaleDeductions?.[row.source];
     const due = row.scaleDue ?? row.amount;
@@ -188,7 +195,7 @@ export function reconcilePaySave(current: Record<string, DriverPayEdits>, snapsh
 }
 
 export function validAdjustments(edits: DriverPayEdits, driver?: DriverPayDriver) {
-  return !paySourceError(edits, driver) && (edits.expenseDeductions ?? []).every(row => row.amount.trim() && validDecimal(row.amount) && hundredths(row.amount) >= BigInt(0) && hundredths(row.amount) <= hundredths(row.available)) && (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
+  return !paySourceError(edits, driver) && (edits.generatedCharges ?? []).every(row => row.name.trim() && row.amount.trim() && validDecimal(row.amount) && (row.kind !== "installment" || hundredths(row.amount) <= BigInt(0))) && costRows.every(({ key }) => {
     const value = edits[`${key}Override`];
     return value == null || (value.trim() !== "" && validDecimal(value));
   }) && normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));
