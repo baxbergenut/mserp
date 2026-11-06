@@ -719,6 +719,7 @@ func deleteExpenseTx(ctx context.Context, tx pgx.Tx, id string) error {
    WHERE p.expense_id=$1::uuid AND p.week_start=s.week_start AND s.driver_id=payroll_driver_at(e.driver_id,p.week_start))))
  OR EXISTS(SELECT 1 FROM investor_pay_weeks s WHERE s.finalized AND (
  s.report @> jsonb_build_object('edits',jsonb_build_object('expenseDeductions',jsonb_build_array(jsonb_build_object('expenseId',$1::text))))
+ OR s.report @> jsonb_build_object('autoCharges',jsonb_build_array(jsonb_build_object('source','expense-reimburse:'||$1::text)))
  OR EXISTS(SELECT 1 FROM expense_payments p WHERE p.expense_id=$1::uuid AND p.week_start=s.week_start AND p.investor_truck_id=s.truck_id)))`, id).Scan(&finalized)
 	if err != nil {
 		return err

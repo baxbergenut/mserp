@@ -7,6 +7,54 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Investor charges mirror saved Driver Pay payouts in their posting week.
+// They never create a second payment against the original invoice.
+func readOwnerReimbursementCharges(ctx context.Context, tx pgx.Tx, week string) (map[string][]PayAutoCharge, error) {
+	result := map[string][]PayAutoCharge{}
+	if payrollCostsOnly(ctx) {
+		return result, nil
+	}
+	rows, err := tx.Query(ctx, `WITH terms AS (`+activePayrollTruckTermsSQL+`)
+ SELECT e.truck_id::text, coalesce(nullif(btrim(e.expense_type),''),e.category),
+ (-p.amount)::text, 'expense-reimburse:'||e.id, e.expense_date::text
+ FROM expense_reimbursement_payments p JOIN expenses e ON e.id=p.expense_id
+ JOIN terms s ON s.truck_id=e.truck_id AND s.owner_id=e.owner_id
+ WHERE p.week_start=$1::date AND p.amount>0 AND lower(btrim(e.payment_type))='reimburse'
+ AND lower(btrim(e.covered_by))='truck owner' AND e.owner_id<>'`+CompanyOwnerID+`'
+ ORDER BY e.expense_date,e.id`, week, payrollTruckIDs(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var truck string
+		var charge PayAutoCharge
+		if err = rows.Scan(&truck, &charge.Name, &charge.Amount, &charge.Source, &charge.ExpenseDate); err != nil {
+			return nil, err
+		}
+		result[truck] = append(result[truck], charge)
+	}
+	return result, rows.Err()
+}
+
+func validateOwnerReimbursementPayments(ctx context.Context, tx pgx.Tx, week string, ids, amounts []string) error {
+	var frozen bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM unnest($2::uuid[],$3::text[]) v(id,amount)
+ JOIN expenses e ON e.id=v.id
+ JOIN investor_pay_weeks w ON w.week_start=$1::date AND w.truck_id=e.truck_id AND w.owner_id=e.owner_id AND w.finalized
+ LEFT JOIN expense_reimbursement_payments p ON p.expense_id=e.id AND p.week_start=w.week_start
+ WHERE lower(btrim(e.covered_by))='truck owner' AND e.owner_id<>'`+CompanyOwnerID+`'
+ AND v.amount::numeric<>coalesce(p.amount,0))`, week, ids, amounts).Scan(&frozen)
+	if err != nil {
+		return err
+	}
+	if frozen {
+		return chargeInvalid("Reopen the truck owner's Investor Pay statement before changing this reimbursement")
+	}
+	return nil
+}
+
 func (r *ExpenseRepository) loadReimbursementBalances(ctx context.Context, values []Expense) error {
 	ids := []string{}
 	for _, e := range values {

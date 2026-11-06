@@ -174,6 +174,10 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 	if err != nil {
 		return source, investor, err
 	}
+	reimbursements, err := readOwnerReimbursementCharges(ctx, tx, source.WeekStart)
+	if err != nil {
+		return source, investor, err
+	}
 	_, scaleCharges, err := wmtPayrollCharges(ctx, tx, source.WeekStart)
 	if err != nil {
 		return source, investor, err
@@ -339,6 +343,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 			g.card.AutoCharges = truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0)
 		}
 		if !g.ownerOnly {
+			g.card.AutoCharges = append(g.card.AutoCharges, reimbursements[id]...)
 			for _, charge := range scaleCharges[id] {
 				if !charge.scaleCollected {
 					g.card.AutoCharges = append(g.card.AutoCharges, charge)

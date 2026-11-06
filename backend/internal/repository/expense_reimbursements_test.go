@@ -101,6 +101,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 			defer pool.Close()
 			pay := NewDriverPayRepository(pool)
 			expenses := NewExpenseRepository(pool)
+			actor := id(`INSERT INTO app_users(username,password_hash) VALUES('reimbursement-review',crypt('test-only',gen_salt('bf'))) RETURNING id`)
 			week, _ := time.Parse(time.DateOnly, "2026-09-28")
 			read := func(driver string, w time.Time) DriverPayDriver {
 				t.Helper()
@@ -168,14 +169,67 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 					if row(read(driver, week.AddDate(0, 0, -7)), expense) != nil {
 						t.Fatal("following Thursday boundary leaked")
 					}
+					ownerCharge := func(w time.Time) string {
+						t.Helper()
+						report, err := pay.InvestorPay(ctx, w)
+						if err != nil {
+							t.Fatal(err)
+						}
+						for _, statement := range report.Drivers {
+							for _, charge := range statement.AutoCharges {
+								if charge.Source == "expense-reimburse:"+expense {
+									if statement.ID != truck || statement.InvestorID != owner || charge.ExpenseDate != "2026-10-07" {
+										t.Fatalf("reimbursement charge routed incorrectly: %+v", charge)
+									}
+									return charge.Amount
+								}
+							}
+						}
+						return ""
+					}
+					if got := ownerCharge(week); got != "" {
+						t.Fatal("unsaved reimbursement charged the owner", got)
+					}
 					credit.Apply = true
+					if classification == "investor_driver" {
+						credit.Amount = "32.25"
+					}
 					edits := card.Edits
 					edits.ExpenseDeductions = []ExpenseDeduction{*credit}
 					if _, e = pay.Save(ctx, edits); e != nil {
 						t.Fatal(e)
 					}
-					if row(read(driver, week.AddDate(0, 0, 7)), expense) != nil {
+					nextWeek := week.AddDate(0, 0, 7)
+					nextCredit := row(read(driver, nextWeek), expense)
+					if classification == "investor_driver" {
+						if got := ownerCharge(week); got != "-32.25" {
+							t.Fatal("owner charge did not mirror the partial payout", got)
+						}
+						if nextCredit == nil || nextCredit.Amount != "10.00" {
+							t.Fatal("driver's unpaid remainder did not carry", nextCredit)
+						}
+						report, err := pay.InvestorPay(ctx, week)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if _, err = pay.SettleInvestor(ctx, week, truck.(string), report.Revision, actor, "", false, false); err != nil {
+							t.Fatal(err)
+						}
+						if got := ownerCharge(week); got != "-32.25" {
+							t.Fatal("finalized owner statement lost the charge", got)
+						}
+						current := read(driver, week)
+						edit := *row(current, expense)
+						edit.Amount, edit.Apply = "32.00", true
+						current.Edits.ExpenseDeductions = []ExpenseDeduction{edit}
+						if _, e = pay.Save(ctx, current.Edits); e == nil || !strings.Contains(e.Error(), "Reopen the truck owner's Investor Pay") {
+							t.Fatal("closed owner statement did not protect the reimbursement", e)
+						}
+					} else if nextCredit != nil {
 						t.Fatal("paid reimbursement repeated next week")
+					}
+					if got := ownerCharge(nextWeek); got != "" {
+						t.Fatal("unsaved or prior-week reimbursement charged the owner", got)
 					}
 				}
 			}

@@ -60,6 +60,19 @@ func prepareExpensePayerCorrection(ctx context.Context, tx pgx.Tx, id string, in
 		owner = nil
 	}
 	if normalizedExpenseText(old.CoveredBy) == covered && sameExpenseID(old.OwnerID, owner) && sameExpenseID(old.ChargeDriverID, driver) {
+		if covered == "truck owner" && normalizedExpenseText(old.PaymentType) == "reimburse" && !sameExpenseID(old.TruckID, in.TruckID) {
+			var frozen bool
+			err = tx.QueryRow(ctx, `SELECT EXISTS(
+ SELECT 1 FROM expense_reimbursement_payments p
+ JOIN investor_pay_weeks w ON w.week_start=p.week_start AND w.owner_id=$2 AND w.truck_id IN ($3,$4)
+ WHERE p.expense_id=$1 AND p.amount>0 AND w.finalized)`, id, owner, old.TruckID, in.TruckID).Scan(&frozen)
+			if err != nil {
+				return nil, err
+			}
+			if frozen {
+				return nil, fmt.Errorf("%w: Reopen the truck owner's Investor Pay statement before changing the reimbursement's truck", ErrExpensePayerCorrection)
+			}
+		}
 		return nil, nil
 	}
 	fail := func(message string) (*expensePayerCorrection, error) {
