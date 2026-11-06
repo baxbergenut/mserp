@@ -47,7 +47,7 @@ import { useDriverRowDrag } from "./useDriverRowDrag";
 
 const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40";
 const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80";
-const grossTierColors = ["", "bg-yellow-500/25", "bg-green-500/25", "bg-blue-500/25"];
+const grossTierColors = ["", "bg-[#ffff00]", "bg-[#00ff00]", "bg-[#00ffff]"];
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, edit }: {
@@ -325,7 +325,8 @@ export default function DriverBoardPage() {
             const grossTier = board?.grossTierMinimumCents?.reduce(
               (tier, minimum, i) => sum.original >= BigInt(minimum) ? i + 1 : tier, 0,
             ) ?? 0;
-            const grossCellClass = `${cellClass} ${grossTierColors[grossTier] ?? ""} px-1 text-center font-mono text-zinc-200`;
+            const grossTierColor = grossTierColors[grossTier];
+            const grossCellClass = `${cellClass} px-1 text-center font-mono ${grossTierColor ? `${grossTierColor} text-black` : "text-zinc-200"}`;
             const loads = previewCurrentLoad(board?.loads[d.id], entry, savedEntries.get(d.id));
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();

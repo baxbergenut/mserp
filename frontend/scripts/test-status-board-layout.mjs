@@ -60,15 +60,11 @@ try {
   const defaults = await columnOrder();
   const firstRow = grid.locator('tr[data-driver-id]').first();
   const grossCell = (i, column) => grid.locator(`tr[data-driver-id="driver-${i}"] [data-board-column="${column}"]`);
-  for (const [i, color] of [[0, null], [1, 'yellow'], [2, 'green'], [3, 'blue'], [4, null]]) {
+  const transparent = 'rgba(0, 0, 0, 0)';
+  const grossBackgrounds = [transparent, 'rgb(255, 255, 0)', 'rgb(0, 255, 0)', 'rgb(0, 255, 255)', transparent];
+  for (const [i, color] of grossBackgrounds.entries()) {
     for (const column of ['originalGross', 'driverGross']) {
-      const cell = grossCell(i, column);
-      if (color) {
-        await expect(cell).toHaveClass(new RegExp(`bg-${color}-500/25`));
-        await expect(cell).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      } else {
-        await expect(cell).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      }
+      await expect(grossCell(i, column)).toHaveCSS('background-color', color);
     }
   }
   await expect(grossCell(1, 'originalGross')).toHaveText('$8,000.00');
