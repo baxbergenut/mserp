@@ -37,6 +37,7 @@ const columns = [
   ["Total miles", 78], ["Loaded miles", 78], ["Deadhead miles", 88], ["Driver fee", 92], ["Reimbursements/charges", 215], ["Amount", 95], ["Comments", 36],
 ] as const;
 const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
+const statementCellButton = "absolute inset-0 flex w-full items-center px-2 text-left font-medium text-blue-400 hover:bg-zinc-800/70 hover:text-blue-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40 disabled:hover:bg-transparent";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 export type DriverCardProps = {
@@ -121,7 +122,8 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
   };
   const extraLoads = driver.loads.filter(load => load.payrollSupplement);
   const outgoing = useOutgoingTransfers().rows.filter(row => row.statementId === driver.id);
-  const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => !load.payrollSupplement && load.date === addDays(edits.weekStart, index)).length + outgoing.filter(row => row.sourceDate === addDays(edits.weekStart, index)).length), 0) + extraLoads.length + (onPlacement && !onAddAccessorial ? 1 : 0);
+  const hasStatementActions = Boolean(onAddAccessorial || onManageEscrow);
+  const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => !load.payrollSupplement && load.date === addDays(edits.weekStart, index)).length + outgoing.filter(row => row.sourceDate === addDays(edits.weekStart, index)).length), 0) + extraLoads.length + (onPlacement && !hasStatementActions ? 1 : 0);
   const visibleCostRows = costRows.filter(({ key }) => {
     const carry = hundredths(edits.costs?.[`${key}Carry`] ?? "0");
     if (driver.payType === "cpm" && carry === BigInt(0)) return false;
@@ -195,9 +197,8 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
     {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
     {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">
       {driver.escrowCollectionChange !== undefined && <p className="px-3 pt-3 text-xs text-zinc-400">{driver.escrowCollectionChange ? "Escrow collection stops this week" : "Escrow collection resumes next week"}</p>}
-      {(onManageEscrow || onRemoveAddition) && <div className="flex gap-2 px-3 pt-3">
-        {onManageEscrow && <button type="button" className={payButtonClass} disabled={statementActionsDisabled} onClick={onManageEscrow}>Manage escrow</button>}
-        {onRemoveAddition && <button type="button" className={payButtonClass} disabled={statementActionsDisabled} onClick={onRemoveAddition}>Remove from week</button>}
+      {onRemoveAddition && <div className="px-3 pt-3">
+        <button type="button" className={payButtonClass} disabled={statementActionsDisabled} onClick={onRemoveAddition}>Remove from week</button>
       </div>}
       <div id={`driver-${driver.id}`}>
         {!!driver.brokerReimbursements?.length && <div className="border-b border-zinc-800 px-3 py-2 text-xs text-amber-300" aria-label="Broker reimbursement reminders">
@@ -252,19 +253,18 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
                 {statuses.length === 1 ? statuses[0] : statuses.length ? <div className="flex items-center justify-center gap-2">{statuses.map(status => <span key={status} className={`rounded px-2 font-medium ${dayStatuses.find(item => item.value === status)?.color ?? ""}`}>{status}</span>)}</div> : "No load"}
               </td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
             })}
-            {(onPlacement || onAddAccessorial) && <tr data-pay-extra-row data-grid-ignore>
+            {(onPlacement || hasStatementActions) && <tr data-pay-extra-row data-grid-ignore>
               {onPlacement ? <>
                 <th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>Add load</th><td className={cell}><input aria-label={`${driver.fullName}, extra load number`} value={extraNumber} onChange={event => { setExtraNumber(event.target.value); setExtraChoices([]); setExtraChoice(""); }} disabled={placementDisabled || placing} maxLength={200} placeholder="Load ID" className="w-full bg-transparent text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (extraNumber.trim()) void changeLoad("add"); } }} /></td><td colSpan={9} className={`${cell} text-zinc-500`}>{extraChoices.length > 0 && <select aria-label="Load trip allocation" value={extraChoice} disabled={placementDisabled || placing} onChange={event => setExtraChoice(event.target.value)} className="mr-3 max-w-80 bg-zinc-900 text-zinc-200"><option value="">Choose trip…</option>{extraChoices.map((choice,index) => <option key={index} value={index}>{choice.tripNumber || (choice.loadTripId ? `Trip ${choice.loadTripId}` : "Full load")} · {choice.driverName} · {choice.sourceDate}</option>)}</select>}<button type="button" disabled={placementDisabled || placing || !extraNumber.trim() || (extraChoices.length > 0 && extraChoice === "")} onClick={() => void changeLoad("add")} className="mr-3 rounded border border-zinc-700 px-2 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40">{placing ? "Saving…" : "Add to statement"}</button>Delivered or invoiced · not in a finalized statement</td>
               </> : <td colSpan={11} className={cell} />}
-              {onAddAccessorial && <>
-                <td className={`${cell} relative !p-0`}>
-                  <button
-                    type="button"
-                    className="absolute inset-0 flex w-full items-center px-2 text-left font-medium text-blue-400 hover:bg-zinc-800/70 hover:text-blue-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500"
-                    onClick={() => onAddAccessorial(driver)}
-                  >Add accessorial</button>
+              {hasStatementActions && <>
+                <td className={cell + " relative !p-0"}>
+                  {onAddAccessorial && <button type="button" className={statementCellButton} onClick={() => onAddAccessorial(driver)}>Add accessorial</button>}
                 </td>
-                <td className={cell} />
+                <td className={cell + " relative !p-0"}>
+                  {onManageEscrow && <button type="button" className={statementCellButton + " justify-center whitespace-nowrap !px-1"}
+                    disabled={statementActionsDisabled} onClick={onManageEscrow}>Manage escrow</button>}
+                </td>
               </>}
               <td className={cell} />
             </tr>}

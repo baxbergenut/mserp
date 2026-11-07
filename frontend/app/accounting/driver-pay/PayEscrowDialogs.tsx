@@ -5,29 +5,24 @@ import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { changeDriverPayMembership, fetchDriverPayCandidates, fetchDriverPayEscrow, saveDriverPayEscrow } from "@/app/lib/api";
 import type { DriverPayCandidate, DriverPayEscrowEditor, PayrollEscrowDraft } from "@/app/lib/types";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
-import { useDebouncedValue } from "@/app/lib/useDebouncedValue";
 
 const money = (amount: string) => decimalDisplay(hundredths(amount), true);
 const cents = (amount: string) => amount === "" ? BigInt(0) : /^\d{1,10}(?:\.\d{1,2})?$/.test(amount) ? hundredths(amount) : null;
 
 export function AddPayDriverDialog({ week, onClose, onAdded }: { week: string; onClose: () => void; onAdded: (id: string) => void }) {
-  const [search, setSearch] = useState("");
-  const query = useDebouncedValue(search, 200);
-  const [drivers, setDrivers] = useState<DriverPayCandidate[]>([]);
+  const [drivers, setDrivers] = useState<DriverPayCandidate[] | null>(null);
   const [driver, setDriver] = useState("");
-  const [loaded, setLoaded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    void fetchDriverPayCandidates(week, query, controller.signal).then(items => {
+    void fetchDriverPayCandidates(week, controller.signal).then(items => {
       if (controller.signal.aborted) return;
       setDrivers(items ?? []);
-      setLoaded(query);
     }).catch(reason => { if (!controller.signal.aborted) setError(reason.message); });
     return () => controller.abort();
-  }, [week, query]);
-  const ready = loaded === search && drivers.some(item => item.id === driver);
+  }, [week]);
+  const ready = Boolean(drivers?.some(item => item.id === driver));
   return <Modal title="Add driver" description={`Add a statement for the week of ${week}.`} onClose={onClose} isSaving={saving} submitLabel="Add to payroll" submitDisabled={!ready}
     onSubmit={async event => {
       event.preventDefault();
@@ -37,14 +32,12 @@ export function AddPayDriverDialog({ week, onClose, onAdded }: { week: string; o
       catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add driver"); setSaving(false); }
     }}>
     <div className="space-y-3">
-      <label className="block text-sm">Search drivers<input autoFocus className={controlClass} value={search} onChange={event => { setSearch(event.target.value); setDriver(""); setError(""); }} disabled={saving} /></label>
-      {loaded === search && drivers.length === 0 && <p role="status" className="text-sm text-zinc-400">No eligible drivers match this search.</p>}
-      <div className="max-h-64 overflow-y-auto">
-        {loaded === search && drivers.map(item => <label key={item.id} className="flex items-center gap-3 border-b border-zinc-800 py-2 text-sm">
-          <input type="radio" name="pay-driver" checked={driver === item.id} onChange={() => setDriver(item.id)} disabled={saving} />
-          {item.name} <span className="text-xs text-zinc-400">{item.active ? "Active" : "Inactive"}</span>
-        </label>)}
-      </div>
+      <label className="block text-sm">Driver
+        <select className={controlClass} value={driver} disabled={saving || !drivers?.length} onChange={event => setDriver(event.target.value)}>
+          <option value="" disabled>{error && !drivers ? "Drivers unavailable" : !drivers ? "Loading drivers…" : drivers.length ? "Select a driver" : "No eligible drivers"}</option>
+          {drivers?.map(item => <option key={item.id} value={item.id}>{item.name}{item.active ? "" : " · Inactive"}</option>)}
+        </select>
+      </label>
       {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
     </div>
   </Modal>;

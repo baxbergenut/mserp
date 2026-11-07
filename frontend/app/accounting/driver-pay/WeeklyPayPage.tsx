@@ -13,8 +13,8 @@ import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, CloudCheck, Download, RefreshCw, UserRound } from "lucide-react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Banknote, CloudCheck, Download, Ellipsis, UserRound } from "lucide-react";
 import { changeDriverPayMembership, APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
 import { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } from "../payrollWeek";
@@ -71,6 +71,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const optionsLatest = payrollFirstWeek ? latestWeek : week;
   const weekOptions = useMemo(() => payrollWeekOptions(optionsFirst, optionsLatest), [optionsFirst, optionsLatest]);
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
+  const actionsId = useId();
+  const actionsPanel = useRef<HTMLDivElement>(null);
   const [addingDriver, setAddingDriver] = useState(false);
   const [escrowDriver, setEscrowDriver] = useState<DriverPayDriver | null>(null);
   const canManageEscrow = ["escrow.read", "escrow.create", "escrow.edit"].every(permission => permissions.includes(permission));
@@ -499,26 +501,52 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     <PageHeader><div><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">{investor ? "Investor pay" : "Driver pay"}</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : report?.pagination?.total ?? rows.length}</span></div></div></PageHeader>
     <PinnablePageHeader pinned={headerPinned}>
     <div className="grid gap-3 md:grid-cols-3"><MetricCard loading={loading} compact label={investor ? "Investor share" : "Earned pay"} value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Total payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /><FinalizationCard loading={loading} finalized={report?.pagination?.finalized ?? drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length} total={report?.pagination?.statements ?? drivers.filter(d => !d.truckInactive).length} /></div>
-    <div className="flex flex-wrap items-center gap-3">
-      <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-      <select aria-label="Payroll week" className={`${controlClass} !w-auto font-mono`} value={week} disabled={finalizing || busy} onChange={event => switchWeek(event.target.value)}>
-        {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>
-          {options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}
-        </optgroup>)}
-      </select>
-      <span className="text-xs text-zinc-500">{payrollWeekLabel(week).year}</span><button className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button><div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
-        {!investor && canEdit && <button type="button" className={payButtonClass} disabled={finalizing || busy || dirty || saving || editingDraft || !preparedReady} onClick={() => setAddingDriver(true)}>Add driver</button>}
+    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <HeaderPinButton iconOnly pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
+        <select aria-label="Payroll week" className={controlClass + " !h-8 !w-auto !py-0 font-mono"} value={week} disabled={finalizing || busy} onChange={event => switchWeek(event.target.value)}>
+          {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>
+            {options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}
+          </optgroup>)}
+        </select>
+        <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
+        <button type="button" className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button>
+      </div>
+      <div className="flex min-w-0 flex-[1_1_22rem] flex-wrap items-center gap-2">
+        <div className="min-w-28 flex-1 [&_input]:h-8 [&_input]:py-0"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
-          {!investor && <select aria-label="Driver type" className={controlClass} value={driverType} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
+          {!investor && <select aria-label="Driver type" className={controlClass + " !h-8 !max-w-36 !py-0"} value={driverType} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
             setDriverType(driverTypes.find(type => type === event.target.value) ?? "");
             setPage(1);
           }}>
             <option value="">All driver types</option>
             {driverTypes.map(type => <option key={type} value={type}>{employmentTypeLabel(type)}</option>)}
           </select>}
-          <select aria-label="Dispatcher" className={`${controlClass} !w-44`} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}><option value="all">All dispatchers</option>{dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}</select>
-        </TableFilters><button type="button" className={payButtonClass} onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>
-    <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex flex-wrap items-center gap-2"><button type="button" className={payButtonClass} disabled={exporting || !report || !preparedReady || finalizing || busy || dirty || saving || editingDraft} onClick={() => void exportStatements()}><Download className="h-3.5 w-3.5" />{exporting ? "Exporting…" : "Export statements"}</button><span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts add to pay; negative amounts are charges." : undefined} className={`flex h-8 w-48 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${refreshing || report?.preparation?.state === "updating" ? "invisible" : ""} ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!preparedReady ? (report?.preparation?.state === "failed" ? "Preparation failed" : report?.preparation?.state === "preparing" ? "Preparing…" : "") : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span><button className={payButtonClass} disabled={finalizing || saving || loading || refreshing} onClick={() => void reload()}><RefreshCw className="h-3.5 w-3.5" />Reload</button><button hidden={!canEdit || investor} className={payButtonClass} disabled={finalizing || saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>{refreshing ? "Refreshing…" : "Refresh load details"}</button></div></div></div>
+          <select aria-label="Dispatcher" className={controlClass + " !h-8 !max-w-36 !py-0"} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}>
+            <option value="all">All dispatchers</option>
+            {dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}
+          </select>
+        </TableFilters>
+      </div>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <span role="status" title={invalid ? "Fuel/Toll: enter a number (zero is allowed) or reset to automatic. Other entries: enter a name and nonzero amount, or clear both cells. Positive amounts add to pay; negative amounts are charges." : undefined} className={`flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${refreshing || report?.preparation?.state === "updating" ? "invisible" : ""} ${error && dirty ? "text-red-300" : invalid ? "text-amber-300" : "text-zinc-500"}`}>{invalid ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CloudCheck className="h-4 w-4 shrink-0" />}{!preparedReady ? (report?.preparation?.state === "failed" ? "Preparation failed" : report?.preparation?.state === "preparing" ? "Preparing…" : "") : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : refreshing ? "" : invalid ? "Complete adjustment entries" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
+        {!investor && canEdit && <button type="button" className={payButtonClass} disabled={finalizing || busy || dirty || saving || editingDraft || !preparedReady} onClick={() => setAddingDriver(true)}>Add driver</button>}
+        <button type="button" className={payButtonClass} aria-label={exporting ? "Exporting statements" : "Export statements"} disabled={exporting || !report || !preparedReady || finalizing || busy || dirty || saving || editingDraft} onClick={() => void exportStatements()}><Download className="h-3.5 w-3.5" />{exporting ? "Exporting…" : "Export"}</button>
+        <button type="button" className={payButtonClass + " !px-2"} aria-label="More actions" title="More actions" popoverTarget={actionsId} onClick={event => {
+          const panel = actionsPanel.current;
+          if (!panel) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          panel.style.left = Math.max(8, rect.right - 192) + "px";
+          panel.style.top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 120)) + "px";
+        }}><Ellipsis className="h-4 w-4" aria-hidden="true" /></button>
+        <div ref={actionsPanel} id={actionsId} popover="auto" role="group" aria-label="Payroll actions"
+          className="fixed m-0 w-48 max-w-[calc(100vw-16px)] rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-xs text-zinc-200 ui-popover [&_button]:block [&_button]:w-full [&_button]:rounded [&_button]:px-3 [&_button]:py-2 [&_button]:text-left [&_button:disabled]:opacity-40 [&_button:enabled:hover]:bg-zinc-800">
+          <button type="button" popoverTarget={actionsId} popoverTargetAction="hide" onClick={() => setOpened(new Set())}>{investor ? "Collapse truck details" : "Collapse all"}</button>
+          <button type="button" popoverTarget={actionsId} popoverTargetAction="hide" disabled={finalizing || saving || busy} onClick={() => void reload()}>Reload</button>
+          {!investor && canEdit && <button type="button" popoverTarget={actionsId} popoverTargetAction="hide" disabled={finalizing || saving || busy || dirty || !report || !drivers.length} onClick={() => void reload(true)}>Refresh load details</button>}
+        </div>
+      </div>
+    </div>
     {driverFilter && <div><button className="text-xs text-blue-400" onClick={() => { setDriverFilter(""); setPage(1); }} disabled={finalizing || busy || dirty || saving}>{investor ? "Show all trucks" : "Show all drivers"}</button></div>}
     </PinnablePageHeader>
 
@@ -547,7 +575,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     {!loading && <UnlistedOutgoingTransfers statementIds={drivers.map(driver => driver.id)} />}
     {report?.pagination && !loading && <fieldset disabled={finalizing || busy || dirty || saving} className="min-w-0"><TablePagination page={report.pagination.page} pageSize={pageSize} totalItems={report.pagination.total} totalPages={report.pagination.totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} /></fieldset>}
     {addingDriver && <AddPayDriverDialog key={week} week={week} onClose={() => setAddingDriver(false)} onAdded={id => {
-      setAddingDriver(false); setDriverFilter(id); setSearch(""); setDispatcher("all"); setPage(1);
+      setAddingDriver(false); setDriverFilter(id); setSearch(""); setDispatcher("all"); setDriverType(""); setPage(1);
       setOpened(new Set([id])); setRefreshRequest(value => value + 1);
     }} />}
     {escrowDriver && <PayEscrowDialog key={week + escrowDriver.id} week={week} driver={escrowDriver.id} name={escrowDriver.fullName}

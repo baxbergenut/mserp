@@ -57,7 +57,7 @@ func (r *DriverPayRepository) DriverPayCandidates(ctx context.Context, week time
 	}
 	rows, err := tx.Query(ctx, `SELECT id::text,full_name,active FROM drivers
  WHERE NOT (id=ANY($2::uuid[])) AND payroll_driver_at(id,$1::date)=id
- AND (full_name ILIKE '%'||$3||'%') ORDER BY lower(full_name),id LIMIT 50`, week, represented, strings.TrimSpace(search))
+ AND (full_name ILIKE '%'||$3||'%') ORDER BY lower(full_name),id`, week, represented, strings.TrimSpace(search))
 	if err != nil {
 		return nil, err
 	}

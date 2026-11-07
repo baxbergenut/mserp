@@ -32,10 +32,10 @@ export function PinnablePageHeader({ pinned, children }: { pinned: boolean; chil
   return <div ref={ref} data-pinned-page-header={pinned} className={`space-y-5 ${pinned ? "sticky z-40 overflow-y-auto bg-background pb-2" : ""}`}>{children}</div>;
 }
 
-export function HeaderPinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
+export function HeaderPinButton({ pinned, onToggle, iconOnly = false }: { pinned: boolean; onToggle: () => void; iconOnly?: boolean }) {
   const Icon = pinned ? PinOff : Pin;
-  return <button type="button" className="ui-button inline-flex shrink-0 items-center gap-2"
+  return <button type="button" className={"ui-button inline-flex shrink-0 items-center gap-2" + (iconOnly ? " justify-center !px-2" : "")}
     aria-label={pinned ? "Unpin header cards and filters" : "Pin header cards and filters"}
     aria-pressed={pinned} title={pinned ? "Let header cards and filters scroll with the page" : "Keep header cards and filters visible while scrolling"}
-    onClick={onToggle}><Icon className="h-4 w-4" /><span>{pinned ? "Unpin header" : "Pin header"}</span></button>;
+    onClick={onToggle}><Icon className="h-4 w-4" />{!iconOnly && <span>{pinned ? "Unpin header" : "Pin header"}</span>}</button>;
 }

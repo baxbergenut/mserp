@@ -9,6 +9,8 @@ export async function runDriverPayEscrowE2E({ page, base, sql, schema }) {
   sql(`SET search_path TO ${schema},public;
     INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date,active,termination_date)
     VALUES('${driver}','${driverName}','former payroll driver','cpm',0.75,'2026-09-01',false,'2026-10-04');
+    INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active)
+    SELECT 'A Candidate '||i,'a candidate '||i,'cpm',0.75,false FROM generate_series(1,55) i;
     INSERT INTO driver_escrows(id,driver_id,driver_name,start_date,amount,opening_paid)
     VALUES('${escrow}','${driver}','${driverName}','2026-09-01',2000,2000);
     INSERT INTO expenses(id,category_id,category,expense_type,expense_date,amount,driver_id,charge_driver_id,covered_by,payment_type)
@@ -27,12 +29,22 @@ export async function runDriverPayEscrowE2E({ page, base, sql, schema }) {
   await page.goto(`${base}/accounting/driver-pay?weekStart=${week}`);
   await expect(page.getByRole('heading', { name: 'Driver pay', exact: true })).toBeVisible();
   const add = page.getByRole('button', { name: 'Add driver', exact: true });
+  const actions = page.getByRole('group', { name: 'Payroll actions' });
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  await expect(actions.getByRole('button', { name: 'Reload', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(actions).toBeHidden();
   await add.click({ timeout: 30000 });
-  await page.getByLabel('Search drivers').fill(driverName);
-  await page.getByRole('radio', { name: new RegExp(driverName) }).check();
+  await page.getByRole('dialog', { name: 'Add driver' }).getByRole('combobox', { name: 'Driver', exact: true }).selectOption(driver);
   await page.getByRole('button', { name: 'Add to payroll' }).click();
   const manage = page.getByRole('button', { name: 'Manage escrow', exact: true });
-  await manage.click({ timeout: 30000 });
+  await expect(manage).toBeVisible({ timeout: 30000 });
+  expect(await manage.evaluate(button => {
+    const cell = button.closest('td');
+    return cell?.previousElementSibling?.querySelector('button')?.textContent === 'Add accessorial'
+      && button.offsetWidth === cell.clientWidth && button.offsetHeight === cell.clientHeight;
+  })).toBe(true);
+  await manage.click({ position: { x: 3, y: 3 } });
   await expect(page.getByLabel('Escrow collection')).toHaveValue('stop');
   await page.getByLabel('Escrow for Settlement charge').fill('300');
   await page.getByLabel('Return to driver').fill('1800');
