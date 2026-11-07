@@ -26,7 +26,7 @@ import {
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
 import { usePermissions, canVisitPage, useAdministrator } from "@/app/lib/access";
 import { useTaskUpdates } from "./TaskUpdatesProvider";
-import { BrandLogo } from "./BrandLogo";
+import { BetaBadge, BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -103,7 +103,7 @@ export function Sidebar() {
       {/* ── Brand ── */}
       <div className="flex h-16 shrink-0 items-center overflow-hidden border-b border-zinc-800/40 px-4">
         <BrandLogo compact={collapsed} />
-        {!collapsed && <span className="ml-2 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold leading-none text-zinc-950">beta</span>}
+        {!collapsed && <BetaBadge className="ml-2" />}
       </div>
 
       {/* ── Navigation ── */}

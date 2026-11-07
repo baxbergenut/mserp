@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BrandLogo } from "@/app/components/BrandLogo";
+import { BetaBadge, BrandLogo } from "@/app/components/BrandLogo";
 import { login } from "@/app/lib/api";
 import { firstAllowedPage, canVisitPage } from "@/app/lib/access";
 import { controlClass } from "@/app/components/management/ManagementUI";
@@ -30,7 +30,10 @@ export default function LoginPage() {
   return <main className="mserp-ui flex min-h-full items-center justify-center px-6 py-12">
     <div className="w-full max-w-sm">
       <div className="mb-8 text-center">
-        <div className="flex justify-center"><BrandLogo className="w-56" /></div>
+        <div className="flex items-center justify-center">
+          <BrandLogo className="w-56" />
+          <BetaBadge className="ml-2" />
+        </div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-800 bg-card p-6">
         <fieldset disabled={submitting} className="space-y-4 disabled:opacity-60">
