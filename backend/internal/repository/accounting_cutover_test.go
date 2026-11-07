@@ -312,6 +312,10 @@ func TestAccountingCutoverRetiredDatabase(t *testing.T) {
 // dependencies; the complete migration and its guards are tested above.
 func applyAccountingExpenseTestSchema(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
+	// Partial expense fixtures do not replay the payroll escrow cutover.
+	if _, err := conn.Exec(ctx, `ALTER TABLE IF EXISTS expense_payments ADD COLUMN IF NOT EXISTS escrow_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (escrow_amount BETWEEN 0 AND amount)`); err != nil {
+		t.Fatal(err)
+	}
 	var brokerColumn bool
 	if err := conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='expenses'::regclass AND attname='broker_load_number' AND NOT attisdropped)`).Scan(&brokerColumn); err != nil {
 		t.Fatal(err)

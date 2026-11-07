@@ -313,11 +313,11 @@ func postStatementEscrow(ctx context.Context, tx pgx.Tx, week, actor string, pos
 }
 
 func reverseStatementEscrow(ctx context.Context, tx pgx.Tx, week, actor string, d DriverPayDriver) error {
-	var blocked bool
+	var posted, blocked bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id
- WHERE e.driver_id=$1 AND r.week_start=$2 AND NOT r.cancelled AND r.payroll_return IS NOT NULL
- AND EXISTS(SELECT 1 FROM payroll_settlements WHERE driver_id=$1 AND week_start>$2 AND finalized))`, d.ID, week).Scan(&blocked)
-	if err != nil {
+ WHERE e.driver_id=$1 AND r.week_start=$2 AND NOT r.cancelled AND r.payroll_return IS NOT NULL),
+ EXISTS(SELECT 1 FROM payroll_settlements WHERE driver_id=$1 AND week_start>$2 AND finalized)`, d.ID, week).Scan(&posted, &blocked)
+	if err != nil || !posted {
 		return err
 	}
 	if blocked {
@@ -337,7 +337,12 @@ func markDriverPayMembership(ctx context.Context, tx pgx.Tx, report *DriverPayWe
 	}
 	ids := make([]string, 0, len(report.Drivers))
 	for _, d := range report.Drivers {
-		ids = append(ids, d.ID)
+		if d.ID != "" {
+			ids = append(ids, d.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
 	}
 	rows, err := tx.Query(ctx, `SELECT driver_id::text,manually_added,manually_added AND version=1 AND escrow_draft='{}' AND NOT EXISTS(
  SELECT 1 FROM payroll_settlements s WHERE s.driver_id=w.driver_id AND s.week_start=w.week_start),(escrow_draft->>'stopCollection')::boolean
