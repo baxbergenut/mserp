@@ -962,7 +962,7 @@ export interface Expense {
 	baseAmount?: string | null;
 	paymentFee?: string;
   verifications: ExpenseVerification[];
- payments: {weekStart: string; amount: string}[];
+ payments: {weekStart: string; amount: string; escrowAmount?: string}[];
  ownerId: string | null;
  ownerName: string | null;
  chargeDriverId: string | null;
@@ -1272,6 +1272,7 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface ExpenseDeduction {
+  escrowAmount?: string;
 	mode?: "auto" | "fixed" | "skip";
 	liveBalance?: boolean;
   source?: "escrow" | "reimburse" | "accessorial";
@@ -1419,6 +1420,9 @@ export interface PayAutoCharge {
   scaleOriginalAmount?: string;
 }
 export interface DriverPayDriver {
+  escrowCollectionChange?: boolean;
+  manualAddition?: boolean;
+  canRemoveAddition?: boolean;
   salaryCarry?: string;
   salaryCarryWeek?: string;
 	expenseRevision?: string;
@@ -1635,9 +1639,10 @@ export interface TruckChargeBulkResult { truckId: string; typeId: string; weekSt
 export interface TruckChargeOwner { truckId: string; ownerId: string; ownerName: string }
 export interface TruckChargeData { eligibleTruckIds: string[]; owners?: TruckChargeOwner[]; terms?: TruckTerm[]; phases: TruckChargePhase[]; lockedCharges?: { truckId: string; typeId: string }[] }
 
-export interface EscrowRelease { id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
+export interface EscrowRelease { payrollReturn?: string; collectionStopped?: boolean; id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
 export interface EscrowReleaseInput { id: string; weekStart: string; amount: string; version: number; escrowVersion: number; cancelled: boolean }
 export interface Escrow {
+  collectionStopped?: boolean;
   managedInSheets?: boolean;
   heldAmount: string;
   releasedAmount: string;
@@ -1810,3 +1815,26 @@ export type LoadSplitReview = { loadId: number; version: number; sourceHash: str
 export type LoadSplitWorkspace = LoadSplitReview & { loadNumber: string; total: string; miles: string; trips: (GrossBoardTrip & {reviewedRate?: string})[]; reviewReason: string };
 
 export interface ExpenseBalanceCorrection { id: string; remaining: string; previous?: string; reason: string; version: number; actor?: string; createdAt?: string; }
+export interface DriverPayCandidate { id: string; name: string; active: boolean }
+export interface PayrollEscrowDraft {
+  escrowId: string;
+  version: number;
+  returnAmount: string;
+  expenses: Record<string, string>;
+  stopCollection?: boolean;
+}
+export interface PayrollEscrowAccount {
+  id: string;
+  version: number;
+  held: string;
+  available: string;
+  stopped: boolean;
+}
+export interface DriverPayEscrowEditor {
+  accounts: PayrollEscrowAccount[];
+  expenses: ExpenseDeduction[];
+  draft: PayrollEscrowDraft;
+  editVersion: number;
+  expenseRevision: string;
+  suggestStop: boolean;
+}

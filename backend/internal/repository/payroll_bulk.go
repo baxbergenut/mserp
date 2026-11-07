@@ -80,7 +80,7 @@ func escrowDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week
  FROM pay_escrows e JOIN pay_escrow_capacity capacity ON capacity.id=e.id
  LEFT JOIN driver_escrow_payments w ON w.escrow_id=e.id AND w.week_start=$2::date
  LEFT JOIN pay_escrow_opening p ON p.id=e.id
- WHERE w.escrow_id IS NOT NULL OR capacity.available>0 ORDER BY e.start_date,e.id`, drivers, week)
+ WHERE w.escrow_id IS NOT NULL OR (capacity.available>0 AND NOT escrow_payroll_suppressed(e.id,e.driver_id,$2::date)) ORDER BY e.start_date,e.id`, drivers, week)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,10 @@ func escrowDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week
 }
 
 func escrowReleaseCreditsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]PayAutoCharge, error) {
-	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,r.id::text,r.amount::text FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE accounting_live_source('escrow',e.id,e.start_date) AND e.driver_id=ANY($1::uuid[]) AND r.week_start=$2::date AND NOT r.cancelled ORDER BY r.id`, drivers, week)
+	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,r.id::text,r.amount::text,'Escrow release' FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE accounting_live_source('escrow',e.id,e.start_date) AND e.driver_id=ANY($1::uuid[]) AND r.week_start=$2::date AND NOT r.cancelled AND r.payroll_return IS NULL
+ UNION ALL SELECT w.driver_id::text,w.escrow_draft->>'escrowId',w.escrow_draft->>'returnAmount','Escrow returned'
+ FROM driver_pay_weeks w WHERE w.driver_id=ANY($1::uuid[]) AND w.week_start=$2::date
+ AND (w.escrow_draft->>'returnAmount')::numeric>0 ORDER BY 2`, drivers, week)
 	if err != nil {
 		return nil, err
 	}
@@ -106,11 +109,11 @@ func escrowReleaseCreditsBulk(ctx context.Context, tx pgx.Tx, drivers []string, 
 	result := map[string][]PayAutoCharge{}
 	for rows.Next() {
 		var driver string
-		var id, amount string
-		if err = rows.Scan(&driver, &id, &amount); err != nil {
+		var id, amount, name string
+		if err = rows.Scan(&driver, &id, &amount, &name); err != nil {
 			return nil, err
 		}
-		result[driver] = append(result[driver], PayAutoCharge{Name: "Escrow release", Amount: amount, Source: "escrow-release:" + id})
+		result[driver] = append(result[driver], PayAutoCharge{Name: name, Amount: amount, Source: "escrow-release:" + id})
 	}
 	return result, rows.Err()
 }

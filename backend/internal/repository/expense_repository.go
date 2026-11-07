@@ -24,8 +24,9 @@ func NewExpenseRepository(pool *pgxpool.Pool) *ExpenseRepository {
 }
 
 type ExpensePayment struct {
-	WeekStart string `json:"weekStart"`
-	Amount    string `json:"amount"`
+	EscrowAmount string `json:"escrowAmount,omitempty"`
+	WeekStart    string `json:"weekStart"`
+	Amount       string `json:"amount"`
 }
 type ExpenseVerification struct {
 	ID         string     `json:"id"`
@@ -781,7 +782,7 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
    (` + expenseSettlementTotalSQL + `-(` + expenseOwnerExternalSQL + `)-coalesce((SELECT sum(amount) FROM expense_payments WHERE expense_id=e.id),0))::text END,
  e.driver_settled,e.owner_id,(SELECT coalesce(od.full_name,i.full_name) FROM investors i LEFT JOIN drivers od ON od.id=i.driver_id WHERE i.id=e.owner_id),e.charge_driver_id,
- coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
+ coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text,'escrowAmount',p.escrow_amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.verifier_role='accountant' AND v.revoked_at IS NULL),'[]'::jsonb)
 , e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),''), NOT coalesce(accounting_live_source('expense',e.id,e.expense_date),false),e.balance_version
  , to_jsonb(e)->>'broker_load_number',coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)

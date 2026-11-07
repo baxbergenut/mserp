@@ -109,6 +109,9 @@ func filterVacationPay(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 		if kind == "investor" {
 			away = v.trucks[d.ID]
 		}
+		if kind == "driver" && d.ManualAddition {
+			away = false
+		}
 		if !away || len(d.Loads) > 0 || len(d.Layovers) > 0 || d.Settlement != nil && d.Settlement.Finalized {
 			kept = append(kept, d)
 		}

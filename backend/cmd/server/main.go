@@ -52,7 +52,12 @@ func main() {
 	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
 	scaleCarryCapability := flag.Bool("payroll-scale-carry-capability", false, "print cross-week CAT Scale collection support and exit without opening a database")
 	scalePartialCapability := flag.Bool("payroll-scale-partial-capability", false, "print partial CAT Scale collection support and exit without opening a database")
+	escrowSettlementCapability := flag.Bool("driver-pay-escrow-capability", false, "print statement escrow schema support and exit")
 	flag.Parse()
+	if *escrowSettlementCapability {
+		fmt.Println("driver-pay-escrow-v1")
+		return
+	}
 	if *scalePartialCapability {
 		fmt.Println("payroll-scale-partial-v1")
 		return

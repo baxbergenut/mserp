@@ -809,3 +809,11 @@ async function payrollMutationRequest<T>(path: string, input: object): Promise<T
     throw error;
   }
 }
+export const fetchDriverPayCandidates = (weekStart: string, search: string, signal: AbortSignal) =>
+  apiRequest<import("./types").DriverPayCandidate[]>(withQuery("/driver-pay/candidates", { weekStart, search }), { signal });
+export const changeDriverPayMembership = (weekStart: string, driverId: string, remove = false) =>
+  apiRequest<{ saved: boolean }>("/driver-pay/membership", { method: "POST", body: JSON.stringify({ weekStart, driverId, remove }) });
+export const fetchDriverPayEscrow = (weekStart: string, driverId: string, signal: AbortSignal) =>
+  apiRequest<import("./types").DriverPayEscrowEditor>(withQuery("/driver-pay/escrow", { weekStart, driverId }), { signal });
+export const saveDriverPayEscrow = (weekStart: string, driverId: string, editVersion: number, expenseRevision: string, draft: import("./types").PayrollEscrowDraft) =>
+  apiRequest<{ saved: boolean }>("/driver-pay/escrow", { method: "PUT", body: JSON.stringify({ weekStart, driverId, editVersion, expenseRevision, draft }) });

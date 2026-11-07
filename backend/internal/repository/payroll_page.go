@@ -304,3 +304,17 @@ func payPageCosts(d DriverPayDriver) int64 {
 	}
 	return total
 }
+
+func (d DriverPayDriver) EscrowMovementCents() (returned, applied int64) {
+	for _, row := range d.AutoCharges {
+		if strings.HasPrefix(row.Source, "escrow-release:") {
+			n, _ := chargeCents(row.Amount)
+			returned += n
+		}
+	}
+	for _, row := range d.Edits.ExpenseDeductions {
+		n, _ := chargeCents(row.EscrowAmount)
+		applied += n
+	}
+	return returned, applied
+}

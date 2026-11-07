@@ -10,12 +10,14 @@ import (
 var ErrEscrowReleaseConflict = errors.New("Escrow changed; refresh and try again")
 
 type EscrowRelease struct {
-	ID        string `json:"id"`
-	WeekStart string `json:"weekStart"`
-	Amount    string `json:"amount"`
-	Cancelled bool   `json:"cancelled"`
-	Version   int    `json:"version"`
-	Editable  bool   `json:"editable"`
+	PayrollReturn     *string `json:"payrollReturn,omitempty"`
+	CollectionStopped *bool   `json:"collectionStopped,omitempty"`
+	ID                string  `json:"id"`
+	WeekStart         string  `json:"weekStart"`
+	Amount            string  `json:"amount"`
+	Cancelled         bool    `json:"cancelled"`
+	Version           int     `json:"version"`
+	Editable          bool    `json:"editable"`
 }
 
 type EscrowReleaseInput struct {

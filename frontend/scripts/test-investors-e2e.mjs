@@ -1,3 +1,4 @@
+import { runDriverPayEscrowE2E } from './driver-pay-escrow-e2e.mjs';
 import { runStatusBoardOrderE2E } from './status-board-order-e2e.mjs';
 import { runDriverSetupE2E } from "./driver-setup-e2e.mjs";
 import { runPayrollVacationsE2E } from './payroll-vacations-e2e.mjs';
@@ -51,6 +52,8 @@ try {
     INSERT INTO app_users(username,password_hash,email,role_id) VALUES('investor-e2e',crypt('${password}',gen_salt('bf')),'investor-e2e@example.com',(SELECT id FROM app_roles WHERE system_role));
     INSERT INTO drivers(full_name,normalized_name,is_owner_operator,pay_type,pay_rate) VALUES('E2e Driver','e2e driver',true,'gross_percentage',80);
   `);
+  const escrowSettlement = process.argv.includes('--escrow-settlement-only');
+  if (escrowSettlement) sql(`SET search_path TO ${schema},public; UPDATE payroll_projection_control SET capture_enabled=true,protocol_mode='resources',first_week='2026-10-19';`);
   if (grossBoard) sql(`SET search_path TO ${schema},public; UPDATE payroll_projection_control SET capture_enabled=true,protocol_mode='resources',first_week=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date;`);
   const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
@@ -59,7 +62,7 @@ try {
   const apiPort = Number(process.env.MSERP_E2E_API_PORT || 18549);
   const webPort = Number(process.env.MSERP_E2E_WEB_PORT || 13549);
   api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
-    ...process.env, ...(grossBoard ? {PAYROLL_PROJECTION_MODE:'shadow',PAYROLL_PREPARED_READS:'true',PAYROLL_PREPARED_COMMANDS:'true',PAYROLL_PREPARED_FINALIZATION:'true',PAYROLL_RESOURCE_LOCKS:'true'} : {}), DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
+    ...process.env, ...((escrowSettlement || grossBoard) ? {PAYROLL_PROJECTION_MODE:'shadow',PAYROLL_PREPARED_READS:'true',PAYROLL_PREPARED_COMMANDS:'true',PAYROLL_PREPARED_FINALIZATION:'true',PAYROLL_RESOURCE_LOCKS:'true'} : {}), DATABASE_URL: database.toString(), PORT: String(apiPort), BIND_ADDRESS: '127.0.0.1',
     RELAY_API_KEY: 'test-disabled', PREPASS_CLIENT_ID: 'test-disabled', PREPASS_CLIENT_SECRET: 'test-disabled', DATATRUCK_API_KEY: 'test-disabled', DATATRUCK_COMPANY_NAME: 'test', SCHEDULED_SYNCS_ENABLED: 'false',
     AUTH_COOKIE_SECURE: 'false', FRONTEND_ORIGIN: `http://127.0.0.1:${webPort}`,
     FLEETSCOPE_COMPANY_ID: webhookCompany, FLEETSCOPE_WEBHOOK_SECRET: webhookSecret,
@@ -112,7 +115,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--load-placements-only')) {
+  if (escrowSettlement) {
+    await runDriverPayEscrowE2E({ page, base, sql, schema });
+  } else if (process.argv.includes('--load-placements-only')) {
     await runPayrollLoadPlacementsE2E({ page, base, sql, schema, temp });
   } else if (process.argv.includes('--vacations-only')) {
     await runPayrollVacationsE2E({ page, base, sql, schema });

@@ -31,6 +31,7 @@ mock_payroll_current=f
 mock_routing_usage=f
 mock_expense_drafts=f
 mock_accessorials=f
+mock_escrow_settlement=f
 mock_scale_carry=f
 mock_scale_partial=f
 runuser() {
@@ -55,6 +56,7 @@ runuser() {
     if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
     if [[ $* == *"public.board_route_usage"* ]]; then result=$mock_routing_usage; fi
     if [[ $* == *"column_name='expense_choices'"* ]]; then result=$mock_expense_drafts; fi
+    if [[ $* == *"column_name='escrow_draft'"* ]]; then result=$mock_escrow_settlement; fi
     if [[ $* == *"JOIN public.weighmytruck_transactions"* ]]; then result=$mock_scale_carry; fi
     if [[ $* == *"scaleOriginalAmount"* ]]; then result=$mock_scale_partial; fi
     [[ $result != error ]] || return 1
@@ -283,3 +285,14 @@ if compatible_release "$test_root/new"; then echo 'Accessorial schema query fail
 mock_accessorials=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown accessorial schema allowed rollback' >&2; exit 1; fi
 echo 'Accessorial compatibility checks passed'
+
+mock_accessorials=t
+mock_escrow_settlement=t
+if compatible_release "$test_root/new"; then echo 'Escrow settlement allowed an incompatible payroll binary' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\ncase "$1" in -driver-pay-escrow-capability) echo driver-pay-escrow-v1;; -accessorial-expenses-capability) echo accessorial-expenses-v1;; -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_escrow_settlement=error
+if compatible_release "$test_root/new"; then echo 'Escrow schema query failure allowed rollback' >&2; exit 1; fi
+mock_escrow_settlement=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown escrow schema allowed rollback' >&2; exit 1; fi
+echo 'Driver Pay escrow compatibility checks passed'

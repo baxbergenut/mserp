@@ -128,6 +128,9 @@ type PayPerson struct {
 }
 
 type DriverPayDriver struct {
+	EscrowCollectionChange *bool                         `json:"escrowCollectionChange,omitempty"`
+	ManualAddition         bool                          `json:"manualAddition,omitempty"`
+	CanRemoveAddition      bool                          `json:"canRemoveAddition,omitempty"`
 	SalaryCarry            string                        `json:"salaryCarry,omitempty"`
 	SalaryCarryWeek        string                        `json:"salaryCarryWeek,omitempty"`
 	ExpenseRevision        string                        `json:"expenseRevision,omitempty"`

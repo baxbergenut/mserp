@@ -61,6 +61,21 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 		return nil, err
 	}
 	headers := []string{"Driver Name", "Total Salary Payable", "Reimbursed Amount"}
+	escrowColumns := false
+	if kind == "driver" {
+		for _, statement := range statements {
+			returned, applied := statement.EscrowMovementCents()
+			if statement.NetPayCents() > 0 && (returned > 0 || applied > 0) {
+				escrowColumns = true
+				break
+			}
+		}
+	}
+	lastColumn := "C"
+	if escrowColumns {
+		lastColumn = "E"
+		headers = append(headers, "Escrow Returned", "Charges Paid From Escrow")
+	}
 	if err := book.SetSheetRow(sheet, "A1", &headers); err != nil {
 		return nil, err
 	}
@@ -68,7 +83,7 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 	if err != nil {
 		return nil, err
 	}
-	if err := book.SetCellStyle(sheet, "A1", "C1", header); err != nil {
+	if err := book.SetCellStyle(sheet, "A1", lastColumn+"1", header); err != nil {
 		return nil, err
 	}
 	currencyFormat := `"$"#,##0.00;-"$"#,##0.00`
@@ -76,18 +91,18 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 	if err != nil {
 		return nil, err
 	}
-	if err := book.SetColStyle(sheet, "B:C", currency); err != nil {
+	if err := book.SetColStyle(sheet, "B:"+lastColumn, currency); err != nil {
 		return nil, err
 	}
 	if err := book.SetColWidth(sheet, "A", "A", 48); err != nil {
 		return nil, err
 	}
-	if err := book.SetColWidth(sheet, "B", "C", 24); err != nil {
+	if err := book.SetColWidth(sheet, "B", lastColumn, 28); err != nil {
 		return nil, err
 	}
 	type exportRow struct {
-		name                string
-		payable, reimbursed int64
+		name                                   string
+		payable, reimbursed, returned, applied int64
 	}
 	rows := make([]exportRow, 0, len(statements))
 	for _, statement := range statements {
@@ -111,13 +126,17 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 			}
 			name = strings.Join(names, " / ")
 		}
-		rows = append(rows, exportRow{name, payable, statement.ReimbursedCents()})
+		returned, applied := statement.EscrowMovementCents()
+		rows = append(rows, exportRow{name, payable, statement.ReimbursedCents(), returned, applied})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		return strings.ToLower(rows[i].name) < strings.ToLower(rows[j].name)
 	})
 	for i, entry := range rows {
 		row := []any{entry.name, float64(entry.payable) / 100, float64(entry.reimbursed) / 100}
+		if escrowColumns {
+			row = append(row, float64(entry.returned)/100, float64(entry.applied)/100)
+		}
 		if err := book.SetSheetRow(sheet, fmt.Sprintf("A%d", i+2), &row); err != nil {
 			return nil, err
 		}

@@ -207,6 +207,7 @@ func registerDriverPayRoutes(r chi.Router, logger *slog.Logger, repo *repository
 			writeJSON(w, 200, result)
 		})
 	}
+	registerDriverPayEscrowRoutes(r, repo, fail)
 	registerPaySourceAcceptance(r, "/driver-pay", repo, fail)
 	registerPayrollExport(r, "/driver-pay", "driver", repo, fail)
 	r.Get("/driver-pay", func(w http.ResponseWriter, r *http.Request) {

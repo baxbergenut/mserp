@@ -3780,3 +3780,21 @@ writers for the routing usage classification and rejects rollback to binaries
 without `-board-routing-usage-capability` support. The SQL classification and Go
 payroll exclusion list must both include `board_route_usage`; fresh/migrated
 Status Board database tests verify the production payroll coverage check.
+
+## Driver Pay escrow settlement (204)
+
+- Add Driver creates one explicit weekly Driver Pay membership for any otherwise
+  missing driver, including terminated drivers. Dated team members are represented
+  by the main statement. Membership does not affect the roster or assignments.
+- Manage escrow saves statement instructions for one of the driver's accounts.
+  It can return escrow through pay, apply it to the driver's own ordinary
+  expenses, and stop or resume collection. A stop applies from the selected
+  week, while a resume starts the following week. Drafts make no ledger posts
+  or reservations.
+- Finalization posts the escrow movement and the salary/escrow expense split
+  atomically with the frozen statement. Legacy releases and statement movements
+  share dated funding limits. Reopening cancels the exact escrow movement and
+  reverses the statement's expense collections; later finalized statements and
+  dependent ledger activity are guarded.
+- Install the matching deploy helper before 204. It quiesces writers and requires
+  the new escrow capability for rollback. See docs/DRIVER_PAY_ESCROW.md.

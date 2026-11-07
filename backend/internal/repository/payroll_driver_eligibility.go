@@ -121,7 +121,7 @@ func preparePayrollDriverEligibility(ctx context.Context, tx pgx.Tx, scopes []pa
 		return err
 	}
 	eligibility := strings.ReplaceAll(payDriverEligibilitySQL, "$1::date", "d.payroll_week")
-	eligibility = strings.ReplaceAll(eligibility, "WHERE x.driver_id=d.id AND (x.available", "WHERE x.driver_id=d.id AND x.week=d.payroll_week AND (x.available")
+	eligibility = strings.ReplaceAll(eligibility, "WHERE x.driver_id=d.id AND ((x.available", "WHERE x.driver_id=d.id AND x.week=d.payroll_week AND (x.available")
 	rows, err := tx.Query(ctx, `WITH scopes AS MATERIALIZED (SELECT * FROM jsonb_to_recordset($1::jsonb) s(week date,drivers uuid[])),
  pay_drivers AS MATERIALIZED (SELECT d.*,s.week payroll_week FROM scopes s CROSS JOIN LATERAL unnest(s.drivers) wanted(id) JOIN drivers d ON d.id=wanted.id),
  pay_escrow_capacity AS MATERIALIZED (SELECT week,driver driver_id,id,available FROM jsonb_to_recordset($2::jsonb) c(week date,driver uuid,id uuid,available numeric))`+eligibility+`

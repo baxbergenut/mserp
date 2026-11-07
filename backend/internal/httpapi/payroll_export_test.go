@@ -48,3 +48,27 @@ func TestPayrollStatementWorkbook(t *testing.T) {
 		})
 	}
 }
+
+func TestPayrollStatementWorkbookEscrow(t *testing.T) {
+	body, err := payrollStatementWorkbook("driver", []repository.DriverPayDriver{{
+		FullName:    "Former Driver",
+		AutoCharges: []repository.PayAutoCharge{{Source: "escrow-release:account", Amount: "1700"}},
+		Edits:       repository.DriverPayEdits{ExpenseDeductions: []repository.ExpenseDeduction{{Amount: "200", EscrowAmount: "300"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Statements")
+	want := [][]string{
+		{"Driver Name", "Total Salary Payable", "Reimbursed Amount", "Escrow Returned", "Charges Paid From Escrow"},
+		{"Former Driver", "$1,500.00", "$0.00", "$1,700.00", "$300.00"},
+	}
+	if err != nil || !reflect.DeepEqual(rows, want) {
+		t.Fatalf("got %v, want %v: %v", rows, want, err)
+	}
+}

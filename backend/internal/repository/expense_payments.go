@@ -12,6 +12,8 @@ import (
 // Amounts are magnitudes; source=reimburse adds to pay, other rows deduct.
 // Apply persists the allocation; a saved zero explicitly defers this week.
 type ExpenseDeduction struct {
+	EscrowEligible bool   `json:"escrowEligible,omitempty"`
+	EscrowAmount   string `json:"escrowAmount,omitempty"`
 	Mode           string `json:"mode,omitempty"`
 	LiveBalance    bool   `json:"liveBalance,omitempty"`
 	Source         string `json:"source,omitempty"`

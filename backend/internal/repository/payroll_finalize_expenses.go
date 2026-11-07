@@ -32,7 +32,8 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 			}
 			n, e := chargeCents(v.Amount)
 			limit, le := chargeCents(v.Available)
-			if e != nil || le != nil || n < 0 || n > limit {
+			escrow, _ := chargeCents(v.EscrowAmount)
+			if e != nil || le != nil || n < 0 || n+escrow > limit {
 				return chargeInvalid("Expense deduction exceeds its available balance")
 			}
 			selected[key] = allocation{v, d.ID, d.InvestorID}
@@ -119,12 +120,14 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 	}
 	// Use the same three destination ledgers and immutable per-row receipts.
 	for _, source := range []string{"", "accessorial", "reimburse", "escrow"} {
-		keys, amounts, trucks := []string{}, []string{}, []string{}
+		keys, amounts, trucks, escrowAmounts := []string{}, []string{}, []string{}, []string{}
 		for _, a := range selected {
 			if a.item.Source == source {
 				keys = append(keys, a.item.ExpenseID)
 				amounts = append(amounts, a.item.Amount)
 				trucks = append(trucks, a.statement)
+				escrow, _ := chargeCents(a.item.EscrowAmount)
+				escrowAmounts = append(escrowAmounts, chargeMoney(escrow))
 			}
 		}
 		if len(keys) == 0 {
@@ -141,9 +144,10 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 			}
 			resultCount = tag.RowsAffected()
 		} else if source == "" {
-			tag, e := tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,statement_kind,statement_id)
- SELECT id,$2::date,amount::numeric,nullif($4,'')::uuid,'driver',statement FROM unnest($1::uuid[],$3::text[],$5::uuid[]) v(id,amount,statement) ORDER BY id
- ON CONFLICT(expense_id,week_start) DO NOTHING`, keys, week, amounts, actor, trucks)
+			tag, e := tx.Exec(ctx, `INSERT INTO expense_payments(expense_id,week_start,amount,updated_by,statement_kind,statement_id,escrow_amount)
+ SELECT id,$2::date,amount::numeric+escrow::numeric,nullif($4,'')::uuid,'driver',statement,escrow::numeric
+ FROM unnest($1::uuid[],$3::text[],$5::uuid[],$6::text[]) v(id,amount,statement,escrow) ORDER BY id
+ ON CONFLICT(expense_id,week_start) DO NOTHING`, keys, week, amounts, actor, trucks, escrowAmounts)
 			if e != nil {
 				return e
 			}

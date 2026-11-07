@@ -84,6 +84,9 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 		if err := readDriverScaleDeductions(ctx, tx, report); err != nil {
 			return err
 		}
+		if err := markDriverPayMembership(ctx, tx, report); err != nil {
+			return err
+		}
 		if err := overlayDriverExpenseBalances(ctx, tx, report); err != nil {
 			return err
 		}

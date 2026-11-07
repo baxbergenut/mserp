@@ -48,7 +48,8 @@ func overlayDriverExpenseBalances(ctx context.Context, tx pgx.Tx, report *Driver
  AND accounting_live_source('expense',e.id,e.expense_date)
  ), balances AS (
  SELECT e.*,coalesce(p.paid,0) paid,w.amount posted,
- coalesce(choices.expense_choices->e.id::text,'{}') choice
+ coalesce(choices.expense_choices->e.id::text,'{}') choice,
+ coalesce(w.escrow_amount,(choices.escrow_draft->'expenses'->>e.id::text)::numeric,0) escrow_amount
  FROM invoices e
  LEFT JOIN LATERAL (SELECT sum(amount) paid FROM expense_payments WHERE expense_id=e.id) p ON true
  LEFT JOIN expense_payments w ON w.expense_id=e.id AND w.week_start=$2::date AND w.investor_truck_id IS NULL
@@ -56,7 +57,7 @@ func overlayDriverExpenseBalances(ctx context.Context, tx pgx.Tx, report *Driver
  LEFT JOIN driver_pay_weeks choices ON choices.driver_id=e.statement AND choices.week_start=$2::date
  ) SELECT statement::text,id::text,coalesce(nullif(btrim(expense_type),''),category),category,expense_date::text,
  total::text,(collectible-paid+coalesce(posted,0))::text,coalesce(posted,collectible-paid)::text,
- balance_version,posted IS NOT NULL,choice
+ balance_version,posted IS NOT NULL,choice,escrow_amount::text,charge_driver_id=statement
  FROM balances WHERE posted IS NOT NULL OR collectible>paid ORDER BY statement,expense_date,id`, string(body), report.WeekStart)
 	if err != nil {
 		return err
@@ -65,8 +66,9 @@ func overlayDriverExpenseBalances(ctx context.Context, tx pgx.Tx, report *Driver
 	for rows.Next() {
 		var id string
 		var choiceBody []byte
+		var escrowAmount string
 		d := ExpenseDeduction{LiveBalance: true}
-		if err = rows.Scan(&id, &d.ExpenseID, &d.Name, &d.Category, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Version, &d.Saved, &choiceBody); err != nil {
+		if err = rows.Scan(&id, &d.ExpenseID, &d.Name, &d.Category, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Version, &d.Saved, &choiceBody, &escrowAmount, &d.EscrowEligible); err != nil {
 			rows.Close()
 			return err
 		}
@@ -94,7 +96,22 @@ func overlayDriverExpenseBalances(ctx context.Context, tx pgx.Tx, report *Driver
 			rows.Close()
 			return err
 		}
-		byID[id] = append(byID[id], entry[0])
+		d = entry[0]
+		escrow, e := chargeCents(escrowAmount)
+		if e != nil {
+			rows.Close()
+			return e
+		}
+		if escrow > 0 {
+			d.EscrowAmount = chargeMoney(escrow)
+			salary, _ := chargeCents(d.Amount)
+			if d.Saved || d.Mode == "auto" {
+				salary = max(0, salary-escrow)
+			}
+			d.Amount = chargeMoney(salary)
+			d.Remaining = chargeMoney(available - salary - escrow)
+		}
+		byID[id] = append(byID[id], d)
 	}
 	err = rows.Err()
 	rows.Close()

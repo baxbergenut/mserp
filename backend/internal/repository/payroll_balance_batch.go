@@ -166,7 +166,7 @@ const payrollEscrowBalanceBatchSQL = `WITH scopes AS MATERIALIZED (
  FROM relevant e JOIN capacity c ON c.id=e.id AND c.target=e.target
  LEFT JOIN payments w ON w.escrow_id=e.id AND w.week_start=e.target
  LEFT JOIN opening o ON o.id=e.id AND o.target=e.target
- WHERE w.escrow_id IS NOT NULL OR c.available>0 ORDER BY e.target,e.start_date,e.id`
+ WHERE w.escrow_id IS NOT NULL OR (c.available>0 AND NOT escrow_payroll_suppressed(e.id,e.driver_id,e.target)) ORDER BY e.target,e.start_date,e.id`
 
 func payrollBatchedDeductions(ctx context.Context, tx pgx.Tx, drivers []string, week, source string) (map[string][]ExpenseDeduction, bool) {
 	batch, _ := ctx.Value(payrollBalanceBatchKey{}).(*payrollBalanceBatch)

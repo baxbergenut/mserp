@@ -40,6 +40,9 @@ const cell = "h-8 border-b border-r border-zinc-800/70 px-2 py-0 align-middle";
 const numeric = `${cell} text-right font-mono tabular-nums whitespace-nowrap`;
 
 export type DriverCardProps = {
+  onManageEscrow?: () => void;
+  onRemoveAddition?: () => void;
+  statementActionsDisabled?: boolean;
   onDraftEditorChange?: (id: string, active: boolean) => void;
   onPlacement?: (input: PayLoadPlacementInput) => Promise<PayLoadPlacementResult | void>;
   placementDisabled?: boolean;
@@ -66,7 +69,7 @@ export type DriverCardProps = {
   onEdit: (id: string, update: (edits: DriverPayEdits) => DriverPayEdits) => void;
 };
 
-export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, settlementPending, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, onAddAccessorial, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
+export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAddition, statementActionsDisabled, onDraftEditorChange, onPlacement, placementDisabled, onTransfer, transferDisabled, driver, edits, disabled, open, onToggle, onEdit, chargeActionsDisabled, onReload, onSettlement, settlementDisabled, settlementPending, returnToPay, onAcceptSource, sourceActionDisabled, onOpenExpense, onAddAccessorial, expenseOpenDisabled, detailError, onRetryDetails }: DriverCardProps) {
   const [extraNumber, setExtraNumber] = useState("");
   const [extraChoices, setExtraChoices] = useState<PayLoadPlacementResult["choices"]>([]);
   const [extraChoice, setExtraChoice] = useState("");
@@ -191,6 +194,11 @@ export const DriverCard = memo(function DriverCard({ onDraftEditorChange, onPlac
     </tr>
     {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
     {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">
+      {driver.escrowCollectionChange !== undefined && <p className="px-3 pt-3 text-xs text-zinc-400">{driver.escrowCollectionChange ? "Escrow collection stops this week" : "Escrow collection resumes next week"}</p>}
+      {(onManageEscrow || onRemoveAddition) && <div className="flex gap-2 px-3 pt-3">
+        {onManageEscrow && <button type="button" className={payButtonClass} disabled={statementActionsDisabled} onClick={onManageEscrow}>Manage escrow</button>}
+        {onRemoveAddition && <button type="button" className={payButtonClass} disabled={statementActionsDisabled} onClick={onRemoveAddition}>Remove from week</button>}
+      </div>}
       <div id={`driver-${driver.id}`}>
         {!!driver.brokerReimbursements?.length && <div className="border-b border-zinc-800 px-3 py-2 text-xs text-amber-300" aria-label="Broker reimbursement reminders">
           {driver.brokerReimbursements.map(item => <div key={item.expenseId} className="flex flex-wrap items-center gap-x-2 gap-y-1">

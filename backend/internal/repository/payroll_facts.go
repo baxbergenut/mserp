@@ -49,6 +49,6 @@ var payDriverEligibilitySQL = `, scale_paid AS MATERIALIZED (` + wmtCollectionsS
  (b.payer='driver' AND (paid.source IS NULL OR balance.due<>0)))) pay_scale,
  EXISTS(SELECT 1 FROM driver_charge_schedules cs WHERE (cs.kind<>'installment' OR accounting_live_source('installment',cs.id,cs.start_week)) AND cs.driver_id=d.id AND cs.start_week<=$1::date) pay_charge,
  EXISTS(SELECT 1 FROM expenses x WHERE accounting_live_source('expense',x.id,x.expense_date) AND x.charge_driver_id=d.id AND (NOT x.driver_settled OR expense_balance_adjustment(x.id)<>0)) pay_expense,
- EXISTS(SELECT 1 FROM pay_escrow_capacity x WHERE x.driver_id=d.id AND (x.available>0 OR EXISTS(SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date))) pay_escrow
+ EXISTS(SELECT 1 FROM pay_escrow_capacity x WHERE x.driver_id=d.id AND ((x.available>0 AND NOT escrow_payroll_suppressed(x.id,d.id,$1::date)) OR EXISTS(SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=x.id AND p.week_start=$1::date))) pay_escrow
  FROM pay_drivers d
 )`

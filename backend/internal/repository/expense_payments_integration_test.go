@@ -169,6 +169,11 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 			}
 			if mode == "migration" {
 				exec("ALTER TABLE driver_pay_weeks ADD COLUMN expense_choices jsonb NOT NULL DEFAULT '{}'; ALTER TABLE investor_pay_weeks ADD COLUMN expense_choices jsonb NOT NULL DEFAULT '{}'; ALTER TABLE expense_payments ADD COLUMN statement_kind text, ADD COLUMN statement_id uuid;")
+				migration, readErr := os.ReadFile("../../sql/204_driver_pay_escrow_settlement.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(migration))
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {

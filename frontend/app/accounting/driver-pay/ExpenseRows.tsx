@@ -1,7 +1,7 @@
 "use client";
 
 import { PayInput } from "./PayInput";
-import { carryBreakdown, validExpenseAmount } from "./pay";
+import { carryBreakdown, centsAmount, validExpenseAmount } from "./pay";
 import type { DriverPayDriver, DriverPayEdits } from "@/app/lib/types";
 import { decimalDisplay, decimalInputValue, hundredths } from "@/app/gross-board/board";
 
@@ -27,15 +27,18 @@ export function ExpenseRows({ driver, edits, disabled, onEdit, onOpenExpense, ex
       const accessorial = row.source === "accessorial";
       const credit = row.source === "reimburse" || accessorial;
       const label = accessorial ? `Accessorial · ${row.name}` : row.name;
-      const valid = validExpenseAmount(row.amount, row.available);
+      const escrow = hundredths(row.escrowAmount ?? "0");
+      const available = hundredths(row.available) - escrow;
+      const valid = validExpenseAmount(row.amount, centsAmount(available));
       const value = valid && hundredths(row.amount) !== BigInt(0) ? `${credit ? "+" : "-"}${row.amount}` : row.amount;
       const balance = valid
-        ? `Left: ${decimalDisplay(hundredths(row.openingBalance) - hundredths(row.amount), true)}`
-        : `Available: ${decimalDisplay(hundredths(row.available), true)}`;
+        ? `Left: ${decimalDisplay(hundredths(row.openingBalance) - hundredths(row.amount) - escrow, true)}`
+        : `Available: ${decimalDisplay(available, true)}`;
       return <tr key={`${row.source ?? "charge"}:${row.expenseId}`}>
         <td className="h-8 border-b border-r border-zinc-800 px-2 text-zinc-300" title={row.name}>
           <div className="flex items-center justify-between gap-1">
             {isExpense ? <ExpenseRowLabel id={row.expenseId} name={label} date={row.expenseDate} onOpenExpense={onOpenExpense} disabled={expenseOpenDisabled} /> : <span className="min-w-0 truncate">{row.name}</span>}
+            {escrow > BigInt(0) && <span className="shrink-0 text-[10px] text-zinc-400">Escrow {decimalDisplay(escrow, true)}</span>}
             <span className="ml-auto shrink-0 text-[10px] text-zinc-500">{balance}</span>
           </div>
         </td>

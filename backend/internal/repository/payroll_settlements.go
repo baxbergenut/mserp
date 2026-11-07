@@ -155,7 +155,20 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 	if len(commands) > 0 {
 		request, expected = commands[0].RequestID, commands[0].ExpectedStatementRevision
 	}
-	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, request, expected, root)
+	// Escrow releases share the source gate with scheduled releases and
+	// effective-week collection policy. Ordinary statements retain resource locks.
+	lockRevision := expected
+	if r.resourceConcurrency && expected != "" {
+		var escrowDraft bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM driver_pay_weeks
+ WHERE week_start=$1 AND driver_id=nullif($2,'')::uuid AND escrow_draft<>'{}')`, week, driver).Scan(&escrowDraft); err != nil {
+			return empty, err
+		}
+		if escrowDraft {
+			lockRevision = ""
+		}
+	}
+	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, request, lockRevision, root)
 	if err != nil {
 		return empty, err
 	}
@@ -227,6 +240,19 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			if current.Revision != revision {
 				return empty, ErrDriverPayConflict
 			}
+		}
+	}
+	escrowPostings := map[string]payrollEscrowPosting{}
+	if !reopen {
+		for _, d := range report.Drivers {
+			if (driver != "" && d.ID != driver) || (d.Settlement != nil && d.Settlement.Finalized) {
+				continue
+			}
+			post, e := prepareStatementEscrow(ctx, tx, report.WeekStart, d)
+			if e != nil {
+				return empty, e
+			}
+			escrowPostings[d.ID] = post
 		}
 	}
 	bulkExpenses := driver == "" && !reopen
@@ -310,6 +336,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 					return empty, err
 				}
 			}
+			if err = postStatementEscrow(ctx, tx, report.WeekStart, actor, escrowPostings[d.ID]); err != nil {
+				return empty, err
+			}
 			confirmed := []string{}
 			for _, row := range d.Edits.GeneratedCharges {
 				scheduled, _ := chargeCents(row.ScheduledAmount)
@@ -359,6 +388,13 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 		}
 	}
 	if reopen {
+		for _, d := range report.Drivers {
+			if selectedIDs[d.ID] {
+				if err = reverseStatementEscrow(ctx, tx, report.WeekStart, actor, d); err != nil {
+					return empty, err
+				}
+			}
+		}
 		if err = reversePayrollExpenses(ctx, tx, "driver", report.WeekStart, payrollReceipt(report, selectedIDs).Drivers); err != nil {
 			return empty, err
 		}
@@ -400,6 +436,7 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 				return empty, err
 			}
 			frozen := d
+			frozen.CanRemoveAddition = false
 			frozen.Settlement = nil
 			if override {
 				frozen.Settlement = &PayrollSettlement{Finalized: true, Override: true, Reason: reason}

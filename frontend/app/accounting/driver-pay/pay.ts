@@ -34,7 +34,8 @@ export function isScaleTicket(row: { source: string }) {
 
 export function paySourceError(edits: DriverPayEdits, driver?: DriverPayDriver): string | undefined {
   for (const row of edits.expenseDeductions ?? []) {
-    if (!validExpenseAmount(row.amount, row.available)) return `${row.name}: enter an amount from zero to ${decimalDisplay(hundredths(row.available), true)} with up to two decimal places.`;
+    const available = hundredths(row.available) - hundredths(row.escrowAmount ?? "0");
+    if (!validExpenseAmount(row.amount, centsAmount(available))) return `${row.name}: enter an amount from zero to ${decimalDisplay(available, true)} with up to two decimal places.`;
   }
   for (const row of [...(driver?.autoCharges ?? []).filter(isScaleTicket), ...(driver?.deferredScaleCharges ?? [])]) {
     const amount = edits.scaleDeductions?.[row.source];

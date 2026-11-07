@@ -74,8 +74,9 @@ func mergePayrollExpenseChoices(before payrollExpenseChoices, current, input []E
 			choice.Mode = "fixed" // Explicit amount edits from older clients.
 			n, err := chargeCents(choice.Amount)
 			limit, limitErr := chargeCents(balance.Available)
-			if err != nil || limitErr != nil || n < 0 || n > limit {
-				return nil, chargeInvalid("Expense deduction must be between zero and the available balance (%s)", balance.Available)
+			escrow, _ := chargeCents(balance.EscrowAmount)
+			if err != nil || limitErr != nil || n < 0 || n > limit-escrow {
+				return nil, chargeInvalid("Expense deduction must be between zero and the available salary deduction (%s)", chargeMoney(limit-escrow))
 			}
 			choice.Amount = chargeMoney(n)
 		default:
@@ -116,8 +117,13 @@ func applyPayrollExpenseChoices(rows []ExpenseDeduction, choices payrollExpenseC
 		}
 		// Keep an over-limit fixed choice visible for review, never silently
 		// shrink a reviewed deduction. The posting limit still rejects it.
+		escrow, _ := chargeCents(row.EscrowAmount)
+		if row.Mode == "auto" && escrow > 0 {
+			amount = max(0, amount-escrow)
+			row.Amount = chargeMoney(amount)
+		}
 		row.OpeningBalance = row.Available
-		row.Remaining = chargeMoney(available - amount)
+		row.Remaining = chargeMoney(available - amount - escrow)
 	}
 	return nil
 }
@@ -177,7 +183,9 @@ func reversePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week string, c
 	for _, d := range cards {
 		for _, row := range d.Edits.ExpenseDeductions {
 			if row.Source == "" {
-				postings = append(postings, posting{row.ExpenseID, d.ID, row.Amount})
+				amount, _ := chargeCents(row.Amount)
+				escrow, _ := chargeCents(row.EscrowAmount)
+				postings = append(postings, posting{row.ExpenseID, d.ID, chargeMoney(amount + escrow)})
 			}
 		}
 	}
