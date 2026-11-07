@@ -323,10 +323,12 @@ try {
     driver.edits.fuelOverride = null;
     await page.reload();
     await expect(fuelRow.getByText('Left: $0.00', { exact: true })).toBeVisible();
+    writable = true;
     driver.settlement={finalized:true,version:1,finalizedAt:'2026-10-01T00:00:00Z',finalizedBy:'Test',reason:''};
     await page.reload();
     await expect(fuelRow.getByRole('textbox')).toBeDisabled();
     await expect(scale).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Add accessorial',exact:true})).toHaveCount(0);
     await fuelRow.getByRole('button',{name:'Grid Test, Fuel transactions',exact:true}).click();
     costsDialog=page.getByRole('dialog',{name:'Fuel transactions',exact:true});
     await expect(costsDialog.getByText('Carried from 09/21',{exact:true})).toBeVisible();
