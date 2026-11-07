@@ -19,7 +19,7 @@ import type { DispatcherCommissionReport, DispatcherCommissionRow, DispatcherCom
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-const button = "inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-zinc-800 px-3 text-[13px] text-zinc-200 hover:bg-zinc-800/60 disabled:opacity-50";
+const button = "inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-zinc-700/70 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
 function weekLabel(week: string) { const start = new Date(week + "T12:00:00"); const end = new Date(start); end.setDate(end.getDate() + 6); return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`; }
 function message(error: unknown) { return error instanceof Error ? error.message : "The request could not be completed."; }
 export function WeeklyPayReport() {
@@ -98,19 +98,19 @@ export function WeeklyPayReport() {
       <MetricCard compact label="Gross" value={money.format(total("gross"))} icon={CircleDollarSign} loading={loading} />
       <FinalizationCard loading={loading} finalized={statements.filter(s => s.dispatcherId && s.finalized).length} total={statements.filter(s => s.dispatcherId).length} />
     </div>
-    <div className="flex flex-wrap items-center gap-2">
-      <div role="tablist" aria-label="Dispatcher pay views" className="flex gap-4">
-        <button role="tab" aria-selected={tab === "pay"} onClick={() => setTab("pay")}>Weekly pay</button>
-        <button role="tab" aria-selected={tab === "rules"} onClick={() => setTab("rules")}>Commission rules</button>
-      </div>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select aria-label="Payroll week" className={`${controlClass} !h-8 !w-auto !py-0 font-mono`} value={week} disabled={busy || loading} onChange={event => switchWeek(event.target.value)}>
           {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>{options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}</optgroup>)}
         </select>
         <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
-        <button className={button} disabled={busy || loading || week === latestWeek} onClick={() => switchWeek(latestWeek)}>Last week</button>
-        {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} !h-8 !max-w-64 !py-0`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
+        <button type="button" className={button} disabled={busy || loading || week === latestWeek} onClick={() => switchWeek(latestWeek)}>Last week</button>
       </div>
+      <div role="tablist" aria-label="Dispatcher pay views" className="flex h-8 items-center rounded-lg border border-zinc-800 bg-card p-0.5 text-xs">
+        <button type="button" role="tab" aria-selected={tab === "pay"} className={`h-[26px] rounded-md px-3 ${tab === "pay" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"}`} onClick={() => setTab("pay")}>Weekly pay</button>
+        <button type="button" role="tab" aria-selected={tab === "rules"} className={`h-[26px] rounded-md px-3 ${tab === "rules" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"}`} onClick={() => setTab("rules")}>Commission rules</button>
+      </div>
+      {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} ml-auto !h-8 !w-auto !min-w-48 !max-w-64 !py-0`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
     </div>
     {notice && <p role="status" className="text-emerald-400">{notice}</p>}
     {error && !editing && !ruleDraft && !statementAction && <div className="flex items-center gap-3">{modalError}<button className={button} onClick={() => { setLoading(true); void fetchDispatcherPay({ weekStart: week || undefined }).then(value => { setReport(value); setAvailableWeeks(value.availableWeeks); setError(""); }).catch(e => setError(message(e))).finally(() => setLoading(false)); }}>Retry</button></div>}
@@ -121,17 +121,17 @@ export function WeeklyPayReport() {
         <colgroup><col style={{ width: "25%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "16%" }} /><col style={{ width: "15%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /></colgroup>
         <thead><tr className="h-8 bg-zinc-900 text-[11px] text-zinc-500">{["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by", ""].map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
         {visible.length === 0 && <tbody><tr><td colSpan={7} className="p-8 text-center text-zinc-500">No Gross Board loads in this week.</td></tr></tbody>}
-        {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); return <tbody key={key} role="region" aria-label={s.dispatcherName} className="bg-zinc-900/20">
-          <tr className="h-10 hover:bg-zinc-800/20">
+        {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); return <tbody key={key} role="region" aria-label={s.dispatcherName}>
+          <tr className={`h-9 text-xs text-zinc-300 ${open ? "bg-zinc-950" : "bg-zinc-900 hover:bg-zinc-800/70"}`}>
             <td className="border-b border-zinc-800 px-3"><button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 w-full min-w-0 items-center gap-3 text-left hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={() => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}><ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="truncate font-medium">{s.dispatcherName}</span>{s.finalized && <span className="ml-auto text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}</button></td>
             <td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.rows.length}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.loadCount}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{money.format(s.gross)}</td><td className="border-b border-zinc-800 px-3 text-right font-mono font-semibold tabular-nums">{money.format(s.pay)}</td><td className="border-b border-zinc-800 px-3 text-right text-xs text-zinc-300">{s.finalized ? s.finalizedBy || "Unknown" : "—"}</td>
             <td className="border-b border-zinc-800 px-3 text-right">{s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={() => { setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}</td>
           </tr>
           {s.sourceChanged && <tr><td colSpan={7} className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</td></tr>}
-          {open && <tr id={`dispatcher-${key}`}><td colSpan={7} className="border-b border-zinc-800 p-0">
+          {open && <tr id={`dispatcher-${key}`} className="bg-zinc-950"><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
         {!s.dispatcherId && <p className="px-3 py-2 text-amber-400">Assign a dispatcher in Gross Board.</p>}
-        <div className="overflow-x-auto"><table className="w-full min-w-[960px] text-left text-[13px]">
-          <thead className="bg-zinc-900/60 text-xs text-zinc-400"><tr>{["Driver / truck", "Gross", "Miles", "RPM", "Home days", "Gross tier", "RPM tier", "Rate", "Commission", ""].map((label, i) => <th key={i} className={`px-3 py-2 font-medium ${i > 0 && i < 9 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
+        <div className="overflow-x-auto bg-zinc-950"><table className="w-full min-w-[960px] text-left text-[13px]">
+          <thead className="bg-zinc-950 text-xs text-zinc-400"><tr>{["Driver / truck", "Gross", "Miles", "RPM", "Home days", "Gross tier", "RPM tier", "Rate", "Commission", ""].map((label, i) => <th key={i} className={`px-3 py-2 font-medium ${i > 0 && i < 9 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
           <tbody>{s.rows.map(row => { const href = `/gross-board?${new URLSearchParams({ driverId: row.driverId, weekStart: currentWeek })}`; const miles = row.creditedMiles ?? (row.gross === row.creditedGross ? row.miles : null); return <tr key={row.driverId} className={`border-t border-zinc-800/60 align-top ${permissions.includes("board.read") ? "cursor-pointer hover:bg-zinc-800/30" : ""}`} onClick={event => { if (!permissions.includes("board.read") || (event.target instanceof Element && event.target.closest("a,button,input,textarea,select,[tabindex]"))) return; if (event.ctrlKey || event.metaKey) window.open(href, "_blank", "noopener"); else router.push(href); }}>
             <td className="px-3 py-2"><div>{permissions.includes("board.read") ? <IntentLink href={href} className="hover:text-blue-300 hover:underline">{row.driverName}</IntentLink> : row.driverName}</div><div className="text-xs text-zinc-400">{row.truckUnits.join(", ") || "—"} · {row.loadCount} {row.loadCount === 1 ? "load" : "loads"}</div>{row.note && <div className="max-w-64 whitespace-pre-wrap text-xs text-zinc-400">{row.note}</div>}{row.issues.map(issue => <div key={issue} className="text-xs text-amber-400">{issue}</div>)}</td>
             <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums">{money.format(row.creditedGross)}</td><td className="px-3 py-2 text-right font-mono tabular-nums">{miles === null ? "—" : number.format(miles)}</td><td className="px-3 py-2 text-right font-mono tabular-nums">{miles && miles > 0 ? `$${(row.creditedGross / miles).toFixed(3)}` : "—"}</td><td className="px-3 py-2 text-right font-mono tabular-nums">{row.homeDays}</td><td className="px-3 py-2 text-right"><TierMedal kind="gross" row={row} rule={s.rule} /></td><td className="px-3 py-2 text-right"><TierMedal kind="rpm" row={row} rule={s.rule} /></td><td className="px-3 py-2 text-right font-mono tabular-nums">{number.format(row.rate)}%</td><td className="px-3 py-2 text-right font-mono tabular-nums">{row.issues.length ? "Review" : money.format(row.pay)}</td>

@@ -91,7 +91,7 @@ export async function runPayrollWorkflowsE2E({ page, base, sql, schema, temp }) 
   const driverSave = page.waitForRequest(request => request.method() === 'PUT' && new URL(request.url()).pathname === '/api/driver-pay', { timeout: 650 });
   await page.getByLabel('Workflow Operator, adjustment 1, amount', { exact: true }).fill('-10.01');
   await driverSave;
-  const payableCard = page.locator('.ui-metric').filter({ hasText: 'Total payable' });
+  const payableCard = page.locator('.ui-metric').filter({ hasText: 'Net payable' });
   await expect(payableCard).toContainText('$64.99');
   await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
   await expect(payableCard).toContainText('$64.99');
