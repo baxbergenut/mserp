@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 export function BetaBadge({ className = "" }: { className?: string }) {
-  return <span className={`rounded border border-accent/30 bg-accent-dim px-1.5 py-0.5 text-[10px] font-semibold leading-none text-accent ${className}`}>beta</span>;
+  return <span className={`rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black ${className}`}>beta</span>;
 }
 
 export function BrandLogo({ compact = false, className = "w-24" }: { compact?: boolean; className?: string }) {
