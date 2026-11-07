@@ -207,7 +207,7 @@ try {
     // Monday midnight in New York opens the next week without a new deployment.
     await page.clock.setFixedTime(new Date('2026-11-02T05:01:00Z'));
     await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-    await expect(picker.locator('option[value="2026-10-26"]')).toHaveText('Week 44 - 10/26');
+    await expect(picker.locator('option[value="2026-10-26"]')).toHaveText('Week 44 · 10/26 → 11/01');
     await picker.selectOption('2026-10-26');
     await expect.poll(()=>readWeeks.includes('2026-10-26')).toBe(true);
     await expect(picker.locator('option[value="2026-11-02"]')).toHaveCount(0);

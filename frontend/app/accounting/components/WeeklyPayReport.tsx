@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Banknote, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Headset, Pencil, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Banknote, ChevronDown, CircleDollarSign, Headset, Pencil, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
-import { addDays, shortDate } from "@/app/gross-board/board";
-import { latestPayrollWeek } from "../payrollWeek";
+import { latestPayrollWeek, payrollWeekGroups, payrollWeekLabel } from "../payrollWeek";
 import { useLatestPayrollWeek } from "./useLatestPayrollWeek";
 import { TierMedal } from "./TierMedal";
 import { PageHeader } from "@/app/components/PageHeader";
@@ -31,6 +30,8 @@ export function WeeklyPayReport() {
   const latestWeek = useLatestPayrollWeek();
   const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek());
   const week = storedWeek > latestWeek ? latestWeek : storedWeek;
+  const [availableWeeks, setAvailableWeeks] = useState([week]);
+  const weekOptions = useMemo(() => payrollWeekGroups([...availableWeeks, week, latestWeek]), [availableWeeks, week, latestWeek]);
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
   const [tab, setTab] = useState("pay");
   const [dispatcher, setDispatcher] = useState("");
@@ -50,7 +51,7 @@ export function WeeklyPayReport() {
   useEffect(() => {
     const controller = new AbortController();
     fetchDispatcherPay({ weekStart: week || undefined }, controller.signal).then(value => {
-      setReport(value); setError("");
+      setReport(value); setAvailableWeeks(value.availableWeeks); setError("");
     }).catch(e => { if (!controller.signal.aborted) { setReport(null); setError(message(e)); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [week]);
@@ -66,7 +67,7 @@ export function WeeklyPayReport() {
     setBusy(true); setError("");
     try {
       await action(); close(); setNotice("Saved");
-      const value = await fetchDispatcherPay({ weekStart: report?.weekStart }); setReport(value);
+      const value = await fetchDispatcherPay({ weekStart: report?.weekStart }); setReport(value); setAvailableWeeks(value.availableWeeks);
       if (tab === "rules") setRules(await fetchDispatcherCommissionRules());
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
@@ -91,10 +92,10 @@ export function WeeklyPayReport() {
   const modalError = error && <p role="alert" className="rounded-lg border border-red-500/30 p-3 text-red-300">{error}</p>;
 
   return <div className="space-y-4">
-    <PageHeader><div className="flex items-center gap-2"><Headset className="h-5 w-5 text-violet-400" /><h1 className="font-semibold">Dispatcher pay</h1></div></PageHeader>
+    <PageHeader><div className="flex items-center gap-3"><Headset className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">Dispatcher pay</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? "—" : statements.length}</span></div></PageHeader>
     <div className="grid gap-4 md:grid-cols-3">
-      <MetricCard label="Dispatcher commission" value={money.format(total("pay"))} icon={Banknote} loading={loading} />
-      <MetricCard label="Gross" value={money.format(total("gross"))} icon={CircleDollarSign} loading={loading} />
+      <MetricCard compact label="Dispatcher commission" value={money.format(total("pay"))} icon={Banknote} loading={loading} />
+      <MetricCard compact label="Gross" value={money.format(total("gross"))} icon={CircleDollarSign} loading={loading} />
       <FinalizationCard loading={loading} finalized={statements.filter(s => s.dispatcherId && s.finalized).length} total={statements.filter(s => s.dispatcherId).length} />
     </div>
     <div className="flex flex-wrap items-center gap-2">
@@ -102,30 +103,32 @@ export function WeeklyPayReport() {
         <button role="tab" aria-selected={tab === "pay"} onClick={() => setTab("pay")}>Weekly pay</button>
         <button role="tab" aria-selected={tab === "rules"} onClick={() => setTab("rules")}>Commission rules</button>
       </div>
-      <div className="ml-auto flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1"><button className={button} aria-label="Previous week" disabled={busy || loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button><span className="min-w-36 px-2 text-center font-mono text-sm" title={weekLabel(week)}>{shortDate(week)} → {shortDate(addDays(week, 6))}</span><button className={button} aria-label="Next week" disabled={busy || loading || week >= latestWeek} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button></div>
-      <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== addDays(week, 6).slice(0, 4) ? ` / ${addDays(week, 6).slice(0, 4)}` : ""}</span><button className={button} disabled={busy || loading} onClick={() => switchWeek(latestWeek)}>Last week</button>
-      {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} max-w-64`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <select aria-label="Payroll week" className={`${controlClass} !h-8 !w-auto !py-0 font-mono`} value={week} disabled={busy || loading} onChange={event => switchWeek(event.target.value)}>
+          {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>{options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}</optgroup>)}
+        </select>
+        <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
+        <button className={button} disabled={busy || loading || week === latestWeek} onClick={() => switchWeek(latestWeek)}>Last week</button>
+        {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} !h-8 !max-w-64 !py-0`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
+      </div>
     </div>
     {notice && <p role="status" className="text-emerald-400">{notice}</p>}
-    {error && !editing && !ruleDraft && !statementAction && <div className="flex items-center gap-3">{modalError}<button className={button} onClick={() => { setLoading(true); void fetchDispatcherPay({ weekStart: week || undefined }).then(value => { setReport(value); setError(""); }).catch(e => setError(message(e))).finally(() => setLoading(false)); }}>Retry</button></div>}
+    {error && !editing && !ruleDraft && !statementAction && <div className="flex items-center gap-3">{modalError}<button className={button} onClick={() => { setLoading(true); void fetchDispatcherPay({ weekStart: week || undefined }).then(value => { setReport(value); setAvailableWeeks(value.availableWeeks); setError(""); }).catch(e => setError(message(e))).finally(() => setLoading(false)); }}>Retry</button></div>}
     {loading && tab === "pay" && <DispatcherPaySkeleton />}
     {!loading && report && tab === "pay" && <>
       {statements.some(s => s.rows.some(row => row.issues.length > 0)) && <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-400">Review flagged rows before finalizing.</p>}
-      {visible.length === 0 && <div className="ui-card py-10 text-center text-zinc-400">No Gross Board loads in this week.</div>}
-      {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); return <section key={key} aria-label={s.dispatcherName} className="overflow-hidden rounded-lg border border-zinc-800">
-        <div className="flex flex-wrap items-center gap-3 bg-card px-3 py-2">
-          <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 min-w-0 flex-1 basis-full items-center gap-3 text-left sm:basis-0 hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={() => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}>
-            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="min-w-0 flex-1 truncate font-semibold">{s.dispatcherName}</span>
-            <span className="hidden text-xs text-zinc-400 sm:inline">{s.rows.length} {s.rows.length === 1 ? "driver" : "drivers"}</span><span className="hidden text-xs text-zinc-400 sm:inline">{s.loadCount} {s.loadCount === 1 ? "load" : "loads"}</span><span className="hidden w-28 text-right font-mono tabular-nums text-zinc-400 md:inline">{money.format(s.gross)}</span><strong className="w-24 text-right font-mono tabular-nums">{money.format(s.pay)}</strong>
-          </button>
-          <div className="flex w-44 shrink-0 items-center justify-end gap-2">
-          {s.finalized && <span className="text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}
-          {s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={() => { setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}
-          </div>
-          <div className="w-32 shrink-0 text-right text-xs text-zinc-400"><div>Finalized by</div><div className="break-words text-zinc-200">{s.finalized ? s.finalizedBy || "Unknown" : "—"}</div></div>
-        </div>
-        {s.sourceChanged && <p className="border-t border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</p>}
-        {open && <div id={`dispatcher-${key}`}>
+      <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0 text-left text-[13px]" aria-label="Weekly dispatcher pay">
+        <colgroup><col style={{ width: "25%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "16%" }} /><col style={{ width: "15%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /></colgroup>
+        <thead><tr className="h-8 bg-zinc-900 text-[11px] text-zinc-500">{["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by", ""].map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
+        {visible.length === 0 && <tbody><tr><td colSpan={7} className="p-8 text-center text-zinc-500">No Gross Board loads in this week.</td></tr></tbody>}
+        {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); return <tbody key={key} role="region" aria-label={s.dispatcherName} className="bg-zinc-900/20">
+          <tr className="h-10 hover:bg-zinc-800/20">
+            <td className="border-b border-zinc-800 px-3"><button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 w-full min-w-0 items-center gap-3 text-left hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={() => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; })}><ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="truncate font-medium">{s.dispatcherName}</span>{s.finalized && <span className="ml-auto text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}</button></td>
+            <td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.rows.length}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.loadCount}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{money.format(s.gross)}</td><td className="border-b border-zinc-800 px-3 text-right font-mono font-semibold tabular-nums">{money.format(s.pay)}</td><td className="border-b border-zinc-800 px-3 text-right text-xs text-zinc-300">{s.finalized ? s.finalizedBy || "Unknown" : "—"}</td>
+            <td className="border-b border-zinc-800 px-3 text-right">{s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={() => { setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}</td>
+          </tr>
+          {s.sourceChanged && <tr><td colSpan={7} className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</td></tr>}
+          {open && <tr id={`dispatcher-${key}`}><td colSpan={7} className="border-b border-zinc-800 p-0">
         {!s.dispatcherId && <p className="px-3 py-2 text-amber-400">Assign a dispatcher in Gross Board.</p>}
         <div className="overflow-x-auto"><table className="w-full min-w-[960px] text-left text-[13px]">
           <thead className="bg-zinc-900/60 text-xs text-zinc-400"><tr>{["Driver / truck", "Gross", "Miles", "RPM", "Home days", "Gross tier", "RPM tier", "Rate", "Commission", ""].map((label, i) => <th key={i} className={`px-3 py-2 font-medium ${i > 0 && i < 9 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
@@ -135,8 +138,9 @@ export function WeeklyPayReport() {
             <td className="px-3 py-2">{permissions.includes("dispatcher_pay.edit") && <button aria-label={`Edit home days for ${row.driverName}`} className={button} disabled={busy || lockedDrivers.has(row.driverId)} title={lockedDrivers.has(row.driverId) ? "Reopen this driver's finalized dispatcher statements first" : row.autoHomeDays ? "Home days from Gross Board; edit settings or comment" : "Manual home days; edit or use Gross Board"} onClick={() => { setEditing(row); setHomeDays(String(row.homeDays)); setAutoHomeDays(!!row.autoHomeDays); setNote(row.note); setError(""); }}><Pencil className="h-4 w-4" /></button>}</td>
           </tr>; })}</tbody>
         </table></div>
-        </div>}
-      </section>; })}
+          </td></tr>}
+        </tbody>; })}
+      </table></div>
     </>}
     {tab === "rules" && <div className="space-y-4">
       {rules.length === 0 && <p className="text-zinc-400">Loading commission rules…</p>}

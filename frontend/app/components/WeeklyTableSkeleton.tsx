@@ -3,18 +3,13 @@ export function SkeletonBar({ className = "" }: { className?: string }) {
 }
 
 export function DispatcherPaySkeleton() {
-  return <div role="status" aria-label="Loading dispatcher pay" aria-busy="true" className="space-y-4">
+  const headers = ["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by", ""];
+  return <div role="status" aria-label="Loading dispatcher pay" aria-busy="true" className="overflow-hidden rounded-lg border border-zinc-800">
     <span className="sr-only">Loading dispatcher pay…</span>
-    {Array.from({ length: 3 }, (_, row) => <div key={row} aria-hidden="true" className="overflow-hidden rounded-lg border border-zinc-800">
-      <div className="flex flex-wrap items-center gap-3 bg-card px-3 py-2">
-        <div className="flex min-h-8 min-w-0 flex-1 basis-full items-center gap-3 sm:basis-0">
-          <SkeletonBar className="h-4 w-4 shrink-0" /><SkeletonBar className="h-4 w-32 max-w-full" />
-          <SkeletonBar className="ml-auto hidden h-3 w-12 sm:inline-block" /><SkeletonBar className="hidden h-3 w-12 sm:inline-block" /><div className="hidden w-28 shrink-0 text-right md:block"><SkeletonBar className="h-3 w-20" /></div><div className="w-24 shrink-0 text-right"><SkeletonBar className="h-4 w-16" /></div>
-        </div>
-        <div className="flex w-44 shrink-0 justify-end"><SkeletonBar className="h-8 w-20" /></div>
-        <div className="w-32 shrink-0 text-right text-xs text-zinc-400"><div>Finalized by</div><SkeletonBar className="h-3 w-20" /></div>
-      </div>
-    </div>)}
+    <table aria-hidden="true" className="w-full min-w-[960px] table-fixed border-separate border-spacing-0"><colgroup><col style={{ width: "25%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "16%" }} /><col style={{ width: "15%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /></colgroup>
+      <thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{headers.map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
+      <tbody>{Array.from({ length: 8 }, (_, row) => <tr key={row} className="h-10 bg-zinc-900/20">{headers.map((_, col) => <td key={col} className={`border-b border-zinc-800/70 px-3 ${col >= 1 ? "text-right" : ""}`}><SkeletonBar className={`h-3 max-w-full ${col === 0 ? row % 2 ? "w-28" : "w-36" : col === 6 ? "w-16" : "w-14"}`} /></td>)}</tr>)}</tbody>
+    </table>
   </div>;
 }
 

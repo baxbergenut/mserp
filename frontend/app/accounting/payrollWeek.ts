@@ -14,16 +14,32 @@ export function payrollWeekLabel(monday: string) {
   return { year, label: `Week ${week} - ${monday.slice(5, 7)}/${monday.slice(8, 10)}` };
 }
 
-export function payrollWeekOptions(first: string, latest: string) {
+export function payrollWeekRangeLabel(monday: string) {
+  const { year, label } = payrollWeekLabel(monday);
+  const sunday = new Date(`${monday}T00:00:00Z`);
+  sunday.setUTCDate(sunday.getUTCDate() + 6);
+  const end = sunday.toISOString().slice(0, 10);
+  return { year, label: `${label.replace(" - ", " · ")} → ${end.slice(5, 7)}/${end.slice(8, 10)}` };
+}
+
+export function payrollWeekGroups(weeks: string[]) {
   const groups = new Map<number, { date: string; label: string }[]>();
+  for (const date of Array.from(new Set(weeks)).sort()) {
+    const { year, label } = payrollWeekRangeLabel(date);
+    if (!groups.has(year)) groups.set(year, []);
+    groups.get(year)!.push({ date, label });
+  }
+  return Array.from(groups).reverse();
+}
+
+export function payrollWeekOptions(first: string, latest: string) {
+  const weeks: string[] = [];
   const monday = new Date(`${first}T00:00:00Z`);
   const last = Date.parse(`${latest}T00:00:00Z`);
   while (monday.getTime() <= last) {
     const date = monday.toISOString().slice(0, 10);
-    const { year, label } = payrollWeekLabel(date);
-    if (!groups.has(year)) groups.set(year, []);
-    groups.get(year)!.push({ date, label });
+    weeks.push(date);
     monday.setUTCDate(monday.getUTCDate() + 7);
   }
-  return Array.from(groups).reverse();
+  return payrollWeekGroups(weeks);
 }
