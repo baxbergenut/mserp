@@ -254,7 +254,15 @@ try {
     await page.screenshot({path:join(tmpdir(), investor ? 'mserp-broker-investor-expense.png':'mserp-broker-driver-expense.png'),fullPage:true,animations:"disabled"});
     await modal.getByRole('button',{name:'Cancel',exact:true}).click();
     if (!investor) {
-      await page.getByRole('button',{name:'Add accessorial',exact:true}).click();
+      const accessorialButton = page.locator('[data-pay-extra-row]').getByRole('button', {name:'Add accessorial',exact:true});
+      await expect(accessorialButton).toBeVisible();
+      const buttonBox = await accessorialButton.boundingBox();
+      const cellBox = await accessorialButton.locator('..').boundingBox();
+      const totalsBox = await page.getByRole('cell', {name:'Net adjustments',exact:true}).boundingBox();
+      expect(buttonBox.x).toBeCloseTo(totalsBox.x, 0);
+      expect(cellBox.width - buttonBox.width).toBeLessThanOrEqual(1);
+      expect(Math.abs(buttonBox.y + buttonBox.height - totalsBox.y)).toBeLessThanOrEqual(1);
+      await accessorialButton.press('Enter');
       const add = page.getByRole('dialog',{name:'Add accessorial'});
       await expect(add.getByLabel('Driver',{exact:true})).toHaveValue('statement');
       await expect(add.getByLabel('Who will cover',{exact:true})).toHaveValue('Truck Owner');

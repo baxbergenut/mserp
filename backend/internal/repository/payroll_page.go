@@ -256,17 +256,6 @@ func (d DriverPayDriver) NetPayCents() int64 {
 	return net + payPageCosts(d) + driverLayoverTotal(d) - carry
 }
 
-func (d DriverPayDriver) AccessorialCents() int64 {
-	var total int64
-	for _, row := range d.Edits.ExpenseDeductions {
-		if row.Source == "accessorial" {
-			amount, _ := chargeCents(row.Amount)
-			total += max(0, amount)
-		}
-	}
-	return total
-}
-
 func (d DriverPayDriver) ReimbursedCents() int64 {
 	var total int64
 	for _, row := range d.Edits.ExpenseDeductions {

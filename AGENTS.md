@@ -78,8 +78,8 @@ button. Accessorials use the ordinary expense date and finalization-only draft
 choices, with a dedicated driver payout ledger. Owner-covered accessorials and
 new owner-covered Reimburse entries use independent ordinary owner collections.
 Legacy reimbursements retain their prior mirrored Investor Pay behavior and
-appear in the owner reimbursement review filter. The XLSX breaks out Accessorials
-separately. Install the matching deploy helper before 203; see
+appear in the owner reimbursement review filter. Install the matching deploy
+helper before 203. See
 `docs/PAYROLL_EXPENSE_FINALIZATION.md`.
 
 Driver and Investor Pay accept any CAT Scale deduction up to the unpaid balance.

@@ -30,7 +30,8 @@ New Truck Owner reimbursements have independent owner collections; their driver
 payout still uses the existing reimbursement window and reservations. Existing
 records retain the previous mirror behavior and appear in the read-only Owner
 reimbursement review filter. The migration creates no historical owner debt.
-The export counts accessorials and reimbursements in separate breakdown columns.
+The export includes accessorials in Total Salary Payable. Reimbursed Amount
+reports reimbursements only.
 Generic external settlement and balance correction are disabled for linked
 expenses to avoid applying them to the wrong side.
 
