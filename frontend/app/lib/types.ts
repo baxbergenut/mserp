@@ -1195,11 +1195,21 @@ export interface GrossBoardDriver {
   active: boolean;
 }
 
+export type GrossBoardPlanningKind = "note" | "destination";
+export interface GrossBoardPlanningEntry {
+  driverId: string;
+  date: string;
+  kind: GrossBoardPlanningKind;
+  text: string;
+  version: number;
+}
+
 export interface GrossBoard {
  managedInSheets?: boolean; cutoverWeek?: string;
   weekStart: string;
   drivers: GrossBoardDriver[];
   entries: GrossBoardEntry[];
+  planningEntries?: GrossBoardPlanningEntry[];
   balances: GrossBoardBalance[];
 }
 

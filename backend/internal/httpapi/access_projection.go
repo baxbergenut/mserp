@@ -91,6 +91,11 @@ func projectFields(value any, user repository.AuthUser, path string) {
 			projectFields(item, user, path)
 		}
 	case map[string]any:
+		// Planning text is dispatch-only even if a future generic projection
+		// accidentally receives a full board object.
+		if !repository.HasPermission(user, "board.read") || (path != "/gross-board" && path != "/gross-board/events") {
+			delete(v, "planningEntries")
+		}
 		_, driver := v["payType"]
 		_, cdl := v["cdlFileId"]
 		_, truck := v["unitNumber"]

@@ -17,9 +17,9 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 const week = '2026-10-12', driverId = 'number-driver';
 const blank = (date, slot = 0) => ({ driverId, date, slot, deleted: false, dayStatus: '', loadNumber: '', loadRecordId: null, originalRate: '', driverRate: '', miles: '', enteredOriginalRate: '', enteredMiles: '', version: 0, duplicate: false });
-let entries = [blank(week), blank('2026-10-13'), blank('2026-10-14'), blank('2026-10-14', 1)];
-const source = { id: 67, loadNumber: 'SERVER-67', originalRate: '670.00', miles: '123.45' };
-const selected = { id: 89, loadNumber: 'SELECT-89', originalRate: '890.00', miles: '234.56' };
+let entries = [blank(week), blank('2026-10-13'), {...blank('2026-10-14'),loadNumber:'DAILY-1'}, {...blank('2026-10-14', 1),loadNumber:'DAILY-2'}];
+const source = { id: 67, loadNumber: 'SERVER-67', originalRate: '670.00', driverRate: '610.00', miles: '123.45' };
+const selected = { id: 89, loadNumber: 'SELECT-89', originalRate: '890.00', driverRate: '820.00', miles: '234.56' };
 const errors = [], invalidWrites = [];
 const fields = ['originalRate', 'driverRate', 'miles', 'enteredOriginalRate', 'enteredMiles'];
 try {
@@ -39,7 +39,7 @@ try {
         if (e.loadNumber === source.loadNumber) {
           next.loadRecordId = source.id;
           next.originalRate ||= source.originalRate;
-          next.driverRate ||= next.originalRate;
+          next.driverRate ||= source.driverRate;
           next.miles ||= source.miles;
         }
         for (const field of fields) if (next[field]) next[field] = Number(next[field]).toFixed(2);
@@ -95,21 +95,21 @@ try {
   expect(await original.evaluate(el => el.selectionStart)).toBe(2);
   await page.keyboard.type('9'); await expect(original).toHaveValue('6897.12');
   await page.keyboard.press('Enter');
-  // Manual total gross continues to follow into an untouched driver gross.
+  // Total gross and Driver gross remain independent financial inputs.
   const manual = amount('total gross', '2026-10-13');
   await manual.click(); await page.keyboard.type('6');
-  await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('6.00');
+  await expect.poll(() => stored('originalRate', '2026-10-13')).toBe('6.00');
   const followingDriver = amount('driver rate', '2026-10-13');
-  await expect(followingDriver).toHaveValue('6');
+  await expect(followingDriver).toHaveValue('');
   await page.keyboard.type('7');
-  await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('67.00');
-  await expect(followingDriver).toHaveValue('67');
-  await page.keyboard.type('.'); await expect(followingDriver).toHaveValue('67.');
+  await expect.poll(() => stored('originalRate', '2026-10-13')).toBe('67.00');
+  await expect(followingDriver).toHaveValue('');
+  await page.keyboard.type('.'); await expect(manual).toHaveValue('67.');
   await page.keyboard.type('0');
   await expect.poll(() => stored('originalRate', '2026-10-13')).toBe('67.00');
-  await expect(followingDriver).toHaveValue('67.0');
+  await expect(manual).toHaveValue('67.0');
   await page.keyboard.press('Enter');
-  await expect(followingDriver).toHaveValue('$67.00');
+  await expect(followingDriver).toHaveValue('');
   // A deliberately different Driver gross must keep its own value and format.
   await followingDriver.click(); await page.keyboard.type('50'); await page.keyboard.press('Enter');
   await expect.poll(() => stored('driverRate', '2026-10-13')).toBe('50.00');
@@ -120,19 +120,22 @@ try {
   // Server resolution can win before the browser's 250 ms lookup finishes.
   const loadNumber = amount('load number or status', '2026-10-15');
   await loadNumber.click(); await page.keyboard.type(source.loadNumber);
+  await page.getByRole('option', { name: 'Add as manual load: ' + source.loadNumber, exact: true }).click();
   await expect(amount('total gross', '2026-10-15')).toHaveValue('$670.00');
-  await expect(amount('driver rate', '2026-10-15')).toHaveValue('$670.00');
+  await expect(amount('driver rate', '2026-10-15')).toHaveValue('$610.00');
   // Browser lookup/selection must apply the same default.
   const browserLoad = amount('load number or status', '2026-10-16');
   await browserLoad.click(); await page.keyboard.type(selected.loadNumber);
-  await expect(amount('driver rate', '2026-10-16')).toHaveValue('$890.00');
+  await page.getByRole('option').filter({ hasText: 'Record #89' }).click();
+  await expect(amount('driver rate', '2026-10-16')).toHaveValue('$820.00');
   // Daily loads use the same decimal guard, including leading-dot input.
   await page.getByRole('button', { name: 'Number Driver, 2026-10-14, load numbers and details', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
   const dailyOriginal = dialog.getByLabel('Number Driver, 2026-10-14, total gross', { exact: true }).first();
   const dailyDriver = dialog.getByLabel('Number Driver, 2026-10-14, driver rate', { exact: true }).first();
   await dailyOriginal.click(); await page.keyboard.type('67.0');
-  await expect(dailyDriver).toHaveValue('67.0');
+  await expect(dailyDriver).toHaveValue('');
+  await dailyDriver.click(); await page.keyboard.type('65'); await page.keyboard.press('Enter');
   const daily = dialog.getByLabel('Number Driver, 2026-10-14, miles', { exact: true }).first();
   await daily.click(); await page.keyboard.type('.12'); await page.keyboard.type('3');
   await expect(daily).toHaveValue('.12');
@@ -158,7 +161,7 @@ try {
   await expect(original).toHaveValue('3400');
   await page.keyboard.press('Enter');
   await expect(original).toHaveValue('$3,400.00');
-  await expect(amount('driver rate')).toHaveValue('$3,400.00');
+  await expect(amount('driver rate')).toHaveValue('$67.12');
   await original.click(); await page.keyboard.press('F2');
   await expect(original).toHaveValue('3400');
   await page.keyboard.type('.5'); await expect(original).toHaveValue('3400.5');
@@ -166,11 +169,11 @@ try {
   await expect.poll(() => stored('originalRate')).toBe('3400.50');
   const footer = page.locator('tfoot tr').getByRole('cell');
   await expect(footer.nth(0)).toHaveText('$5,108.00');
-  await expect(footer.nth(3)).toHaveText('$5,027.50');
+  await expect(footer.nth(3)).toHaveText('$1,562.12');
   await expect(footer.nth(1)).toHaveText('425.25');
   await expect(footer.nth(2)).toHaveText('$12.01');
   await expect(amount('total gross', '2026-10-14')).toHaveText('$67.00');
-  await expect(amount('total driver rate', '2026-10-14')).toHaveText('$67.00');
+  await expect(amount('total driver rate', '2026-10-14')).toHaveText('$65.00');
   expect(invalidWrites).toEqual([]);
   expect(errors).toEqual([]);
   await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toHaveCount(0);

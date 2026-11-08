@@ -88,12 +88,13 @@ type GrossBoardDriver struct {
 }
 
 type GrossBoard struct {
-	ManagedInSheets bool                `json:"managedInSheets,omitempty"`
-	CutoverWeek     string              `json:"cutoverWeek,omitempty"`
-	WeekStart       string              `json:"weekStart"`
-	Drivers         []GrossBoardDriver  `json:"drivers"`
-	Entries         []GrossBoardEntry   `json:"entries"`
-	Balances        []GrossBoardBalance `json:"balances"`
+	ManagedInSheets bool                      `json:"managedInSheets,omitempty"`
+	CutoverWeek     string                    `json:"cutoverWeek,omitempty"`
+	WeekStart       string                    `json:"weekStart"`
+	Drivers         []GrossBoardDriver        `json:"drivers"`
+	Entries         []GrossBoardEntry         `json:"entries"`
+	PlanningEntries []GrossBoardPlanningEntry `json:"planningEntries"`
+	Balances        []GrossBoardBalance       `json:"balances"`
 }
 
 type GrossBoardBalance struct {
@@ -206,7 +207,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
 		return GrossBoard{}, err
 	}
-	board, err := readGrossBoard(ctx, tx, week)
+	board, err := readGrossBoardSnapshot(ctx, tx, week, true)
 	if err != nil {
 		return board, err
 	}
@@ -218,12 +219,27 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 
 // Payroll projections share the exact board resolution and transaction snapshot.
 func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard, error) {
-	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}}
+	return readGrossBoardSnapshot(ctx, tx, week, false)
+}
+
+// Only the dispatch endpoint includes planning text and planning-only drivers.
+// Financial projections keep their existing roster, inputs and serialized data.
+func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, includePlanning bool) (GrossBoard, error) {
+	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}, PlanningEntries: []GrossBoardPlanningEntry{}}
+	planningRoster := ""
+	if includePlanning {
+		var err error
+		board.PlanningEntries, err = readGrossBoardPlanning(ctx, tx, week)
+		if err != nil {
+			return board, err
+		}
+		planningRoster = ` OR EXISTS(SELECT 1 FROM gross_board_planning_entries p WHERE p.driver_id=d.id AND p.text<>'' AND p.service_date >= $1::date AND p.service_date < $1::date+7)`
+	}
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
  FROM drivers d `+weeklyAssignmentJoins+`
  WHERE payroll_driver_at(d.id,$1::date)=d.id AND (((d.active OR (d.termination_date >= $1::date AND d.termination_date < $1::date+7)) AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
- AND e.service_date >= $1::date AND e.service_date < $1::date+7) OR EXISTS(SELECT 1 FROM gross_board_transfers moved WHERE moved.driver_id=d.id AND moved.active AND moved.source_date >= $1::date AND moved.source_date < $1::date+7))
+ AND e.service_date >= $1::date AND e.service_date < $1::date+7) OR EXISTS(SELECT 1 FROM gross_board_transfers moved WHERE moved.driver_id=d.id AND moved.active AND moved.source_date >= $1::date AND moved.source_date < $1::date+7)`+planningRoster+`)
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
 	if err != nil {
 		return board, err
@@ -287,6 +303,11 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 		return board, err
 	}
 	working := map[string]bool{}
+	for _, entry := range board.PlanningEntries {
+		if entry.Text != "" {
+			working[entry.DriverID] = true
+		}
+	}
 	for _, e := range board.Entries {
 		if !e.Deleted && (e.TransferOut || e.DayStatus == "" && strings.TrimSpace(e.LoadNumber) != "" || e.DayStatus == "SHOP") {
 			working[e.DriverID] = true

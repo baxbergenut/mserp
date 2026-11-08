@@ -2,7 +2,7 @@
 
 import { useLoadNotes } from "./useLoadNotes";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
 import { amountDisplay, editAmount, emptyEntry, mismatch, validDecimal } from "./board";
@@ -13,6 +13,7 @@ import { DecimalInput } from "./DecimalInput";
 
 type DayCellProps = {
   entry: GrossBoardEntry;
+  planning?: ReactNode;
   id?: string;
   highlighted?: boolean;
   driverName: string;
@@ -22,7 +23,7 @@ type DayCellProps = {
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted }: DayCellProps) {
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted, planning }: DayCellProps) {
   const notes = useLoadNotes([entry], disabled, onChange);
   const cellRef = useRef<HTMLTableCellElement>(null);
   useEffect(() => {
@@ -40,7 +41,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   const label = `${driverName}, ${entry.date}`;
   const fieldClass = "h-8 w-full min-w-0 border-0 border-b border-zinc-800/70 bg-transparent px-2 text-center font-mono text-xs outline-none focus:bg-blue-500/10 focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50";
   const addButton = onAdd && <button type="button" onClick={() => onAdd(entry.driverId, entry.date)} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" aria-label={`${label}, add another load`}><Plus className="h-3 w-3" /></button>;
-  if(entry.transferOut) return <td className="border-b border-r border-zinc-800/70 bg-blue-500/10 p-0 text-center text-xs text-blue-200"><div className="flex h-6 items-center justify-end border-b border-zinc-800/70 px-1">{addButton}</div><div className="p-2"><div className="font-mono">{entry.loadNumber}</div><div className="mt-3 font-medium">Late delivered<br />moved to next week</div></div></td>;
+  if(entry.transferOut) return <td className="border-b border-r border-zinc-800/70 bg-blue-500/10 p-0 text-center text-xs text-blue-200"><div className="flex h-6 items-center justify-end border-b border-zinc-800/70 px-1">{addButton}</div><div className="p-2"><div className="font-mono">{entry.loadNumber}</div><div className="mt-3 font-medium">Late delivered<br />moved to next week</div></div>{planning}</td>;
   return (
     <td data-gross-driver={entry.driverId} data-gross-date={entry.date} data-gross-slot={entry.slot} {...notes.cellProps} id={id} ref={cellRef} tabIndex={highlighted ? -1 : undefined} data-highlighted={highlighted || undefined} aria-label={highlighted ? `Selected load ${entry.loadNumber}, ${driverName}, ${entry.date}, slot ${entry.slot + 1}` : undefined} className={`relative border-r border-b border-zinc-800/70 p-0 align-top ${highlighted ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500">
@@ -67,6 +68,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : "text-zinc-300"}`}
         /></div>;
       })}
+      {planning}
       {reviewing && entry.split && <SplitReviewDialog entry={entry} driverName={driverName} disabled={disabled} onClose={() => setReviewing(false)} onApply={next => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...next, version: current.version }))} />}
       {reviewing && !entry.split && <BoardDialog title={`Review load ${entry.loadNumber}`} onClose={() => setReviewing(false)}>
         <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use your entered values. Current system values are shown for comparison.</p>
@@ -90,6 +92,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
+  && previous.planning === next.planning
   && previous.entry.sourceMissing === next.entry.sourceMissing && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
   && JSON.stringify(previous.entry.splitReview) === JSON.stringify(next.entry.splitReview)
   && previous.entry.note === next.entry.note

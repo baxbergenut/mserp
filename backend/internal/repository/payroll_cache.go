@@ -49,6 +49,7 @@ var payrollUnrelatedTables = []string{
 	"load_source_availability",
 	"datatruck_load_versions", "datatruck_load_sync_state",
 	"driver_board", "driver_board_history", "driver_board_load_state", "board_route_usage",
+	"gross_board_planning_entries",
 	"payroll_projection_control", "payroll_projection_sources", "payroll_projection_changes",
 	"payroll_protocol_events",
 	"payroll_projection_jobs", "payroll_projection_generations", "payroll_statement_versions", "payroll_statement_state",

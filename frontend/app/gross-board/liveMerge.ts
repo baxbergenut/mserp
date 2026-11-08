@@ -1,5 +1,6 @@
 import type { GrossBoard } from "@/app/lib/types";
 import { entryKey } from "./board";
+import { mergePlanningEntries } from "./planning";
 
 export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard, protectedKeys: Set<string>, protectedDays: Set<string>) {
   if (!current || current.weekStart !== incoming.weekStart) return incoming;
@@ -28,5 +29,5 @@ export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard,
     if (protectedDays.has(`${e.driverId}:${e.date}`) || stale) protectedKeys.add(key);
   }
   for (const key of protectedKeys) { const e = previous.get(key); if (e) next.set(key,e); else next.delete(key); }
-  return { ...incoming, entries: Array.from(next.values()) };
+  return { ...incoming, entries: Array.from(next.values()), planningEntries: mergePlanningEntries(current.planningEntries, incoming.planningEntries) };
 }

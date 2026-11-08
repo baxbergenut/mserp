@@ -247,6 +247,24 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 		}
 		writeJSON(w, http.StatusOK, balance)
 	})
+	r.Put("/gross-board/planning-entries", func(w http.ResponseWriter, r *http.Request) {
+		var request grossBoardPlanningRequest
+		if err := decodeJSON(r, &request); err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := request.validate(); err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		session, _ := authSessionFromContext(r.Context())
+		entries, err := repo.SavePlanningChanges(r.Context(), request.Entries, session.User.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, entries)
+	})
 	r.Put("/gross-board", func(w http.ResponseWriter, r *http.Request) {
 		var request grossBoardRequest
 		if err := decodeJSON(r, &request); err != nil {

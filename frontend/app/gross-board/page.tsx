@@ -14,10 +14,11 @@ import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, Cloud
 import { fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
 import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, grossLocationKey, reconcileGrossPatches, refreshRejectedSources, type GrossDrafts } from "./drafts";
+import { mergePlanningEntries } from "./planning";
 import { mergeGrossLive } from "./liveMerge";
 import { GrossPresence } from "./GrossPresence";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
-import type { GrossBoard, GrossBoardEntry, GrossBoardSaveIssue } from "@/app/lib/types";
+import type { GrossBoard, GrossBoardEntry, GrossBoardSaveIssue, GrossBoardPlanningEntry } from "@/app/lib/types";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { MetricCard } from "@/app/components/MetricCard";
 import { ManagementSearch } from "@/app/components/management/ManagementUI";
@@ -61,6 +62,14 @@ export default function GrossBoardPage() {
   }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
   const canEdit=hasEditPermission&&!board?.managedInSheets;
+  const planningSaved = useCallback((entries: GrossBoardPlanningEntry[]) => {
+    setBoard(current => current && current.weekStart === week ? { ...current, planningEntries: mergePlanningEntries(current.planningEntries, entries) } : current);
+  }, [week]);
+  const planningByDay = useMemo(() => {
+    const indexed = new Map<string, GrossBoardPlanningEntry[]>();
+    for (const entry of board?.planningEntries ?? []) { const key = `${entry.driverId}:${entry.date}`; indexed.set(key, [...(indexed.get(key) ?? []), entry]); }
+    return indexed;
+  }, [board?.planningEntries]);
   const userId = useContext(CurrentUserIDContext);
   const draftKey = `gross-board-drafts:v1:${userId}:${week}`;
   const baselinesRef = useRef<GrossDrafts>({});
@@ -424,7 +433,7 @@ export default function GrossBoardPage() {
                   <th data-gross-driver={driver.id} data-gross-field="driver" scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td data-gross-driver={driver.id} data-gross-field="truck" className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Total gross", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
-                  {dayEntries.map((entries, i) => !driver.dates.includes(dates[i]) ? <td key={dates[i]} className="border-b border-r border-zinc-800 bg-zinc-900/40 px-2 text-center text-xs text-zinc-500"><span>{driver.assignments?.some(a => a.date === dates[i]) ? "Changed dispatcher" : "Not started"}</span><span className="mt-1 block text-[10px]">{driver.assignments?.find(a => a.date === dates[i])?.dispatcherName}</span></td> : <DaySummaryCell readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
+                  {dayEntries.map((entries, i) => !driver.dates.includes(dates[i]) ? <td key={dates[i]} className="border-b border-r border-zinc-800 bg-zinc-900/40 px-2 text-center text-xs text-zinc-500"><span>{driver.assignments?.some(a => a.date === dates[i]) ? "Changed dispatcher" : "Not started"}</span><span className="mt-1 block text-[10px]">{driver.assignments?.find(a => a.date === dates[i])?.dispatcherName}</span></td> : <DaySummaryCell week={week} planningEntries={planningByDay.get(`${driver.id}:${dates[i]}`) ?? []} onPlanningSaved={planningSaved} readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
                   <td data-gross-driver={driver.id} data-gross-field="originalTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="milesTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="rpm" aria-label={`Total gross RPM for ${driver.fullName}`} className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{rpmDisplay(sum.original, sum.miles)}</td>

@@ -29,6 +29,7 @@ eval "$(sed -n '/^compatible_release() {/,/^activate_release() {/p' "$helper" | 
 payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
 mock_routing_usage=f
+mock_gross_planning=f
 mock_expense_drafts=f
 mock_accessorials=f
 mock_escrow_settlement=f
@@ -55,6 +56,7 @@ runuser() {
     if [[ $* == *"public.load_source_availability"* ]]; then result=$mock_load_availability; fi
     if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
     if [[ $* == *"public.board_route_usage"* ]]; then result=$mock_routing_usage; fi
+    if [[ $* == *"public.gross_board_planning_entries"* ]]; then result=$mock_gross_planning; fi
     if [[ $* == *"column_name='expense_choices'"* ]]; then result=$mock_expense_drafts; fi
     if [[ $* == *"column_name='escrow_draft'"* ]]; then result=$mock_escrow_settlement; fi
     if [[ $* == *"JOIN public.weighmytruck_transactions"* ]]; then result=$mock_scale_carry; fi
@@ -296,3 +298,14 @@ if compatible_release "$test_root/new"; then echo 'Escrow schema query failure a
 mock_escrow_settlement=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown escrow schema allowed rollback' >&2; exit 1; fi
 echo 'Driver Pay escrow compatibility checks passed'
+
+mock_escrow_settlement=t
+mock_gross_planning=t
+if compatible_release "$test_root/new"; then echo 'Dispatch planning allowed an incompatible payroll binary' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\ncase "$1" in -gross-board-planning-capability) echo gross-board-planning-v1;; -driver-pay-escrow-capability) echo driver-pay-escrow-v1;; -accessorial-expenses-capability) echo accessorial-expenses-v1;; -payroll-scale-partial-capability) echo payroll-scale-partial-v1;; -payroll-scale-carry-capability) echo payroll-scale-carry-v1;; -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_gross_planning=error
+if compatible_release "$test_root/new"; then echo 'Planning schema query failure allowed rollback' >&2; exit 1; fi
+mock_gross_planning=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown planning schema allowed rollback' >&2; exit 1; fi
+echo 'Gross Board planning compatibility checks passed'

@@ -80,6 +80,8 @@ try {
   const staleEmpty = board();
   // A burst is one write, not one transaction for every character.
   await field(page).focus(); await page.keyboard.type('PLAN-123456', { delay: 15 });
+  expect(writes.length).toBe(0);
+  await page.getByRole('option', { name: 'Add as manual load: PLAN-123456', exact: true }).click();
   await saved(page); expect(writes.length).toBe(1);
   const committedVersion = stored().version;
   await push(staleEmpty);
@@ -116,6 +118,7 @@ try {
   // Edits made after the first failure join the recovery copy in this tab.
   const queuedDay = '2026-11-04';
   await fill(field(page, 'load number or status', queuedDay), 'QUEUED-AFTER-ERROR');
+  await page.getByRole('option', { name: 'Add as manual load: QUEUED-AFTER-ERROR', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
   await page.reload();
   await expect(field(page, 'driver rate')).toHaveValue('$1,111.00');
@@ -151,6 +154,7 @@ try {
   const secondDay = '2026-11-03';
   duplicateError = 'Load PLAN-123456 is already on Gross Board for Reliable Driver on 2026-11-02 (load 1). Edit or move the existing entry instead of adding it again.';
   await fill(field(page, 'load number or status', secondDay), 'PLAN-123456');
+  await page.getByRole('option', { name: 'Add as manual load: PLAN-123456', exact: true }).click();
   await expect(page.getByRole('main').getByRole('alert')).toContainText(duplicateError);
   await expect(field(page, 'load number or status', secondDay)).toHaveValue('PLAN-123456');
   expect(stored(secondDay)).toBeUndefined();
@@ -159,6 +163,7 @@ try {
   expect(writes.length).toBe(rejectedWrites);
   duplicateError = '';
   await fill(field(page, 'load number or status', secondDay), 'DIFFERENT-LOAD');
+  await page.getByRole('option', { name: 'Add as manual load: DIFFERENT-LOAD', exact: true }).click();
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await saved(page);
   expect(stored(secondDay).loadNumber).toBe('DIFFERENT-LOAD');

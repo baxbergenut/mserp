@@ -107,6 +107,7 @@ try {
   const clearCell = name => page.getByLabel(`Daily Driver, ${clearDay}, ${name}`, { exact: true });
   await expect(clearCell('driver rate')).toHaveValue('$800.00');
   await clearCell('load number or status').fill('');
+  await page.getByRole('option', { name: 'Clear load number', exact: true }).click();
   await clearCell('load number or status').blur();
   for (const name of ['total gross', 'driver rate', 'miles']) await expect(clearCell(name)).toHaveValue('');
   await expect.poll(() => saved(clearDay)).toMatchObject({ loadNumber: '', loadRecordId: null, originalRate: '', driverRate: '', miles: '' });
@@ -116,16 +117,19 @@ try {
   // Reuse two removed slots in one editor, matching the reported disappearing loads.
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
   await field(secondDay, 'load number or status', 1).fill('SECOND');
+  await page.getByRole('option', { name: 'Add as manual load: SECOND', exact: true }).click();
   await field(secondDay, 'total gross', 1).fill('250');
   await field(secondDay, 'miles', 1).fill('125');
   await daily.getByRole('button', { name: 'Add load', exact: true }).click();
   await field(secondDay, 'load number or status', 2).fill('THIRD');
+  await page.getByRole('option', { name: 'Add as manual load: THIRD', exact: true }).click();
   await field(secondDay, 'total gross', 2).fill('300');
   await field(secondDay, 'miles', 2).fill('150');
   holdNextSave = true;
   await apply(); await expect.poll(() => typeof releaseSave).toBe('function');
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
   await field(secondDay, 'load number or status', 3).fill('FOURTH');
+  await page.getByRole('option', { name: 'Add as manual load: FOURTH', exact: true }).click();
   await field(secondDay, 'total gross', 3).fill('400');
   await field(secondDay, 'miles', 3).fill('200');
   releaseSave(); await expect.poll(() => saved(secondDay, 1)?.version).toBe(6);

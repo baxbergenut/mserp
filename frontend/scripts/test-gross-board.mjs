@@ -230,7 +230,10 @@ assert.equal(dispatcherRows([{...movingDriver,assignments:undefined}],dates).len
 
 // A projected transfer and a native slot have independent version sequences.
 const liveSource = readFileSync(new URL("../app/gross-board/liveMerge.ts", import.meta.url), "utf8");
-const liveCode = ts.transpileModule(liveSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText.replace('import { entryKey } from "./board";', `const entryKey = ${entryKey.toString()};`);
+const planningSource = readFileSync(new URL("../app/gross-board/planning.ts", import.meta.url), "utf8");
+const planningCode = ts.transpileModule(planningSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
+const planningModule = `data:text/javascript;base64,${Buffer.from(planningCode).toString("base64")}`;
+const liveCode = ts.transpileModule(liveSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText.replace('import { entryKey } from "./board";', `const entryKey = ${entryKey.toString()};`).replace('"./planning"', JSON.stringify(planningModule));
 const { mergeGrossLive } = await import(`data:text/javascript;base64,${Buffer.from(liveCode).toString("base64")}`);
 const liveEmpty = { ...emptyEntry("transfer-driver", "2026-10-26"), version: 25, sourceDate: "2026-10-26", sourceSlot: 0 };
 const liveMoved = { ...liveEmpty, version: 2, sourceDate: "2026-10-25", transferVersion: 1, loadNumber: "82H5939", originalRate: "1433", driverRate: "1433", miles: "453" };

@@ -3823,3 +3823,19 @@ Status Board database tests verify the production payroll coverage check.
   dependent ledger activity are guarded.
 - Install the matching deploy helper before 204. It quiesces writers and requires
   the new escrow capability for rollback. See docs/DRIVER_PAY_ESCROW.md.
+
+## Gross Board planning entries (206)
+
+- Load, Status or note, and Planned destination are explicit choices in the same
+  day cell. Day-level note/destination text lives separately from load slots,
+  can coexist with loads and never changes their rates or dispatch state.
+- `gross_board_planning_entries` uses independent versions and empty-text
+  tombstones. GET/live Gross Board responses carry `planningEntries`; the
+  dedicated PUT `/gross-board/planning-entries` cannot be overwritten by older
+  full-row load clients. See `docs/GROSS_BOARD_PLANNING.md`.
+- Planning text is dispatch-only: never copy it into Status Board queue inputs,
+  payroll snapshots, exports or provider payloads. Keep manual unmatched loads
+  eligible and existing fixed status shortcuts intact. Migration 206 does not
+  reclassify existing text or alter historical load records.
+- Install the matching deploy helper before migration 206. It quiesces writers
+  and rejects rollback binaries without -gross-board-planning-capability.

@@ -171,6 +171,40 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await page.getByLabel('Note for LIVE-A, load 1',{exact:true}).fill('Live seal note');
     await saved();await page.keyboard.press('Escape');
     await expect(viewerCell.getByRole('img',{name:'Has load note',exact:true})).toBeVisible();
+    // Dispatch-only day planning persists and reaches another user without
+    // changing the colocated load or becoming a financial/load-queue field.
+    const planningBefore = await entry(id);
+    const planningReads = [];
+    const planningTrack = req => { if (req.method() === 'GET' && new URL(req.url()).pathname === '/api/gross-board') planningReads.push(req.url()); };
+    viewer.on('request', planningTrack);
+    for (const [kind, title, text] of [['note', 'Status / note', 'Available after 3 PM'], ['destination', 'Planned destination', 'Dallas, TX']]) {
+      await page.getByRole('button', {name:`Add entry for Gross Live A, ${week}`,exact:true}).click();
+      const planningDialog = page.getByRole('dialog', {name:'Day entry',exact:true});
+      await planningDialog.getByRole('button', {name:title,exact:true}).click();
+      await planningDialog.getByRole('textbox', {name:title,exact:true}).fill(text);
+      await planningDialog.getByRole('button', {name:'Save',exact:true}).click();
+      await expect(planningDialog.getByRole('status')).toHaveText('Saved');
+      await planningDialog.getByRole('button', {name:'Close',exact:true}).last().click();
+      await expect(planningDialog).toHaveCount(0);
+      await expect(viewer.getByLabel(`${title} for Gross Live A, ${week}`, {exact:true})).toContainText(text);
+      const rows = (await board()).planningEntries;
+      expect(rows.find(e => e.driverId === id && e.date === week && e.kind === kind)?.text).toBe(text);
+    }
+    viewer.off('request', planningTrack);
+    expect(planningReads).toEqual([]);
+    const planningAfter = await entry(id);
+    for (const field of ['loadNumber','originalRate','driverRate','miles','note','version']) expect(planningAfter[field]).toBe(planningBefore[field]);
+    const savedNote = (await board()).planningEntries.find(e => e.driverId === id && e.date === week && e.kind === 'note');
+    expect((await viewer.request.put(base+'/api/gross-board/planning-entries', {headers:{'X-CSRF-Token':viewerAuth.csrfToken},data:{weekStart:week,entries:[{...savedNote,text:'Viewer cannot edit'}]}})).status()).toBe(403);
+    expect((await page.request.put(base+'/api/gross-board/planning-entries', {headers,data:{weekStart:week,entries:[{...savedNote,version:0,text:'Stale overwrite'}]}})).status()).toBe(409);
+    // Legacy full-row saves know nothing about planningEntries and preserve them.
+    expect((await page.request.put(base+'/api/gross-board', {headers,data:{weekStart:week,entries:[planningAfter]}})).status()).toBe(200);
+    expect((await board()).planningEntries.find(e => e.driverId === id && e.date === week && e.kind === 'note')?.text).toBe('Available after 3 PM');
+    await page.reload();
+    await expect(page.getByLabel(`Status / note for Gross Live A, ${week}`, {exact:true})).toContainText('Available after 3 PM');
+    await expect(page.getByLabel(`Planned destination for Gross Live A, ${week}`, {exact:true})).toContainText('Dallas, TX');
+    await expect(field(page, 'load number or status')).toHaveValue('LIVE-A');
+    await page.screenshot({path:join(temp,'gross-board-live-planning.png'),fullPage:true,animations:'disabled'});
     // Keep newer typing while a committed response is deliberately delayed.
     let release,started;const gate=new Promise(r=>release=r),inFlight=new Promise(r=>started=r);
     await page.route('**/api/gross-board',async route=>{if(route.request().method()!=='PUT')return route.continue();const response=await route.fetch();started();await gate;await route.fulfill({response})},{times:1});

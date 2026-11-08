@@ -58,6 +58,7 @@ import type {
   RelayIdentityTask,
   GrossBoard,
   GrossBoardEntry,
+  GrossBoardPlanningEntry,
   GrossBoardBalance,
   GrossBoardLoad,
   Dispatcher,
@@ -233,6 +234,8 @@ export const resetGrossBoardBalance = (driverId: string, weekStart: string, bala
   apiRequest<GrossBoardBalance>("/gross-board/balance/reset", { method: "POST", body: JSON.stringify({ driverId, weekStart, balance }) });
 export const searchGrossBoardLoads = (search: string) =>
   apiRequest<GrossBoardLoad[]>(withQuery("/gross-board/loads", { search }));
+export const saveGrossBoardPlanningEntries = (weekStart: string, entries: GrossBoardPlanningEntry[]) =>
+  apiRequest<GrossBoardPlanningEntry[]>("/gross-board/planning-entries", { method: "PUT", body: JSON.stringify({ weekStart, entries }) });
 export async function saveGrossBoard(weekStart: string, entries: GrossBoardEntry[]): Promise<import("./types").GrossBoardSaveResult> {
   const result = await apiRequest<import("./types").GrossBoardSaveResult | GrossBoardEntry[]>("/gross-board", {
     method: "PUT", body: JSON.stringify({ weekStart, entries, allowPartial: true }),

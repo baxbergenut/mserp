@@ -1,20 +1,33 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Check, ChevronDown } from "lucide-react";
+import { CurrentUserIDContext } from "@/app/lib/access";
 import { searchGrossBoardLoads } from "@/app/lib/api";
 import type { GrossBoardDayStatus, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
-import { amountDisplay, dayStatuses, exactDayStatus, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
+import { amountDisplay, dayStatuses, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
 import { BoardDialog } from "./BoardDialog";
 
 export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
-type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" };
+type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" } | { kind: "manual" } | { kind: "cancel" };
 
 export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview, onChange }: {
   entry: GrossBoardEntry; label: string; disabled: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit;
 }) {
   const id = useId();
+  const userId = useContext(CurrentUserIDContext);
+  const draftKey = ["gross-board-load-intent:v1", userId, entry.driverId, entry.date, entry.slot].join(":");
+  const [draftText, setDraftText] = useState<string | null>(() => {
+    if (disabled) return null;
+    try { const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? "null"); return saved && Date.now() - saved.savedAt < 7 * 86400000 && typeof saved.text === "string" ? saved.text : null; } catch { return null; }
+  });
+  const [recoveryError, setRecoveryError] = useState(false);
+  const setDraft = (value: string | null) => {
+    setDraftText(value);
+    try { if (value === null) sessionStorage.removeItem(draftKey); else sessionStorage.setItem(draftKey, JSON.stringify({ text: value, savedAt: Date.now() })); setRecoveryError(false); }
+    catch { setRecoveryError(true); }
+  };
   const input = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
@@ -24,16 +37,19 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const [searchError, setSearchError] = useState("");
   const [pendingStatus, setPendingStatus] = useState<GrossBoardDayStatus>("");
   const [position, setPosition] = useState({ left: 0, top: 0, height: 320, width: 288 });
-  const query = entry.loadNumber.trim();
-  const status = dayStatuses.find((item) => item.value === entry.dayStatus);
-  const confirmed = entry.loadRecordId !== null && !entry.sourceMissing;
+  const query = (draftText ?? entry.loadNumber).trim();
+  const status = draftText === null ? dayStatuses.find((item) => item.value === entry.dayStatus) : undefined;
+  const confirmed = draftText === null && entry.loadRecordId !== null && !entry.sourceMissing;
   const unmatched = !status && !confirmed && query !== "";
   const statusOptions = suggestedDayStatuses(browse || status ? "" : query);
   const loads = results.query === query && !status ? results.loads : [];
   const options: Option[] = [
+    ...(draftText !== null && !query ? [{ kind: "manual" } as const] : []),
     ...(status ? [{ kind: "clear" } as const] : []),
     ...statusOptions.map((item): Option => ({ kind: "status", status: item })),
     ...loads.map((load): Option => ({ kind: "load", load })),
+    ...(draftText !== null && query ? [{ kind: "manual" } as const] : []),
+    ...(draftText !== null ? [{ kind: "cancel" } as const] : []),
   ];
   const open = focused && !disabled && (!confirmed || browse);
   const activeIndex = Math.min(active, Math.max(0, options.length - 1));
@@ -47,12 +63,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       searchGrossBoardLoads(query).then((matches) => {
         if (cancelled) return;
         setSearchError(""); setResults({ query, loads: matches });
-        const exact = matches.filter((load) => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
-        // Status words are never mistaken for loads. An explicit load selection
-        // still supports the rare real load whose number is also a status word.
-        if (exact.length === 1 && !exactDayStatus(query) && !entry.sourceMissing) {
-          onChange(entry.driverId, entry.date, (current) => !current.dayStatus && current.loadNumber.trim() === query ? matchLoad(current, exact[0]) : current);
-        }
+
       }).catch(() => { if (!cancelled) { setResults({ query, loads: [] }); setSearchError(query); } });
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
@@ -83,36 +94,35 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
 
   const choose = (option: Option) => {
     setFocused(false); setBrowse(false);
+    if (option.kind === "cancel") { setDraft(null); return; }
+    if (option.kind === "manual") {
+      onChange(entry.driverId, entry.date, current => ({ ...current, sourceMissing: false, dayStatus: "", loadNumber: query, loadRecordId: null, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: [],
+        note: query.toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
+        originalRate: current.loadRecordId !== null ? "" : current.originalRate, driverRate: current.loadRecordId !== null ? "" : current.driverRate, miles: current.loadRecordId !== null ? "" : current.miles,
+        enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate, enteredMiles: current.loadRecordId !== null ? "" : current.enteredMiles,
+        duplicate: false, systemDriverRate: "", acceptDriverGross: false, acceptSystemValues: false }));
+      setDraft(null); return;
+    }
+    setDraft(null);
     if (option.kind === "status" && hasAmounts(entry)) { setPendingStatus(option.status.value); return; }
     onChange(entry.driverId, entry.date, (current) => option.kind === "load" ? matchLoad(current, option.load) :
       setDayStatus(current, option.kind === "status" ? option.status.value : ""));
   };
   return <>
     <div data-grid-cell className="relative">
-      <input ref={input} aria-label={`${label}, load number or status`}
+      <input ref={input} data-unconfirmed-load={draftText !== null || undefined} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && options.length ? `${id}-${activeIndex}` : undefined}
-        title={status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number or day status"}
-        maxLength={200} value={status?.value ?? entry.loadNumber} disabled={disabled}
+        title={draftText !== null ? "Unconfirmed load text. Choose a system load or Add as manual load to put it in the dispatch queue." : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Choose a system load, explicitly add a manual load, or choose a day status"}
+        maxLength={200} value={draftText ?? status?.value ?? entry.loadNumber} disabled={disabled}
         onFocus={(event) => { setFocused(true); setBrowse(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => { setFocused(false); setBrowse(false); }}
         onChange={(event) => {
-          const loadNumber = event.target.value;
-          const exact = exactDayStatus(loadNumber);
+          setDraft(event.target.value);
           setActive(0); setBrowse(false); setFocused(true); setSearchError("");
-          if (exact && !hasAmounts(entry)) setFocused(false);
-          onChange(entry.driverId, entry.date, (current) => exact && !hasAmounts(current) ? setDayStatus(current, exact.value) :
-            ({ ...current, sourceMissing: false, dayStatus: "", loadNumber, loadRecordId: null, loadTripId: null, split: false, tripReview: false, tripReviewReason: "", trips: [],
-              note: loadNumber.trim().toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
-              originalRate: current.loadRecordId !== null ? "" : current.originalRate,
-              driverRate: current.loadRecordId !== null ? "" : current.driverRate,
-              miles: current.loadRecordId !== null ? "" : current.miles,
-              enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate,
-              enteredMiles: current.loadRecordId !== null ? "" : current.enteredMiles,
-              duplicate: false, systemDriverRate: "", acceptDriverGross: false, acceptSystemValues: false }));
         }}
         onKeyDown={(event) => {
-          if (event.key === "Escape") { setFocused(false); return; }
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setDraft(null); setFocused(false); return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault(); setFocused(true);
             if (confirmed) setBrowse(true);
@@ -121,7 +131,9 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           if (event.key === "Enter" && open && options.length) { event.preventDefault(); choose(options[activeIndex]); }
         }}
         className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
-        placeholder="Load # / status" />
+        placeholder="Choose load / status" />
+      {draftText !== null && !focused && <button type="button" className="block w-full px-1 text-[10px] text-amber-300" onClick={() => input.current?.focus()}>Unconfirmed load text</button>}
+      {recoveryError && <span role="alert" className="block text-[10px] text-amber-300">Keep this page open; draft recovery is unavailable.</span>}
       {entry.sourceMissing && <span role="status" title="The linked DataTruck record is no longer available. Reconciliation reconnects a unique replacement; entered values and finalized statements are preserved." className="block px-1 text-[10px] text-amber-400">Not found in system</span>}
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
         <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" disabled={disabled}
@@ -135,18 +147,19 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       onMouseDown={(event) => event.preventDefault()}>
       <div className="px-2 py-2 text-[10px] text-zinc-400">{statusOptions.length ? "DAY STATUSES" : "LOADS"} <span className="float-right">↑ ↓ choose · Enter select</span></div>
       <ul id={id} role="listbox" aria-label="Loads and day statuses" className="grid grid-cols-2 gap-0.5">
-        {options.map((option, index) => <li key={option.kind === "status" ? option.status.value : option.kind === "load" ? option.load.id : "clear"}
+        {options.map((option, index) => <li key={option.kind === "status" ? option.status.value : option.kind === "load" ? option.load.id : option.kind}
           id={`${id}-${index}`} role="option" aria-selected={index === activeIndex}
           onClick={() => choose(option)} className={`${option.kind !== "status" ? "col-span-2" : ""} cursor-pointer rounded-md px-2 py-2 text-xs ${index === activeIndex ? "bg-white/10 ring-1 ring-inset ring-zinc-600" : "hover:bg-zinc-800"}`}>
           {option.kind === "status" ? <span className={`inline-flex rounded px-2 py-1 font-medium ${option.status.color}`}>{option.status.value}</span> : option.kind === "clear" ?
-            <span className="text-zinc-400">Clear status · Enter a load</span> : <>
+            <span className="text-zinc-400">Clear status · Enter a load</span> : option.kind === "manual" ? <span className="text-blue-300">{query ? `Add as manual load: ${query}` : "Clear load number"}</span> : option.kind === "cancel" ? <span className="text-zinc-400">Cancel typed text</span> : <>
               <div className="font-medium text-zinc-100">{option.load.loadNumber} · {amountDisplay(option.load.originalRate, true)} <span className="text-[10px] text-zinc-500">LOAD</span></div>
               <div className="mt-1 text-zinc-400">{option.load.driverName || "Unassigned"} · {option.load.pickupDate || "No pickup date"} · {amountDisplay(option.load.miles) || "—"} mi</div>
               <div className="text-zinc-500">Record #{option.load.id}</div>
             </>}
         </li>)}
       </ul>
-      {!options.length && <p className="p-2 text-xs text-zinc-500">{searchError === query ? "Load lookup unavailable. Your text is kept." : "No suggestions. Your text is kept as a plan."}</p>}
+      {!options.length && <p className="p-2 text-xs text-zinc-500">{searchError === query ? "Load lookup unavailable. Your text is kept; you can explicitly add a manual load." : "Choose a load or add its number explicitly. Notes and destinations use Add entry."}</p>}
+      {draftText !== null && <p className="border-t border-zinc-800 px-2 py-2 text-[11px] text-zinc-400">Typing alone does not add a load. A selected or manual load joins the dispatch queue.</p>}
       {statusOptions.length > 0 && <p className="border-t border-zinc-800 px-2 py-2 text-[10px] text-zinc-500">Status days have no rates or miles.</p>}
     </div>, document.body)}
     {pendingStatus && <BoardDialog title={`Replace this day with ${pendingStatus}?`} onClose={() => setPendingStatus("")}>
