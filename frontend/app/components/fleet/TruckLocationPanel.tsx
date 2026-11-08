@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin } from "lucide-react";
 import { fetchDriverTruckLocation, fetchTruckLocation } from "@/app/lib/api";
 import type { FleetLocation } from "@/app/lib/types";
 import { LocationCell } from "@/app/driver-board/LocationCell";
@@ -31,8 +30,7 @@ export function TruckLocationPanel({ truckId, driverId }: { truckId: string; dri
   }, [truckId, driverId]);
   return <section aria-label="Latest truck location" className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/20">
     <div className="p-4">
-      <div className="flex items-center justify-between gap-2"><h2 className="flex items-center gap-2"><MapPin className="text-zinc-400" />Latest location</h2>{data?.truckId && <span className="text-xs text-zinc-400">Unit {data.truckUnit}</span>}</div>
-      {data?.location && <div className="mt-2 text-xs"><LocationCell name={`Truck ${data.truckUnit}`} location={data.location} /></div>}
+      <div className="flex items-center justify-between gap-2"><h2 className="flex items-center gap-2"><LocationCell name={data?.truckUnit ? `Truck ${data.truckUnit}` : "Truck"} location={data?.location ?? null} />Latest location</h2>{data?.truckId && <span className="text-xs text-zinc-400">Unit {data.truckUnit}</span>}</div>
       {!data && !error && <p className="mt-3 text-xs text-zinc-500">Loading location…</p>}
       {data && !data.location && <p className="mt-3 text-xs text-zinc-500">{data.truckId ? "No location available." : "No assigned truck."}</p>}
       {error && <p role="status" className="mt-3 text-xs text-zinc-400">{data ? "Could not refresh location. Showing the last loaded data." : error}</p>}
