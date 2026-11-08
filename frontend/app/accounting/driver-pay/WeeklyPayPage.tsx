@@ -515,17 +515,17 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       <div className="flex min-w-0 flex-[1_1_22rem] flex-wrap items-center gap-2">
         <div className="min-w-28 flex-1 [&_input]:h-8 [&_input]:py-0"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
-          {!investor && <select aria-label="Driver type" className={controlClass + " !h-8 !max-w-36 !py-0"} value={driverType} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
+          {!investor && <div className="relative inline-block max-w-full"><select aria-label="Driver type" className={controlClass + " appearance-none !h-8 !max-w-36 !py-0 !pr-9"} value={driverType} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
             setDriverType(driverTypes.find(type => type === event.target.value) ?? "");
             setPage(1);
           }}>
             <option value="">All driver types</option>
             {driverTypes.map(type => <option key={type} value={type}>{employmentTypeLabel(type)}</option>)}
-          </select>}
-          <select aria-label="Dispatcher" className={controlClass + " !h-8 !max-w-36 !py-0"} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}>
+          </select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" /></div>}
+          <div className="relative inline-block max-w-full"><select aria-label="Dispatcher" className={controlClass + " appearance-none !h-8 !max-w-36 !py-0 !pr-9"} value={dispatcher} disabled={finalizing || busy || dirty || saving} onChange={event => { setDispatcher(event.target.value); setPage(1); }}>
             <option value="all">All dispatchers</option>
             {dispatchers.map(([id, name]) => <option key={id} value={id || "__unassigned"}>{name}</option>)}
-          </select>
+          </select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" /></div>
         </TableFilters>
       </div>
       <div className="ml-auto flex flex-wrap items-center gap-2">
