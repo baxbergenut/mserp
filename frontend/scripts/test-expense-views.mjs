@@ -95,8 +95,14 @@ try {
   await expect(page.getByRole('button', { name: 'Add entry', exact: true })).toBeVisible();
   await expect.poll(() => applicantReads).toBeGreaterThan(0);
   const pageDropTransfer = await page.evaluateHandle(() => { const data = new DataTransfer(); data.items.add(new File(['page receipt'], 'page-receipt.txt', { type: 'text/plain' })); return data; });
+  await page.getByTestId('expenses-drop-target').evaluate(element => { element.style.minHeight = '3000px'; });
   await page.getByTestId('expenses-drop-target').dispatchEvent('dragenter', { dataTransfer: pageDropTransfer });
-  await expect(page.getByText('Drop to analyze expenses', { exact: true })).toBeVisible();
+  await expect(page.getByText('Drop to add expense', { exact: true })).toBeVisible();
+  await expect(page.getByText('We’ll analyze the file and open a draft for review.', { exact: true })).toBeVisible();
+  const dropPrompt = await page.getByText('Drop to add expense', { exact: true }).boundingBox();
+  expect(dropPrompt.y).toBeGreaterThan(0);
+  expect(dropPrompt.y + dropPrompt.height).toBeLessThan(1000);
+  await page.getByTestId('expenses-drop-target').evaluate(element => { element.style.minHeight = ''; });
   await page.getByTestId('expenses-drop-target').dispatchEvent('drop', { dataTransfer: pageDropTransfer });
   await expect(page.getByText('Review entry 1 of 1. Each item is saved separately.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toHaveCount(0);

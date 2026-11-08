@@ -9,6 +9,7 @@ import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
 import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type SelectHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
 import Link from "@/app/components/AccessLink";
 
 import { Check, ChevronDown, Ellipsis, FileUp, Settings, Trash2, WalletCards, X } from "lucide-react";
@@ -427,12 +428,12 @@ export default function ExpensesPage() {
   return (
     <div data-testid="expenses-drop-target" className="min-h-[calc(100dvh-7rem)] space-y-5 animate-fade-in" onDragEnter={handlePageDragEnter} onDragOver={handlePageDragOver} onDragLeave={handlePageDragLeave} onDrop={handlePageDrop}>
 
-      {pageDropActive && <div className="pointer-events-none fixed inset-3 z-[70] flex items-center justify-center rounded-2xl border-2 border-dashed border-blue-400 bg-zinc-950/90 backdrop-blur-sm" role="status" aria-live="polite">
+      {pageDropActive && createPortal(<div className="pointer-events-none fixed inset-3 z-[70] flex items-center justify-center rounded-2xl border-2 border-dashed border-blue-400 bg-zinc-950/90 backdrop-blur-sm" role="status" aria-live="polite">
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/15 text-blue-400"><FileUp className="h-6 w-6" aria-hidden="true" /></span>
-          <div><p className="text-sm font-semibold text-zinc-100">Drop to analyze expenses</p><p className="mt-1 text-xs text-zinc-400">One PDF, TXT, PNG, JPEG, or WEBP file</p></div>
+          <div><p className="text-base font-semibold text-zinc-100">Drop to add expense</p><p className="mt-1 text-xs text-zinc-400">We’ll analyze the file and open a draft for review.</p></div>
         </div>
-      </div>}
+      </div>, document.body)}
 
 
       {error && <ErrorBanner message={error} />}
