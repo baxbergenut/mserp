@@ -94,6 +94,15 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/expenses`);
   await expect(page.getByRole('button', { name: 'Add entry', exact: true })).toBeVisible();
   await expect.poll(() => applicantReads).toBeGreaterThan(0);
+  const pageDropTransfer = await page.evaluateHandle(() => { const data = new DataTransfer(); data.items.add(new File(['page receipt'], 'page-receipt.txt', { type: 'text/plain' })); return data; });
+  await page.getByTestId('expenses-drop-target').dispatchEvent('dragenter', { dataTransfer: pageDropTransfer });
+  await expect(page.getByText('Drop to analyze expenses', { exact: true })).toBeVisible();
+  await page.getByTestId('expenses-drop-target').dispatchEvent('drop', { dataTransfer: pageDropTransfer });
+  await expect(page.getByText('Review entry 1 of 1. Each item is saved separately.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toHaveCount(0);
+  await expect(page.getByText('page-receipt.txt', { exact: true })).toBeVisible();
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   // A webhook arrives after the page loaded, before opening the expense form.
   applicants.push({ id: 'fiston', fullName: 'Fiston Makuza', status: 'applied' });
   await page.getByRole('button', { name: 'Add entry', exact: true }).click();

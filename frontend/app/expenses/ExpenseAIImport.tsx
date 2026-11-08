@@ -3,7 +3,7 @@
 import { ExpenseNameSelect } from "./ExpenseNameSelect";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClipboardEvent, DragEvent } from "react";
 import { FileUp, LoaderCircle, Sparkles, Trash2, X } from "lucide-react";
 import { extractExpenses } from "../lib/api";
@@ -33,6 +33,13 @@ function isSupportedAttachment(file: File) {
     SUPPORTED_ATTACHMENT_EXTENSIONS.some((extension) => name.endsWith(extension));
 }
 
+export function expenseAttachmentError(file: File) {
+  if (!isSupportedAttachment(file)) return "Choose a PDF, TXT, PNG, JPEG, or WEBP file.";
+  if (file.size === 0) return "The selected attachment is empty.";
+  if (file.size > MAX_ATTACHMENT_SIZE) return "The expense attachment must be 20 MB or smaller.";
+  return "";
+}
+
 function toInput(draft: AIExpenseDraft): ExpenseInput {
   return {
     costBreakdown: [],
@@ -58,28 +65,27 @@ function toInput(draft: AIExpenseDraft): ExpenseInput {
 export function ExpenseAIImport({
   onExtracted,
   onError, onBusyChange,
+  initialFile = null,
+  analyzeInitialFile = false,
 }: {
   onExtracted: (drafts: ExpenseInput[], file: File | null, source: AIExpenseDraft[]) => void;
   onBusyChange?: (value: boolean) => void;
   onError: (message: string) => void;
+  initialFile?: File | null;
+  analyzeInitialFile?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(initialFile);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const analysisInFlight = useRef(false);
+  const autoAnalysisStarted = useRef(false);
 
   function selectFile(nextFile: File) {
-    if (!isSupportedAttachment(nextFile)) {
-      onError("Choose a PDF, TXT, PNG, JPEG, or WEBP file.");
-      return;
-    }
-    if (nextFile.size === 0) {
-      onError("The selected attachment is empty.");
-      return;
-    }
-    if (nextFile.size > MAX_ATTACHMENT_SIZE) {
-      onError("The expense attachment must be 20 MB or smaller.");
+    const validationError = expenseAttachmentError(nextFile);
+    if (validationError) {
+      onError(validationError);
       return;
     }
     setFile(nextFile);
@@ -110,27 +116,44 @@ export function ExpenseAIImport({
     selectFile(namedImage);
   }
 
-  async function analyze() {
-    if (!text.trim() && !file) {
+  const runAnalysis = useCallback(async (content: string, attachment: File | null) => {
+    if (!content.trim() && !attachment) {
       onError("Paste transaction text or choose a receipt, invoice, or transaction file.");
       return;
     }
-    if(isAnalyzing) return;
+    if (analysisInFlight.current) return;
+    analysisInFlight.current = true;
     setIsAnalyzing(true);onBusyChange?.(true);
     onError("");
     try {
-      const result = await extractExpenses(text, file);
+      const result = await extractExpenses(content, attachment);
       if (result.expenses.length === 0) {
         onError("AI could not find an expense in that content. Add more detail or try a clearer file.");
         return;
       }
-      onExtracted(result.expenses.map(toInput),file,result.expenses);
+      onExtracted(result.expenses.map(toInput),attachment,result.expenses);
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "The transaction could not be analyzed");
     } finally {
+      analysisInFlight.current = false;
       setIsAnalyzing(false);onBusyChange?.(false);
     }
+  }, [onBusyChange, onError, onExtracted]);
+
+  function analyze() {
+    void runAnalysis(text, file);
   }
+
+  useEffect(() => {
+    if (!analyzeInitialFile || !initialFile || autoAnalysisStarted.current) return;
+    autoAnalysisStarted.current = true;
+    const validationError = expenseAttachmentError(initialFile);
+    if (validationError) {
+      onError(validationError);
+      return;
+    }
+    void runAnalysis("", initialFile);
+  }, [analyzeInitialFile, initialFile, onError, runAnalysis]);
 
   return (
     <section onPaste={handlePaste}>
@@ -158,7 +181,7 @@ export function ExpenseAIImport({
           event.currentTarget.value = "";
         }} />
         <button type="button" onClick={() => fileInput.current?.click()} className="rounded-lg border border-zinc-700 px-3 py-2 text-[12px] font-medium text-zinc-400 transition hover:bg-zinc-800/60 hover:text-zinc-200">Browse</button>
-        <button type="button" disabled={isAnalyzing} onClick={() => void analyze()} className="inline-flex min-w-28 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60">
+        <button type="button" disabled={isAnalyzing} onClick={analyze} className="inline-flex min-w-28 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-medium text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60">
           {isAnalyzing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {isAnalyzing ? "Analyzing…" : "Analyze"}
         </button>

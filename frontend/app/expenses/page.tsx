@@ -8,10 +8,10 @@ import { TableFilters } from "@/app/components/management/TableFilters";
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
-import { useCallback, useEffect, useId, useRef, useState, type SelectHTMLAttributes } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type SelectHTMLAttributes } from "react";
 import Link from "@/app/components/AccessLink";
 
-import { Check, ChevronDown, Ellipsis, Settings, Trash2, WalletCards, X } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, FileUp, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   uploadExpenseDocument,
@@ -42,7 +42,7 @@ import {
   ExpenseForm,
   expenseToInput,
 } from "./ExpenseForm";
-import { ExpenseAIImport } from "./ExpenseAIImport";
+import { ExpenseAIImport, expenseAttachmentError } from "./ExpenseAIImport";
 import { ReceiptUpload } from "../components/ReceiptUpload";
 import { ExpenseBalanceAction } from "@/app/components/expenses/ExpenseBalanceEditor";
 import { ExternalSettlements } from "./ExternalSettlements";
@@ -139,6 +139,9 @@ export default function ExpensesPage() {
   const [review,setReview]=useState<{entries:{form:ExpenseInput;source:AIExpenseDraft}[];index:number;file:File|null}|null>(null);
   const [aiBusy,setAIBusy]=useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [pageDropFile, setPageDropFile] = useState<File | null>(null);
+  const [pageDropActive, setPageDropActive] = useState(false);
+  const pageDragDepth = useRef(0);
   const [uploadError, setUploadError] = useState("");
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
   const saveLock=useRef(false);
@@ -219,11 +222,12 @@ export default function ExpensesPage() {
   }, [expenseOpen, canLoadFleetSelectors]);
 
   function showReview(queue: NonNullable<typeof review>,index:number) {
+    setPageDropFile(null);
     const entry=queue.entries[index];setReview({...queue,index});setError("");setAttachment(queue.file);setPendingUploadId(null);setUploadError("");
     setForm(entry.form);setEditing(null);
   }
   function completeEntry() {setEditing(undefined);setAttachment(null);setPendingUploadId(null);setUploadError("");if(review && review.index+1<review.entries.length)showReview(review,review.index+1);else setReview(null);}
-  function closeEntry(){setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
+  function closeEntry(){setEditing(undefined);setReview(null);setPageDropFile(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
   function changeForm(next:ExpenseInput){ setForm(next); }
   const hasFilters = Boolean(ownerReview || truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified);
   const hiddenFilterCount = [showHistory, ownerReview, paymentType, paidBy, coveredBy, accountantVerified].filter(Boolean).length;
@@ -232,8 +236,12 @@ export default function ExpensesPage() {
     accessorialRequest.current=null;
     const categoryId=createCategoryIds.includes(category) ? category : createCategoryIds[0] ?? "";
     const value={...emptyExpenseInput,paidBy:currentUser,categoryId,expenseDate:new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())};
-    setReview(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);setUploadError("");
+    setReview(null);setPageDropFile(null);setError("");setForm(value);setAttachment(null);setPendingUploadId(null);setUploadError("");
     setEditing(null);
+  }
+  function openCreateFromDrop(file: File) {
+    openCreate();
+    setPageDropFile(file);
   }
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -253,7 +261,7 @@ export default function ExpensesPage() {
   }, [setCategory, setSearch]);
   useQuickCreate(openCreate, !isLoading && createCategoryIds.length > 0);
   function openEdit(expense: Expense) {
-    setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");
+    setReview(null);setPageDropFile(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");
     setForm(expenseToInput(expense));setEditing(expense);
   }
   async function save() {
@@ -372,8 +380,59 @@ export default function ExpensesPage() {
     setPage(1);
   }
 
+  const pageDropEnabled = !isLoading && createCategoryIds.length > 0 && editing === undefined && !verificationDetails && !pendingDelete && !aiBusy;
+
+  function isFileDrag(event: DragEvent<HTMLElement>) {
+    return event.dataTransfer.types.includes("Files");
+  }
+
+  function handlePageDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (!pageDropEnabled || !isFileDrag(event)) return;
+    event.preventDefault();
+    pageDragDepth.current += 1;
+    setPageDropActive(true);
+  }
+
+  function handlePageDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!pageDropEnabled || !isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handlePageDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return;
+    pageDragDepth.current = Math.max(0, pageDragDepth.current - 1);
+    if (pageDragDepth.current === 0) setPageDropActive(false);
+  }
+
+  function handlePageDrop(event: DragEvent<HTMLDivElement>) {
+    if (!pageDropEnabled || !isFileDrag(event)) return;
+    event.preventDefault();
+    pageDragDepth.current = 0;
+    setPageDropActive(false);
+    const droppedFiles = Array.from(event.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+    if (droppedFiles.length > 1) {
+      setError("Attach one file at a time. A single file can still contain several transactions.");
+      return;
+    }
+    const validationError = expenseAttachmentError(droppedFiles[0]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    openCreateFromDrop(droppedFiles[0]);
+  }
+
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div data-testid="expenses-drop-target" className="min-h-[calc(100dvh-7rem)] space-y-5 animate-fade-in" onDragEnter={handlePageDragEnter} onDragOver={handlePageDragOver} onDragLeave={handlePageDragLeave} onDrop={handlePageDrop}>
+
+      {pageDropActive && <div className="pointer-events-none fixed inset-3 z-[70] flex items-center justify-center rounded-2xl border-2 border-dashed border-blue-400 bg-zinc-950/90 backdrop-blur-sm" role="status" aria-live="polite">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/15 text-blue-400"><FileUp className="h-6 w-6" aria-hidden="true" /></span>
+          <div><p className="text-sm font-semibold text-zinc-100">Drop to analyze expenses</p><p className="mt-1 text-xs text-zinc-400">One PDF, TXT, PNG, JPEG, or WEBP file</p></div>
+        </div>
+      </div>}
 
 
       {error && <ErrorBanner message={error} />}
@@ -541,6 +600,8 @@ export default function ExpensesPage() {
           {!editing && !review && !pendingUploadId && (
             <div className="mb-5">
               <ExpenseAIImport
+                initialFile={pageDropFile}
+                analyzeInitialFile={!!pageDropFile}
                 onError={setError}
                 onBusyChange={setAIBusy}
                 onExtracted={(drafts,file,source) => {
