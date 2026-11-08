@@ -79,14 +79,14 @@ try {
   await page.getByRole('button', { name: /More filters and actions/ }).click();
   await expect(page.getByLabel('Accountant verification')).toHaveValue('false');
   await page.keyboard.press('Escape');
-  await page.getByPlaceholder('Search expenses…').fill('no matching expense toolbar check');
+  await page.getByPlaceholder('Search expenses by text or amount').fill('no matching expense toolbar check');
   await expect(page.getByText('No entries match these filters.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Expense category')).toBeVisible();
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await page.getByRole('button', { name: /More filters and actions/ }).click();
   await expect(page.getByLabel('Accountant verification')).toHaveValue('');
   await page.keyboard.press('Escape');
-  await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('');
+  await expect(page.getByPlaceholder('Search expenses by text or amount')).toHaveValue('');
   await page.screenshot({ path: join(tmpdir(), 'mserp-toolbar-filters-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 1000 });
   await page.screenshot({ path: join(tmpdir(), 'mserp-toolbar-filters-mobile.png'), fullPage: true });

@@ -186,11 +186,17 @@ type ExpensePage struct {
 }
 
 func (r *ExpenseRepository) ListExpensesPage(ctx context.Context, query ExpensePageQuery) (ExpensePage, error) {
+	search := expenseTextSearchSQL
+	amount := normalizeExpenseSearchAmount(query.Search)
+	if amount != "" {
+		// Keep numeric truck/reference searches working. A separate ID lookup lets
+		// PostgreSQL use the amount index without casting every invoice to text.
+		search = "(" + search + ` OR e.id IN (
+			SELECT id FROM expenses WHERE amount=$17::numeric AND category_id=ANY($2::uuid[])
+		))`
+	}
 	where := `
-WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings WHERE id=e.category_id), COALESCE(t.unit_number, e.unit_number),
-		COALESCE(d.full_name, e.driver_name), e.payment_type, e.expense_type,
-		e.reference_number, e.description, e.covered_by, e.paid_by, e.broker_load_number)
-	ILIKE '%' || $1 || '%')
+WHERE ` + search + `
 	AND e.category_id=ANY($2::uuid[])
 	AND ($3 = '' OR e.category_id = $3::uuid)
 	AND ($4 = '' OR e.payment_type = $4)
@@ -209,6 +215,9 @@ WHERE ($1 = '' OR concat_ws(' ', e.category, (SELECT name FROM expense_settings 
 		query.Search, query.VisibleCategoryIDs, query.CategoryID, query.PaymentType, query.DateFrom, query.DateTo,
 		query.TruckID, query.DriverID, query.ChargeDriverID, query.Responsibility,
 		query.AccountantVerified, query.PaidBy, query.CoveredBy, query.UnitNumber, query.DriverName, query.History,
+	}
+	if amount != "" {
+		args = append(args, amount)
 	}
 
 	if query.OwnerReimbursementReview {

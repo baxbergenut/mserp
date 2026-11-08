@@ -9908,3 +9908,8 @@ CREATE TRIGGER escrow_collection_policy_guard BEFORE INSERT OR UPDATE ON driver_
  FOR EACH ROW EXECUTE FUNCTION guard_stopped_escrow_payment();
 
 COMMIT;
+
+-- Exact amount searches retain text matches through a separate indexed ID lookup.
+-- Also supports the existing amount-range filters. No invoice values are changed.
+CREATE INDEX IF NOT EXISTS expenses_amount_category_idx
+    ON expenses (amount, category_id) INCLUDE (id);

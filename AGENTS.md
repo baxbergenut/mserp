@@ -2676,6 +2676,17 @@ assignment lookup lists.
   token. Session cookies are opaque, HttpOnly, SameSite=Strict, and host-only;
   only SHA-256 token digests are stored in PostgreSQL.
 
+## Expense amount search (205)
+
+Expenses search matches exact invoice totals as well as the existing text fields.
+Plain numbers, decimals and US currency formatting such as $1,234.50 are accepted;
+amounts are compared as numeric values, never substrings or floating-point values.
+The amount/category covering index serves a separate ID lookup so numeric truck
+and reference searches keep their existing results. Text search retains its prior
+scan behavior. Permissions, filters, totals and pagination apply to both matches.
+Check TestExpenseSearchAmount, TestExpenseAmountSearchDatabase and
+frontend/scripts/test-expense-amount-search.mjs.
+
 ## Implementation conventions
 
 - Follow `docs/UI_DESIGN_SPECS.md` for all UI work: shared headers without

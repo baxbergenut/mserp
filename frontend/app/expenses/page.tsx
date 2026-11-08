@@ -474,7 +474,7 @@ export default function ExpensesPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
-        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses…" />
+        <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses by text or amount" />
         <TableFilters>
           <label className="block space-y-1"><input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} /></label><span aria-hidden="true">→</span><label><input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} /></label>
           <ExpenseFilterSelect aria-label="Expense truck" value={unitNumber} onChange={event => { setUnitNumber(event.target.value); setPage(1); }}><option value="">All trucks</option>{(options.filters?.trucks ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect><ExpenseFilterSelect aria-label="Expense driver" value={driverName} onChange={event => { setDriverName(event.target.value); setPage(1); }}><option value="">All drivers</option>{(options.filters?.drivers ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect>

@@ -213,7 +213,7 @@ try {
   await expect(row).toBeVisible();
   const add = await page.getByRole('button', { name: 'Add entry', exact: true }).boundingBox();
   const more = await page.getByRole('button', { name: /More filters and actions/ }).boundingBox();
-  const search = await page.getByPlaceholder('Search expenses…').boundingBox();
+  const search = await page.getByPlaceholder('Search expenses by text or amount').boundingBox();
   expect(Math.abs(add.y - search.y)).toBeLessThan(4);
   expect(Math.abs(more.y - add.y)).toBeLessThan(4);
   const truckChevron = await page.getByLabel('Expense truck', { exact: true }).evaluate(select => {
