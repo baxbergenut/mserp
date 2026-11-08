@@ -27,7 +27,7 @@ const later = load('LATER');
 const completed = { ...load('COMPLETED-HERE'), completed: true, canRestoreToQueue: true };
 const delivered = { ...load('DELIVERED'), completed: true, sourceStatus: 'Delivered' };
 const canceled = { ...load('CANCELED'), sourceStatus: 'Canceled' };
-let full = { current, week: [current, next, later], next: [next, later], earlier: [earlier], hidden: [load('HIDDEN')], unavailable: [completed, delivered, canceled], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
+let full = { current, week: [current, next, later], next: [next, later], earlier: [earlier], hidden: [{ ...load('HIDDEN'), manual: true, canRemoveFromQueue: true }], unavailable: [completed, delivered, canceled], destinationSource: true, sourceDestination: 'Atlanta, GA', stopKey: 'pickup', fromDate: '2026-10-29', revision: 'first', customOrder: false };
 let entry = { driverId: driver.id, currentLoad: current.number, trailerNumber: '', trailerNote: '', status: 'DISPATCHED', destination: '', eta: '', notes: '', homeTime: '', version: 1 };
 const overview = () => ({ ...full, detailsOmitted: true, earlier: [], hidden: [], unavailable: [] });
 const board = () => ({ weekStart: '2026-10-26', drivers: [driver], entries: [entry], grossEntries: [], loads: { [driver.id]: overview() }, eld: { configured: false } });
@@ -109,11 +109,27 @@ try {
   await push();
   await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toContainText('Overdue');
   await expect(panel.getByRole('button', { name: 'NEXT · Overdue load', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'NEXT · Overdue load', exact: true }).click();
+  await expect(panel.getByText('Remove this plan in Gross Board.', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
   await page.screenshot({ path: '../artifacts/overdue-load-window.png', fullPage: true });
+  // A manual identity backed by Gross Board is protected too. Once Gross
+  // removes that backing, a refreshed capability exposes manual-only removal.
+  full = { ...full, next: [{ ...next, manual: true, canRemoveFromQueue: false }, later], revision: 'gross-backed-manual' };
+  await push();
+  await expect(panel.getByRole('button', { name: 'NEXT', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
+  full = { ...full, next: [{ ...next, manual: true, canRemoveFromQueue: true }, later], revision: 'manual-only' };
+  await push();
+  await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toBeVisible();
   full = { ...full, next: [next, later], revision: 'overdue-cleared' };
   await push();
   await expect(panel.getByRole('button', { name: 'NEXT', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).not.toContainText('Overdue');
+
+  await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'CURRENT · Current load', exact: true }).click();
+  await expect(destination).toBeEnabled();
 
   const sequence = panel.getByRole('region', { name: 'Load sequence' });
   const cards = sequence.getByRole('button', { name: /^(LATER|NEXT|CURRENT · Current load|DELIVERED · Completed load|COMPLETED-HERE · Completed load|EARLIER)$/ });

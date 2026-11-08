@@ -1586,8 +1586,12 @@ assignment lookup lists.
   preceding Saturday/Sunday and future plans. Earlier days in that window remain
   in Next with an Overdue label. Older plans stay in Earlier unless explicitly
   restored; current selections stay visible. Completion, cancellation, removal
-  and hidden-state safeguards remain. The window advances only on Monday. The
-  server clamps stale cutoff dates and rejects stale midnight actions.
+  safeguards remain. Gross Board plans cannot be hidden from Status Board; remove
+  the plan in Gross Board. The API rejects hide even through a manual duplicate,
+  and legacy hidden Gross plans reappear on read. Manual-only queue entries keep
+  Remove/Restore. Completing or canceling a load still removes it normally.
+  The window advances only on Monday. The server clamps stale cutoff dates
+  and rejects stale midnight actions.
   Gross Board controls planned assignment;
   DataTruck driver mismatches warn instead of dropping or moving plans. Finished
   next loads remain inspectable; finished current loads are not auto-cleared.

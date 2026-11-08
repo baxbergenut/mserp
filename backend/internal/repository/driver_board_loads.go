@@ -18,6 +18,7 @@ import (
 
 var ErrBoardLoadSelection = errors.New("load plans changed or the selection is unavailable; refresh Loads and review the current plans")
 var ErrBoardLoadCompleted = errors.New("a load completed in DataTruck cannot be made current")
+var ErrBoardGrossPlanRemoval = errors.New("remove this load from Gross Board; Gross Board plans cannot be removed from the Status Board queue")
 
 type BoardStop struct {
 	ManualStopTime string         `json:"manualStopTime,omitempty"`
@@ -32,21 +33,22 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
-	Overdue           bool        `json:"overdue,omitempty"`
-	Completed         bool        `json:"completed,omitempty"`
-	CanRestoreToQueue bool        `json:"canRestoreToQueue,omitempty"`
-	Manual            bool        `json:"manual,omitempty"`
-	PlanID            string      `json:"planId"`
-	Date              string      `json:"date"`
-	Slot              int         `json:"slot"`
-	Number            string      `json:"number"`
-	LoadID            *int        `json:"loadId"`
-	SourceStatus      string      `json:"sourceStatus"`
-	SourceDriver      string      `json:"sourceDriver"`
-	SourceMissing     bool        `json:"sourceMissing,omitempty"`
-	SyncedAt          string      `json:"syncedAt"`
-	Stops             []BoardStop `json:"stops"`
-	Warning           string      `json:"warning"`
+	CanRemoveFromQueue bool        `json:"canRemoveFromQueue,omitempty"`
+	Overdue            bool        `json:"overdue,omitempty"`
+	Completed          bool        `json:"completed,omitempty"`
+	CanRestoreToQueue  bool        `json:"canRestoreToQueue,omitempty"`
+	Manual             bool        `json:"manual,omitempty"`
+	PlanID             string      `json:"planId"`
+	Date               string      `json:"date"`
+	Slot               int         `json:"slot"`
+	Number             string      `json:"number"`
+	LoadID             *int        `json:"loadId"`
+	SourceStatus       string      `json:"sourceStatus"`
+	SourceDriver       string      `json:"sourceDriver"`
+	SourceMissing      bool        `json:"sourceMissing,omitempty"`
+	SyncedAt           string      `json:"syncedAt"`
+	Stops              []BoardStop `json:"stops"`
+	Warning            string      `json:"warning"`
 }
 type boardLoadState struct {
 	Manual                []BoardLoad       `json:"manual,omitempty"`
@@ -495,6 +497,16 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	for _, id := range ids {
 		s := states[id]
 		view := result[id]
+		// Gross Board owns removal, including when a previously manual queue
+		// identity now represents a Gross Board plan. Never let duplicate manual
+		// identities or legacy hidden markers bypass the native assignment.
+		grossNumbers, grossIDs := map[string]bool{}, map[int]bool{}
+		for _, p := range plans[id] {
+			grossNumbers[strings.ToLower(strings.TrimSpace(p.Number))] = true
+			if p.LoadID != nil {
+				grossIDs[*p.LoadID] = true
+			}
+		}
 		// Manual queue identities survive later imports and Gross Board planning.
 		// Keep the real Gross Board plans in Week, but show each source once in the queue.
 		plans[id] = append(manualPlans[id], plans[id]...)
@@ -598,6 +610,8 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				}
 				seen[*p.LoadID] = true
 			}
+			p.CanRemoveFromQueue = p.Manual && !grossNumbers[strings.ToLower(strings.TrimSpace(p.Number))] &&
+				(p.LoadID == nil || !grossIDs[*p.LoadID])
 			sourceUnavailable := p.SourceMissing || terminalLoad(p.SourceStatus)
 			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID]
 			if sourceUnavailable || completedHere {
@@ -608,7 +622,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				p.CanRestoreToQueue = completedHere && !sourceUnavailable &&
 					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
-			} else if hidden[p.PlanID] {
+			} else if hidden[p.PlanID] && p.CanRemoveFromQueue {
 				view.Hidden = append(view.Hidden, p)
 			} else if !boardPlanQueued(p, s, from) {
 				view.Earlier = append(view.Earlier, p)
@@ -924,6 +938,9 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		valid := false
 		for _, p := range list {
 			if p.PlanID == a.PlanID {
+				if a.Action == "hide" && !p.CanRemoveFromQueue {
+					return result, ErrBoardGrossPlanRemoval
+				}
 				valid = true
 			}
 		}

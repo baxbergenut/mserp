@@ -97,11 +97,16 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if view().CustomOrder || view().Next[0].Number != "PLAN-B" {
 		t.Fatal("undo failed to restore planned order")
 	}
-	r = action(BoardLoadAction{Action: "hide", PlanID: view().Next[0].PlanID})
-	if len(r.Loads.Hidden) != 1 || len(r.Loads.Next) != 2 {
-		t.Fatal("hide queue")
+	v = view()
+	if v.Next[0].CanRemoveFromQueue {
+		t.Fatal("Gross Board plan advertised removal")
 	}
-	action(BoardLoadAction{Action: "restore", PlanID: r.Loads.Hidden[0].PlanID})
+	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "hide", PlanID: v.Next[0].PlanID}, ""); !errors.Is(err, ErrBoardGrossPlanRemoval) {
+		t.Fatal("Gross Board plan removed from queue", err)
+	}
+	if after := view(); len(after.Hidden) != 0 || len(after.Next) != len(v.Next) || after.Revision != v.Revision {
+		t.Fatal("rejected removal changed queue", after)
+	}
 	// Source revision prevents acting on plans edited after the drawer was opened.
 	v = view()
 	exec(`UPDATE gross_board_entries SET load_number='PLAN-C' WHERE driver_id=$1 AND service_date='2026-10-06'`, d.ID)

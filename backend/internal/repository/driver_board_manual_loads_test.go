@@ -113,6 +113,17 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 		}
 	}
 	exec(`UPDATE loads SET status='Dispatched' WHERE id=989001`)
+	v = view()
+	if v.Next[0].CanRemoveFromQueue {
+		t.Fatal("Gross-backed manual plan advertised removal")
+	}
+	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "hide", PlanID: planID}, ""); !errors.Is(err, ErrBoardGrossPlanRemoval) {
+		t.Fatal("Gross-backed manual plan removed", err)
+	}
+	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1 AND load_record_id=989001`, d.ID)
+	if v = view(); len(v.Next) != 1 || !v.Next[0].CanRemoveFromQueue {
+		t.Fatal("manual-only plan did not regain removal", v)
+	}
 	r = act(BoardLoadAction{Action: "hide", PlanID: planID})
 	if len(r.Loads.Next) != 0 || len(r.Loads.Hidden) != 1 {
 		t.Fatal("hide")

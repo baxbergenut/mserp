@@ -101,7 +101,7 @@ func testBoardQueueWindow(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if incident == nil || !incident.Overdue || incident.LoadID != nil || incident.Slot != 1 {
 		t.Fatalf("Friday unmatched second slot missing: %+v", v)
 	}
-	if len(v.Hidden) != 1 || len(v.Unavailable) != 5 || find(v.Next, "DELETED") != nil {
+	if len(v.Hidden) != 0 || find(v.Next, "HIDDEN") == nil || len(v.Unavailable) != 5 || find(v.Next, "DELETED") != nil {
 		t.Fatalf("completion/removal guards changed: %+v", v)
 	}
 	duplicate := find(v.Next, "WINDOW-DUP")
@@ -128,42 +128,25 @@ func testBoardQueueWindow(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 			t.Fatalf("weekend missing %s: %+v", number, v)
 		}
 	}
-	// Restore must recognize the same weekend eligibility when updating status.
-	saturday := find(v.Next, "SATURDAY")
+	// Native Gross plans, including legacy hidden entries, cannot be hidden by
+	// an old client or a direct API action. Rejections do not mutate the queue.
 	var version int
 	if err := pool.QueryRow(ctx, `SELECT version FROM driver_board WHERE driver_id=$1`, d.ID).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	r := BoardLoadResult{Entry: DriverBoardEntry{Version: version}, Loads: v}
-	others := []string{}
-	for _, p := range v.Next {
-		if p.PlanID == saturday.PlanID {
-			continue
+	for _, p := range append(slices.Clone(v.Next), v.Earlier...) {
+		if p.CanRemoveFromQueue {
+			t.Fatal("native plan marked removable", p)
 		}
-		others = append(others, p.PlanID)
-		r, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: r.Entry.Version, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "hide", PlanID: p.PlanID}, "")
-		if err != nil {
-			t.Fatal(err)
+		_, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: version, FromDate: v.FromDate, Revision: v.Revision, Action: "hide", PlanID: p.PlanID}, "")
+		if !errors.Is(err, ErrBoardGrossPlanRemoval) {
+			t.Fatal("Gross hide bypass", p.Number, err)
 		}
 	}
-	r, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: r.Entry.Version, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "hide", PlanID: saturday.PlanID}, "")
-	if err != nil {
-		t.Fatal(err)
+	if view().Revision != v.Revision {
+		t.Fatal("rejected removals mutated the board")
 	}
-	if r.Entry.Status != "ENROUTE" || len(r.Loads.Next) != 0 {
-		t.Fatal("last queued load did not clear reserved status", r)
-	}
-	r, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: r.Entry.Version, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "restore", PlanID: saturday.PlanID}, "")
-	if err != nil || find(r.Loads.Next, "SATURDAY") == nil || r.Entry.Status != "RESERVED" {
-		t.Fatal("weekend restore", err, r)
-	}
-	for _, planID := range others {
-		r, err = repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: r.Entry.Version, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "restore", PlanID: planID}, "")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	stale := BoardLoadAction{DriverID: d.ID, Version: r.Entry.Version, FromDate: r.Loads.FromDate, Revision: r.Loads.Revision, Action: "clear"}
+	stale := BoardLoadAction{DriverID: d.ID, Version: version, FromDate: v.FromDate, Revision: v.Revision, Action: "clear"}
 	day = "2026-11-15"
 	if find(view().Next, "SATURDAY") == nil {
 		t.Fatal("weekend must remain through Sunday")

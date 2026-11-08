@@ -132,7 +132,8 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
         {kind === "completed" && canEdit && load.canRestoreToQueue && <button type="button" className={`${buttonClass} mt-3`} disabled={locked}
           aria-label={`Restore to queue · ${load.number}`}
           onClick={() => void act({ action: "restore_completed", planId: load.planId })}>Restore to queue</button>}
-        {(kind === "next" || kind === "earlier") && canEdit && <div className="mt-3 flex flex-wrap gap-2"><button className={buttonClass} disabled={locked} onClick={() => choose(load)}>Set current</button><button className={buttonClass} disabled={locked} onClick={() => void act({ action: "hide", planId: load.planId })}>Remove from queue</button>{kind === "next" && <>
+        {(kind === "next" || kind === "earlier") && !load.canRemoveFromQueue && <p className="mt-3 text-xs text-zinc-500">Remove this plan in Gross Board.</p>}
+        {(kind === "next" || kind === "earlier") && canEdit && <div className="mt-3 flex flex-wrap gap-2"><button className={buttonClass} disabled={locked} onClick={() => choose(load)}>Set current</button>{load.canRemoveFromQueue && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "hide", planId: load.planId })}>Remove from queue</button>}{kind === "next" && <>
             <button aria-label={`Move ${load.number} up`} className={buttonClass} disabled={locked || index === view.next.length - 1} onClick={() => move(index, 1)}><ArrowUp className="h-3 w-3" /></button>
             <button aria-label={`Move ${load.number} down`} className={buttonClass} disabled={locked || index === 0} onClick={() => move(index, -1)}><ArrowDown className="h-3 w-3" /></button>
           </>}</div>}</div>}
@@ -168,7 +169,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
           {completed.reverse().map(load => loadCard(load, "completed"))}
           {[...view.earlier].reverse().map(load => loadCard(load, "earlier"))}
         </section>
-        {view.hidden.length > 0 && <details><summary className="cursor-pointer text-xs text-zinc-400">Removed from queue ({view.hidden.length})</summary><p className="mt-2 text-xs text-zinc-500">Gross Board plans remain unchanged.</p>{view.hidden.map(load => <div key={load.planId} className="mt-2 flex items-center justify-between gap-2 text-sm text-zinc-400"><span>{load.number} · {load.date}</span>{canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "restore", planId: load.planId })}>Restore</button>}</div>)}</details>}
+        {view.hidden.length > 0 && <details><summary className="cursor-pointer text-xs text-zinc-400">Removed from queue ({view.hidden.length})</summary><p className="mt-2 text-xs text-zinc-500">Only manually added loads can be removed here.</p>{view.hidden.map(load => <div key={load.planId} className="mt-2 flex items-center justify-between gap-2 text-sm text-zinc-400"><span>{load.number} · {load.date}</span>{canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "restore", planId: load.planId })}>Restore</button>}</div>)}</details>}
         {unavailable.length > 0 && <details>
           <summary className="cursor-pointer text-xs text-zinc-400">Unavailable loads ({unavailable.length})</summary>
           {unavailable.map(load => <article key={load.planId} className="mt-3 border-t border-zinc-800 pt-3 text-sm text-zinc-400">{load.number}{detail(load)}</article>)}

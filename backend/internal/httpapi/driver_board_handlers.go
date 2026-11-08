@@ -86,7 +86,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		if errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrBoardLoadSelection) ||
-			errors.Is(err, repository.ErrBoardLoadCompleted) || errors.Is(err, repository.ErrDriverBoardOrderConflict) ||
+			errors.Is(err, repository.ErrBoardLoadCompleted) || errors.Is(err, repository.ErrBoardGrossPlanRemoval) || errors.Is(err, repository.ErrDriverBoardOrderConflict) ||
 			errors.Is(err, repository.ErrDriverBoardAutoOrder) {
 			writeAPIError(w, http.StatusConflict, err.Error())
 			return

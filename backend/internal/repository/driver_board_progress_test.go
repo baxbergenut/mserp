@@ -31,7 +31,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
  (88121,'PROGRESS-A','Dispatched',100,100,100,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Dallas","state":"TX"}}]}'),
  (88122,'PROGRESS-B','Dispatched',200,200,200,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Boston","state":"MA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Miami","state":"FL"}}]}')`)
-	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-28','PROGRESS-A',88121),($1,'2026-10-01','PROGRESS-B',88122)`, d.ID)
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-28','PROGRESS-A',88121)`, d.ID)
 	actor := "progress-user-one"
 	rows, err := repo.Save(ctx, []DriverBoardEntry{{DriverID: d.ID, CurrentLoad: "PROGRESS-A", Notes: "Keep notes", ETA: "2026-10-01T15:00"}}, actor)
 	if err != nil {
@@ -68,6 +68,8 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 			t.Fatal(err)
 		}
 	}
+	// Manual-only plans retain remove/restore and its progress/undo behavior.
+	act(BoardLoadAction{Action: "add", Number: "PROGRESS-B"})
 	if e.Status != "DISPATCHED" || view().SourceDestination != "Atlanta, GA" || e.UndoID == 0 {
 		t.Fatal("new load did not start at pickup", e, view())
 	}
