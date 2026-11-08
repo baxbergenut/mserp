@@ -109,6 +109,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   function choose(load: BoardLoad) { setSelect(load); setClear(false); }
   function detail(load: BoardLoad) {
     return <><p className="mt-1 text-xs text-zinc-500">{load.manual ? "Manually added next load" : load.planId ? `Gross Board: ${load.date} · slot ${load.slot + 1}` : "Imported load · no Gross Board plan"}{load.loadId !== null ? ` · DataTruck #${load.loadId}` : load.manual ? " · Waiting for load details" : " · Unmatched plan"}</p>
+      {load.previouslyActive && <p className="mt-2 text-xs text-zinc-400">Previously worked and replaced on this board. Completion has not been confirmed.</p>}
       {load.warning && <p className="mt-2 text-xs text-amber-300">{load.warning}</p>}
       {load.stops.map(s => s.schedule && <p key={`schedule-${s.key}`} className="mt-1 text-[11px] text-zinc-400">{s.type}: {s.schedule.detail || s.schedule.reason}</p>)}
       {load.loadId !== null && <p className="mt-1 text-[11px] text-zinc-500">DataTruck: {load.sourceStatus || "No status"} · last synced {time(load.syncedAt)} NY</p>}
@@ -119,7 +120,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     const open = expanded === load.planId;
     const current = kind === "current";
     const inTransit = kind === "earlier" && inTransitLoad(load);
-    const status = current ? "Current" : kind === "completed" ? "Completed" : inTransit ? "In Transit" : load.overdue ? "Overdue" : "";
+    const status = current ? "Current" : kind === "completed" ? "Completed" : load.previouslyActive ? "Previously active" : inTransit ? "In Transit" : load.overdue ? "Overdue" : "";
     const draggable = kind === "next" && canEdit && drag.queue.length > 1 && !locked;
     return <article key={load.planId} data-queued-load={kind === "next" ? load.planId : undefined}
       onPointerDown={draggable ? event => drag.start(event, load.planId) : undefined}
@@ -131,9 +132,9 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
       {open && <div className="border-t border-zinc-800 px-3 pb-3">{detail(load)}
         {current && <><label className="mt-3 block text-xs text-zinc-400">Destination source<select aria-label="Current load destination source" disabled={locked} value={view.destinationSource ? view.stopKey : ""} onChange={e => void act(e.target.value ? { action: "source", stopKey: e.target.value } : { action: "manual" })} className={`${controlClass} mt-1`}><option value="">Manual destination</option>{load.stops.filter(s => s.location).map((s, i) => <option key={`${s.key}-${i}`} value={s.key}>{s.type} · {compactLoadLocation(s.location)}</option>)}</select></label>
           {canEdit && <button className={`${buttonClass} mt-3`} disabled={locked} onClick={() => { setClear(true); setSelect(null); }}>Clear current selection</button>}</>}
-        {kind === "completed" && canEdit && load.canRestoreToQueue && <button type="button" className={`${buttonClass} mt-3`} disabled={locked}
+        {(kind === "completed" || load.previouslyActive) && canEdit && load.canRestoreToQueue && <button type="button" className={`${buttonClass} mt-3`} disabled={locked}
           aria-label={`Restore to queue · ${load.number}`}
-          onClick={() => void act({ action: "restore_completed", planId: load.planId })}>Restore to queue</button>}
+          onClick={() => void act({ action: load.previouslyActive ? "restore_previous" : "restore_completed", planId: load.planId })}>Restore to queue</button>}
         {(kind === "next" || kind === "earlier") && !load.canRemoveFromQueue && <p className="mt-3 text-xs text-zinc-500">Remove this plan in Gross Board.</p>}
         {(kind === "next" || kind === "earlier") && canEdit && <div className="mt-3 flex flex-wrap gap-2"><button className={buttonClass} disabled={locked} onClick={() => choose(load)}>Set current</button>{load.canRemoveFromQueue && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "hide", planId: load.planId })}>Remove from queue</button>}{kind === "next" && <>
             <button aria-label={`Move ${load.number} up`} className={buttonClass} disabled={locked || index === view.next.length - 1} onClick={() => move(index, 1)}><ArrowUp className="h-3 w-3" /></button>
@@ -153,9 +154,9 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
           event.preventDefault();
           const value = number.trim();
           if (!value || locked) return;
-          const existing = [view.current, ...view.next, ...view.hidden, ...view.unavailable, ...view.earlier.filter(inTransitLoad)].find(load => load?.number.trim().toLowerCase() === value.toLowerCase());
+          const existing = [view.current, ...view.next, ...view.hidden, ...view.unavailable, ...view.earlier.filter(load => load.previouslyActive || inTransitLoad(load))].find(load => load?.number.trim().toLowerCase() === value.toLowerCase());
           if (existing) {
-            setError(existing.canRestoreToQueue ? "Open the completed load and use Restore to queue." : "This load is already listed. Use its existing entry.");
+            setError(existing.canRestoreToQueue ? "Open the load and use Restore to queue." : "This load is already listed. Use its existing entry.");
             return;
           }
           void act({ action: "add", number: value });

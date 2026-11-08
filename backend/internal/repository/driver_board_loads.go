@@ -33,24 +33,27 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
-	CanRemoveFromQueue bool        `json:"canRemoveFromQueue,omitempty"`
-	Overdue            bool        `json:"overdue,omitempty"`
-	Completed          bool        `json:"completed,omitempty"`
-	CanRestoreToQueue  bool        `json:"canRestoreToQueue,omitempty"`
-	Manual             bool        `json:"manual,omitempty"`
-	PlanID             string      `json:"planId"`
-	Date               string      `json:"date"`
-	Slot               int         `json:"slot"`
-	Number             string      `json:"number"`
-	LoadID             *int        `json:"loadId"`
-	SourceStatus       string      `json:"sourceStatus"`
-	SourceDriver       string      `json:"sourceDriver"`
-	SourceMissing      bool        `json:"sourceMissing,omitempty"`
-	SyncedAt           string      `json:"syncedAt"`
-	Stops              []BoardStop `json:"stops"`
-	Warning            string      `json:"warning"`
+	PreviouslyActive    bool `json:"previouslyActive,omitempty"`
+	previousActiveEvent int64
+	CanRemoveFromQueue  bool        `json:"canRemoveFromQueue,omitempty"`
+	Overdue             bool        `json:"overdue,omitempty"`
+	Completed           bool        `json:"completed,omitempty"`
+	CanRestoreToQueue   bool        `json:"canRestoreToQueue,omitempty"`
+	Manual              bool        `json:"manual,omitempty"`
+	PlanID              string      `json:"planId"`
+	Date                string      `json:"date"`
+	Slot                int         `json:"slot"`
+	Number              string      `json:"number"`
+	LoadID              *int        `json:"loadId"`
+	SourceStatus        string      `json:"sourceStatus"`
+	SourceDriver        string      `json:"sourceDriver"`
+	SourceMissing       bool        `json:"sourceMissing,omitempty"`
+	SyncedAt            string      `json:"syncedAt"`
+	Stops               []BoardStop `json:"stops"`
+	Warning             string      `json:"warning"`
 }
 type boardLoadState struct {
+	RequeuedLoads         map[string]int64  `json:"requeuedLoads,omitempty"`
 	Manual                []BoardLoad       `json:"manual,omitempty"`
 	ManualStopTimes       map[string]string `json:"manualStopTimes,omitempty"`
 	AutomationContext     string            `json:"automationContext,omitempty"`
@@ -183,7 +186,7 @@ func boardLoadQueueStart(from string) string {
 }
 
 func boardPlanQueued(p BoardLoad, s boardLoadState, from string) bool {
-	return !boardLoadInTransit(p) && (p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID])
+	return !p.PreviouslyActive && !boardLoadInTransit(p) && (p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID])
 }
 
 func boardLoadInTransit(p BoardLoad) bool {
@@ -487,6 +490,10 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	if err != nil {
 		return nil, err
 	}
+	previouslyActive, err := readPreviouslyActiveBoardLoads(ctx, tx, plans, manualPlans)
+	if err != nil {
+		return nil, err
+	}
 	// A saved selection may outlive its plan. Recheck its exact source ID;
 	// never silently switch a pinned selection to a recreated order.
 	missingIDs := map[int]bool{}
@@ -603,6 +610,9 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		// An older duplicate must not hide the same source's eligible plan.
 		// Manual identities keep precedence; otherwise retain date/slot order.
 		queuePlans := slices.Clone(plans[id])
+		for i := range queuePlans {
+			annotatePreviouslyActive(&queuePlans[i], previouslyActive[id], s)
+		}
 		sort.SliceStable(queuePlans, func(i, j int) bool {
 			a, b := queuePlans[i], queuePlans[j]
 			if a.Manual != b.Manual {
@@ -629,6 +639,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID]
 			if sourceUnavailable || completedHere {
 				p.Completed = !p.SourceMissing && (providerCompletedLoad(p.SourceStatus) || completedHere && !sourceUnavailable)
+				p.PreviouslyActive = false
 				if p.Completed && sourceUnavailable {
 					p.Warning = ""
 				}
@@ -638,6 +649,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			} else if hidden[p.PlanID] && p.CanRemoveFromQueue {
 				view.Hidden = append(view.Hidden, p)
 			} else if !boardPlanQueued(p, s, from) {
+				p.CanRestoreToQueue = p.PreviouslyActive && !strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Earlier = append(view.Earlier, p)
 			} else {
 				p.Overdue = !p.Manual && p.Date < from
@@ -729,7 +741,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	if err != nil {
 		return result, err
 	}
-	assigning := a.Action == "add" || a.Action == "select" || a.Action == "restore"
+	assigning := a.Action == "add" || a.Action == "select" || a.Action == "restore" || a.Action == "restore_previous"
 	switch a.Action {
 	case "add":
 		number := strings.TrimSpace(a.Number)
@@ -742,7 +754,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			}
 		}
 		for _, p := range view.Earlier {
-			if boardLoadInTransit(p) && strings.EqualFold(strings.TrimSpace(p.Number), number) {
+			if (p.PreviouslyActive || boardLoadInTransit(p)) && strings.EqualFold(strings.TrimSpace(p.Number), number) {
 				return result, ErrBoardLoadSelection
 			}
 		}
@@ -885,6 +897,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		if chosen == nil {
 			return result, ErrBoardLoadSelection
 		}
+		chosen.PreviouslyActive, chosen.CanRestoreToQueue = false, false
 		s.Current = chosen
 		e.CurrentLoad = chosen.Number
 		e.Status, e.Destination = "DISPATCHED", ""
@@ -922,6 +935,22 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	case "reset_order":
 		s.Order = nil
 		s.OrderLabels = nil
+	case "restore_previous":
+		index := slices.IndexFunc(view.Earlier, func(p BoardLoad) bool { return p.PlanID == a.PlanID && p.PreviouslyActive && p.CanRestoreToQueue })
+		if index < 0 {
+			return result, ErrBoardLoadSelection
+		}
+		p := view.Earlier[index]
+		if s.RequeuedLoads == nil {
+			s.RequeuedLoads = map[string]int64{}
+		}
+		s.RequeuedLoads[boardCompletionKey(p)] = p.previousActiveEvent
+		if s.RestoredPlans == nil {
+			s.RestoredPlans = map[string]bool{}
+		}
+		s.RestoredPlans[p.PlanID] = true
+		s.Hidden = slices.DeleteFunc(s.Hidden, func(id string) bool { return id == p.PlanID })
+		e.Status = boardProgressStatus(e.Status, []BoardLoad{p})
 	case "restore_completed":
 		index := slices.IndexFunc(view.Unavailable, func(p BoardLoad) bool {
 			return p.PlanID == a.PlanID && p.CanRestoreToQueue
@@ -930,6 +959,13 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			return result, ErrBoardLoadSelection
 		}
 		p := view.Unavailable[index]
+		// An explicit completion correction also clears the same worked departure.
+		if p.previousActiveEvent != 0 {
+			if s.RequeuedLoads == nil {
+				s.RequeuedLoads = map[string]int64{}
+			}
+			s.RequeuedLoads[boardCompletionKey(p)] = p.previousActiveEvent
+		}
 		loadKey, planKey := boardCompletionKey(p), "plan:"+p.PlanID
 		matchesCompletion := func(key string) bool { return key == loadKey || key == planKey }
 		s.Completed = slices.DeleteFunc(s.Completed, matchesCompletion)
@@ -1013,7 +1049,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	if assigning {
-		queueOnly := a.Action == "add" || a.Action == "restore"
+		queueOnly := a.Action == "add" || a.Action == "restore" || a.Action == "restore_previous"
 		returned, err := prepareBoardLoadAssignment(ctx, tx, a.DriverID, "", !queueOnly)
 		if err != nil {
 			return result, err

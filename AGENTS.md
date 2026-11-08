@@ -3839,3 +3839,16 @@ Status Board database tests verify the production payroll coverage check.
   reclassify existing text or alter historical load records.
 - Install the matching deploy helper before migration 206. It quiesces writers
   and rejects rollback binaries without -gross-board-planning-capability.
+## Previously active Status Board loads
+
+- A Dispatched source leaves Next only when the exact driver/source ID's latest
+  audited departure proves In Transit/Reserved or a selected delivery stop before
+  replacement by another resolved source. Clears, pickup-only replacements,
+  missing evidence and other drivers/source IDs do not qualify. Reads never mark
+  completion, change Gross Board/payroll/source status, or hide current selections.
+- These loads remain in history as Previously active. Restore to queue is a
+  version/revision-guarded operational correction recorded in load state/history;
+  it applies only to that exact replacement event. A later worked replacement
+  requires a new correction. Existing assignment/availability guards still apply.
+- Check TestBoardPreviouslyActiveDeparture, TestDriverBoardDatabase (fresh and
+  migrated schema), and frontend/scripts/test-status-board-loads.mjs.

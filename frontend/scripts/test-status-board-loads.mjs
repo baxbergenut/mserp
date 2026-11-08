@@ -66,6 +66,9 @@ try {
             full = { ...full, stopKey: 'delivery', completedStopKeys: ['pickup', 'second-pickup'], sourceDestination: 'Dallas, TX', revision: 'delivery' };
             entry = { ...entry, status: 'RESERVED' };
           }
+        } else if (input.action === 'restore_previous') {
+          expect(input.planId).toBe('PREVIOUSLY-ACTIVE');
+          full = { ...full, next: [...full.next, { ...load(input.planId), sourceStatus: 'Dispatched' }], earlier: full.earlier.filter(load => load.planId !== input.planId), revision: 'previous-restored' };
         } else if (input.action === 'restore_completed') {
           expect(input.planId).toBe(completed.planId);
           full = { ...full, next: [load(completed.number)], unavailable: [delivered, canceled], revision: 'restored' };
@@ -290,8 +293,31 @@ try {
   await expect(page.getByLabel('Loads Driver · Destination', { exact: true })).toHaveValue('Dallas, TX');
   await expect(chooser).toHaveCount(0);
   expect(mutations).toBe(4);
+  // Proven prior work stays below Current without being called completed.
+  const previous = { ...load('PREVIOUSLY-ACTIVE'), sourceStatus: 'Dispatched', previouslyActive: true, canRestoreToQueue: true };
+  full = { ...full, earlier: [previous], revision: 'previous-history' };
+  await push();
+  await page.getByRole('button', { name: 'Loads Driver · Next load', exact: true }).click();
+  const previousCard = panel.getByRole('button', { name: 'PREVIOUSLY-ACTIVE · Previously active load', exact: true });
+  await expect(previousCard).toBeVisible();
+  await expect(panel.locator('[data-queued-load="PREVIOUSLY-ACTIVE"]')).toHaveCount(0);
+  await previousCard.click();
+  await expect(panel.getByText('Previously worked and replaced on this board. Completion has not been confirmed.', { exact: true })).toBeVisible();
+  await page.screenshot({ path: '../artifacts/previously-active-history.png', fullPage: true });
+  await panel.getByLabel('Add next load', { exact: true }).fill('PREVIOUSLY-ACTIVE');
+  await panel.getByRole('button', { name: 'Add next load', exact: true }).click();
+  await expect(panel.getByRole('alert')).toHaveText('Open the load and use Restore to queue.');
+  expect(mutations).toBe(4);
+  await panel.getByRole('button', { name: 'Restore to queue · PREVIOUSLY-ACTIVE', exact: true }).click();
+  await expect.poll(() => mutations).toBe(5);
+  await expect(panel.locator('[data-queued-load="PREVIOUSLY-ACTIVE"]')).toBeVisible();
+  await expect(previousCard).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'NEXT · Current load', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  await page.getByRole('button', { name: 'Loads Driver · Next load', exact: true }).click();
+  await expect(panel.locator('[data-queued-load="PREVIOUSLY-ACTIVE"]')).toBeVisible();
   expect(errors).toEqual([]);
-  console.log('Status Board loads passed: animated drag, keyboard reorder, completed history, live refresh, and multi-pickup progression.');
+  console.log('Status Board loads passed: animated drag, keyboard reorder, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

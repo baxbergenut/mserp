@@ -141,6 +141,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testDriverBoardLoads(t, ctx, pool, repo, fleet)
 			testBoardQueueWindow(t, ctx, pool, repo, fleet)
 			testBoardInTransitQueue(t, ctx, pool, repo, fleet)
+			testBoardPreviouslyActiveQueue(t, ctx, pool, repo, fleet)
 			testManualNextLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)
 			testBoardProgress(t, ctx, pool, repo, fleet)
