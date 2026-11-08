@@ -8,10 +8,10 @@ import { TableFilters } from "@/app/components/management/TableFilters";
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type SelectHTMLAttributes } from "react";
 import Link from "@/app/components/AccessLink";
 
-import { Check, Settings, Trash2, WalletCards, X } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   uploadExpenseDocument,
@@ -52,6 +52,13 @@ import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
 
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
+
+function ExpenseFilterSelect({ wide = false, children, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { wide?: boolean }) {
+  return <span className={`relative inline-block max-w-full ${wide ? "w-full" : ""}`}>
+    <select {...props} className={`${filterClass} appearance-none !pr-9 ${wide ? "w-full" : ""}`}>{children}</select>
+    <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+  </span>;
+}
 
 const emptyOptions: ExpensePage["options"] = {
   settings: [],
@@ -141,6 +148,8 @@ export default function ExpensesPage() {
   const [administrator, setAdministrator] = useState(false);
   const [showHistory,setShowHistory]=useState(false);
   const [ownerReview,setOwnerReview]=useState(false);
+  const actionsId = useId();
+  const actionsPanel = useRef<HTMLDivElement>(null);
   const [verificationDetails, setVerificationDetails] = useState<Expense | null>(null);
   const verificationUndo = useRef<{ expenseId: string; verificationId: string }[]>([]);
   const verificationBusy = useRef(false);
@@ -217,6 +226,7 @@ export default function ExpensesPage() {
   function closeEntry(){setEditing(undefined);setReview(null);setError("");setAttachment(null);setPendingUploadId(null);setUploadError("");}
   function changeForm(next:ExpenseInput){ setForm(next); }
   const hasFilters = Boolean(ownerReview || truckId || unitNumber || driverName || paymentType || paidBy || coveredBy || search || category || dateFrom || dateTo || accountantVerified);
+  const hiddenFilterCount = [showHistory, ownerReview, paymentType, paidBy, coveredBy, accountantVerified].filter(Boolean).length;
 
   function openCreate() {
     accessorialRequest.current=null;
@@ -383,18 +393,15 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
         <ManagementSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search expenses…" />
         <TableFilters>
           <label className="block space-y-1"><input aria-label="Expense date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} className={filterClass} /></label><span aria-hidden="true">→</span><label><input aria-label="Expense date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} className={filterClass} /></label>
-          <select aria-label="Expense truck" value={unitNumber} onChange={event => { setUnitNumber(event.target.value); setPage(1); }} className={filterClass}><option value="">All trucks</option>{(options.filters?.trucks ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense driver" value={driverName} onChange={event => { setDriverName(event.target.value); setPage(1); }} className={filterClass}><option value="">All drivers</option>{(options.filters?.drivers ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
-          <select aria-label="Expense category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className={filterClass}>
+          <ExpenseFilterSelect aria-label="Expense truck" value={unitNumber} onChange={event => { setUnitNumber(event.target.value); setPage(1); }}><option value="">All trucks</option>{(options.filters?.trucks ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect><ExpenseFilterSelect aria-label="Expense driver" value={driverName} onChange={event => { setDriverName(event.target.value); setPage(1); }}><option value="">All drivers</option>{(options.filters?.drivers ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect>
+          <ExpenseFilterSelect aria-label="Expense category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}>
           <option value="">All categories</option>
           {options.categories.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
-        </select>
-          <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={showHistory} onChange={e=>{setShowHistory(e.target.checked);setPage(1)}}/>Show historical</label><label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={ownerReview} onChange={e=>{setOwnerReview(e.target.checked);setPage(1)}}/>Owner reimbursement review</label><select aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }} className={filterClass}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select><select aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
-          <select aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }} className={filterClass}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>
-          <select aria-label="Accountant verification" value={accountantVerified} onChange={e => { setAccountantVerified(e.target.value); setPage(1); }} className={filterClass}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></select>
+        </ExpenseFilterSelect>
         </TableFilters>
 
 
@@ -404,14 +411,44 @@ export default function ExpensesPage() {
             <X className="h-3 w-3" /> Clear
           </button>
         )}
-      <div className="ml-auto flex max-w-full flex-wrap items-center gap-2"><span role="status" title={verificationNotice} className="h-8 w-52 shrink-0 truncate text-xs leading-8 text-zinc-400">{isSaving ? "Saving…" : verifying ? "Saving verification…" : verificationNotice}</span><ManagementHeader
+      <div className="relative ml-auto flex max-w-full shrink-0 flex-nowrap items-center gap-2 [&>div]:flex-nowrap [&>div>div]:flex-nowrap"><span role="status" title={verificationNotice} className="pointer-events-none absolute right-full mr-2 h-8 w-52 truncate text-right text-xs leading-8 text-zinc-400">{isSaving ? "Saving…" : verifying ? "Saving verification…" : verificationNotice}</span><ManagementHeader
         icon={WalletCards}
         title="Expenses"
 
         count={total}
         actionLabel={createCategoryIds.length ? "Add entry" : undefined}
         onAction={createCategoryIds.length ? openCreate : undefined}
-        secondaryAction={permissions.includes("expense_settings.manage") ? <Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expenses settings</Link> : undefined}
+        secondaryAction={<>
+          <button type="button" className="ui-button relative !px-2" aria-label={hiddenFilterCount ? `More filters and actions, ${hiddenFilterCount} active` : "More filters and actions"} title="More filters and actions" popoverTarget={actionsId} onClick={event => {
+            const panel = actionsPanel.current;
+            if (!panel) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            panel.style.left = Math.max(8, rect.right - 288) + "px";
+            panel.style.top = Math.max(8, rect.bottom + 4) + "px";
+            requestAnimationFrame(() => {
+              const height = panel.getBoundingClientRect().height;
+              if (height) panel.style.top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - height - 8)) + "px";
+            });
+          }}>
+            <Ellipsis className="h-4 w-4" aria-hidden="true" />
+            {hiddenFilterCount > 0 && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" aria-hidden="true" />}
+          </button>
+          <div ref={actionsPanel} id={actionsId} popover="auto" role="group" aria-label="Expense filters and actions" className="fixed m-0 max-h-[calc(100dvh-16px)] w-72 max-w-[calc(100vw-16px)] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-200 ui-popover">
+            <div className="space-y-3 p-3">
+              <p className="font-medium text-zinc-300">More filters</p>
+              <label className="flex items-center gap-2 text-zinc-300"><input type="checkbox" checked={showHistory} onChange={event => { setShowHistory(event.target.checked); setPage(1); }} />Show historical</label>
+              <label className="flex items-center gap-2 text-zinc-300"><input type="checkbox" checked={ownerReview} onChange={event => { setOwnerReview(event.target.checked); setPage(1); }} />Owner reimbursement review</label>
+              <label className="block space-y-1.5"><span className="text-zinc-500">Payment type</span><ExpenseFilterSelect wide aria-label="Expense payment type" value={paymentType} onChange={event => { setPaymentType(event.target.value); setPage(1); }}><option value="">All payment types</option>{(options.filters?.paymentTypes ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect></label>
+              <label className="block space-y-1.5"><span className="text-zinc-500">Paid by</span><ExpenseFilterSelect wide aria-label="Expense paid by" value={paidBy} onChange={event => { setPaidBy(event.target.value); setPage(1); }}><option value="">All payers</option>{(options.filters?.paidBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect></label>
+              <label className="block space-y-1.5"><span className="text-zinc-500">Responsibility</span><ExpenseFilterSelect wide aria-label="Expense responsibility" value={coveredBy} onChange={event => { setCoveredBy(event.target.value); setPage(1); }}><option value="">All responsibilities</option>{(options.filters?.coveredBy ?? []).map(value => <option key={value} value={value}>{value}</option>)}</ExpenseFilterSelect></label>
+              <label className="block space-y-1.5"><span className="text-zinc-500">Accountant status</span><ExpenseFilterSelect wide aria-label="Accountant verification" value={accountantVerified} onChange={event => { setAccountantVerified(event.target.value); setPage(1); }}><option value="">Any accountant status</option><option value="false">Unverified by accountant</option><option value="true">Verified by accountant</option></ExpenseFilterSelect></label>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t border-zinc-800 p-1">
+              {permissions.includes("expense_settings.manage") ? <Link href="/expenses/settings" className="inline-flex items-center gap-2 rounded px-2 py-2 text-zinc-300 hover:bg-zinc-800"><Settings className="h-3.5 w-3.5" />Expenses settings</Link> : <span />}
+              <button type="button" className="rounded px-3 py-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" popoverTarget={actionsId} popoverTargetAction="hide">Done</button>
+            </div>
+          </div>
+        </>}
       /></div></div>
 
 

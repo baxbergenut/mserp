@@ -46,6 +46,12 @@ let browser;
 try {
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  const expenseActions = page.getByRole('group', { name: 'Expense filters and actions', exact: true });
+  const openExpenseActions = async () => {
+    if (!(await expenseActions.isVisible())) await page.getByRole('button', { name: /More filters and actions/ }).click();
+    await expect(expenseActions).toBeVisible();
+    return expenseActions;
+  };
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
@@ -79,7 +85,7 @@ try {
     if (path === '/expenses') applicantReads++;
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')));
     const fixtures = {
-      '/auth/session': { user: { id: 'user', administrator, username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canView:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'user', administrator, username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'expense_settings.manage', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canView:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
       '/expenses': { items: filtered, total: filtered.length, page: 1, pageSize: 25, totalPages: 1, summary: { amount: String(filtered.reduce((sum, e) => sum + Number(e.amount), 0)), incompleteCount: 0 }, options: { applicants, settings, categories: settings, filters: Object.fromEntries(Object.entries({ drivers: 'driverName', trucks: 'unitNumber', paymentTypes: 'paymentType', paidBy: 'paidBy', coveredBy: 'coveredBy' }).map(([key, field]) => [key, [...new Set(entries.map(e => e[field]).filter(Boolean))]])), paymentTypes: ['Cash', 'EFS'], expenseTypes: [], paidBy: ['Entry User', 'Other User'], coveredBy: [] } },
       '/maintenance/options': {vendors:[],types:[],programs:[]}, '/drivers': drivers, '/trucks': trucks, '/investors': owners, '/expenses/extract': { expenses: drafts },
     };
@@ -172,13 +178,27 @@ try {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.reload();
   await expect(page.getByRole('columnheader')).toHaveCount(7);
-  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeHidden();
+  await openExpenseActions();
+  await expect(expenseActions.getByRole('link', { name: 'Expenses settings', exact: true })).toBeVisible();
+  await page.screenshot({ path: join(tmpdir(), 'mserp-expense-overflow.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(expenseActions).toBeHidden();
   const row = page.getByRole('row', { name: 'Open Repair 0', exact: true });
   await expect(row).toBeVisible();
   const add = await page.getByRole('button', { name: 'Add entry', exact: true }).boundingBox();
+  const more = await page.getByRole('button', { name: /More filters and actions/ }).boundingBox();
   const search = await page.getByPlaceholder('Search expenses…').boundingBox();
-  // Visible filters can wrap between search and actions in the same toolbar.
-  expect(add.y).toBeGreaterThanOrEqual(search.y - 3);
+  expect(Math.abs(add.y - search.y)).toBeLessThan(4);
+  expect(Math.abs(more.y - add.y)).toBeLessThan(4);
+  const truckChevron = await page.getByLabel('Expense truck', { exact: true }).evaluate(select => {
+    const icon = select.parentElement?.querySelector('svg');
+    const selectBox = select.getBoundingClientRect();
+    const iconBox = icon?.getBoundingClientRect();
+    return { appearance: getComputedStyle(select).appearance, rightInset: iconBox ? selectBox.right - iconBox.right : 0 };
+  });
+  expect(truckChevron.appearance).toBe('none');
+  expect(truckChevron.rightInset).toBeGreaterThanOrEqual(10);
   expect(add.y + add.height).toBeLessThan((await page.locator('table').boundingBox()).y);
   expect(add.y).toBeGreaterThan((await page.getByText('Filtered total', { exact: true }).boundingBox()).y);
   await expect(row.getByText('$12.50')).toHaveAttribute('title', 'Paid: $5.00\nRemaining: $7.50');
@@ -234,6 +254,7 @@ try {
   entries[1] = { ...entries[1], accountingVerified: false, verifications: [] };
   entries[2] = { ...entries[2], accountingVerified: true, verifications: [...entries[2].verifications, { id: 'filter-accountant', role: 'accountant', userId: 'user', userName: 'Entry User' }] };
   await page.reload();
+  await openExpenseActions();
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('true');
   await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(2);
   await expect(page.getByLabel('Admin verification', { exact: true })).toHaveCount(0);
@@ -241,7 +262,7 @@ try {
   await page.getByLabel('Accountant verification', { exact: true }).selectOption('false');
   await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Accountant verification', { exact: true })).toBeHidden();
   await page.getByRole('row', { name: 'Open Repair 1', exact: true }).getByRole('button', { name: 'Verify', exact: true }).click();
   await expect(page.getByRole('row', { name: 'Open Repair 1', exact: true })).toHaveCount(0);
   await page.keyboard.press('Control+z');
@@ -251,7 +272,9 @@ try {
   entries[3] = { ...entries[3], unitNumber: '102', driverName: 'Owner Driver', paymentType: 'Retired card', paidBy: 'Former Payer', coveredBy: 'Broker' };
   await page.reload();
   for (const [, label, value] of [['Unit / driver','Expense truck','102'],['Unit / driver','Expense driver','Owner Driver'],['Payment','Expense payment type','Retired card'],['Payment','Expense paid by','Former Payer'],['Responsibility','Expense responsibility','Broker']]) {
-    await page.getByLabel(label, { exact: true }).selectOption(value);
+    const control = page.getByLabel(label, { exact: true });
+    if (!(await control.isVisible())) await openExpenseActions();
+    await control.selectOption(value);
     await expect(page.getByRole('row', { name: /^Open Repair/ })).toHaveCount(1);
     await expect(page.getByRole('row', { name: 'Open Repair 3', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -261,6 +284,13 @@ try {
   verificationRole = ''; await page.reload();
   await expect(page.getByRole('button', { name: 'Verify', exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
+  await openExpenseActions();
+  const mobileActions = await expenseActions.boundingBox();
+  expect(mobileActions.x).toBeGreaterThanOrEqual(0);
+  expect(mobileActions.x + mobileActions.width).toBeLessThanOrEqual(390);
+  expect(mobileActions.y).toBeGreaterThanOrEqual(0);
+  expect(mobileActions.y + mobileActions.height).toBeLessThanOrEqual(844);
+  await page.keyboard.press('Escape');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(verified).toEqual(['expense-0', 'expense-1', 'expense-2', 'expense-1']);
   await page.setViewportSize({width:1280,height:1000});

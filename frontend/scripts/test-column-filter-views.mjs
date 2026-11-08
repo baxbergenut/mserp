@@ -17,7 +17,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(url => !url.pathname.startsWith('/login'));
   const views = [
-    ['/expenses', null, ['Expense date from', 'Expense date to', 'Expense truck', 'Expense driver', 'Expense category', 'Expense payment type', 'Expense paid by', 'Expense responsibility', 'Accountant verification', 'Admin verification']],
+    ['/expenses', null, ['Expense date from', 'Expense date to', 'Expense truck', 'Expense driver', 'Expense category'], ['Expense payment type', 'Expense paid by', 'Expense responsibility', 'Accountant verification']],
     ['/drivers', null, ['Show terminated drivers']],
     ['/investors', null, ['Show company']],
     ['/fleet/trailers', null, ['Storage location', 'Trailer availability', 'Trailer condition', 'Record status']],
@@ -37,37 +37,55 @@ try {
     ['/accounting/driver-pay', null, ['Dispatcher']],
     ['/accounting/investor-pay', null, ['Dispatcher']],
   ];
-  for (const [path, tab, labels] of views) {
+  for (const [path, tab, labels, overflowLabels = []] of views) {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(access.base + path);
     if (tab) await page.getByRole(tab[0], { name: tab[1], exact: true }).click();
     const filters = page.getByRole('group', { name: 'Table filters', exact: true });
     for (const label of labels) await expect(filters.getByLabel(label, { exact: true })).toBeVisible();
+    const overflow = page.getByRole('group', { name: 'Expense filters and actions', exact: true });
+    if (overflowLabels.length) {
+      await expect(overflow).toBeHidden();
+      await page.getByRole('button', { name: /More filters and actions/ }).click();
+      for (const label of overflowLabels) await expect(overflow.getByLabel(label, { exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+    }
     await expect(page.locator('thead select, thead input[type=date], thead button[aria-label^="Filter "]')).toHaveCount(0);
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))));
+      if (overflowLabels.length) await page.getByRole('button', { name: /More filters and actions/ }).click();
       for (const label of labels) {
         const box = await filters.getByLabel(label, { exact: true }).boundingBox();
         expect(box.x, `${path}: ${label} left at ${width}`).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width, `${path}: ${label} right at ${width}`).toBeLessThanOrEqual(width + 1);
       }
+      for (const label of overflowLabels) {
+        const box = await overflow.getByLabel(label, { exact: true }).boundingBox();
+        expect(box.x, `${path}: ${label} left at ${width}`).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width, `${path}: ${label} right at ${width}`).toBeLessThanOrEqual(width + 1);
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${path} wraps at ${width}`).toBe(true);
+      if (overflowLabels.length) await page.keyboard.press('Escape');
     }
     console.log(`Visible toolbar filters: ${path} ${tab?.[1] ?? ''}`);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(access.base + '/expenses');
+  await page.getByRole('button', { name: /More filters and actions/ }).click();
   await page.getByLabel('Accountant verification').selectOption('false');
-  await page.getByLabel('Admin verification').selectOption('true');
+  await page.keyboard.press('Escape');
   await page.reload();
+  await page.getByRole('button', { name: /More filters and actions/ }).click();
   await expect(page.getByLabel('Accountant verification')).toHaveValue('false');
-  await expect(page.getByLabel('Admin verification')).toHaveValue('true');
+  await page.keyboard.press('Escape');
   await page.getByPlaceholder('Search expenses…').fill('no matching expense toolbar check');
   await expect(page.getByText('No entries match these filters.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Expense category')).toBeVisible();
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await page.getByRole('button', { name: /More filters and actions/ }).click();
   await expect(page.getByLabel('Accountant verification')).toHaveValue('');
+  await page.keyboard.press('Escape');
   await expect(page.getByPlaceholder('Search expenses…')).toHaveValue('');
   await page.screenshot({ path: join(tmpdir(), 'mserp-toolbar-filters-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 1000 });
