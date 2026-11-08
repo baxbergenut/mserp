@@ -36,8 +36,9 @@ try {
  await page.goto(access.base+'/accounting/dispatcher-pay');
  const section=page.getByRole('region',{name:dispatcherName,exact:true});
  await expect(section.getByRole('table')).toHaveCount(0);
- await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
+ const summaryRow=section.locator(':scope > tr').first();await expect(summaryRow).toHaveClass(/cursor-pointer/);await summaryRow.locator('td').nth(1).click();
  await expect(section.getByRole('table')).toBeVisible();
+ await expect(section.getByRole('columnheader',{name:'Driver / truck',exact:true})).toHaveClass(/!bg-zinc-950/);
  await expect(section.locator('[aria-label^="Gross tier 1:"]')).toHaveAttribute('title',/\$7,500\.00.*\$9,000\.00/);
  await expect(section.locator('[aria-label^="RPM tier 1:"]')).toHaveAttribute('title',/\$2\.20.*\$2\.31/);
  for(const name of ['Actual gross tier','Selected gross tier','Credited gross','Adjusted gross']) await expect(section.getByRole('columnheader',{name,exact:true})).toHaveCount(0);
