@@ -92,5 +92,5 @@ were reproduced on the unchanged deployed worktree, then updated to the already
 shipped independent financial-input contract. No application calculation was
 changed for that test repair.
 
-No migration has been applied to production; no code has been committed, pushed,
-or deployed as part of this implementation.
+Production rollout uses the approved main-branch CI deployment. Verify migration
+206 and the installed release after activation; never test writes on live records.
