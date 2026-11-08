@@ -36,7 +36,8 @@ try {
  await page.goto(access.base+'/accounting/dispatcher-pay');
  const section=page.getByRole('region',{name:dispatcherName,exact:true});
  await expect(section.getByRole('table')).toHaveCount(0);
- const summaryRow=section.locator(':scope > tr').first();await expect(summaryRow).toHaveClass(/cursor-pointer/);await summaryRow.locator('td').nth(1).click();
+ const summaryRow=section.locator(':scope > tr').first();await expect(summaryRow).toHaveClass(/cursor-pointer/);await expect(summaryRow.locator(':scope > th button svg')).not.toHaveClass(/rotate-180/);await summaryRow.locator('td').nth(0).click();
+ await expect(summaryRow.locator(':scope > th button svg')).toHaveClass(/rotate-180/);
  await expect(section.getByRole('table')).toBeVisible();
  await expect(section.getByRole('columnheader',{name:'Driver / truck',exact:true})).toHaveClass(/!bg-zinc-950/);
  await expect(section.locator('[aria-label^="Gross tier 1:"]')).toHaveAttribute('title',/\$7,500\.00.*\$9,000\.00/);
@@ -87,6 +88,7 @@ try {
  await page.getByRole('dialog').getByLabel('Home days',{exact:true}).fill('0');
  await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(section).toContainText('$85.00');
+ await expect(summaryRow.locator(':scope > th, :scope > td')).toHaveCount(6);await expect(summaryRow.locator(':scope > td').nth(4).getByRole('button',{name:'Finalize',exact:true})).toBeVisible();
  await section.getByRole('button',{name:'Finalize',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Finalize',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(section).toContainText('Finalized');
@@ -98,7 +100,7 @@ try {
  sql(`UPDATE gross_board_entries SET entered_original_rate=10000,entered_miles=4000 WHERE driver_id='${driver}';`);
  await page.reload();await expect(section).toContainText('Source values changed');await expect(section).toContainText('$85.00');
  await expect(section.getByRole('button',{name:`Edit home days for ${driverName}`})).toBeDisabled();
- await section.getByRole('button',{name:'Reopen',exact:true}).click();
+ await summaryRow.click({button:'right'});await page.getByRole('menuitem',{name:'Reopen dispatcher',exact:true}).click();
  await expect(page.getByRole('dialog').getByLabel('Reason',{exact:true})).toHaveCount(0);
  await page.getByRole('dialog').getByRole('button',{name:'Reopen',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(section).toContainText('$100.00');await expect(section.getByText('Draft',{exact:true})).toHaveCount(0);

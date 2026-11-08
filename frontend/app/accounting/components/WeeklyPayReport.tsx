@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Banknote, ChevronDown, CircleDollarSign, Headset, Pencil, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
@@ -12,6 +12,7 @@ import { PageHeader } from "@/app/components/PageHeader";
 import { FinalizationCard } from "./FinalizationCard";
 import { MetricCard } from "@/app/components/MetricCard";
 import { DispatcherPaySkeleton } from "@/app/components/WeeklyTableSkeleton";
+import { StatementMenu } from "../driver-pay/StatementMenu";
 import { Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { usePermissions } from "@/app/lib/access";
 import { changeDispatcherPayStatement, fetchDispatcherCommissionRules, fetchDispatcherPay, saveDispatcherCommissionRules, saveDispatcherPayInput } from "@/app/lib/api";
@@ -47,6 +48,8 @@ export function WeeklyPayReport() {
   const [effectiveWeek, setEffectiveWeek] = useState("");
   const [ruleRevision, setRuleRevision] = useState(0);
   const [statementAction, setStatementAction] = useState<{ action: "finalize" | "reopen"; statement: DispatcherCommissionStatement } | null>(null);
+  const [statementMenu, setStatementMenu] = useState<{ statement: DispatcherCommissionStatement; x: number; y: number } | null>(null);
+  const closeStatementMenu = useCallback(() => setStatementMenu(null), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,17 +121,16 @@ export function WeeklyPayReport() {
     {!loading && report && tab === "pay" && <>
       {statements.some(s => s.rows.some(row => row.issues.length > 0)) && <p role="status" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-amber-400">Review flagged rows before finalizing.</p>}
       <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0 text-left text-[13px]" aria-label="Weekly dispatcher pay">
-        <colgroup><col style={{ width: "25%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "16%" }} /><col style={{ width: "15%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /></colgroup>
-        <thead><tr className="h-8 bg-zinc-900 text-[11px] text-zinc-500">{["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by", ""].map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
-        {visible.length === 0 && <tbody><tr><td colSpan={7} className="p-8 text-center text-zinc-500">No Gross Board loads in this week.</td></tr></tbody>}
-        {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key); const toggleStatement = () => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); return <tbody key={key} role="region" aria-label={s.dispatcherName}>
-          <tr className={`h-9 cursor-pointer text-xs text-zinc-300 ${open ? "bg-zinc-950" : "bg-zinc-900 hover:bg-zinc-800/70"}`} onClick={toggleStatement}>
-            <td className="border-b border-zinc-800 px-3"><button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="flex min-h-8 w-full min-w-0 items-center gap-3 text-left hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500" onClick={event => { event.stopPropagation(); toggleStatement(); }}><ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} /><span className="truncate font-medium">{s.dispatcherName}</span>{s.finalized && <span className="ml-auto text-xs text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}</button></td>
-            <td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.rows.length}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.loadCount}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{money.format(s.gross)}</td><td className="border-b border-zinc-800 px-3 text-right font-mono font-semibold tabular-nums">{money.format(s.pay)}</td><td className="border-b border-zinc-800 px-3 text-right text-xs text-zinc-300">{s.finalized ? s.finalizedBy || "Unknown" : "—"}</td>
-            <td className="border-b border-zinc-800 px-3 text-right">{s.dispatcherId && permissions.includes(s.finalized ? "dispatcher_pay.reopen" : "dispatcher_pay.finalize") && <button className={button} disabled={busy || (!s.finalized && s.rows.some(row => row.issues.length > 0))} onClick={event => { event.stopPropagation(); setStatementAction({ action: s.finalized ? "reopen" : "finalize", statement: s }); setError(""); }}>{s.finalized ? "Reopen" : "Finalize"}</button>}</td>
+        <colgroup><col style={{ width: "28%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "18%" }} /><col style={{ width: "17%" }} /><col style={{ width: "19%" }} /></colgroup>
+        <thead><tr className="h-8 bg-zinc-900 text-[11px] text-zinc-500">{["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by"].map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
+        {visible.length === 0 && <tbody><tr><td colSpan={6} className="p-8 text-center text-zinc-500">No Gross Board loads in this week.</td></tr></tbody>}
+        {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key), canReopen = !!s.dispatcherId && s.finalized && permissions.includes("dispatcher_pay.reopen"); const toggleStatement = () => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); return <tbody key={key} role="region" aria-label={s.dispatcherName}>
+          <tr className={`h-9 cursor-pointer text-xs text-zinc-300 ${open ? "bg-zinc-950" : "bg-zinc-900 hover:bg-zinc-800/70"}`} onClick={toggleStatement} onContextMenu={event => { if (canReopen) { event.preventDefault(); setStatementMenu({ statement: s, x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (canReopen && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setStatementMenu({ statement: s, x: rect.left + 12, y: rect.bottom }); } }}>
+            <th scope="row" className="border-b border-zinc-800 px-3 py-0 text-left font-medium"><div className="flex h-9 w-full items-center gap-2 text-left text-zinc-100"><button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500"><ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} /></button><span className="truncate">{s.dispatcherName}</span>{s.finalized && <span className="ml-auto text-[10px] text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}</div></th>
+            <td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.rows.length}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{s.loadCount}</td><td className="border-b border-zinc-800 px-3 text-right font-mono tabular-nums">{money.format(s.gross)}</td><td className="border-b border-zinc-800 px-3 text-right font-mono font-semibold tabular-nums">{money.format(s.pay)}</td><td className="border-b border-zinc-800 px-3 text-right text-xs text-zinc-300">{s.finalized ? s.finalizedBy || "Unknown" : s.dispatcherId && permissions.includes("dispatcher_pay.finalize") ? <button className={button} disabled={busy || s.rows.some(row => row.issues.length > 0)} onClick={event => { event.stopPropagation(); setStatementAction({ action: "finalize", statement: s }); setError(""); }}>Finalize</button> : "—"}</td>
           </tr>
-          {s.sourceChanged && <tr><td colSpan={7} className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</td></tr>}
-          {open && <tr id={`dispatcher-${key}`} className="bg-zinc-950"><td colSpan={7} className="border-b border-zinc-700 bg-zinc-950 p-0">
+          {s.sourceChanged && <tr><td colSpan={6} className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-400">Source values changed. Reopen to recalculate.</td></tr>}
+          {open && <tr id={`dispatcher-${key}`} className="bg-zinc-950"><td colSpan={6} className="border-b border-zinc-700 bg-zinc-950 p-0">
         {!s.dispatcherId && <p className="px-3 py-2 text-amber-400">Assign a dispatcher in Gross Board.</p>}
         <div className="overflow-x-auto bg-zinc-950"><table className="w-full min-w-[960px] text-left text-[13px]">
           <thead className="bg-zinc-950 text-xs text-zinc-400"><tr>{["Driver / truck", "Gross", "Miles", "RPM", "Home days", "Gross tier", "RPM tier", "Rate", "Commission", ""].map((label, i) => <th key={i} className={`!bg-zinc-950 px-3 py-2 font-medium ${i > 0 && i < 9 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
@@ -157,6 +159,7 @@ export function WeeklyPayReport() {
     {statementAction && <Modal title={`${statementAction.action === "finalize" ? "Finalize" : "Reopen"} · ${statementAction.statement.dispatcherName}`} isSaving={busy} submitLabel={statementAction.action === "finalize" ? "Finalize" : "Reopen"} onClose={() => setStatementAction(null)} onSubmit={e => { e.preventDefault(); void mutate(() => changeDispatcherPayStatement(statementAction.action, { weekStart: currentWeek, dispatcherId: statementAction.statement.dispatcherId, revision: statementAction.statement.revision, version: statementAction.statement.version }), () => setStatementAction(null)); }}>
       <div className="space-y-4">{modalError}<p>{weekLabel(currentWeek)} · {money.format(statementAction.statement.pay)}</p><p className="text-zinc-400">{statementAction.action === "finalize" ? "Save the reviewed inputs, commission rules and calculated amounts as a finalized statement." : "Reopening recalculates this statement using current Gross Board values, weekly inputs and effective rules."}</p></div>
     </Modal>}
+    {statementMenu && <StatementMenu x={statementMenu.x} y={statementMenu.y} label="Reopen dispatcher" disabled={busy} onClose={closeStatementMenu} onSelect={() => { setStatementAction({ action: "reopen", statement: statementMenu.statement }); setError(""); }} />}
     {ruleDraft && <Modal title="Commission rules" wide isSaving={busy} submitLabel="Save revision" onClose={() => setRuleDraft(null)} onSubmit={e => { e.preventDefault(); void mutate(() => saveDispatcherCommissionRules({ expectedRevision: ruleRevision, effectiveWeek, rules: ruleDraft }), () => setRuleDraft(null)); }}>
       <div className="space-y-4">{modalError}<div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs">Effective starting week<input className={controlClass} type="date" required value={effectiveWeek} onChange={e => setEffectiveWeek(e.target.value)} /></label>

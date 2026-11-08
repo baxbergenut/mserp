@@ -3,12 +3,12 @@ export function SkeletonBar({ className = "" }: { className?: string }) {
 }
 
 export function DispatcherPaySkeleton() {
-  const headers = ["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by", ""];
+  const headers = ["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by"];
   return <div role="status" aria-label="Loading dispatcher pay" aria-busy="true" className="overflow-hidden rounded-lg border border-zinc-800">
     <span className="sr-only">Loading dispatcher pay…</span>
-    <table aria-hidden="true" className="w-full min-w-[960px] table-fixed border-separate border-spacing-0"><colgroup><col style={{ width: "25%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "16%" }} /><col style={{ width: "15%" }} /><col style={{ width: "14%" }} /><col style={{ width: "12%" }} /></colgroup>
+    <table aria-hidden="true" className="w-full min-w-[960px] table-fixed border-separate border-spacing-0"><colgroup><col style={{ width: "28%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "18%" }} /><col style={{ width: "17%" }} /><col style={{ width: "19%" }} /></colgroup>
       <thead><tr className="h-8 bg-zinc-900 text-left text-[11px] text-zinc-500">{headers.map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
-      <tbody>{Array.from({ length: 8 }, (_, row) => <tr key={row} className="h-10 bg-zinc-900/20">{headers.map((_, col) => <td key={col} className={`border-b border-zinc-800/70 px-3 ${col >= 1 ? "text-right" : ""}`}><SkeletonBar className={`h-3 max-w-full ${col === 0 ? row % 2 ? "w-28" : "w-36" : col === 6 ? "w-16" : "w-14"}`} /></td>)}</tr>)}</tbody>
+      <tbody>{Array.from({ length: 8 }, (_, row) => <tr key={row} className="h-10 bg-zinc-900/20">{headers.map((_, col) => <td key={col} className={`border-b border-zinc-800/70 px-3 ${col >= 1 ? "text-right" : ""}`}><SkeletonBar className={`h-3 max-w-full ${col === 0 ? row % 2 ? "w-28" : "w-36" : col === 5 ? "w-16" : "w-14"}`} /></td>)}</tr>)}</tbody>
     </table>
   </div>;
 }
