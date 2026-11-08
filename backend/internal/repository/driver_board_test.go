@@ -140,6 +140,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testDriverBoardHistory(t, ctx, pool, repo, fleet)
 			testDriverBoardLoads(t, ctx, pool, repo, fleet)
 			testBoardQueueWindow(t, ctx, pool, repo, fleet)
+			testBoardInTransitQueue(t, ctx, pool, repo, fleet)
 			testManualNextLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)
 			testBoardProgress(t, ctx, pool, repo, fleet)

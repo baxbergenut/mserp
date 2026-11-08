@@ -113,6 +113,31 @@ try {
   await expect(panel.getByText('Remove this plan in Gross Board.', { exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
   await page.screenshot({ path: '../artifacts/overdue-load-window.png', fullPage: true });
+  // An upstream In Transit plan leaves Next and remains below Current in history.
+  // An in-transit driver/current load must not suppress its other pending plans.
+  full = { ...full, current: { ...current, sourceStatus: 'in_transit' }, next: [later], earlier: [earlier, { ...next, sourceStatus: ' In Transit ', overdue: false }], revision: 'in-transit-history' };
+  entry = { ...entry, status: 'ENROUTE' };
+  await push();
+  await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toHaveText('LATER');
+  await expect(panel.locator('[data-queued-load]')).toHaveCount(1);
+  await expect(panel.locator('[data-queued-load="NEXT"]')).toHaveCount(0);
+  const transitHistory = panel.getByRole('button', { name: 'NEXT · In Transit load', exact: true });
+  await expect(transitHistory).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'CURRENT · Current load', exact: true })).toBeVisible();
+  const labels = await panel.getByRole('region', { name: 'Load sequence' }).locator('article > div > button[aria-expanded]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
+  expect(labels.indexOf('NEXT · In Transit load')).toBeGreaterThan(labels.indexOf('CURRENT · Current load'));
+  await expect(transitHistory).not.toContainText('Overdue');
+  await page.screenshot({ path: '../artifacts/in-transit-load-history.png', fullPage: true });
+  await panel.getByLabel('Add next load', { exact: true }).fill('NEXT');
+  await panel.getByRole('button', { name: 'Add next load', exact: true }).click();
+  await expect(panel.getByRole('alert')).toHaveText('This load is already listed. Use its existing entry.');
+  expect(mutations).toBe(0);
+  await panel.getByLabel('Add next load', { exact: true }).fill('');
+  full = { ...full, current, next: [next, later], earlier: [earlier], revision: 'in-transit-cleared' };
+  entry = { ...entry, status: 'DISPATCHED' };
+  await push();
+  await expect(panel.locator('[data-queued-load]')).toHaveCount(2);
+  await expect(panel.getByRole('button', { name: 'NEXT', exact: true })).toBeVisible();
   // A manual identity backed by Gross Board is protected too. Once Gross
   // removes that backing, a refreshed capability exposes manual-only removal.
   full = { ...full, next: [{ ...next, manual: true, canRemoveFromQueue: false }, later], revision: 'gross-backed-manual' };

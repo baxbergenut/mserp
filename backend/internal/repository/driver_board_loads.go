@@ -183,7 +183,20 @@ func boardLoadQueueStart(from string) string {
 }
 
 func boardPlanQueued(p BoardLoad, s boardLoadState, from string) bool {
-	return p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID]
+	return !boardLoadInTransit(p) && (p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID])
+}
+
+func boardLoadInTransit(p BoardLoad) bool {
+	// DataTruck often retains In transit after delivery. Exclude these loads
+	// from Next without completing them or clearing an explicit current load.
+	// A driver's dispatch status says nothing about other queued plans.
+	if p.LoadID != nil {
+		switch strings.ToLower(strings.TrimSpace(p.SourceStatus)) {
+		case "in_transit", "in transit", "in-transit":
+			return true
+		}
+	}
+	return false
 }
 
 func (r *DriverBoardRepository) loadStartDate(from string) string {
@@ -619,7 +632,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				if p.Completed && sourceUnavailable {
 					p.Warning = ""
 				}
-				p.CanRestoreToQueue = completedHere && !sourceUnavailable &&
+				p.CanRestoreToQueue = completedHere && !sourceUnavailable && !boardLoadInTransit(p) &&
 					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] && p.CanRemoveFromQueue {
@@ -725,6 +738,11 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		}
 		for _, list := range [][]BoardLoad{view.Next, view.Hidden, view.Unavailable, s.Manual} {
 			if hasBoardNumber(list, number) {
+				return result, ErrBoardLoadSelection
+			}
+		}
+		for _, p := range view.Earlier {
+			if boardLoadInTransit(p) && strings.EqualFold(strings.TrimSpace(p.Number), number) {
 				return result, ErrBoardLoadSelection
 			}
 		}

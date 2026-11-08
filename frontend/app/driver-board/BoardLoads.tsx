@@ -11,6 +11,7 @@ import { useLoadQueueDrag } from "./useLoadQueueDrag";
 
 const buttonClass = "rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40";
 const time = (value: string) => value ? new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Unknown";
+const inTransitLoad = (load: BoardLoad) => load.loadId !== null && ["in_transit", "in transit", "in-transit"].includes(load.sourceStatus.trim().toLowerCase());
 
 function CopyLoadNumber({ number }: { number: string }) {
   const [feedback, setFeedback] = useState("");
@@ -117,7 +118,8 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   function loadCard(load: BoardLoad, kind: "next" | "current" | "completed" | "earlier", index = -1) {
     const open = expanded === load.planId;
     const current = kind === "current";
-    const status = current ? "Current" : kind === "completed" ? "Completed" : load.overdue ? "Overdue" : "";
+    const inTransit = kind === "earlier" && inTransitLoad(load);
+    const status = current ? "Current" : kind === "completed" ? "Completed" : inTransit ? "In Transit" : load.overdue ? "Overdue" : "";
     const draggable = kind === "next" && canEdit && drag.queue.length > 1 && !locked;
     return <article key={load.planId} data-queued-load={kind === "next" ? load.planId : undefined}
       onPointerDown={draggable ? event => drag.start(event, load.planId) : undefined}
@@ -151,7 +153,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
           event.preventDefault();
           const value = number.trim();
           if (!value || locked) return;
-          const existing = [view.current, ...view.next, ...view.hidden, ...view.unavailable].find(load => load?.number.trim().toLowerCase() === value.toLowerCase());
+          const existing = [view.current, ...view.next, ...view.hidden, ...view.unavailable, ...view.earlier.filter(inTransitLoad)].find(load => load?.number.trim().toLowerCase() === value.toLowerCase());
           if (existing) {
             setError(existing.canRestoreToQueue ? "Open the completed load and use Restore to queue." : "This load is already listed. Use its existing entry.");
             return;

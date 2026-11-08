@@ -1584,8 +1584,14 @@ assignment lookup lists.
   identical business numbers with distinct records remain separate. Unmatched
   plans stay visible. Next loads include this New York Monday-Sunday week, the
   preceding Saturday/Sunday and future plans. Earlier days in that window remain
-  in Next with an Overdue label. Older plans stay in Earlier unless explicitly
-  restored; current selections stay visible. Completion, cancellation, removal
+  in Next with an Overdue label. Loads whose own DataTruck status is In transit
+  stay out of Next, including manual/restored plans; they remain inspectable in
+  Earlier, below current with an In Transit label. Explicit current selections
+  stay visible. This does not complete loads, alter Gross Board, or suppress
+  unmatched/pending plans based on a driver's separate dispatch status. Completed
+  In transit loads cannot restore to Next; history entries cannot be re-added as
+  duplicate manual plans. Older plans stay in Earlier unless explicitly restored;
+  current selections stay visible. Completion, cancellation, removal
   safeguards remain. Gross Board plans cannot be hidden from Status Board; remove
   the plan in Gross Board. The API rejects hide even through a manual duplicate,
   and legacy hidden Gross plans reappear on read. Manual-only queue entries keep

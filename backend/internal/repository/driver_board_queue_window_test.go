@@ -11,6 +11,7 @@ import (
 )
 
 func TestBoardLoadQueueWindow(t *testing.T) {
+	loadID := 1
 	for _, tc := range []struct{ instant, start string }{
 		{"2026-11-09T04:59:59Z", "2026-10-31"}, // Sunday in New York
 		{"2026-11-09T05:00:00Z", "2026-11-07"}, // Monday in New York
@@ -35,6 +36,13 @@ func TestBoardLoadQueueWindow(t *testing.T) {
 		{BoardLoad{Date: "2026-11-20"}, true},
 		{BoardLoad{Date: "2026-01-01", Manual: true}, true},
 		{BoardLoad{Date: "2026-01-01", PlanID: "restored"}, true},
+		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: "in_transit"}, false},
+		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: " In Transit "}, false},
+		{BoardLoad{Date: "2026-11-20", LoadID: &loadID, SourceStatus: "IN-TRANSIT"}, false},
+		{BoardLoad{Manual: true, LoadID: &loadID, SourceStatus: "in_transit"}, false},
+		{BoardLoad{Date: "2026-01-01", PlanID: "restored", LoadID: &loadID, SourceStatus: "in_transit"}, false},
+		{BoardLoad{Date: "2026-11-09", SourceStatus: "in_transit"}, true}, // Unmatched is not proof of transit.
+		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: "Dispatched"}, true},
 	} {
 		state := boardLoadState{RestoredPlans: map[string]bool{"restored": true}}
 		if got := boardPlanQueued(tc.load, state, "2026-11-09"); got != tc.want {
