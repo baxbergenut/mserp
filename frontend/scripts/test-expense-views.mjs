@@ -27,6 +27,7 @@ settings.push(...['Cash', 'EFS'].map(name => ({id:'method-'+name,kind:'payment_m
 const blankDraft = { company: 'Wrong company', categoryId: 'maintenance', expenseDate: '2026-09-28', truckId: 'investor-truck', driverId: 'hired', unitNumber: '101', driverName: 'Hired Driver', amount: '12.50', paymentType: '', expenseType: 'Repair', referenceNumber: '', description: '', coveredBy: 'Company', paidBy: 'Invented payer' };
 let drafts = [{...blankDraft,costBreakdown:[{name:'Oil change',amount:'10.10'},{name:'Shop supplies',amount:'2.40'}]}];
 const writes = [];
+const extractionRequests = [];
 const applicants = [{ id: 'applicant-001', fullName: 'Hiring Applicant', status: 'applied' }];
 let applicantReads = 0;
 const receiptUploads = [];
@@ -56,6 +57,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/lookups/','/').slice(4);
+    if (path === '/expenses/extract') extractionRequests.push(route.request().postDataBuffer()?.toString('utf8') ?? '');
     if (path.endsWith('/external-settlements')) return route.fulfill({ json: [] });
     if (route.request().method() === 'POST' && ['/expenses', '/expenses/bulk'].includes(path)) {
       writes.push(route.request().postDataJSON()); await route.fulfill({ status: 201, json: { id: 'created-' + writes.length } }); return;
@@ -107,6 +109,9 @@ try {
   await expect(page.getByText('Review entry 1 of 1. Each item is saved separately.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toHaveCount(0);
   await expect(page.getByText('page-receipt.txt', { exact: true })).toBeVisible();
+  expect(extractionRequests).toHaveLength(1);
+  expect(extractionRequests[0]).toContain('filename="page-receipt.txt"');
+  expect(extractionRequests[0]).toContain('page receipt');
   expect(writes).toHaveLength(0);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   // A webhook arrives after the page loaded, before opening the expense form.
@@ -155,6 +160,9 @@ try {
   expect(Math.abs(browse.y - analyze.y)).toBeLessThan(3);
   await page.getByRole('button', { name: 'Analyze', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toHaveCount(0);
+  expect(extractionRequests).toHaveLength(2);
+  expect(extractionRequests[1]).toContain('filename="receipt.txt"');
+  expect(extractionRequests[1]).toContain('receipt');
   await expect(page.getByLabel('Paid by', { exact: true })).toHaveValue('Entry User');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Truck Owner');
   await page.screenshot({ path: join(tmpdir(), 'mserp-expense-modal.png'), fullPage: true });

@@ -12,7 +12,7 @@ import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type S
 import { createPortal } from "react-dom";
 import Link from "@/app/components/AccessLink";
 
-import { Check, ChevronDown, Ellipsis, FileUp, Settings, Trash2, WalletCards, X } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, FileUp, LoaderCircle, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   uploadExpenseDocument,
@@ -142,6 +142,7 @@ export default function ExpensesPage() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [pageDropFile, setPageDropFile] = useState<File | null>(null);
   const [pageDropActive, setPageDropActive] = useState(false);
+  const [pageDropReading, setPageDropReading] = useState(false);
   const pageDragDepth = useRef(0);
   const [uploadError, setUploadError] = useState("");
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
@@ -381,7 +382,7 @@ export default function ExpensesPage() {
     setPage(1);
   }
 
-  const pageDropEnabled = !isLoading && createCategoryIds.length > 0 && editing === undefined && !verificationDetails && !pendingDelete && !aiBusy;
+  const pageDropEnabled = !isLoading && createCategoryIds.length > 0 && editing === undefined && !verificationDetails && !pendingDelete && !aiBusy && !pageDropReading;
 
   function isFileDrag(event: DragEvent<HTMLElement>) {
     return event.dataTransfer.types.includes("Files");
@@ -406,7 +407,7 @@ export default function ExpensesPage() {
     if (pageDragDepth.current === 0) setPageDropActive(false);
   }
 
-  function handlePageDrop(event: DragEvent<HTMLDivElement>) {
+  async function handlePageDrop(event: DragEvent<HTMLDivElement>) {
     if (!pageDropEnabled || !isFileDrag(event)) return;
     event.preventDefault();
     pageDragDepth.current = 0;
@@ -417,21 +418,40 @@ export default function ExpensesPage() {
       setError("Attach one file at a time. A single file can still contain several transactions.");
       return;
     }
-    const validationError = expenseAttachmentError(droppedFiles[0]);
+    const droppedFile = droppedFiles[0];
+    const validationError = expenseAttachmentError(droppedFile);
     if (validationError) {
       setError(validationError);
       return;
     }
-    openCreateFromDrop(droppedFiles[0]);
+    setPageDropReading(true);
+    setError("");
+    try {
+      const data = await droppedFile.arrayBuffer();
+      const stableFile = new File([data], droppedFile.name, {
+        type: droppedFile.type,
+        lastModified: droppedFile.lastModified,
+      });
+      const stableValidationError = expenseAttachmentError(stableFile);
+      if (stableValidationError) {
+        setError(stableValidationError);
+        return;
+      }
+      openCreateFromDrop(stableFile);
+    } catch {
+      setError("The dropped file could not be read. Try dropping it again or use Browse in Add entry.");
+    } finally {
+      setPageDropReading(false);
+    }
   }
 
   return (
     <div data-testid="expenses-drop-target" className="min-h-[calc(100dvh-7rem)] space-y-5 animate-fade-in" onDragEnter={handlePageDragEnter} onDragOver={handlePageDragOver} onDragLeave={handlePageDragLeave} onDrop={handlePageDrop}>
 
-      {pageDropActive && createPortal(<div className="pointer-events-none fixed inset-3 z-[70] flex items-center justify-center rounded-2xl border-2 border-dashed border-blue-400 bg-zinc-950/90 backdrop-blur-sm" role="status" aria-live="polite">
+      {(pageDropActive || pageDropReading) && createPortal(<div className="pointer-events-none fixed inset-3 z-[70] flex items-center justify-center rounded-2xl border-2 border-dashed border-blue-400 bg-zinc-950/90 backdrop-blur-sm" role="status" aria-live="polite">
         <div className="flex flex-col items-center gap-3 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/15 text-blue-400"><FileUp className="h-6 w-6" aria-hidden="true" /></span>
-          <div><p className="text-base font-semibold text-zinc-100">Drop to add expense</p><p className="mt-1 text-xs text-zinc-400">We’ll analyze the file and open a draft for review.</p></div>
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/15 text-blue-400">{pageDropReading ? <LoaderCircle className="h-6 w-6 animate-spin" aria-hidden="true" /> : <FileUp className="h-6 w-6" aria-hidden="true" />}</span>
+          <div><p className="text-base font-semibold text-zinc-100">{pageDropReading ? "Reading expense file…" : "Drop to add expense"}</p><p className="mt-1 text-xs text-zinc-400">We’ll analyze the file and open a draft for review.</p></div>
         </div>
       </div>, document.body)}
 
