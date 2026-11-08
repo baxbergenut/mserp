@@ -32,6 +32,7 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
+	Overdue           bool        `json:"overdue,omitempty"`
 	Completed         bool        `json:"completed,omitempty"`
 	CanRestoreToQueue bool        `json:"canRestoreToQueue,omitempty"`
 	Manual            bool        `json:"manual,omitempty"`
@@ -163,6 +164,24 @@ const boardPlansSQL = `(SELECT driver_id,service_date,0 AS slot,false AS deleted
 func boardLoadToday(now time.Time) string {
 	loc, _ := time.LoadLocation("America/New_York")
 	return now.In(loc).Format(time.DateOnly)
+}
+
+// Gross Board and queue windows use New York calendar dates. FromDate stays
+// today for stale editor/midnight fencing, separately from queue eligibility.
+func boardLoadWeekStart(from string) string {
+	day, _ := time.Parse(time.DateOnly, from)
+	return day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
+}
+
+// Carry the previous Saturday/Sunday through the whole current week. Older
+// plans remain inspectable in Earlier unless deliberately restored.
+func boardLoadQueueStart(from string) string {
+	week, _ := time.Parse(time.DateOnly, boardLoadWeekStart(from))
+	return week.AddDate(0, 0, -2).Format(time.DateOnly)
+}
+
+func boardPlanQueued(p BoardLoad, s boardLoadState, from string) bool {
+	return p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID]
 }
 
 func (r *DriverBoardRepository) loadStartDate(from string) string {
@@ -381,7 +400,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		return nil, err
 	}
 	day, _ := time.Parse(time.DateOnly, from)
-	week := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
+	week := boardLoadWeekStart(from)
 	weekEnd := day.AddDate(0, 0, 7-(int(day.Weekday())+6)%7).Format(time.DateOnly)
 	result := map[string]BoardLoads{}
 	states := map[string]boardLoadState{}
@@ -556,7 +575,17 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 		for _, key := range s.Completed {
 			completed[key] = true
 		}
-		for _, p := range plans[id] {
+		// An older duplicate must not hide the same source's eligible plan.
+		// Manual identities keep precedence; otherwise retain date/slot order.
+		queuePlans := slices.Clone(plans[id])
+		sort.SliceStable(queuePlans, func(i, j int) bool {
+			a, b := queuePlans[i], queuePlans[j]
+			if a.Manual != b.Manual {
+				return a.Manual
+			}
+			return boardPlanQueued(a, s, from) && !boardPlanQueued(b, s, from)
+		})
+		for _, p := range queuePlans {
 			if p.PlanID == "" {
 				continue
 			}
@@ -581,9 +610,10 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				view.Unavailable = append(view.Unavailable, p)
 			} else if hidden[p.PlanID] {
 				view.Hidden = append(view.Hidden, p)
-			} else if !p.Manual && p.Date < from && !s.RestoredPlans[p.PlanID] {
+			} else if !boardPlanQueued(p, s, from) {
 				view.Earlier = append(view.Earlier, p)
 			} else {
+				p.Overdue = !p.Manual && p.Date < from
 				view.Next = append(view.Next, p)
 			}
 		}
@@ -977,7 +1007,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		}
 		if a.Action == "restore" {
 			for _, p := range view.Hidden {
-				if p.PlanID == a.PlanID && (p.Manual || p.Date >= view.FromDate || s.RestoredPlans[p.PlanID]) {
+				if p.PlanID == a.PlanID && boardPlanQueued(p, s, view.FromDate) {
 					next = append(next, p)
 				}
 			}

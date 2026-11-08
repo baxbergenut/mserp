@@ -1582,10 +1582,12 @@ assignment lookup lists.
   never activate/advance loads. Current selection is explicit and retained with
   a warning after source removal/reassignment. Unique linked loads deduplicate;
   identical business numbers with distinct records remain separate. Unmatched
-  plans stay visible. Next loads start today in New York and include future plans. Older unfinished
-  plans are shown separately and may still be explicitly selected as current.
-  Older current selections stay visible; custom ordering cannot make past plans
-  upcoming. The server clamps stale cutoff dates and rejects stale midnight actions.
+  plans stay visible. Next loads include this New York Monday-Sunday week, the
+  preceding Saturday/Sunday and future plans. Earlier days in that window remain
+  in Next with an Overdue label. Older plans stay in Earlier unless explicitly
+  restored; current selections stay visible. Completion, cancellation, removal
+  and hidden-state safeguards remain. The window advances only on Monday. The
+  server clamps stale cutoff dates and rejects stale midnight actions.
   Gross Board controls planned assignment;
   DataTruck driver mismatches warn instead of dropping or moving plans. Finished
   next loads remain inspectable; finished current loads are not auto-cleared.

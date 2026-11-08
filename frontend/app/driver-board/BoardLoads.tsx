@@ -117,7 +117,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   function loadCard(load: BoardLoad, kind: "next" | "current" | "completed" | "earlier", index = -1) {
     const open = expanded === load.planId;
     const current = kind === "current";
-    const status = current ? "Current" : kind === "completed" ? "Completed" : "";
+    const status = current ? "Current" : kind === "completed" ? "Completed" : load.overdue ? "Overdue" : "";
     const draggable = kind === "next" && canEdit && drag.queue.length > 1 && !locked;
     return <article key={load.planId} data-queued-load={kind === "next" ? load.planId : undefined}
       onPointerDown={draggable ? event => drag.start(event, load.planId) : undefined}

@@ -104,6 +104,17 @@ try {
   await expect(panel.getByText('Removed from queue (1)', { exact: true })).toBeVisible();
   await expect(panel.getByText('Unavailable loads (1)', { exact: true })).toBeVisible();
 
+  // Overdue plans remain visible in both the table and live-updated queue.
+  full = { ...full, next: [{ ...next, date: '2026-10-27', overdue: true }, later], revision: 'overdue' };
+  await push();
+  await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toContainText('Overdue');
+  await expect(panel.getByRole('button', { name: 'NEXT · Overdue load', exact: true })).toBeVisible();
+  await page.screenshot({ path: '../artifacts/overdue-load-window.png', fullPage: true });
+  full = { ...full, next: [next, later], revision: 'overdue-cleared' };
+  await push();
+  await expect(panel.getByRole('button', { name: 'NEXT', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).not.toContainText('Overdue');
+
   const sequence = panel.getByRole('region', { name: 'Load sequence' });
   const cards = sequence.getByRole('button', { name: /^(LATER|NEXT|CURRENT · Current load|DELIVERED · Completed load|COMPLETED-HERE · Completed load|EARLIER)$/ });
   const historyOrder = [/^CURRENT/, /^DELIVERED/, /^COMPLETED-HERE/, 'EARLIER'];

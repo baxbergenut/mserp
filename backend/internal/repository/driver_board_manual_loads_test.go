@@ -154,7 +154,7 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 		t.Fatal("ambiguous source guessed", p)
 	}
 	// An earlier Gross Board plan can still be entered as the next dispatch.
-	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES($1,$2,1,'EARLIER-NEXT')`, d.ID, now.AddDate(0, 0, -1).Format(time.DateOnly))
+	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES($1,$2,1,'EARLIER-NEXT')`, d.ID, now.AddDate(0, 0, -14).Format(time.DateOnly))
 	r = act(BoardLoadAction{Action: "add", Number: "EARLIER-NEXT"})
 	if len(r.Loads.Next) != 2 || r.Loads.Next[1].Number != "EARLIER-NEXT" || !r.Loads.Next[1].Manual {
 		t.Fatal("earlier plan blocked manual dispatch", r)

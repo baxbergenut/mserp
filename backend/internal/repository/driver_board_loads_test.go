@@ -162,8 +162,8 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err = pool.QueryRow(ctx, `SELECT sum(original_rate)::text FROM gross_board_entries WHERE driver_id=$1`, d.ID).Scan(&sum); err != nil || sum != "9000.00" {
 		t.Fatal("operational actions changed accounting", sum, err)
 	}
-	// Current-week defaults must not pull in the previous week, even when an
-	// older current load is retained for review across the week boundary.
+	// The queue window excludes older history while retaining an explicit
+	// current load across the week boundary. The preceding weekend is included.
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES
  ($1,'2026-09-21','OLD-WEEK'),($1,'2026-09-29','OLD-OTHER')`, d.ID)
 	for _, week := range []string{"2026-09-28", "2026-10-05"} {
@@ -178,12 +178,12 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 			t.Fatalf("week window or retained current changed: %+v", loads)
 		}
 		for _, p := range loads.Next {
-			if p.Date < week {
+			if p.Date < boardLoadQueueStart(week) {
 				t.Fatalf("previous-week plan appeared in next loads: %+v", p)
 			}
 		}
 	}
-	// Midnight changes queue eligibility, even for an explicitly ordered plan.
+	// Midnight invalidates stale actions but retains unfinished same-week plans.
 	v = view()
 	order := []string{}
 	for _, p := range v.Next {
@@ -200,13 +200,13 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("rollover lost current", v)
 	}
 	for _, p := range v.Next {
-		if p.Date < v.FromDate {
-			t.Fatal("old ordered plan still upcoming", p)
+		if p.Date < boardLoadQueueStart(v.FromDate) {
+			t.Fatal("historical ordered plan still upcoming", p)
 		}
 	}
 	var earlier *BoardLoad
 	for _, p := range v.Earlier {
-		if p.Number == "PLAN-C" {
+		if p.Number == "OLD-WEEK" {
 			copy := p
 			earlier = &copy
 		}
