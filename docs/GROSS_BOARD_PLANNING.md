@@ -5,6 +5,12 @@ destination. Loads can be selected from DataTruck or entered manually before a
 provider match exists. Notes and destinations are dispatch planning only and can
 coexist with any load on the same driver/day.
 
+When a day contains only a custom status/note or planned destination, planning
+fills the day cell instead of showing empty load and amount fields. If both
+planning kinds exist, they share that space. Existing loads, fixed statuses,
+amounts, transfers and per-load notes retain their normal layout with planning
+below. Add entry still opens the chooser to add a load or another planning kind.
+
 Typing in a load cell creates an unconfirmed local draft. Select a DataTruck
 result, a fixed status shortcut, or Add as manual load before it changes a load
 slot. Daily loads cannot Apply while typed text is still unconfirmed. Escape

@@ -114,10 +114,10 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       return true;
   }
 
-  const planning = useDayPlanning({ entries: planningEntries, driverId, driverName, date, week, readOnly, onAddLoad: () => openEditor(displayed.some(entry => !!(entry.loadNumber || entry.dayStatus || entry.originalRate || entry.driverRate || entry.miles))), onSaved: onPlanningSaved });
+  const { planning, fullDay, dialog: planningDialog } = useDayPlanning({ fullDayEligible: visible.length === 0, entries: planningEntries, driverId, driverName, date, week, readOnly, onAddLoad: () => openEditor(displayed.some(entry => !!(entry.loadNumber || entry.dayStatus || entry.originalRate || entry.driverRate || entry.miles))), onSaved: onPlanningSaved });
 
   return <>
-    {displayed.length === 1 ? <DayCell planning={planning} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
+    {fullDay ? <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={blank.slot} id={cellId} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span>
         {!readOnly && displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
       </div>
@@ -130,6 +130,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${(name === "driver rate" ? driverNeedsReview : needsReview) ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
       {planning}
     </td>}
+    {planningDialog && createPortal(<div className="mserp-ui">{planningDialog}</div>, document.body)}
     {displayed.length > 1 && notes.popup}
     {hover && createPortal(<div id={tooltipId} role="tooltip" style={hover} className="pointer-events-none fixed z-50 w-[480px] rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 ui-popover">
       <div className="mb-2 flex justify-between"><span>{driverName} · {date}</span><span className="text-zinc-500">{readOnly ? "Click to inspect" : "Click to edit"}</span></div>

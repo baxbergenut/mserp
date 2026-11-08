@@ -30,8 +30,8 @@ const names = { note: "Status / note", destination: "Planned destination" };
 
 // State belongs to DaySummaryCell, not its single/grouped load subtree.
 // Changing the load count must not remount drafts or an in-flight save.
-export function useDayPlanning({ entries, driverId, driverName, date, week, readOnly, onAddLoad, onSaved }: {
-  entries: GrossBoardPlanningEntry[]; driverId: string; driverName: string; date: string; week: string; readOnly: boolean;
+export function useDayPlanning({ entries, driverId, driverName, date, week, readOnly, fullDayEligible, onAddLoad, onSaved }: {
+  entries: GrossBoardPlanningEntry[]; driverId: string; driverName: string; date: string; week: string; readOnly: boolean; fullDayEligible: boolean;
   onAddLoad: () => void; onSaved: (entries: GrossBoardPlanningEntry[]) => void;
 }) {
   const userId = useContext(CurrentUserIDContext);
@@ -87,21 +87,29 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   };
   const choose = (type: GrossBoardPlanningKind) => { setKind(type); setOpen(true); patch({ error: "", notice: "" }); };
 
-  return <div data-gross-planning className="border-t border-zinc-800/70 px-1 py-1 text-left font-sans text-xs" onContextMenu={event => event.stopPropagation()}>
+  // Use the same saved/draft view as the labels, including clear drafts until saved.
+  // Never replace a day that still has load, status, financial or per-load note content.
+  const fullDay = fullDayEligible && kinds.some(type => !!saved(type).text || (!readOnly && !!drafts[type]));
+  const planning = <div data-gross-planning data-gross-planning-full-day={fullDay || undefined}
+    className={fullDay ? "flex h-full min-h-48 flex-col px-1 py-1 font-sans text-xs" : "border-t border-zinc-800/70 px-1 py-1 text-left font-sans text-xs"}
+    onContextMenu={event => event.stopPropagation()}>
+    <div className={fullDay ? "flex flex-1 flex-col" : undefined}>
     {kinds.map(type => {
       const entry = readOnly ? saved(type) : drafts[type] ?? saved(type);
       if (!entry.text && !drafts[type]) return null;
-      return <button type="button" key={type} aria-label={names[type] + " for " + driverName + ", " + date} title={entry.text}
-        className="block w-full rounded px-1 py-1 text-left text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-400"
+      return <button type="button" key={type} data-grid-action={fullDay || undefined} aria-label={names[type] + " for " + driverName + ", " + date} title={entry.text}
+        className={`w-full min-w-0 rounded text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-400 ${fullDay ? "flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-center" : "block px-1 py-1 text-left"}`}
         onClick={() => choose(type)}>
         <span className="block text-[11px] text-zinc-400">{type === "note" ? "Note" : "Destination"}{!readOnly && drafts[type] ? " · Unsaved" : ""}</span>
-        <span className="line-clamp-2 whitespace-pre-wrap break-words">{entry.text || "Clear entry"}</span>
+        <span className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${fullDay ? "line-clamp-4 w-full font-medium" : "line-clamp-2"}`}>{entry.text || "Clear entry"}</span>
       </button>;
     })}
+    </div>
     {!readOnly && <button type="button" aria-label={"Add entry for " + driverName + ", " + date}
       className="min-h-8 w-full rounded px-1 text-left text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-400"
       onClick={() => { setKind(""); patch({ error: "", notice: "" }); setOpen(true); }}>+ Add entry</button>}
-    {open && <BoardDialog title="Day entry" onClose={() => setOpen(false)}>
+  </div>;
+  const dialog = open && <BoardDialog title="Day entry" onClose={() => setOpen(false)}>
       <div data-gross-editor-day={driverId + ":" + date}><p className="mb-4 text-xs text-zinc-400">{driverName} · {date}</p>
       {!readOnly && <fieldset className="mb-4"><legend className="mb-2 text-xs text-zinc-400">Entry type</legend>
         <div className="flex flex-wrap gap-2">
@@ -129,6 +137,6 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
         </div>
         {!readOnly && drafts[kind] && <p className="mt-3 text-xs text-zinc-400">Closing keeps your draft in this tab. Cancel discards this draft.</p>}
       </>}
-    </div></BoardDialog>}
-  </div>;
+    </div></BoardDialog>;
+  return { planning, fullDay, dialog };
 }
