@@ -173,7 +173,9 @@ jobs:
 
       - name: Check gross board calculations and autosave
         working-directory: frontend
-        run: node scripts/test-gross-board.mjs
+        run: |
+          node scripts/test-gross-board.mjs
+          node scripts/test-gross-board-planning-helpers.mjs
 
       - name: Check driver board autosave
         working-directory: frontend
@@ -250,6 +252,8 @@ jobs:
         env:
           MSERP_INVESTOR_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/mserp_assignment_history_test?sslmode=disable
         run: |
+          node scripts/test-gross-board-planning.mjs
+          node scripts/test-status-board-loads.mjs
           node scripts/test-gross-board-daily-loads.mjs
           node scripts/test-gross-board-reliability.mjs
           node scripts/test-investors-e2e.mjs --gross-partial-only
