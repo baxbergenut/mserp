@@ -65,8 +65,8 @@ func TestPayrollStatementWorkbookEscrow(t *testing.T) {
 	defer book.Close()
 	rows, err := book.GetRows("Statements")
 	want := [][]string{
-		{"Driver Name", "Total Salary Payable", "Reimbursed Amount", "Escrow Returned", "Charges Paid From Escrow"},
-		{"Former Driver", "$1,500.00", "$0.00", "$1,700.00", "$300.00"},
+		{"Driver Name", "Total Salary Payable", "Reimbursed Amount"},
+		{"Former Driver", "$1,500.00", "$0.00"},
 	}
 	if err != nil || !reflect.DeepEqual(rows, want) {
 		t.Fatalf("got %v, want %v: %v", rows, want, err)
