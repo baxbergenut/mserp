@@ -11,6 +11,7 @@ interface MetricCardProps {
   compact?: boolean;
   loading?: boolean;
   progress?: { value: number; description: string };
+  hideLabel?: boolean;
 }
 
 export function MetricCard({
@@ -19,6 +20,7 @@ export function MetricCard({
   delta,
   loading = false,
   progress,
+  hideLabel = false,
 }: MetricCardProps) {
   return (
     <div
@@ -47,7 +49,7 @@ export function MetricCard({
         <p className="ui-metric-value text-zinc-100">
           {loading ? <SkeletonBar className="h-5 w-24 align-middle" /> : value}
         </p>
-        <p className="mt-1 text-xs text-zinc-400">{label}</p>
+        {!hideLabel && <p className="mt-1 text-xs text-zinc-400">{label}</p>}
         {progress && <div className="mt-2">
           <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={loading ? undefined : progress.value} aria-valuetext={loading ? "Loading" : progress.description} className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
             <div className="h-full rounded-full bg-emerald-500" style={{ width: `${loading ? 0 : progress.value}%` }} />

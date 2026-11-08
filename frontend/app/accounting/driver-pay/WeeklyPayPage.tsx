@@ -14,7 +14,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, CloudCheck, Download, Ellipsis, UserRound } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronDown, CloudCheck, Download, Ellipsis, UserRound } from "lucide-react";
 import { changeDriverPayMembership, APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
 import { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } from "../payrollWeek";
@@ -504,11 +504,11 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <HeaderPinButton iconOnly pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-        <select aria-label="Payroll week" className={controlClass + " !h-8 !w-auto !py-0 font-mono"} value={week} disabled={finalizing || busy} onChange={event => switchWeek(event.target.value)}>
+        <div className="relative shrink-0"><select aria-label="Payroll week" className={controlClass + " appearance-none !h-8 !w-auto !py-0 !pr-9 font-mono"} value={week} disabled={finalizing || busy} onChange={event => switchWeek(event.target.value)}>
           {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>
             {options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}
           </optgroup>)}
-        </select>
+        </select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" /></div>
         <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
         <button type="button" className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button>
       </div>

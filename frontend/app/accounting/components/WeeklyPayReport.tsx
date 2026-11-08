@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, ChevronDown, CircleDollarSign, Headset, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, Banknote, ChevronDown, CircleDollarSign, Headset, Pencil, Plus, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -13,7 +13,7 @@ import { FinalizationCard } from "./FinalizationCard";
 import { MetricCard } from "@/app/components/MetricCard";
 import { DispatcherPaySkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { StatementMenu } from "../driver-pay/StatementMenu";
-import { Modal, controlClass } from "@/app/components/management/ManagementUI";
+import { ManagementSearch, Modal, controlClass } from "@/app/components/management/ManagementUI";
 import { usePermissions } from "@/app/lib/access";
 import { changeDispatcherPayStatement, fetchDispatcherCommissionRules, fetchDispatcherPay, saveDispatcherCommissionRules, saveDispatcherPayInput } from "@/app/lib/api";
 import type { DispatcherCommissionReport, DispatcherCommissionRow, DispatcherCommissionRules, DispatcherCommissionRuleVersion, DispatcherCommissionStatement } from "@/app/lib/types";
@@ -35,7 +35,7 @@ export function WeeklyPayReport() {
   const weekOptions = useMemo(() => payrollWeekGroups([...availableWeeks, week, latestWeek]), [availableWeeks, week, latestWeek]);
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
   const [tab, setTab] = useState("pay");
-  const [dispatcher, setDispatcher] = useState("");
+  const [search, setSearch] = useViewState("page:search", "");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -87,7 +87,8 @@ export function WeeklyPayReport() {
     setLoading(true); setReport(null); setError(""); setNotice(""); setOpened(new Set()); setWeek(next);
   }
   const statements = report?.statements ?? [];
-  const visible = statements.filter(s => !dispatcher || s.dispatcherId === dispatcher).sort((a, b) => Number(a.finalized) - Number(b.finalized));
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visible = statements.filter(s => !normalizedSearch || [s.dispatcherName, ...s.rows.flatMap(row => [row.driverName, ...row.truckUnits])].some(value => value.toLocaleLowerCase().includes(normalizedSearch))).sort((a, b) => Number(a.finalized) - Number(b.finalized));
   const currentWeek = report?.weekStart ?? week;
   const lockedDrivers = new Set(statements.filter(s => s.finalized).flatMap(s => s.rows.map(row => row.driverId)));
   const selectedRules = rules.filter((version, index) => rules.findIndex(v => v.effectiveWeek === version.effectiveWeek) === index);
@@ -103,17 +104,18 @@ export function WeeklyPayReport() {
     </div>
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Payroll week" className={`${controlClass} !h-8 !w-auto !py-0 font-mono`} value={week} disabled={busy || loading} onChange={event => switchWeek(event.target.value)}>
+        <div className="relative shrink-0"><select aria-label="Payroll week" className={`${controlClass} appearance-none !h-8 !w-auto !py-0 !pr-9 font-mono`} value={week} disabled={busy || loading} onChange={event => switchWeek(event.target.value)}>
           {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>{options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}</optgroup>)}
-        </select>
+        </select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" /></div>
         <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
         <button type="button" className={button} disabled={busy || loading || week === latestWeek} onClick={() => switchWeek(latestWeek)}>Last week</button>
       </div>
-      <div role="tablist" aria-label="Dispatcher pay views" className="flex h-8 items-center rounded-lg border border-zinc-800 bg-card p-0.5 text-xs">
-        <button type="button" role="tab" aria-selected={tab === "pay"} className={`h-[26px] rounded-md px-3 ${tab === "pay" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"}`} onClick={() => setTab("pay")}>Weekly pay</button>
-        <button type="button" role="tab" aria-selected={tab === "rules"} className={`h-[26px] rounded-md px-3 ${tab === "rules" ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"}`} onClick={() => setTab("rules")}>Commission rules</button>
+      <div className="flex min-w-0 flex-[1_1_22rem] items-center gap-2">
+        {tab === "pay" && <div className="min-w-28 flex-1 [&_input]:h-8 [&_input]:py-0"><ManagementSearch value={search} onChange={setSearch} placeholder="Dispatcher, driver, or truck…" /></div>}
+        <button type="button" className={`${button} ml-auto shrink-0`} onClick={() => { setTab(tab === "pay" ? "rules" : "pay"); setError(""); }}>
+          {tab === "pay" ? <Settings aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />}{tab === "pay" ? "Commission rules" : "Back to weekly pay"}
+        </button>
       </div>
-      {tab === "pay" && <select aria-label="Dispatcher" className={`${controlClass} ml-auto !h-8 !w-auto !min-w-48 !max-w-64 !py-0`} value={dispatcher} onChange={e => setDispatcher(e.target.value)}><option value="">All dispatchers</option>{statements.filter(s => s.dispatcherId).map(s => <option key={s.dispatcherId} value={s.dispatcherId}>{s.dispatcherName}</option>)}</select>}
     </div>
     {notice && <p role="status" className="text-emerald-400">{notice}</p>}
     {error && !editing && !ruleDraft && !statementAction && <div className="flex items-center gap-3">{modalError}<button className={button} onClick={() => { setLoading(true); void fetchDispatcherPay({ weekStart: week || undefined }).then(value => { setReport(value); setAvailableWeeks(value.availableWeeks); setError(""); }).catch(e => setError(message(e))).finally(() => setLoading(false)); }}>Retry</button></div>}
@@ -123,7 +125,7 @@ export function WeeklyPayReport() {
       <div className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[960px] table-fixed border-separate border-spacing-0 text-left text-[13px]" aria-label="Weekly dispatcher pay">
         <colgroup><col style={{ width: "28%" }} /><col style={{ width: "9%" }} /><col style={{ width: "9%" }} /><col style={{ width: "18%" }} /><col style={{ width: "17%" }} /><col style={{ width: "19%" }} /></colgroup>
         <thead><tr className="h-8 bg-zinc-900 text-[11px] text-zinc-500">{["Dispatcher", "Drivers", "Loads", "Gross", "Commission", "Finalized by"].map((label, index) => <th key={index} className={`border-b border-zinc-800 px-3 font-medium ${index >= 1 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
-        {visible.length === 0 && <tbody><tr><td colSpan={6} className="p-8 text-center text-zinc-500">No Gross Board loads in this week.</td></tr></tbody>}
+        {visible.length === 0 && <tbody><tr><td colSpan={6} className="p-8 text-center text-zinc-500">{normalizedSearch ? "No matching dispatchers." : "No Gross Board loads in this week."}</td></tr></tbody>}
         {visible.map(s => { const key = s.dispatcherId || "unassigned", open = opened.has(key), canReopen = !!s.dispatcherId && s.finalized && permissions.includes("dispatcher_pay.reopen"); const toggleStatement = () => setOpened(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); return <tbody key={key} role="region" aria-label={s.dispatcherName}>
           <tr className={`h-9 cursor-pointer text-xs text-zinc-300 ${open ? "bg-zinc-950" : "bg-zinc-900 hover:bg-zinc-800/70"}`} onClick={toggleStatement} onContextMenu={event => { if (canReopen) { event.preventDefault(); setStatementMenu({ statement: s, x: event.clientX, y: event.clientY }); } }} onKeyDown={event => { if (canReopen && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); setStatementMenu({ statement: s, x: rect.left + 12, y: rect.bottom }); } }}>
             <th scope="row" className="border-b border-zinc-800 px-3 py-0 text-left font-medium"><div className="flex h-9 w-full items-center gap-2 text-left text-zinc-100"><button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${s.dispatcherName}`} aria-expanded={open} aria-controls={`dispatcher-${key}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500"><ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} /></button><span className="truncate">{s.dispatcherName}</span>{s.finalized && <span className="ml-auto text-[10px] text-emerald-400" title={s.finalizedAt ? new Date(s.finalizedAt).toLocaleString() : undefined}>Finalized</span>}</div></th>

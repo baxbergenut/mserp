@@ -79,7 +79,7 @@ try {
     await expect(progress).toHaveAttribute('aria-valuenow', '25');
     await expect(progress).toHaveAttribute('aria-valuetext', '1 of 4 statements finalized');
     await expect(page.locator('.ui-metric')).toHaveCount(3);
-    await expect(page.locator('.ui-metric').nth(2)).toContainText('Finalization');
+    await expect(page.locator('.ui-metric').nth(2).getByText('Finalization', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Loads needing review', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Payroll Reviewer', { exact: true })).toBeVisible();
     if (kind !== 'dispatcher') {

@@ -70,7 +70,7 @@ try {
  assert.equal(report.statements.find(s=>s.dispatcherId===dispatcher).pay,0);
  let response=await context.request.put(access.base+'/api/dispatcher-pay/inputs',{headers:{'x-csrf-token':csrf,origin:access.base},data:{weekStart:week,driverId:driver,homeDays:0,note:'stale',version:0}});
  assert.equal(response.status(),409);
- await page.getByRole('tab',{name:'Commission rules',exact:true}).click();
+ const rulesButton=page.getByRole('button',{name:'Commission rules',exact:true});await expect(page.getByRole('tab')).toHaveCount(0);await expect(rulesButton.locator('svg')).toHaveCount(1);await rulesButton.click();
  await page.getByRole('button',{name:'Edit / schedule rules',exact:true}).first().click();
  let dialog=page.getByRole('dialog');
  await dialog.getByLabel('Effective starting week',{exact:true}).fill(next);
@@ -83,7 +83,7 @@ try {
  const unfinished=await context.request.get(access.base+'/api/dispatcher-pay?weekStart='+next);
  assert.equal(unfinished.status(),400);assert.match(await unfinished.text(),/after the week ends/);
  report=await get('/dispatcher-pay?weekStart='+week);assert.equal(report.rule.rules.tiers[0].brackets[0].percent,1);
- await page.getByRole('tab',{name:'Weekly pay',exact:true}).click();
+ await page.getByRole('button',{name:'Back to weekly pay',exact:true}).click();
  await section.getByRole('button',{name:`Edit home days for ${driverName}`}).click();
  await page.getByRole('dialog').getByLabel('Home days',{exact:true}).fill('0');
  await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();
@@ -108,7 +108,7 @@ try {
  await section.getByRole('button',{name:'Collapse '+dispatcherName,exact:true}).click();await expect(section.getByRole('table')).toHaveCount(0);
  await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
  const weekPicker=page.getByRole('combobox',{name:'Payroll week',exact:true});
- await expect(weekPicker).toHaveValue(week);await expect(weekPicker.locator(`option[value="${week}"]`)).toContainText('→');
+ await expect(weekPicker).toHaveValue(week);await expect(weekPicker).toHaveClass(/appearance-none/);await expect(weekPicker.locator(`option[value="${week}"]`)).toContainText('→');await expect(weekPicker.locator('xpath=..').locator('svg')).toHaveClass(/right-3/);
  await expect(page.getByRole('button',{name:'Last week',exact:true})).toBeDisabled();await expect(section).toBeVisible();
  await section.locator('tbody tr').filter({hasText:driverName}).locator('td').nth(1).click();
  await page.waitForURL(url=>url.pathname==='/gross-board'&&url.searchParams.get('driverId')===driver&&url.searchParams.get('weekStart')===week);
@@ -126,13 +126,14 @@ try {
  await expect(firstRow.locator('td').nth(1)).toHaveText('$10,000.00');await expect(firstRow.locator('td').nth(2)).toHaveText('4,000');
  await expect(firstRow.locator('[aria-label^="Gross tier 3:"]')).toHaveAttribute('title',/Full-week gross \$14,000\.00/);
  const secondSection=page.getByRole('region',{name:secondName,exact:true});await secondSection.getByRole('button',{name:'Expand '+secondName,exact:true}).click();
+ const dispatcherSearch=page.getByLabel('Dispatcher, driver, or truck…',{exact:true});await dispatcherSearch.fill(secondName);await expect(section).toHaveCount(0);await expect(secondSection).toBeVisible();await dispatcherSearch.fill('');await expect(section).toBeVisible();
  const secondRow=secondSection.locator('tbody tr').filter({hasText:driverName});
  await expect(secondRow.locator('td').nth(1)).toHaveText('$4,000.00');await expect(secondRow.locator('td').nth(2)).toHaveText('1,000');await expect(secondRow.locator('td').nth(3)).toHaveText('$4.000');
  await expect(secondRow.locator('[aria-label^="RPM tier 2:"]')).toHaveAttribute('title',/Full-week RPM \$2\.80/);await expect(secondRow.locator('td').nth(8)).toHaveText('$70.00');
  await secondRow.locator('td').nth(1).click();await page.waitForURL(url=>url.pathname==='/gross-board'&&url.searchParams.get('driverId')===driver);await expect(page.locator(`[data-gross-driver="${driver}"][data-gross-field="driver"]`)).toHaveCount(2);await page.goBack();await expect(secondSection.getByRole('table')).toBeVisible();
  const collapseDispatcher=section.getByRole('button',{name:'Collapse '+dispatcherName,exact:true});if(await collapseDispatcher.count())await collapseDispatcher.click();await section.getByRole('button',{name:'Expand '+dispatcherName,exact:true}).click();
  await page.screenshot({path:join(artifacts,'weekly-pay.png'),fullPage:true,animations:'disabled'});
- await page.getByRole('tab',{name:'Commission rules',exact:true}).click();await expect(page.getByRole('heading',{name:'Effective '+next,exact:true})).toBeVisible();await page.screenshot({path:join(artifacts,'commission-rules.png'),fullPage:true});
+ await page.getByRole('button',{name:'Commission rules',exact:true}).click();await expect(page.getByRole('heading',{name:'Effective '+next,exact:true})).toBeVisible();await page.screenshot({path:join(artifacts,'commission-rules.png'),fullPage:true});
  const viewerRole=randomUUID(),viewer=randomUUID(),viewerToken=randomBytes(32).toString('base64url'),viewerCSRF=randomBytes(32).toString('base64url');
  sql(`INSERT INTO app_roles(id,name,permissions) VALUES('${viewerRole}','Commission viewer ${suffix}',ARRAY['dispatcher_pay.read']);INSERT INTO app_users(id,username,email,password_hash,role_id) VALUES('${viewer}','Commission viewer ${suffix}','${viewer}@example.test','$2test','${viewerRole}');INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) VALUES('${viewer}','${createHash('sha256').update(viewerToken).digest('hex')}','${viewerCSRF}',now()+interval '1 hour');`);
  const viewerContext=await browser.newContext({viewport:{width:1200,height:900}});await viewerContext.addCookies([{name:'mserp_session',value:viewerToken,url:access.base,httpOnly:true,sameSite:'Strict'}]);
@@ -143,8 +144,8 @@ try {
   response=await viewerContext.request[method](access.base+'/api/dispatcher-pay/'+path,{headers:{'x-csrf-token':viewerCSRF,origin:access.base},data});assert.equal(response.status(),403,path);
  }
  await expect(viewPage.getByRole('button',{name:`Edit home days for ${driverName}`})).toHaveCount(0);await expect(viewPage.getByRole('button',{name:'Finalize',exact:true})).toHaveCount(0);
- await viewPage.getByRole('tab',{name:'Commission rules',exact:true}).click();await expect(viewPage.getByRole('heading',{name:'Effective '+next,exact:true})).toBeVisible();await expect(viewPage.getByRole('button',{name:'Edit / schedule rules',exact:true})).toHaveCount(0);
- await page.setViewportSize({width:390,height:844});await page.getByRole('tab',{name:'Weekly pay',exact:true}).click();await expect(section).toBeVisible();
+ await viewPage.getByRole('button',{name:'Commission rules',exact:true}).click();await expect(viewPage.getByRole('heading',{name:'Effective '+next,exact:true})).toBeVisible();await expect(viewPage.getByRole('button',{name:'Edit / schedule rules',exact:true})).toHaveCount(0);
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Back to weekly pay',exact:true}).click();await expect(section).toBeVisible();
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'page must not overflow outside the table');
  await page.screenshot({path:join(artifacts,'weekly-pay-mobile.png'),fullPage:true});
  assert.deepEqual(errors,[]);
