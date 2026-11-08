@@ -112,6 +112,7 @@ try {
   expect(extractionRequests).toHaveLength(1);
   expect(extractionRequests[0]).toContain('filename="page-receipt.txt"');
   expect(extractionRequests[0]).toContain('page receipt');
+  expect(extractionRequests[0]).toContain('page-drop');
   expect(writes).toHaveLength(0);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   // A webhook arrives after the page loaded, before opening the expense form.
@@ -163,6 +164,7 @@ try {
   expect(extractionRequests).toHaveLength(2);
   expect(extractionRequests[1]).toContain('filename="receipt.txt"');
   expect(extractionRequests[1]).toContain('receipt');
+  expect(extractionRequests[1]).toContain('modal');
   await expect(page.getByLabel('Paid by', { exact: true })).toHaveValue('Entry User');
   await expect(page.getByLabel('Who will cover')).toHaveValue('Truck Owner');
   await page.screenshot({ path: join(tmpdir(), 'mserp-expense-modal.png'), fullPage: true });

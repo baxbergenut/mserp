@@ -67,12 +67,16 @@ export function ExpenseAIImport({
   onError, onBusyChange,
   initialFile = null,
   analyzeInitialFile = false,
+  autoAnalyzeReady = true,
+  analysisSource = "modal",
 }: {
   onExtracted: (drafts: ExpenseInput[], file: File | null, source: AIExpenseDraft[]) => void;
   onBusyChange?: (value: boolean) => void;
   onError: (message: string) => void;
   initialFile?: File | null;
   analyzeInitialFile?: boolean;
+  autoAnalyzeReady?: boolean;
+  analysisSource?: "modal" | "page-drop";
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -126,7 +130,7 @@ export function ExpenseAIImport({
     setIsAnalyzing(true);onBusyChange?.(true);
     onError("");
     try {
-      const result = await extractExpenses(content, attachment);
+      const result = await extractExpenses(content, attachment, analysisSource);
       if (result.expenses.length === 0) {
         onError("AI could not find an expense in that content. Add more detail or try a clearer file.");
         return;
@@ -138,22 +142,23 @@ export function ExpenseAIImport({
       analysisInFlight.current = false;
       setIsAnalyzing(false);onBusyChange?.(false);
     }
-  }, [onBusyChange, onError, onExtracted]);
+  }, [analysisSource, onBusyChange, onError, onExtracted]);
 
   function analyze() {
     void runAnalysis(text, file);
   }
 
   useEffect(() => {
-    if (!analyzeInitialFile || !initialFile || autoAnalysisStarted.current) return;
+    if (!analyzeInitialFile || !autoAnalyzeReady || !initialFile || autoAnalysisStarted.current) return;
     autoAnalysisStarted.current = true;
     const validationError = expenseAttachmentError(initialFile);
     if (validationError) {
       onError(validationError);
       return;
     }
-    void runAnalysis("", initialFile);
-  }, [analyzeInitialFile, initialFile, onError, runAnalysis]);
+    const timeout = window.setTimeout(() => void runAnalysis("", initialFile), 600);
+    return () => window.clearTimeout(timeout);
+  }, [analyzeInitialFile, autoAnalyzeReady, initialFile, onError, runAnalysis]);
 
   return (
     <section onPaste={handlePaste}>

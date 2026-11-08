@@ -623,6 +623,8 @@ export default function ExpensesPage() {
               <ExpenseAIImport
                 initialFile={pageDropFile}
                 analyzeInitialFile={!!pageDropFile}
+                autoAnalyzeReady={choicesLoaded}
+                analysisSource={pageDropFile ? "page-drop" : "modal"}
                 onError={setError}
                 onBusyChange={setAIBusy}
                 onExtracted={(drafts,file,source) => {

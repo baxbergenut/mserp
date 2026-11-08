@@ -531,6 +531,10 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		Text:        strings.TrimSpace(r.FormValue("text")),
 		MessageDate: expenseSubmissionDate(),
 	}
+	source := strings.TrimSpace(r.FormValue("source"))
+	if source != "page-drop" {
+		source = "modal"
+	}
 	if headers := r.MultipartForm.File["file"]; len(headers) > 0 {
 		data, err := readMultipartFile(headers[0], 20<<20)
 		if err != nil {
@@ -550,6 +554,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 		writeAPIError(w, http.StatusBadRequest, "transaction text or an attachment is required")
 		return
 	}
+	handler.logger.Info("expense extraction input", "source", source, "file_bytes", len(input.FileData), "mime_type", input.MIMEType, "text_chars", len(input.Text))
 
 	settings, err := handler.repo.ListExpenseSettings(r.Context())
 	if err != nil {

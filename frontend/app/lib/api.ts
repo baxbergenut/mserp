@@ -553,10 +553,11 @@ export const createExpenses = (expenses: ExpenseInput[]) =>
     method: "POST",
     body: JSON.stringify({ expenses: expenses.map(expensePayload) }),
   });
-export const extractExpenses = (text: string, file: File | null) => {
+export const extractExpenses = (text: string, file: File | null, source: "modal" | "page-drop" = "modal") => {
   const form = new FormData();
   if (text.trim()) form.append("text", text.trim());
   if (file) form.append("file", file);
+  form.append("source", source);
   return apiRequest<ExpenseExtraction>("/expenses/extract", {
     method: "POST",
     body: form,
