@@ -209,6 +209,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		if a.Context == "" || a.CustomDestination || a.RequiresConfirmation || !a.TelemetrySafe {
 			evidence = ArrivalEvidence{}
 		} else {
+			evidence = recoverCachedArrival(evidence, a.Context, a.travelEvidence, stop)
 			evidence = evaluateArrival(evidence, a.Context, d.Location, stop, now)
 		}
 		body, _ := json.Marshal(evidence)

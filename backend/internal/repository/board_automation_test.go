@@ -243,7 +243,8 @@ func TestArrivalEvidence(t *testing.T) {
 	if lastKnown := evaluateArrival(ArrivalEvidence{}, "one", point(now.Add(-30*time.Minute), inside), stop, now); !lastKnown.Arrived || !lastKnown.LastAt.Equal(now.Add(-30*time.Minute)) {
 		t.Fatal("last-known proximity was discarded")
 	}
-	a = evaluateArrival(a, "one", point(now, inside), stop, now)
+	arrivedAt := now
+	a = evaluateArrival(a, "one", point(arrivedAt, inside), stop, now)
 	if !a.Arrived {
 		t.Fatal("first fresh point inside five miles did not establish proximity")
 	}
@@ -252,12 +253,20 @@ func TestArrivalEvidence(t *testing.T) {
 		t.Fatal("out-of-order sample changed proximity")
 	}
 	a = evaluateArrival(a, "one", point(now.Add(time.Minute), outside), stop, now.Add(time.Minute))
-	if a.Arrived {
-		t.Fatal("first fresh point outside five miles did not clear proximity")
+	if !a.Arrived || !a.LastAt.Equal(arrivedAt) {
+		t.Fatal("leaving the facility cleared or refreshed established arrival")
 	}
 	a = evaluateArrival(a, "one", point(now.Add(2*time.Minute), inside), stop, now.Add(2*time.Minute))
-	if !a.Arrived {
-		t.Fatal("returning within five miles did not restore proximity")
+	if !a.Arrived || !a.LastAt.Equal(arrivedAt) {
+		t.Fatal("later points changed established arrival evidence")
+	}
+	priorRoute := BoardTravel{Source: "five_eld", Context: "one", ReportedAt: now.Add(-time.Minute), Position: &boardRoutePosition{Latitude: inside, Longitude: lng}}
+	recovered := recoverCachedArrival(ArrivalEvidence{Source: "five_eld", Context: "one", LastAt: now.Add(time.Minute)}, "one", priorRoute, stop)
+	if !recovered.Arrived || !recovered.LastAt.Equal(priorRoute.ReportedAt) {
+		t.Fatal("inside-radius cached route did not recover overwritten arrival")
+	}
+	if got := recoverCachedArrival(ArrivalEvidence{}, "two", priorRoute, stop); got.Arrived {
+		t.Fatal("cached arrival crossed stop context")
 	}
 	a = evaluateArrival(a, "two", nil, stop, now)
 	if a.Context != "two" || !a.LastAt.IsZero() {

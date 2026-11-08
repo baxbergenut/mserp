@@ -82,20 +82,25 @@ This action changes no current-load selection, ETA, progress or provider data.
 
 ## Arrival and manual input
 
-The latest provider position within five straight-line miles of the selected stop
-shows @PU/@DEL; a newer position beyond five miles clears the automatic marker.
-This is a proximity signal, not a claim that the truck reached the dock.
+The first provider position within five straight-line miles of the selected stop
+shows @PU/@DEL and latches that marker for the exact load/stop/truck context. A
+newer position beyond five miles does not clear a reached stop; selecting another
+stop, load or truck resets the evidence. This is a proximity signal, not a claim
+that the truck reached the dock.
 It uses the cached GPS coordinates and selected stop coordinates without requiring
 optional road routing. Future/out-of-order positions are ignored. An unchanged
 cached position is re-evaluated after a rule change, including when the provider
 has not sent a new point. Positions older than ten minutes show only last-known
-proximity, with a yellow marker. Automatic
+arrival, with a yellow marker. Later outside positions do not refresh the original
+arrival observation time. Automatic
 proximity requires a uniquely identified assigned truck VIN. Driver/truck assignment identity,
 VIN, trailer, load ID, selected stop and facility coordinates scope evidence.
 
 Fresh proximity displays a green @PU/@DEL prefix. Outdated proximity uses yellow.
 While @PU/@DEL is displayed, the ETA cell hides the retained travel estimate,
-which returns when the automatic marker clears.
+which returns after the operational context advances and the next stop has not yet
+been reached. Exact context-fenced cached route origins inside the same radius can
+recover arrival markers that older releases cleared after departure.
 Time/day remains the normal theme color.
 For a stop without a recognized provider schedule, the prefix appears alone.
 The ETA popup has no arrival or travel mode dropdown. Old saved mode choices are

@@ -130,7 +130,8 @@ type BoardAutomation struct {
 	CustomDestination    bool            `json:"customDestination,omitempty"`
 	Evidence             ArrivalEvidence `json:"-"`
 
-	routeAddress string
+	routeAddress   string
+	travelEvidence BoardTravel
 }
 
 type ArrivalEvidence struct {
@@ -154,6 +155,12 @@ func evaluateArrival(old ArrivalEvidence, key string, location *DriverBoardLocat
 	if old.Context != key || (location != nil && !sameTelemetrySource(old.Source, location.Source)) {
 		old = ArrivalEvidence{Context: key}
 	}
+	// Arrival is stop progress evidence, not a live geofence occupancy flag. Once
+	// observed for this exact load/stop/truck context, retain it until the context
+	// changes instead of clearing it as the driver leaves the facility.
+	if old.Arrived {
+		return old
+	}
 	if location == nil || stop.Latitude == nil || stop.Longitude == nil || location.ReportedAt.IsZero() || location.ReportedAt.Before(old.LastAt) || location.ReportedAt.After(now) {
 		return old
 	}
@@ -164,6 +171,20 @@ func evaluateArrival(old ArrivalEvidence, key string, location *DriverBoardLocat
 	// Staleness is exposed to viewers and never treated as a live observation.
 	old.Arrived = distanceMeters(location.Latitude, location.Longitude, *stop.Latitude, *stop.Longitude) <= boardArrivalRadiusMeters
 	return old
+}
+
+// Earlier releases treated arrival as current geofence occupancy and could
+// overwrite a true marker after the truck departed. A route origin is an exact,
+// context-fenced Five ELD position, so reuse an inside-radius cached origin to
+// recover that prior arrival without guessing from road mileage.
+func recoverCachedArrival(old ArrivalEvidence, key string, travel BoardTravel, stop BoardStop) ArrivalEvidence {
+	if old.Arrived || key == "" || travel.Context != key || travel.Position == nil || travel.ReportedAt.IsZero() || stop.Latitude == nil || stop.Longitude == nil {
+		return old
+	}
+	if distanceMeters(travel.Position.Latitude, travel.Position.Longitude, *stop.Latitude, *stop.Longitude) > boardArrivalRadiusMeters {
+		return old
+	}
+	return ArrivalEvidence{Source: travel.Source, Context: key, Arrived: true, LastAt: travel.ReportedAt}
 }
 
 func sameTelemetrySource(a, b string) bool {
@@ -272,7 +293,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 			sum := sha256.Sum256(body)
 			key = hex.EncodeToString(sum[:])
 		}
-		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key, CustomDestination: address != "", routeAddress: address}
+		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key, CustomDestination: address != "", routeAddress: address, travelEvidence: travel}
 		a.TelemetrySafe = telemetrySafe
 		if selectionInvalid && address == "" {
 			a.Reason = "Review the changed current load selection before automation resumes"

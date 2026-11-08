@@ -883,9 +883,11 @@ positive Reimburse-method expense credits already included in net payable.
   Reads never write board state, history or accounting. Surviving plans with
   changed source IDs and ambiguous/unresolved replacements require review.
   Preserve DataTruck per-stop schedule fields through import serialization. Appointment
-  text is read-only inside ETA; @PU/@DEL replaces travel mileage when the last
-  GPS position was within five straight-line miles of the selected stop,
-  including stops without a provider schedule.
+  text is read-only inside ETA; @PU/@DEL replaces travel mileage after any GPS
+  position reaches five straight-line miles of the selected stop and stays latched
+  for that exact load/stop/truck context, including stops without a provider
+  schedule. Advancing the stop/load/truck resets it; later outside positions do not.
+  Exact context-fenced cached route origins recover markers cleared by older releases.
   Fresh automatic markers are red; stale last-known markers are amber.
   A typed Destination uses a budgeted Google Routes address waypoint. It keeps
   the selected stop's PU/DEL schedule and suspends that stop's arrival marker.
