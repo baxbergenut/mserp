@@ -72,7 +72,7 @@ function focusCell(table: HTMLTableElement, row: number, column: number) {
 export function selectGridCell(event: MouseEvent<HTMLElement>) {
   if (event.defaultPrevented || event.button !== 0) return;
   const target = event.target as HTMLElement;
-  if (excluded(target) || target.closest('button,a,textarea,select,input[type=checkbox],input[type=radio],input[type=file]')) return;
+  if (excluded(target) || target.closest('button:not([data-grid-select]),a,textarea,select,input[type=checkbox],input[type=radio],input[type=file]')) return;
   if (target instanceof HTMLInputElement && document.activeElement === target && !target.readOnly) return;
   const cell = target.closest<Cell>(cellSelector);
   const table = cell?.closest("table");
