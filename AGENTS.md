@@ -3915,15 +3915,16 @@ the existing budget/backoff; manual destination text stays untouched.
 
 ## Relay status-linked fuel policies (208)
 
-- `RELAY_STATUS_POLICY_ENABLED` is off by default. Migration 208 adds durable
-  status ownership/context and sweep progress to existing Relay storage.
-- Current dated team policies follow the main driver's fleet status, with each
-  person's termination/security holds preserved. Never use Gross Board planning.
-- Re-enable requires a confirmed automation-owned disable of the exact assignment;
-  pre-existing/manual disabled policies stay held. Same-state ERP disable revokes
-  ownership. Termination/rehire never restores access; day-10 removal is unchanged.
+- `RELAY_STATUS_POLICY_ENABLED` is off by default. Migration208 adds durable
+  status context and sweep progress to existing Relay storage.
+- Current dated team policies follow the main driver's fleet status. Never use
+  Gross Board planning. Current termination/inactive guards still apply.
+- Explicitly approved status-always-governs includes pre-existing/manual disabled
+  active assignments. No ownership/manual-block exception. Rehired active people
+  with existing assignments follow status; missing accounts are never recreated.
+  Existing termination disable/day10 removal is unchanged.
 - GET `/relay-drivers/status-policy-preview` is cached, read-only and fuel.read
   protected, with snapshot freshness and no sensitive availability labels.
 - A committed receipt precedes each provider PUT. A short per-action fleet fence
   protects source/link races; read-back confirms success. Unknown results hold.
-  See docs/integrations/RELAY_DRIVERS.md for portal limitations and validation.
+  See docs/integrations/RELAY_DRIVERS.md for activation and validation.

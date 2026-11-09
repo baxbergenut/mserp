@@ -458,11 +458,6 @@ func (r *FuelRepository) changeRelayDriverLocked(ctx context.Context, conn *pgxp
 	if (in.Action == "enable" || in.Action == "disable" || in.Action == "unassign") && a == nil {
 		return &RelayDriverValidation{"This driver has no policy assignment."}
 	}
-	if in.RelayDriverID != "" {
-		if _, err = conn.Exec(ctx, `UPDATE relay_driver_operations SET status_ownership_revoked=true WHERE environment=$1 AND relay_driver_id=$2 AND source='fleet_status' AND NOT status_ownership_revoked`, r.relayEnvironment, in.RelayDriverID); err != nil {
-			return err
-		}
-	}
 	if in.Action == "enable" && a.Enabled || in.Action == "disable" && !a.Enabled {
 		return ErrRelayDriverConflict
 	}
@@ -634,22 +629,11 @@ func (r *FuelRepository) VerifyRelayOperation(ctx context.Context, id, actor str
 	if _, err = r.refreshRelayDrivers(ctx, conn); err != nil {
 		return err
 	}
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-	command, err := tx.Exec(ctx, `UPDATE relay_driver_operations SET state='verified',resolved_at=now(),resolved_by=$3 WHERE id=$1 AND environment=$2 AND state='pending' AND created_at<now()-interval '2 minutes'`, id, r.relayEnvironment, actor)
+	command, err := conn.Exec(ctx, `UPDATE relay_driver_operations SET state='verified',resolved_at=now(),resolved_by=$3 WHERE id=$1 AND environment=$2 AND state='pending' AND created_at<now()-interval '2 minutes'`, id, r.relayEnvironment, actor)
 	if err == nil && command.RowsAffected() != 1 {
 		return ErrRelayDriverConflict
 	}
-	if err == nil {
-		_, err = tx.Exec(ctx, `UPDATE relay_driver_operations SET status_ownership_revoked=true WHERE environment=$1 AND source='fleet_status' AND relay_driver_id=(SELECT relay_driver_id FROM relay_driver_operations WHERE id=$2 AND environment=$1)`, r.relayEnvironment, id)
-	}
-	if err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return err
 }
 
 func (r *FuelRepository) LinkRelayRosterDriver(ctx context.Context, relayID, driverID, actor string) (int64, error) {

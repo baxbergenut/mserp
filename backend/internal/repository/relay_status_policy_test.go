@@ -151,52 +151,52 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 			t.Fatal("preview wrote operation", got)
 		}
 	})
-	t.Run("disable enable ownership preserves assignment and usage", func(t *testing.T) {
-		repo, fake, locals := setup("status_owned")
+	t.Run("status transitions preserve assignment and usage", func(t *testing.T) {
+		repo, fake, locals := setup("status_transition")
 		repo.ConfigureRelayStatusPolicy(true)
-		before := *fake.assignments["status_owned"]
-		board(locals["status_owned"], "HOME")
+		before := *fake.assignments["status_transition"]
+		board(locals["status_transition"], "HOME")
 		run(repo)
-		if fake.calls != 1 || fake.assignments["status_owned"].Enabled {
+		if fake.calls != 1 || fake.assignments["status_transition"].Enabled {
 			t.Fatal("status did not disable")
 		}
-		if got := id(`SELECT count(*)::text FROM relay_driver_operations WHERE relay_driver_id='status_owned' AND source='fleet_status' AND state='confirmed' AND status_owned_revision<>'' AND actor_id IS NULL`); got != "1" {
-			t.Fatal("missing owned receipt", got)
+		if got := id(`SELECT count(*)::text FROM relay_driver_operations WHERE relay_driver_id='status_transition' AND source='fleet_status' AND state='confirmed' AND actor_id IS NULL`); got != "1" {
+			t.Fatal("missing system receipt", got)
 		}
 		run(repo)
 		if fake.calls != 1 {
 			t.Fatal("disable replayed")
 		}
-		// Provider usage can advance while disabled; usage is not ownership identity.
-		fake.assignments["status_owned"].Limits[0].Usage = "20"
-		fake.assignments["status_owned"].Limits[0].Remaining = "80"
+		// Provider usage can advance while disabled and must be preserved.
+		fake.assignments["status_transition"].Limits[0].Usage = "20"
+		fake.assignments["status_transition"].Limits[0].Remaining = "80"
 		before.Limits = []relay.PolicyLimit{{Usage: "20", Remaining: "80"}}
-		board(locals["status_owned"], "READY")
+		board(locals["status_transition"], "READY")
 		run(repo)
-		if fake.calls != 2 || !fake.assignments["status_owned"].Enabled {
-			t.Fatal("owned disable was not restored")
+		if fake.calls != 2 || !fake.assignments["status_transition"].Enabled {
+			t.Fatal("READY did not restore disabled assignment")
 		}
 		run(repo)
 		if fake.calls != 2 {
 			t.Fatal("enable replayed")
 		}
-		if !reflect.DeepEqual(before, *fake.assignments["status_owned"]) {
+		if !reflect.DeepEqual(before, *fake.assignments["status_transition"]) {
 			t.Fatal("enable/disable changed assignment or usage")
 		}
 	})
-	t.Run("manual disabled stays held", func(t *testing.T) {
+	t.Run("preexisting disabled assignment follows current ON status", func(t *testing.T) {
 		repo, fake, locals := setup("status_manual")
 		fake.assignments["status_manual"].Enabled = false
 		board(locals["status_manual"], "READY")
 		repo.ConfigureRelayStatusPolicy(true)
 		run(repo)
-		if fake.calls != 0 || fake.assignments["status_manual"].Enabled {
-			t.Fatal("manual disabled assignment enabled")
+		if fake.calls != 1 || !fake.assignments["status_manual"].Enabled {
+			t.Fatal("preexisting disabled assignment was not enabled")
 		}
 		if err := repo.RefreshRelayDrivers(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if got := preview(repo, "status_manual"); got.Action != "manual_block_hold" {
+		if got := preview(repo, "status_manual"); got.Action != "no_change" {
 			t.Fatalf("preview: %+v", got)
 		}
 	})
@@ -270,7 +270,7 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 		exec(`UPDATE relay_driver_operations SET created_at=now()-interval '16 minutes' WHERE relay_driver_id='status_retry' AND source='fleet_status' AND state='failed'`)
 		run(repo)
 		if !fake.assignments["status_retry"].Enabled || fake.calls != calls+1 {
-			t.Fatal("known failed enable lost disable ownership")
+			t.Fatal("known failed enable did not retry after backoff")
 		}
 	})
 	t.Run("reconciliation disabled and missing policy are inert", func(t *testing.T) {
@@ -296,7 +296,7 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 			t.Fatalf("missing assignment: %+v", got)
 		}
 	})
-	t.Run("assignment replacement cannot inherit ownership", func(t *testing.T) {
+	t.Run("replacement assignment follows current ON status", func(t *testing.T) {
 		repo, fake, locals := setup("status_replaced")
 		repo.ConfigureRelayStatusPolicy(true)
 		board(locals["status_replaced"], "HOME")
@@ -305,11 +305,11 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 		board(locals["status_replaced"], "READY")
 		calls := fake.calls
 		run(repo)
-		if fake.calls != calls || fake.assignments["status_replaced"].Enabled {
-			t.Fatal("replacement assignment inherited ownership")
+		if fake.calls != calls+1 || !fake.assignments["status_replaced"].Enabled {
+			t.Fatal("replacement assignment did not follow READY status")
 		}
 	})
-	t.Run("manual same state disable releases ownership", func(t *testing.T) {
+	t.Run("manual same state disable yields to current ON status", func(t *testing.T) {
 		repo, fake, locals := setup("status_manual_again")
 		repo.ConfigureRelayStatusPolicy(true)
 		board(locals["status_manual_again"], "HOME")
@@ -324,8 +324,22 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 		board(locals["status_manual_again"], "READY")
 		calls := fake.calls
 		run(repo)
-		if fake.calls != calls || fake.assignments["status_manual_again"].Enabled {
-			t.Fatal("manual same-state disable was reversed")
+		if fake.calls != calls+1 || !fake.assignments["status_manual_again"].Enabled {
+			t.Fatal("manual same-state disable was not reconciled to READY")
+		}
+		// A successful manual OFF of an enabled assignment is also reconciled.
+		change.RequestID = id(`SELECT gen_random_uuid()::text`)
+		change.Revision = relayRosterEntry(fake.drivers["status_manual_again"], fake.assignments["status_manual_again"]).Revision
+		if err := repo.ChangeRelayDriver(ctx, change, actor); err != nil {
+			t.Fatal(err)
+		}
+		if fake.assignments["status_manual_again"].Enabled {
+			t.Fatal("manual disable did not execute")
+		}
+		calls = fake.calls
+		run(repo)
+		if fake.calls != calls+1 || !fake.assignments["status_manual_again"].Enabled {
+			t.Fatal("manual OFF overrode current READY status")
 		}
 	})
 	t.Run("stale status and relink candidate send nothing", func(t *testing.T) {
@@ -363,8 +377,8 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 		board(replacement, "READY")
 		calls := fake.calls
 		run(repo)
-		if fake.calls != calls || fake.assignments["status_stale"].Enabled {
-			t.Fatal("relink inherited previous person's disable ownership")
+		if fake.calls != calls+1 || !fake.assignments["status_stale"].Enabled {
+			t.Fatal("relinked assignment did not follow current driver READY status")
 		}
 	})
 	for _, change := range []string{"status", "link"} {
@@ -472,21 +486,38 @@ func testRelayStatusPolicy(t *testing.T, parent context.Context, pool *pgxpool.P
 			t.Fatal("next sweep failed to converge to waiting status update")
 		}
 	})
-	t.Run("terminate rehire revokes ownership between sweeps", func(t *testing.T) {
-		repo, fake, locals := setup("status_rehire")
+	t.Run("terminated and inactive stay untouched while rehire follows status", func(t *testing.T) {
+		repo, fake, locals := setup("status_rehire", "status_inactive")
 		repo.ConfigureRelayStatusPolicy(true)
 		board(locals["status_rehire"], "HOME")
+		board(locals["status_inactive"], "HOME")
+		exec(`UPDATE drivers SET active=false WHERE id=$1`, locals["status_inactive"])
 		run(repo)
+		if fake.calls != 1 || fake.assignments["status_rehire"].Enabled || !fake.assignments["status_inactive"].Enabled {
+			t.Fatal("active home or inactive policy handled incorrectly")
+		}
 		exec(`UPDATE drivers SET status='terminated',active=false WHERE id=$1`, locals["status_rehire"])
+		board(locals["status_rehire"], "READY")
+		reads, calls := fake.reads, fake.calls
+		run(repo)
+		if fake.calls != calls || fake.reads != reads {
+			t.Fatal("status worker contacted provider for terminated or inactive driver")
+		}
 		exec(`UPDATE drivers SET status='active',active=true WHERE id=$1`, locals["status_rehire"])
 		board(locals["status_rehire"], "READY")
-		calls := fake.calls
 		run(repo)
-		if fake.calls != calls || fake.assignments["status_rehire"].Enabled {
-			t.Fatal("rehire restored stale policy ownership")
+		if fake.calls != calls+1 || !fake.assignments["status_rehire"].Enabled {
+			t.Fatal("rehired active driver did not follow READY status")
 		}
-		if got := id(`SELECT count(*)::text FROM relay_driver_operations WHERE relay_driver_id='status_rehire' AND source='fleet_status' AND status_ownership_revoked`); got != "1" {
-			t.Fatal("employment cycle did not revoke ownership", got)
+		delete(fake.assignments, "status_rehire")
+		delete(fake.drivers, "status_rehire")
+		if err := repo.RefreshRelayDrivers(ctx); err != nil {
+			t.Fatal(err)
+		}
+		calls = fake.calls
+		run(repo)
+		if fake.calls != calls || len(fake.drivers) != 1 {
+			t.Fatal("rehire recreated a removed provider account")
 		}
 	})
 }

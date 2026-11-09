@@ -42,7 +42,7 @@ type RelayStatusImpact struct {
 }
 
 // Current team routing is date-sensitive, matching the Status Board. Both
-// policies follow the main driver; each retains their own employment/security holds.
+// policies follow the main driver; each retains their own employment restrictions.
 const relayStatusContextSQL = `SELECT d.id::text,main.id::text,d.status,d.active,
  CASE WHEN NOT d.active OR d.status='terminated' THEN 'Left'
  WHEN NOT main.active OR main.status='terminated' THEN 'Left'
@@ -109,17 +109,7 @@ func (r *FuelRepository) relayStatusDecision(ctx context.Context, q relayStatusQ
 		v.Action = "disable"
 		return nil
 	}
-	var owned bool
-	err = q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM relay_driver_operations o WHERE o.environment=$1 AND o.relay_driver_id=$2
- AND o.driver_id=$3 AND o.source='fleet_status' AND o.action='disable' AND o.state='confirmed'
- AND NOT o.status_ownership_revoked AND o.status_owned_revision=$4)`, r.relayEnvironment, v.RelayDriverID, v.DriverID, v.Revision).Scan(&owned)
-	if err != nil {
-		return err
-	}
-	v.Action = "manual_block_hold"
-	if owned {
-		v.Action = "enable"
-	}
+	v.Action = "enable"
 	return nil
 }
 
@@ -294,15 +284,6 @@ func (r *FuelRepository) applyRelayStatusPolicy(ctx context.Context, conn *pgxpo
 	if !fleetEnabled {
 		return nil
 	}
-	if v.Action == "enable" {
-		var owned bool
-		if err = tx.QueryRow(operationCtx, `SELECT EXISTS(SELECT 1 FROM relay_driver_operations WHERE environment=$1 AND relay_driver_id=$2 AND driver_id=$3 AND source='fleet_status' AND action='disable' AND state='confirmed' AND NOT status_ownership_revoked AND status_owned_revision=$4)`, r.relayEnvironment, v.RelayDriverID, v.DriverID, v.Revision).Scan(&owned); err != nil {
-			return err
-		}
-		if !owned {
-			return nil
-		}
-	}
 	// Remote state is not conditionally writable. This second fresh read narrows
 	// the portal race, but cannot eliminate it (documented provider limitation).
 	assignment, err := r.relayDrivers.Assignment(operationCtx, v.RelayDriverID)
@@ -310,11 +291,7 @@ func (r *FuelRepository) applyRelayStatusPolicy(ctx context.Context, conn *pgxpo
 		return err
 	}
 	if relayPolicyRevision(assignment) != v.Revision {
-		_, err = tx.Exec(operationCtx, `UPDATE relay_driver_operations SET status_ownership_revoked=true WHERE environment=$2 AND relay_driver_id=$3 AND source='fleet_status' AND id<>$1`, receipt, r.relayEnvironment, v.RelayDriverID)
-		if err != nil {
-			return err
-		}
-		return tx.Commit(operationCtx)
+		return nil
 	}
 	sent = true
 	err = r.relayDrivers.EnablePolicy(operationCtx, v.RelayDriverID, v.DesiredEnabled)
@@ -337,14 +314,7 @@ func (r *FuelRepository) applyRelayStatusPolicy(ctx context.Context, conn *pgxpo
 	if confirmed == nil || confirmed.ID != a.ID || confirmed.PolicyID != a.PolicyID || confirmed.Enabled != v.DesiredEnabled {
 		return ErrRelayDriverConflict
 	}
-	if _, err = tx.Exec(operationCtx, `UPDATE relay_driver_operations SET status_ownership_revoked=true WHERE environment=$1 AND relay_driver_id=$2 AND source='fleet_status' AND id<>$3 AND NOT status_ownership_revoked`, r.relayEnvironment, v.RelayDriverID, receipt); err != nil {
-		return err
-	}
-	owned := ""
-	if !v.DesiredEnabled {
-		owned = relayPolicyRevision(confirmed)
-	}
-	if _, err = tx.Exec(operationCtx, `UPDATE relay_driver_operations SET state='confirmed',resolved_at=now(),status_owned_revision=$2 WHERE id=$1`, receipt, owned); err != nil {
+	if _, err = tx.Exec(operationCtx, `UPDATE relay_driver_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, receipt); err != nil {
 		return err
 	}
 	return tx.Commit(operationCtx)
@@ -381,7 +351,7 @@ func (r *FuelRepository) PreviewRelayStatusPolicyReport(ctx context.Context) (Re
 	return result, tx.Commit(ctx)
 }
 
-// Ownership is assignment-specific, independent of profile timestamps and usage.
+// Assignment fencing excludes unrelated profile timestamps and mutable usage.
 func relayPolicyRevision(a *relay.PolicyAssignment) string {
 	if a == nil {
 		return ""

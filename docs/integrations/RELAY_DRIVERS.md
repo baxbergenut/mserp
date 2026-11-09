@@ -140,16 +140,15 @@ failure and idempotent retries. Browser fixtures cover bulk selection/results.
 ## Status-linked policy automation (migration 208)
 
 `RELAY_STATUS_POLICY_ENABLED=true` opts the selected Relay environment in. It is
-OFF by default. Apply 208 before the binary, review the cached preview, then
-explicitly approve activation. No production activation/deployment was performed.
-The existing termination worker runs first, independently of this flag: disable
-on termination, delete at day 10, and never auto-restore after rehire.
+OFF by default. Apply 208 before the binary, review a fresh provider comparison,
+then activate explicitly. The existing termination worker runs first and remains
+independent of this flag: disable on termination and delete at day 10.
 
 Current dated team policies follow the main driver's current fleet status using
 `payroll_driver_at` on today's New York date. Future crews and historical/custom
 Gross Board text are excluded. Main-driver personal availability precedes the
-board label; each linked person's own employment/inactive and security holds
-remain authoritative. Fleet status reconciliation must also be enabled.
+board label; each linked person's own current termination/inactive state remains
+authoritative. Fleet status reconciliation must also be enabled.
 
 On: READY, REST, COVERED, DISPATCHED, ENROUTE, RESERVED, DEADHEAD, In the YARD,
 Hold for Load, Issue with PU/Del, At PU, At DEL, 34 RESET.
@@ -157,45 +156,45 @@ Off: VACATION, HOME, SHOP, STOP, Left, Family issue, Health issue, HOME (YARD),
 NEW DRIVER, ACCIDENT, blank and unknown/retired labels. Comparison trims space
 and ignores case. Explicit Left still uses native termination workflow.
 
-Re-enable requires a confirmed automation-owned disable of that exact linked
-person, Relay account, assignment and policy. Pre-existing disabled assignments
-remain manual-review holds. Usage and profile timestamps are excluded from the
-ownership fingerprint. Manual ERP mutations, including a same-state disable
-attempt, revoke ownership. Identity changes, termination, inactivation and portal
-verification revoke it too. Ordinary home/vacation changes do not. Known failed
-enables retain ownership for retry after 15-minute backoff. No assignment or
-limit changes occur; usage is preserved.
+Status always governs existing assignments for active, verified linked drivers.
+This includes pre-existing or manually disabled assignments: an ON status enables
+them on the next successful pass. There is no hidden manual-block or ownership
+exception. This behavior was explicitly approved. A manual/portal disable while
+the effective status is ON is temporary, not a persistent security block. To keep
+fuel OFF, change the effective fleet status or disable this automation. Relay
+cannot identify same-state portal actions; it need not do so under this rule.
+No assignments, limits or usage are changed, and missing assignments/accounts are
+never created. Currently terminated/inactive drivers are never enabled. Under
+this opt-in feature, a rehired active driver with an existing assignment follows
+current status again; a removed Relay account is never recreated automatically.
+The termination worker itself still does not restore rehires.
 
 GET `/relay-drivers/status-policy-preview` requires fuel.read. It never calls
 Relay or writes; it works with automation off. A repeatable-read snapshot returns
 items and metadata: rosterRefreshedAt, automationEnabled, fleetStatusEnabled,
 evidence=cached_relay_roster. Sensitive availability labels/internal context are
 redacted. Actions distinguish changes, no assignment, no-change, unlinked,
-employment, manual-block, uncertainty and backoff holds. Cached impact is not
-confirmation of current remote state.
+employment, uncertainty and backoff holds. Cached impact is not confirmation of
+current remote state. Activation must use a fresh provider comparison.
 
 A minute sweep follows changes by any actor. Durable cursor progress prevents
 slow accounts starving later accounts. The existing environment lock serializes
 manual/offboarding/status work. Initial assignment reads and no-ops do not hold
 the fleet lock. Each actual change commits a pending receipt, then reacquires
-native fleet and identity locks, checks current source/context/ownership and
-upstream assignment, sends only enable/disable and reads back confirmation.
-That final fence is bounded to 10 seconds total, with a 5-second lock wait limit,
-and can delay fleet edits for that one action. It never spans the roster loop.
-Known-unsent aborts are reconsidered safely. Definitive provider failures back off
-15 minutes. Unknown sent outcomes remain pending until explicit portal review.
+native fleet and identity locks, checks current source/context and upstream
+assignment, sends only enable/disable and reads back confirmation. That final
+fence is bounded to 10 seconds total, with a 5-second lock wait limit, and can
+delay fleet edits for that one action. It never spans the roster loop. Known-
+unsent aborts are reconsidered safely. Definitive provider failures back off 15
+minutes. Unknown sent outcomes remain pending until explicit portal review.
 
 A settled pass reads one assignment per active linked account (~91 GETs/minute
 for 91 accounts), plus existing five-minute refresh and actual-action checks.
-Throttling can delay convergence. Relay has no conditional-write or manual-block
-provenance API: portal changes after final read cannot be atomic, and same-state
-portal disable or unseen off/on/off changes cannot be detected. Use the ERP
-Disable action to release ownership for security holds, or keep automation off
-for portal-only security-block workflows. Do not claim every portal block is
-preserved automatically.
+Throttling can delay convergence. Relay has no conditional-write API: portal
+changes after final read cannot be atomic with an ERP mutation.
 
 Validation: TestRelayStatusEnabled, TestRelayDriverDatabase (fresh and migrated
-schemas with fake provider and disposable local _test database),
+schemas, fake provider, actual source/link races and local writer fencing),
 TestRelayStatusPreviewRedaction, TestRelayDriverPermissions and
 TestRelayStatusPolicyDefaultOff. Existing termination tests remain in the same
-harness. Live staging lifecycle is opt-in and was not run.
+harness. The live staging lifecycle is opt-in and is not part of these checks.
