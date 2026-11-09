@@ -99,7 +99,7 @@ try {
  await page.getByRole('button',{name:'Retry save',exact:true}).click();
  await expect.poll(()=>entries[0].note).toBe('Keep draft after conflict');
  // Replacing the load clears the old note.
- await cell.dblclick(); await cell.fill('REPLACED-2'); await page.getByRole('option', {name:'Add as manual load: REPLACED-2',exact:true}).click(); await page.keyboard.press('Tab');
+ await cell.dblclick(); await cell.fill('REPLACED-2'); await page.keyboard.press('Enter'); await page.keyboard.press('Tab');
  await expect.poll(()=>entries[0].note).toBe('');
  // Read-only users can see notes; editors remain non-writable.
  readOnly=true; await page.reload();

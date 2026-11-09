@@ -36,6 +36,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   useImperativeHandle(resetRef, () => () => { setDraft(null); setCustomError(""); setFocused(false); });
   const [browse, setBrowse] = useState(false);
   const [active, setActive] = useState(0);
+  const [navigated, setNavigated] = useState(false);
   const [results, setResults] = useState<{ query: string; loads: GrossBoardLoad[] }>({ query: "", loads: [] });
   const [searchError, setSearchError] = useState("");
   const [pendingStatus, setPendingStatus] = useState<GrossBoardDayStatus>("");
@@ -49,16 +50,15 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   // Manual loads are identifiers, never free-form planning sentences.
   const loadIdentifier = /^(?=.*\d)[a-z0-9][a-z0-9._/#-]*$/i.test(query);
   const options: Option[] = [
-    ...(draftText !== null && !query ? [{ kind: "manual" } as const] : []),
     ...(status ? [{ kind: "clear" } as const] : []),
     ...statusOptions.map((item): Option => ({ kind: "status", status: item })),
     ...loads.map((load): Option => ({ kind: "load", load })),
-    ...(draftText !== null && query && loadIdentifier ? [{ kind: "manual" } as const] : []),
     ...(draftText !== null && query && onCustomStatus ? [{ kind: "custom" } as const] : []),
     ...(draftText !== null ? [{ kind: "cancel" } as const] : []),
   ];
   const open = focused && !disabled && (!confirmed || browse);
   const activeIndex = Math.min(active, Math.max(0, options.length - 1));
+  const highlightOption = !loadIdentifier || navigated;
   const hasAmounts = (value: GrossBoardEntry) => value.loadRecordId !== null ||
     !!(value.originalRate || value.driverRate || value.miles || value.enteredOriginalRate || value.enteredMiles);
 
@@ -132,10 +132,10 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
     <div data-grid-cell className="relative">
       <input ref={input} data-unconfirmed-load={draftText !== null || undefined} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
-        aria-activedescendant={open && options.length ? `${id}-${activeIndex}` : undefined}
-        title={draftText !== null ? (loadIdentifier ? "Load number. Saves on Enter or when you leave the field." : "Choose Add as custom status to use this text.") : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Choose a system load, explicitly add a manual load, or choose a day status"}
+        aria-activedescendant={open && highlightOption && options.length ? `${id}-${activeIndex}` : undefined}
+        title={draftText !== null ? (loadIdentifier ? "Load number. Saves on Enter or when you leave the field." : "Choose Add as status/destination to use this text.") : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number. Use the status/destination alternative for other text."}
         maxLength={200} value={draftText ?? status?.value ?? entry.loadNumber} disabled={disabled || savingCustom}
-        onFocus={(event) => { setFocused(true); setBrowse(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
+        onFocus={(event) => { setFocused(true); setBrowse(false); setNavigated(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => {
           if (draftText !== null && loadIdentifier && !savingCustom) {
             const exact = loads.filter(load => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
@@ -150,16 +150,17 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
             setFocused(false); setBrowse(false); return;
           }
           setDraft(event.target.value);
-          setActive(0); setBrowse(false); setFocused(true); setSearchError("");
+          setActive(0); setNavigated(false); setBrowse(false); setFocused(true); setSearchError("");
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setDraft(null); setFocused(false); return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault(); setFocused(true);
             if (confirmed) setBrowse(true);
-            if (options.length) setActive((value) => open ? (Math.min(value, options.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length : 0);
+            if (options.length) setActive((value) => navigated && open ? (Math.min(value, options.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length : event.key === "ArrowUp" ? options.length - 1 : 0);
+            setNavigated(true);
           }
-          if (event.key === "Enter" && draftText !== null && loadIdentifier && activeIndex === 0) {
+          if (event.key === "Enter" && draftText !== null && loadIdentifier && !navigated) {
             event.preventDefault();
             const exact = loads.filter(load => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
             choose(exact.length === 1 ? { kind: "load", load: exact[0] } : { kind: "manual" });
@@ -181,20 +182,20 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
     {open && createPortal(<div ref={menu} style={{ position: "fixed", left: position.left, top: position.top, width: position.width, maxHeight: position.height }}
       className="z-[80] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-1 text-left ui-popover"
       onMouseDown={(event) => event.preventDefault()}>
-      <div className="px-2 py-2 text-[10px] text-zinc-400">{statusOptions.length ? "DAY STATUSES" : "LOADS"} <span className="float-right">↑ ↓ choose · Enter select</span></div>
+      <div className="px-2 py-2 text-[10px] text-zinc-400">{statusOptions.length ? "DAY STATUSES" : loads.length ? "MATCHING LOADS" : "ALTERNATIVE"} <span className="float-right">↑ ↓ choose · Enter select</span></div>
       <ul id={id} role="listbox" aria-label="Loads and day statuses" className="grid grid-cols-2 gap-0.5">
         {options.map((option, index) => <li key={option.kind === "status" ? option.status.value : option.kind === "load" ? option.load.id : option.kind}
-          id={`${id}-${index}`} role="option" aria-selected={index === activeIndex} aria-disabled={option.kind === "custom" && !!customStatusUnavailable}
-          onClick={() => choose(option)} className={`${option.kind !== "status" ? "col-span-2" : ""} cursor-pointer rounded-md px-2 py-2 text-xs ${index === activeIndex ? "bg-white/10 ring-1 ring-inset ring-zinc-600" : "hover:bg-zinc-800"}`}>
+          id={`${id}-${index}`} role="option" aria-selected={highlightOption && index === activeIndex} aria-disabled={option.kind === "custom" && !!customStatusUnavailable}
+          onClick={() => choose(option)} className={`${option.kind !== "status" ? "col-span-2" : ""} cursor-pointer rounded-md px-2 py-2 text-xs ${highlightOption && index === activeIndex ? "bg-white/10 ring-1 ring-inset ring-zinc-600" : "hover:bg-zinc-800"}`}>
           {option.kind === "status" ? <span className={`inline-flex rounded px-2 py-1 font-medium ${option.status.color}`}>{option.status.value}</span> : option.kind === "clear" ?
-            <span className="text-zinc-400">Clear status · Enter a load</span> : option.kind === "manual" ? <span className="text-blue-300">{query ? `Add as manual load: ${query}` : "Clear load number"}</span> : option.kind === "custom" ? <span className={customStatusUnavailable ? "text-zinc-500" : "text-blue-300"}>Add as custom status: {query}{customStatusUnavailable && <span className="mt-1 block text-[10px]">{customStatusUnavailable}</span>}</span> : option.kind === "cancel" ? <span className="text-zinc-400">Cancel typed text</span> : <>
+            <span className="text-zinc-400">Clear status · Enter a load</span> : option.kind === "manual" ? null : option.kind === "custom" ? <span className={customStatusUnavailable ? "text-zinc-500" : "text-blue-300"}>Add as status/destination: {query}{customStatusUnavailable && <span className="mt-1 block text-[10px]">{customStatusUnavailable}</span>}</span> : option.kind === "cancel" ? <span className="text-zinc-400">Cancel typed text</span> : <>
               <div className="font-medium text-zinc-100">{option.load.loadNumber} · {amountDisplay(option.load.originalRate, true)} <span className="text-[10px] text-zinc-500">LOAD</span></div>
               <div className="mt-1 text-zinc-400">{option.load.driverName || "Unassigned"} · {option.load.pickupDate || "No pickup date"} · {amountDisplay(option.load.miles) || "—"} mi</div>
               <div className="text-zinc-500">Record #{option.load.id}</div>
             </>}
         </li>)}
       </ul>
-      {!options.length && <p className="p-2 text-xs text-zinc-500">{searchError === query ? "Load lookup unavailable. Your text is kept; you can explicitly add a manual load." : "Choose a load or add its number explicitly. Type a status or destination to add a custom status."}</p>}
+      {!options.length && <p className="p-2 text-xs text-zinc-500">{searchError === query ? "Load lookup unavailable. Load numbers still save as manual loads." : "Enter a load number, or choose the status/destination alternative."}</p>}
       {draftText !== null && <p className="border-t border-zinc-800 px-2 py-2 text-[11px] text-zinc-400">Load numbers save as loads. Choose the custom status alternative for status or destination text.</p>}
       {statusOptions.length > 0 && <p className="border-t border-zinc-800 px-2 py-2 text-[10px] text-zinc-500">Status days have no rates or miles.</p>}
     </div>, document.body)}

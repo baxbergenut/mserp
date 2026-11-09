@@ -1,7 +1,7 @@
 # Gross Board planning entries
 
 The day-cell input accepts a system load selection, an explicit unmatched load
-identifier, or an inline Add as custom status suggestion. Manual identifiers must
+identifier, or an inline Add as status/destination suggestion. Manual identifiers must
 contain a digit and use letters, digits, dots, slashes, underscores, # or hyphens;
 free-form sentences and destinations are offered only as custom statuses. Existing
 stored load identifiers remain readable and are not reclassified.

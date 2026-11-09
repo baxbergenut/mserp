@@ -120,7 +120,7 @@ try {
   // Server resolution can win before the browser's 250 ms lookup finishes.
   const loadNumber = amount('load number or status', '2026-10-15');
   await loadNumber.click(); await page.keyboard.type(source.loadNumber);
-  await page.getByRole('option', { name: 'Add as manual load: ' + source.loadNumber, exact: true }).click();
+  await page.keyboard.press('Enter');
   await expect(amount('total gross', '2026-10-15')).toHaveValue('$670.00');
   await expect(amount('driver rate', '2026-10-15')).toHaveValue('$610.00');
   // Browser lookup/selection must apply the same default.

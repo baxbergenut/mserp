@@ -88,7 +88,12 @@ try {
   // Identifiers are loads by default: Enter and blur commit without an extra choice.
   const defaultDate = '2026-11-04', defaultInput = cell(defaultDate).getByRole('combobox');
   await expect(defaultInput).toHaveAttribute('placeholder', 'Load number');
-  await defaultInput.fill('23423423'); await defaultInput.blur();
+  await defaultInput.fill('23423423');
+  await expect(page.getByRole('option', { name: /Add as (?:manual )?load/i })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: 'Add as status/destination: 23423423', exact: true })).toBeVisible();
+  await mkdir(new URL('../../artifacts/', import.meta.url), { recursive: true });
+  await page.screenshot({ path: fileURLToPath(new URL('../../artifacts/gross-board-default-load-dropdown.png', import.meta.url)), fullPage: true });
+  await defaultInput.blur();
   await expect.poll(() => saved(defaultDate)?.loadNumber).toBe('23423423');
   await expect(cell(defaultDate).getByText('Choose load or custom status', { exact: true })).toHaveCount(0);
   expect(planning.some(e => e.date === defaultDate && e.text)).toBe(false);
@@ -109,12 +114,26 @@ try {
   // Explicit alternative wins even for numeric text: menu selection must beat blur.
   const beforeNumericStatus = loadWrites.length;
   await defaultInput.fill('23423423');
-  await page.getByRole('option', { name: 'Add as custom status: 23423423', exact: true }).click();
+  await page.getByRole('option', { name: 'Add as status/destination: 23423423', exact: true }).click();
   await expect.poll(() => planning.find(e => e.date === defaultDate)?.text).toBe('23423423');
   await expect(fullDay(defaultDate)).toContainText('23423423');
   await expect(cell(defaultDate).getByRole('combobox')).toHaveCount(0);
   expect(saved(defaultDate)?.loadNumber).toBe('');
   expect(loadWrites).toHaveLength(beforeNumericStatus);
+  await statusButton(defaultDate).click(); await editor(defaultDate).fill(''); await editor(defaultDate).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === defaultDate)?.text).toBe('');
+  await expect(defaultInput).toHaveValue('');
+  // ArrowDown explicitly chooses the alternative; plain Enter above stayed a load.
+  const beforeKeyboardStatus = loadWrites.length;
+  await defaultInput.fill('87654321');
+  await expect(page.getByRole('option', { name: /Add as (?:manual )?load/i })).toHaveCount(0);
+  await defaultInput.press('ArrowDown');
+  await expect(page.getByRole('option', { name: 'Add as status/destination: 87654321', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await defaultInput.press('Enter');
+  await expect.poll(() => planning.find(e => e.date === defaultDate)?.text).toBe('87654321');
+  await expect(cell(defaultDate).getByRole('combobox')).toHaveCount(0);
+  expect(saved(defaultDate)?.loadNumber).toBe('');
+  expect(loadWrites).toHaveLength(beforeKeyboardStatus);
   await statusButton(defaultDate).click(); await editor(defaultDate).fill(''); await editor(defaultDate).press('Enter');
   await expect.poll(() => planning.find(e => e.date === defaultDate)?.text).toBe('');
   await expect(defaultInput).toHaveValue('');
@@ -130,12 +149,21 @@ try {
   const statusDate = '2026-11-04';
   await cell(statusDate).getByRole('combobox').fill('Dallas, TX');
   await expect(page.getByRole('option', { name: 'Add as manual load: Dallas, TX', exact: true })).toHaveCount(0);
-  await page.getByRole('option', { name: 'Add as custom status: Dallas, TX', exact: true }).click();
+  await page.getByRole('option', { name: 'Add as status/destination: Dallas, TX', exact: true }).click();
   await expect(fullDay(statusDate)).toBeVisible();
   await expect(fullDay(statusDate).getByRole('combobox')).toHaveCount(0);
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Dallas, TX');
   expect(planning.find(e => e.date === statusDate).kind).toBe('note');
   expect(loadWrites).toHaveLength(loadsBeforeCustom);
+  // Reproduce a lost acknowledgement deterministically: saved text is newer
+  // than the matching recovery draft, which must rebase before the next edit.
+  await expect(fullDay(statusDate).getByText('Unsaved', { exact: true })).toHaveCount(0);
+  await expect(fullDay(statusDate).getByRole('status')).toHaveCount(0);
+  const committedStatus = planning.find(e => e.date === statusDate && e.kind === 'note');
+  await page.evaluate(({ key, draft }) => sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), drafts: { note: draft } })), {
+    key: ['gross-board-planning-drafts:v1', 'inline-test', week, driverId, statusDate].join(':'),
+    draft: { ...committedStatus, version: Math.max(0, committedStatus.version - 1) },
+  });
   await page.reload(); await expect(fullDay(statusDate)).toContainText('Dallas, TX');
   await statusButton(statusDate).click(); await editor(statusDate).fill('Chicago, IL'); await editor(statusDate).press('Enter');
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Chicago, IL');
@@ -151,21 +179,21 @@ try {
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('');
   await expect(cell(statusDate).getByRole('combobox')).toHaveValue('');
   await cell(statusDate).getByRole('combobox').fill('STATUS-123');
-  await page.getByRole('option', { name: 'Add as manual load: STATUS-123', exact: true }).click();
+  await page.keyboard.press('Enter');
   await expect.poll(() => saved(statusDate)?.loadNumber).toBe('STATUS-123');
   await expect(fullDay(statusDate)).toHaveCount(0);
   expect(planning.find(e => e.date === statusDate).text).toBe('');
   await cell(statusDate).getByRole('combobox').fill('');
   await expect.poll(() => saved(statusDate)?.loadNumber).toBe('');
   await cell(statusDate).getByRole('combobox').fill('Available Friday');
-  await page.getByRole('option', { name: 'Add as custom status: Available Friday', exact: true }).click();
+  await page.getByRole('option', { name: 'Add as status/destination: Available Friday', exact: true }).click();
   await expect(fullDay(statusDate)).toContainText('Available Friday');
   await expect(cell(statusDate).getByRole('combobox')).toHaveCount(0);
 
-  // Unmatched identifiers still become real manual loads only on explicit choice.
+  // Unmatched identifiers become real manual loads by default on Enter.
   const manualDate = '2026-11-05';
   await cell(manualDate).getByRole('combobox').fill('998877');
-  await page.getByRole('option', { name: 'Add as manual load: 998877', exact: true }).click();
+  await page.keyboard.press('Enter');
   await expect.poll(() => saved(manualDate)?.loadNumber).toBe('998877');
   expect(saved(manualDate).loadRecordId).toBeNull();
   expect(planning.some(e => e.date === manualDate)).toBe(false);
@@ -196,7 +224,7 @@ try {
   const daily = page.getByRole('dialog', { name: 'Daily loads', exact: true });
   const pendingPlanning = planningWrites.length;
   await daily.locator('[data-gross-slot="0"]').getByRole('combobox').fill('Wait for dispatch');
-  const customAlternative = page.getByRole('option', { name: /Add as custom status: Wait for dispatch/ });
+  const customAlternative = page.getByRole('option', { name: /Add as status\/destination: Wait for dispatch/ });
   await expect(customAlternative).toHaveAttribute('aria-disabled', 'true');
   expect(planningWrites).toHaveLength(pendingPlanning);
   await daily.locator('[data-gross-slot="0"]').getByRole('combobox').press('Escape');
@@ -213,7 +241,7 @@ try {
   await cell(multiDate).getByRole('combobox').fill('');
   await expect.poll(() => saved(multiDate, 1)?.loadNumber).toBe('');
   await cell(multiDate).getByRole('combobox').fill('Wait for dispatch');
-  await page.getByRole('option', { name: 'Add as custom status: Wait for dispatch', exact: true }).click();
+  await page.getByRole('option', { name: 'Add as status/destination: Wait for dispatch', exact: true }).click();
   await expect(fullDay(multiDate)).toContainText('Wait for dispatch');
   await expect(cell(multiDate).getByRole('combobox')).toHaveCount(0);
 

@@ -44,7 +44,12 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   const putDrafts = (next: PlanningDrafts) => patch({ drafts: next, storageError: !writePlanningDrafts(storageKey, next) });
   const edit = (kind: GrossBoardPlanningKind, text: string) => {
     if (readOnly) return;
-    putDrafts({ ...session.value.drafts, [kind]: { ...(session.value.drafts[kind] ?? saved(kind)), text } });
+    const latest = saved(kind);
+    const recovered = session.value.drafts[kind];
+    // A reload may retain a draft whose save committed before its acknowledgement.
+    // Identical saved text is already accepted; start the new edit at that revision.
+    const baseline = recovered && (recovered.text.trim() !== latest.text || recovered.version > latest.version) ? recovered : latest;
+    putDrafts({ ...session.value.drafts, [kind]: { ...baseline, text } });
     patch({ error: "" });
   };
   const cancel = (kind: GrossBoardPlanningKind) => {

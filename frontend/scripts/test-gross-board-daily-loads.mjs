@@ -117,19 +117,19 @@ try {
   // Reuse two removed slots in one editor, matching the reported disappearing loads.
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
   await field(secondDay, 'load number or status', 1).fill('SECOND-2');
-  await page.getByRole('option', { name: 'Add as manual load: SECOND-2', exact: true }).click();
+  await page.keyboard.press('Enter');
   await field(secondDay, 'total gross', 1).fill('250');
   await field(secondDay, 'miles', 1).fill('125');
   await daily.getByRole('button', { name: 'Add load', exact: true }).click();
   await field(secondDay, 'load number or status', 2).fill('THIRD-3');
-  await page.getByRole('option', { name: 'Add as manual load: THIRD-3', exact: true }).click();
+  await page.keyboard.press('Enter');
   await field(secondDay, 'total gross', 2).fill('300');
   await field(secondDay, 'miles', 2).fill('150');
   holdNextSave = true;
   await apply(); await expect.poll(() => typeof releaseSave).toBe('function');
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
   await field(secondDay, 'load number or status', 3).fill('FOURTH-4');
-  await page.getByRole('option', { name: 'Add as manual load: FOURTH-4', exact: true }).click();
+  await page.keyboard.press('Enter');
   await field(secondDay, 'total gross', 3).fill('400');
   await field(secondDay, 'miles', 3).fill('200');
   releaseSave(); await expect.poll(() => saved(secondDay, 1)?.version).toBe(6);

@@ -3834,7 +3834,7 @@ Status Board database tests verify the production payroll coverage check.
 ## Gross Board planning entries (206)
 
 - Load identifiers and custom statuses share an inline day-cell input. Free-form
-  text uses Add as custom status; there is no planning chooser/modal. New statuses
+  text uses Add as status/destination; there is no planning chooser/modal. New statuses
   use note storage, and legacy destinations use the same visual style without
   migration. Inline Enter/blur saves and Escape cancels; failed drafts recover.
   Day-level text remains separate from loads and never changes dispatch or pay.
