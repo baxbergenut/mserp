@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useId, useRef, useState } from "react";
+import { useContext, useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Check, ChevronDown } from "lucide-react";
 import { CurrentUserIDContext } from "@/app/lib/access";
@@ -10,19 +10,21 @@ import { amountDisplay, dayStatuses, matchLoad, setDayStatus, suggestedDayStatus
 import { BoardDialog } from "./BoardDialog";
 
 export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
-type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" } | { kind: "manual" } | { kind: "cancel" };
+type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" } | { kind: "manual" } | { kind: "cancel" } | { kind: "custom" };
 
-export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview, onChange }: {
-  entry: GrossBoardEntry; label: string; disabled: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit;
+export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview, onChange, onCustomStatus, resetRef }: {
+  entry: GrossBoardEntry; label: string; disabled: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit; onCustomStatus?: (text: string) => Promise<void>; resetRef?: Ref<() => void>;
 }) {
   const id = useId();
   const userId = useContext(CurrentUserIDContext);
   const draftKey = ["gross-board-load-intent:v1", userId, entry.driverId, entry.date, entry.slot].join(":");
   const [draftText, setDraftText] = useState<string | null>(() => {
     if (disabled) return null;
-    try { const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? "null"); return saved && Date.now() - saved.savedAt < 7 * 86400000 && typeof saved.text === "string" ? saved.text : null; } catch { return null; }
+    try { const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? "null"); return saved && Date.now() - saved.savedAt < 7 * 86400000 && typeof saved.text === "string" && saved.text.trim() ? saved.text : null; } catch { return null; }
   });
   const [recoveryError, setRecoveryError] = useState(false);
+  const [customError, setCustomError] = useState("");
+  const [savingCustom, setSavingCustom] = useState(false);
   const setDraft = (value: string | null) => {
     setDraftText(value);
     try { if (value === null) sessionStorage.removeItem(draftKey); else sessionStorage.setItem(draftKey, JSON.stringify({ text: value, savedAt: Date.now() })); setRecoveryError(false); }
@@ -31,6 +33,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const input = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
+  useImperativeHandle(resetRef, () => () => { setDraft(null); setCustomError(""); setFocused(false); });
   const [browse, setBrowse] = useState(false);
   const [active, setActive] = useState(0);
   const [results, setResults] = useState<{ query: string; loads: GrossBoardLoad[] }>({ query: "", loads: [] });
@@ -43,12 +46,15 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const unmatched = !status && !confirmed && query !== "";
   const statusOptions = suggestedDayStatuses(browse || status ? "" : query);
   const loads = results.query === query && !status ? results.loads : [];
+  // Manual loads are identifiers, never free-form planning sentences.
+  const loadIdentifier = /^(?=.*\d)[a-z0-9][a-z0-9._/#-]*$/i.test(query);
   const options: Option[] = [
     ...(draftText !== null && !query ? [{ kind: "manual" } as const] : []),
     ...(status ? [{ kind: "clear" } as const] : []),
     ...statusOptions.map((item): Option => ({ kind: "status", status: item })),
     ...loads.map((load): Option => ({ kind: "load", load })),
-    ...(draftText !== null && query ? [{ kind: "manual" } as const] : []),
+    ...(draftText !== null && query && loadIdentifier ? [{ kind: "manual" } as const] : []),
+    ...(draftText !== null && query && onCustomStatus ? [{ kind: "custom" } as const] : []),
     ...(draftText !== null ? [{ kind: "cancel" } as const] : []),
   ];
   const open = focused && !disabled && (!confirmed || browse);
@@ -93,6 +99,20 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   }, [open, activeIndex, id]);
 
   const choose = (option: Option) => {
+    if (disabled || savingCustom) return;
+    if (option.kind === "custom") {
+      if (!onCustomStatus) return;
+      // Retire the load intent before planning can switch this day to full-day layout.
+      setDraft(null); setSavingCustom(true); setCustomError("");
+      void onCustomStatus(query).then(() => { setFocused(false); setBrowse(false); })
+        .catch(err => {
+          // A newly created planning draft survives in its own recovery store.
+          // Only restore the load input if this same picker is still mounted.
+          if (input.current) { setDraft(query); setCustomError(err instanceof Error ? err.message : "Unable to save custom status. Your text is kept."); }
+        })
+        .finally(() => setSavingCustom(false));
+      return;
+    }
     setFocused(false); setBrowse(false);
     if (option.kind === "cancel") { setDraft(null); return; }
     if (option.kind === "manual") {
@@ -113,11 +133,17 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       <input ref={input} data-unconfirmed-load={draftText !== null || undefined} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && options.length ? `${id}-${activeIndex}` : undefined}
-        title={draftText !== null ? "Unconfirmed load text. Choose a system load or Add as manual load to put it in the dispatch queue." : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Choose a system load, explicitly add a manual load, or choose a day status"}
-        maxLength={200} value={draftText ?? status?.value ?? entry.loadNumber} disabled={disabled}
+        title={draftText !== null ? "Choose a load or add this text as a custom status." : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Choose a system load, explicitly add a manual load, or choose a day status"}
+        maxLength={200} value={draftText ?? status?.value ?? entry.loadNumber} disabled={disabled || savingCustom}
         onFocus={(event) => { setFocused(true); setBrowse(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => { setFocused(false); setBrowse(false); }}
         onChange={(event) => {
+          setCustomError("");
+          if (!event.target.value.trim()) {
+            setDraft(null);
+            onChange(entry.driverId, entry.date, current => setDayStatus(current, ""));
+            setFocused(false); setBrowse(false); return;
+          }
           setDraft(event.target.value);
           setActive(0); setBrowse(false); setFocused(true); setSearchError("");
         }}
@@ -132,7 +158,9 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
         }}
         className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
         placeholder="Choose load / status" />
-      {draftText !== null && !focused && <button type="button" className="block w-full px-1 text-[10px] text-amber-300" onClick={() => input.current?.focus()}>Unconfirmed load text</button>}
+      {draftText !== null && !focused && <button type="button" className="block w-full px-1 text-[10px] text-amber-300" onClick={() => input.current?.focus()}>Choose load or custom status</button>}
+      {customError && <span role="alert" className="block text-[10px] text-red-300">{customError}</span>}
+      {savingCustom && <span role="status" className="block text-[10px] text-zinc-400">Saving custom status...</span>}
       {recoveryError && <span role="alert" className="block text-[10px] text-amber-300">Keep this page open; draft recovery is unavailable.</span>}
       {entry.sourceMissing && <span role="status" title="The linked DataTruck record is no longer available. Reconciliation reconnects a unique replacement; entered values and finalized statements are preserved." className="block px-1 text-[10px] text-amber-400">Not found in system</span>}
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
@@ -151,14 +179,14 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           id={`${id}-${index}`} role="option" aria-selected={index === activeIndex}
           onClick={() => choose(option)} className={`${option.kind !== "status" ? "col-span-2" : ""} cursor-pointer rounded-md px-2 py-2 text-xs ${index === activeIndex ? "bg-white/10 ring-1 ring-inset ring-zinc-600" : "hover:bg-zinc-800"}`}>
           {option.kind === "status" ? <span className={`inline-flex rounded px-2 py-1 font-medium ${option.status.color}`}>{option.status.value}</span> : option.kind === "clear" ?
-            <span className="text-zinc-400">Clear status · Enter a load</span> : option.kind === "manual" ? <span className="text-blue-300">{query ? `Add as manual load: ${query}` : "Clear load number"}</span> : option.kind === "cancel" ? <span className="text-zinc-400">Cancel typed text</span> : <>
+            <span className="text-zinc-400">Clear status · Enter a load</span> : option.kind === "manual" ? <span className="text-blue-300">{query ? `Add as manual load: ${query}` : "Clear load number"}</span> : option.kind === "custom" ? <span className="text-blue-300">Add as custom status: {query}</span> : option.kind === "cancel" ? <span className="text-zinc-400">Cancel typed text</span> : <>
               <div className="font-medium text-zinc-100">{option.load.loadNumber} · {amountDisplay(option.load.originalRate, true)} <span className="text-[10px] text-zinc-500">LOAD</span></div>
               <div className="mt-1 text-zinc-400">{option.load.driverName || "Unassigned"} · {option.load.pickupDate || "No pickup date"} · {amountDisplay(option.load.miles) || "—"} mi</div>
               <div className="text-zinc-500">Record #{option.load.id}</div>
             </>}
         </li>)}
       </ul>
-      {!options.length && <p className="p-2 text-xs text-zinc-500">{searchError === query ? "Load lookup unavailable. Your text is kept; you can explicitly add a manual load." : "Choose a load or add its number explicitly. Notes and destinations use Add entry."}</p>}
+      {!options.length && <p className="p-2 text-xs text-zinc-500">{searchError === query ? "Load lookup unavailable. Your text is kept; you can explicitly add a manual load." : "Choose a load or add its number explicitly. Type a status or destination to add a custom status."}</p>}
       {draftText !== null && <p className="border-t border-zinc-800 px-2 py-2 text-[11px] text-zinc-400">Typing alone does not add a load. A selected or manual load joins the dispatch queue.</p>}
       {statusOptions.length > 0 && <p className="border-t border-zinc-800 px-2 py-2 text-[10px] text-zinc-500">Status days have no rates or miles.</p>}
     </div>, document.body)}

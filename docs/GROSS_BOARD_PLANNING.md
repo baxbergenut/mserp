@@ -1,21 +1,32 @@
 # Gross Board planning entries
 
-Gross Board has three explicit entry choices: Load, Status or note, and Planned
-destination. Loads can be selected from DataTruck or entered manually before a
-provider match exists. Notes and destinations are dispatch planning only and can
-coexist with any load on the same driver/day.
+The day-cell input accepts a system load selection, an explicit unmatched load
+identifier, or an inline Add as custom status suggestion. Manual identifiers must
+contain a digit and use letters, digits, dots, slashes, underscores, # or hyphens;
+free-form sentences and destinations are offered only as custom statuses. Existing
+stored load identifiers remain readable and are not reclassified.
 
-When a day contains only a custom status/note or planned destination, planning
-fills the day cell instead of showing empty load and amount fields. If both
-planning kinds exist, they share that space. Existing loads, fixed statuses,
-amounts, transfers and per-load notes retain their normal layout with planning
-below. Add entry still opens the chooser to add a load or another planning kind.
+New custom statuses use the existing note storage kind. Existing destination
+entries retain their independent storage and appear with the same custom-status
+style. There is no Add entry chooser or planning modal. Click a status to edit
+inline; Enter or blur saves, Shift+Enter inserts a newline, and Escape cancels an
+unsaved edit. Failed saves retain recoverable drafts. Conflicting changes require
+explicit inline replacement or choosing the saved text.
 
-Typing in a load cell creates an unconfirmed local draft. Select a DataTruck
-result, a fixed status shortcut, or Add as manual load before it changes a load
-slot. Daily loads cannot Apply while typed text is still unconfirmed. Escape
-discards that typed load draft. Planning entries use their own explicit Save;
-closing the editor keeps a recoverable draft and Cancel discards that draft.
+Custom statuses fill otherwise empty days. An inline load input remains available
+to add a load without erasing the status. Days with loads retain their financial
+fields and show custom statuses below. Multiple loads retain the existing daily
+load editor. Adding custom text never clears existing loads or amounts.
+
+Deleting the load input clears its load identity, notes and amounts immediately
+and uses the ordinary guarded load autosave; there is no empty unconfirmed draft
+or extra Clear load number action. Typing nonempty text alone still does not
+commit a load. Select a result, explicitly add a manual identifier, or choose the
+custom-status suggestion. Escape discards unselected typing.
+
+Weekly cards and all table totals use Total gross, Driver gross, Total miles,
+Total RPM, Driver RPM, Rate balance. Both RPM values use the existing exact
+amount/mileage calculation and show a dash when miles are zero.
 
 ## Storage and compatibility
 
@@ -45,8 +56,8 @@ for dispatch Gross Board reads, not the shared payroll board projection.
 Canonical day-status shortcuts keep their existing display and payroll rules.
 
 A manual load remains eligible for the Status Board even if DataTruck has no
-matching record yet. Do not solve free-text classification by requiring an
-upstream match or by guessing whether text looks like a load number.
+matching record yet. Manual identifiers do not require an upstream match. Free-form text is committed
+only by the custom-status suggestion, never by typing or blur.
 
 ## Historical records
 
@@ -68,11 +79,17 @@ This change itself does not apply migrations to any live environment.
 
 ## Verification
 
+The inline flow is covered by `frontend/scripts/test-gross-board-inline-entry.mjs`
+(the existing planning script delegates to it). It uses intercepted synthetic API
+fixtures, not live data, and covers same-day load coexistence, direct clearing,
+old note/destination records, failed saves, reload recovery and stale conflicts.
+Backend financial/finalization protection remains unchanged.
+
 Use only a disposable localhost database whose name contains `_test` for
 PostgreSQL checks. Build the frontend with `NEXT_PUBLIC_API_URL=/api` before
 fixture or real-API browser tests. Exercise note/destination coexistence,
 manual unmatched loads, old-client load saves, concurrent planning changes,
-delete/recreate, failed saves, live snapshots, reload recovery, Cancel and
+delete/recreate, failed saves, live snapshots, reload recovery, Escape and
 read-only permissions. Run the repository's Go tests/vet and frontend
 lint/build plus relevant existing Gross Board and Status Board regressions.
 

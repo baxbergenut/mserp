@@ -117,17 +117,17 @@ try {
   await expect(page.getByRole('main').getByRole('alert')).toContainText('Temporary fixture outage');
   // Edits made after the first failure join the recovery copy in this tab.
   const queuedDay = '2026-11-04';
-  await fill(field(page, 'load number or status', queuedDay), 'QUEUED-AFTER-ERROR');
-  await page.getByRole('option', { name: 'Add as manual load: QUEUED-AFTER-ERROR', exact: true }).click();
+  await fill(field(page, 'load number or status', queuedDay), 'QUEUED-AFTER-ERROR-2');
+  await page.getByRole('option', { name: 'Add as manual load: QUEUED-AFTER-ERROR-2', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
   await page.reload();
   await expect(field(page, 'driver rate')).toHaveValue('$1,111.00');
-  await expect(field(page, 'load number or status', queuedDay)).toHaveValue('QUEUED-AFTER-ERROR');
+  await expect(field(page, 'load number or status', queuedDay)).toHaveValue('QUEUED-AFTER-ERROR-2');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('Temporary fixture outage');
   fail = false;
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await saved(page); expect(stored().driverRate).toBe('1111');
-  expect(stored(queuedDay).loadNumber).toBe('QUEUED-AFTER-ERROR');
+  expect(stored(queuedDay).loadNumber).toBe('QUEUED-AFTER-ERROR-2');
 
   // Same-field writes from a stale tab use the last submitted value, without
   // blocking unrelated saves or requesting a version/conflict decision.
@@ -162,11 +162,11 @@ try {
   await page.waitForTimeout(700);
   expect(writes.length).toBe(rejectedWrites);
   duplicateError = '';
-  await fill(field(page, 'load number or status', secondDay), 'DIFFERENT-LOAD');
-  await page.getByRole('option', { name: 'Add as manual load: DIFFERENT-LOAD', exact: true }).click();
+  await fill(field(page, 'load number or status', secondDay), 'DIFFERENT-LOAD-3');
+  await page.getByRole('option', { name: 'Add as manual load: DIFFERENT-LOAD-3', exact: true }).click();
   await page.getByRole('button', { name: 'Retry save', exact: true }).click();
   await saved(page);
-  expect(stored(secondDay).loadNumber).toBe('DIFFERENT-LOAD');
+  expect(stored(secondDay).loadNumber).toBe('DIFFERENT-LOAD-3');
   expect(stored().driverRate).toBe('1400');
   // Missing source identity is explicit, and focusing the field cannot silently
   // replace a pinned historical link or overwrite the entered driver gross.

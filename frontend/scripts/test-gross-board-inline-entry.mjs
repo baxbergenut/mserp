@@ -1,0 +1,212 @@
+// Synthetic browser regression: every API request is intercepted; no production writes.
+import { chromium, expect } from '@playwright/test';
+import { createServer } from 'node:http';
+import { readFile, mkdir } from 'node:fs/promises';
+import { extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const server = createServer(async (req, res) => {
+  try {
+    const path = new URL(req.url, 'http://localhost').pathname;
+    const file = path === '/' ? 'index.html' : extname(path) ? path.slice(1) : `${path.slice(1)}.html`;
+    const body = await readFile(new URL(`../out/${file}`, import.meta.url));
+    res.writeHead(200, { 'Content-Type': { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.txt': 'text/plain' }[extname(file)] ?? 'application/octet-stream' });
+    res.end(body);
+  } catch { res.writeHead(404); res.end(); }
+});
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const browser = await chromium.launch();
+const week = '2026-11-02', driverId = 'inline-driver', name = 'Inline Driver';
+const driver = { id: driverId, fullName: name, active: true, dispatcherId: '', dispatcherName: 'Unassigned', truckId: '', truckUnit: '42' };
+const entry = (date, slot = 0) => ({ driverId, date, slot, deleted: false, dayStatus: '', note: 'Load note', loadNumber: `LOAD-${date}-${slot}`, loadRecordId: 100 + slot, loadTripId: null, split: false, tripReview: false, trips: [], originalRate: '400', driverRate: '350', miles: '100', enteredOriginalRate: '400', enteredMiles: '100', systemOriginalRate: '400', systemDriverRate: '350', systemMiles: '100', version: 1, duplicate: false });
+let entries = [entry(week), entry('2026-11-06'), entry('2026-11-06', 1), entry('2026-11-07')];
+let planning = [{ driverId, date: '2026-11-03', kind: 'destination', text: 'Legacy destination', version: 3 }, { driverId, date: '2026-11-03', kind: 'note', text: 'Legacy note', version: 2 }, { driverId, date: '2026-11-08', kind: 'destination', text: 'Legacy destination only', version: 1 }];
+let readOnly = false, failPlanning = false;
+const loadWrites = [], planningWrites = [], errors = [];
+const same = (a, b) => a.driverId === b.driverId && a.date === b.date && a.kind === b.kind;
+const snapshot = () => ({ weekStart: week, drivers: [driver], entries, planningEntries: planning, balances: [] });
+const saved = (date, slot = 0) => entries.find(e => e.date === date && e.slot === slot);
+try {
+  const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
+  await page.clock.setFixedTime(new Date('2026-11-03T12:00:00Z'));
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.EventSource = class { constructor() { setTimeout(() => this.onopen?.(), 0); } addEventListener() {} close() {} }; });
+  await page.route('**/api/**', async route => {
+    const req = route.request(), url = new URL(req.url()), path = url.pathname.replace('/lookups/', '/').slice(4);
+    if (path.startsWith('/gross-board/presence')) return route.fulfill(req.method() === 'GET' ? { json: [] } : { status: 204 });
+    if (path === '/gross-board/planning-entries' && req.method() === 'PUT') {
+      const changes = req.postDataJSON().entries; planningWrites.push(changes);
+      if (failPlanning) return route.fulfill({ status: 503, json: { error: 'Temporary planning save failure' } });
+      const committed = [];
+      for (const change of changes) {
+        const prior = planning.find(e => same(e, change));
+        if (prior && prior.version !== change.version && prior.text !== change.text.trim()) return route.fulfill({ status: 409, json: { error: 'Planning entry changed elsewhere' } });
+        const next = prior?.text === change.text.trim() ? prior : { ...change, text: change.text.trim(), version: (prior?.version ?? 0) + 1 };
+        planning = [...planning.filter(e => !same(e, next)), next]; committed.push(next);
+      }
+      return route.fulfill({ json: committed });
+    }
+    if (path === '/gross-board' && req.method() === 'PUT') {
+      const changes = req.postDataJSON().entries; loadWrites.push(changes);
+      const committed = changes.map(change => {
+        const prior = saved(change.date, change.slot);
+        const next = { ...prior, driverId, date: change.date, slot: change.slot, version: (prior?.version ?? 0) + 1 };
+        for (const field of change.fields ?? Object.keys(change)) if (field !== 'version') next[field] = change[field];
+        return next;
+      });
+      entries = [...entries.filter(e => !committed.some(c => c.date === e.date && c.slot === e.slot)), ...committed];
+      return route.fulfill({ json: { entries: committed, issues: [] } });
+    }
+    const fixtures = { '/auth/session': { user: { id: 'inline-test', username: 'Inline Test', permissions: ['board.read', ...(readOnly ? [] : ['board.write'])] }, csrfToken: 'fixture' }, '/gross-board': snapshot(), '/sidebar-counts': {}, '/tasks/count': { count: 0 } };
+    return route.fulfill({ json: fixtures[path] ?? [] });
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const cell = date => page.locator(`td[data-gross-driver="${driverId}"][data-gross-date="${date}"]`);
+  const fullDay = date => cell(date).locator('[data-gross-planning-full-day]');
+  const statusButton = date => cell(date).getByRole('button', { name: /Custom status for/ });
+  const editor = date => cell(date).locator('textarea');
+  await page.goto(`${base}/gross-board?weekStart=${week}`);
+  await expect(page.locator('[data-gross-board-grid] thead th').last()).toHaveText('Rate balance');
+  expect((await page.locator('[data-gross-board-grid] thead th').allTextContents()).slice(-6)).toEqual(['Total gross', 'Driver gross', 'Total miles', 'Total RPM', 'Driver RPM', 'Rate balance']);
+  await expect(page.getByLabel(`Driver RPM for ${name}`, { exact: true })).toHaveText('$3.50');
+  await expect(page.getByRole('button', { name: /Add entry/ })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Day entry', exact: true })).toHaveCount(0);
+  await expect(statusButton('2026-11-03')).toHaveCount(2);
+  await expect(cell('2026-11-03')).toContainText('Legacy destination');
+  await expect(cell('2026-11-03')).toContainText('Legacy note');
+  expect(planningWrites).toHaveLength(0);
+
+  // Free-form text is explicitly saved as planning, never as a dispatch load.
+  const statusDate = '2026-11-04';
+  await cell(statusDate).getByRole('combobox').fill('Dallas, TX');
+  await expect(page.getByRole('option', { name: 'Add as manual load: Dallas, TX', exact: true })).toHaveCount(0);
+  await page.getByRole('option', { name: 'Add as custom status: Dallas, TX', exact: true }).click();
+  await expect(fullDay(statusDate)).toBeVisible();
+  await expect(fullDay(statusDate).getByRole('combobox')).toHaveValue('');
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Dallas, TX');
+  expect(planning.find(e => e.date === statusDate).kind).toBe('note');
+  expect(loadWrites).toHaveLength(0);
+  await page.reload(); await expect(fullDay(statusDate)).toContainText('Dallas, TX');
+  await statusButton(statusDate).click(); await editor(statusDate).fill('Chicago, IL'); await editor(statusDate).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Chicago, IL');
+  await statusButton(statusDate).click(); await editor(statusDate).fill('Discard me'); await editor(statusDate).press('Escape');
+  await expect(fullDay(statusDate)).toContainText('Chicago, IL');
+  expect(planning.find(e => e.date === statusDate).text).toBe('Chicago, IL');
+  await statusButton(statusDate).click(); await editor(statusDate).fill('Available Friday'); await editor(statusDate).blur();
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Available Friday');
+
+  // A full-day status can accept a load directly without losing its planning text.
+  await fullDay(statusDate).getByRole('combobox').fill('STATUS-123');
+  await page.getByRole('option', { name: 'Add as manual load: STATUS-123', exact: true }).click();
+  await expect.poll(() => saved(statusDate)?.loadNumber).toBe('STATUS-123');
+  await expect(fullDay(statusDate)).toHaveCount(0);
+  await expect(cell(statusDate)).toContainText('Available Friday');
+  await cell(statusDate).getByRole('combobox').fill('');
+  await expect.poll(() => saved(statusDate)?.loadNumber).toBe('');
+  await expect(fullDay(statusDate)).toContainText('Available Friday');
+
+  // Unmatched identifiers still become real manual loads only on explicit choice.
+  const manualDate = '2026-11-05';
+  await cell(manualDate).getByRole('combobox').fill('998877');
+  await page.getByRole('option', { name: 'Add as manual load: 998877', exact: true }).click();
+  await expect.poll(() => saved(manualDate)?.loadNumber).toBe('998877');
+  expect(saved(manualDate).loadRecordId).toBeNull();
+  expect(planning.some(e => e.date === manualDate)).toBe(false);
+
+  // Deleting a selected load is one direct action, clearing note and financial data.
+  await cell(week).getByRole('combobox').fill('');
+  await expect(cell(week).getByRole('combobox')).toHaveValue('');
+  await expect(cell(week).getByText('Unconfirmed load text', { exact: true })).toHaveCount(0);
+  for (const label of ['total gross', 'driver rate', 'miles']) await expect(cell(week).getByLabel(`${name}, ${week}, ${label}`, { exact: true })).toHaveValue('');
+  await expect.poll(() => saved(week)).toMatchObject({ loadNumber: '', loadRecordId: null, note: '', originalRate: '', driverRate: '', miles: '' });
+  await page.reload(); await expect(cell(week).getByRole('combobox')).toHaveValue('');
+
+  // X also discards an unselected text draft, including its reload recovery copy.
+  const removeDate = '2026-11-07';
+  await cell(removeDate).getByRole('combobox').fill('Unselected draft');
+  await cell(removeDate).getByRole('button', { name: name + ', ' + removeDate + ', remove load', exact: true }).click();
+  await expect.poll(() => saved(removeDate)?.loadNumber).toBe('');
+  await expect(cell(removeDate).getByRole('combobox')).toHaveValue('');
+  await page.reload(); await expect(cell(removeDate).getByRole('combobox')).toHaveValue('');
+
+  // Legacy destination-only full-day cells can create a new note through the same input.
+  await fullDay('2026-11-08').getByRole('combobox').fill('Available after noon');
+  await page.getByRole('option', { name: 'Add as custom status: Available after noon', exact: true }).click();
+  await expect.poll(() => planning.find(e => e.date === '2026-11-08' && e.kind === 'note')?.text).toBe('Available after noon');
+  expect(planning.find(e => e.date === '2026-11-08' && e.kind === 'destination').text).toBe('Legacy destination only');
+  await expect(fullDay('2026-11-08').getByRole('combobox')).toHaveValue('');
+
+  // Clearing one daily slot preserves its sibling and remains an atomic draft.
+  const multiDate = '2026-11-06', sibling = structuredClone(saved(multiDate, 1));
+  await cell(multiDate).getByRole('button', { name: `${name}, ${multiDate}, load numbers and details`, exact: true }).click();
+  const daily = page.getByRole('dialog', { name: 'Daily loads', exact: true });
+  await daily.locator('[data-gross-slot="0"]').getByRole('combobox').fill('Wait for dispatch');
+  await page.getByRole('option', { name: 'Add as custom status: Wait for dispatch', exact: true }).click();
+  await expect.poll(() => planning.find(e => e.date === multiDate)?.text).toBe('Wait for dispatch');
+  await expect(daily.locator('[data-gross-slot="0"]').getByRole('combobox')).toHaveValue(saved(multiDate).loadNumber);
+  await daily.locator('[data-gross-slot="0"]').getByRole('combobox').fill('');
+  await expect(daily.locator('[data-gross-slot="0"]').getByRole('combobox')).toHaveValue('');
+  await daily.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await expect.poll(() => saved(multiDate).loadNumber).toBe('');
+  expect(saved(multiDate, 1)).toEqual(sibling);
+
+  // Existing legacy records retain both independent keys after editing one.
+  await statusButton('2026-11-03').filter({ hasText: 'Legacy destination' }).click();
+  await editor('2026-11-03').fill('Updated legacy destination'); await editor('2026-11-03').press('Enter');
+  await expect.poll(() => planning.find(e => e.date === '2026-11-03' && e.kind === 'destination')?.text).toBe('Updated legacy destination');
+  expect(planning.find(e => e.date === '2026-11-03' && e.kind === 'note').text).toBe('Legacy note');
+
+  // Failed saves retain a recoverable draft; reload and retry do not duplicate loads.
+  failPlanning = true;
+  await statusButton(statusDate).click(); await editor(statusDate).fill('Recover after reload'); await editor(statusDate).press('Enter');
+  await expect(cell(statusDate).getByRole('alert').filter({ hasText: 'Temporary planning save failure' })).toBeVisible();
+  expect(planning.find(e => e.date === statusDate).text).toBe('Available Friday');
+  await page.reload(); await expect(fullDay(statusDate)).toContainText('Recover after reload');
+  failPlanning = false;
+  await statusButton(statusDate).click(); await editor(statusDate).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Recover after reload');
+
+  // A stale editor cannot overwrite another user's newer text without review.
+  await statusButton(statusDate).click(); await editor(statusDate).fill('My concurrent draft');
+  planning = planning.map(e => e.date === statusDate ? { ...e, text: 'Saved elsewhere', version: e.version + 1 } : e);
+  await editor(statusDate).press('Enter');
+  await expect(cell(statusDate).getByRole('button', { name: 'Replace with my text', exact: true })).toBeVisible();
+  expect(planning.find(e => e.date === statusDate).text).toBe('Saved elsewhere');
+  await cell(statusDate).getByRole('button', { name: 'Use saved text', exact: true }).click();
+  await expect(fullDay(statusDate)).toContainText('Saved elsewhere');
+  await statusButton(statusDate).click(); await editor(statusDate).fill('Reviewed replacement');
+  planning = planning.map(e => e.date === statusDate ? { ...e, text: 'Second external edit', version: e.version + 1 } : e);
+  await editor(statusDate).press('Enter');
+  await cell(statusDate).getByRole('button', { name: 'Replace with my text', exact: true }).click();
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Reviewed replacement');
+
+  // Clearing the only status returns a normal empty load cell without load writes.
+  const beforeClear = loadWrites.length;
+  await statusButton(statusDate).click(); await editor(statusDate).fill(''); await editor(statusDate).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('');
+  await expect(fullDay(statusDate)).toHaveCount(0);
+  expect(loadWrites).toHaveLength(beforeClear);
+
+  // Capture desktop and narrow layouts with only synthetic data.
+  await mkdir(new URL('../../artifacts/', import.meta.url), { recursive: true });
+  await page.screenshot({ path: fileURLToPath(new URL('../../artifacts/gross-board-inline-desktop.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 900, height: 900 });
+  await fullDay('2026-11-08').scrollIntoViewIfNeeded();
+  expect(await fullDay('2026-11-08').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: fileURLToPath(new URL('../../artifacts/gross-board-inline-tablet.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await fullDay('2026-11-08').scrollIntoViewIfNeeded();
+  expect(await fullDay('2026-11-08').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: fileURLToPath(new URL('../../artifacts/gross-board-inline-narrow.png', import.meta.url)), fullPage: true });
+  await page.setViewportSize({ width: 1800, height: 1000 });
+
+  // Read-only viewers cannot alter either load entries or custom statuses.
+  readOnly = true; await page.reload();
+  for (const input of await page.locator('[data-gross-board-grid]').getByRole('combobox').all()) await expect(input).toBeDisabled();
+  const before = [loadWrites.length, planningWrites.length];
+  await expect(statusButton('2026-11-03').first()).toBeDisabled();
+  const readEditor = editor('2026-11-03');
+  if (await readEditor.count()) await expect(readEditor).toHaveAttribute('readonly', '');
+  expect([loadWrites.length, planningWrites.length]).toEqual(before);
+  expect(errors).toEqual([]);
+  console.log('PASS gross-board inline entry: totals, custom text isolation, editing/clearing, manual loads, multiple slots, legacy entries and read-only');
+} finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

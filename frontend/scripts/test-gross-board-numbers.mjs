@@ -169,9 +169,9 @@ try {
   await expect.poll(() => stored('originalRate')).toBe('3400.50');
   const footer = page.locator('tfoot tr').getByRole('cell');
   await expect(footer.nth(0)).toHaveText('$5,108.00');
-  await expect(footer.nth(3)).toHaveText('$1,562.12');
-  await expect(footer.nth(1)).toHaveText('425.25');
-  await expect(footer.nth(2)).toHaveText('$12.01');
+  await expect(footer.nth(1)).toHaveText('$1,562.12');
+  await expect(footer.nth(2)).toHaveText('425.25');
+  await expect(footer.nth(3)).toHaveText('$12.01');
   await expect(amount('total gross', '2026-10-14')).toHaveText('$67.00');
   await expect(amount('total driver rate', '2026-10-14')).toHaveText('$65.00');
   expect(invalidWrites).toEqual([]);

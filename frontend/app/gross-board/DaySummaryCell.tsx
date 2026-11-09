@@ -10,6 +10,7 @@ import { Modal } from "@/app/components/management/ManagementUI";
 import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { useDayPlanning } from "./DayPlanning";
 import { DayCell } from "./DayCell";
+import { LoadStatusPicker } from "./LoadStatusPicker";
 import { additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
@@ -114,10 +115,11 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       return true;
   }
 
-  const { planning, fullDay, dialog: planningDialog } = useDayPlanning({ fullDayEligible: visible.length === 0, entries: planningEntries, driverId, driverName, date, week, readOnly, onAddLoad: () => openEditor(displayed.some(entry => !!(entry.loadNumber || entry.dayStatus || entry.originalRate || entry.driverRate || entry.miles))), onSaved: onPlanningSaved });
+  const { planning, fullDay, createCustomStatus, dialog: planningDialog } = useDayPlanning({
+    loadInput: !readOnly ? (create) => <LoadStatusPicker onCustomStatus={create} entry={blank} label={label} disabled={readOnly} needsReview={false} onReview={() => {}} onChange={(id, day, update) => onChange(id, day, blank.slot, update)} /> : undefined, fullDayEligible: visible.length === 0, entries: planningEntries, driverId, driverName, date, week, readOnly, onAddLoad: () => openEditor(displayed.some(entry => !!(entry.loadNumber || entry.dayStatus || entry.originalRate || entry.driverRate || entry.miles))), onSaved: onPlanningSaved });
 
   return <>
-    {fullDay ? <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={blank.slot} id={cellId} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
+    {fullDay ? <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={blank.slot} id={cellId} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} onCustomStatus={createCustomStatus} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span>
         {!readOnly && displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
       </div>
@@ -143,7 +145,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, e
       {!readOnly && onReturn && <div className="mb-4 flex items-center gap-3"><button type="button" disabled={!!invalid} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-blue-300 disabled:opacity-40" onClick={() => { if (applyDraft()) onReturn(); }}>Apply and return to Driver Pay</button><span className="text-xs text-zinc-500">Changes save before returning to your place.</span></div>}
       <div ref={dailyEditor} data-gross-editor-day={`${driverId}:${date}`} className="overflow-x-auto pb-32"><table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{draft.filter(entry => !entry.deleted).map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
         <td className="p-0 align-top text-[11px] text-zinc-500"><div className="h-6" />{["Load #", "Total gross", "Driver", "Miles"].map(name => <div key={name} className="flex h-8 items-center">{name}</div>)}</td>
-        {draft.filter(entry => !entry.deleted).map(entry => <DayCell key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
+        {draft.filter(entry => !entry.deleted).map(entry => <DayCell onCustomStatus={createCustomStatus} key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
       </tr></tbody></table></div>
       <button type="button" hidden={readOnly} disabled={readOnly || draft.filter(entry => !entry.deleted).length >= 100} onClick={() => addDraft(driverId, date)} className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-3 py-2 text-xs text-blue-300"><Plus className="h-3 w-3" />Add load</button>
       {draftError && <p role="alert" className="mt-3 text-xs text-red-300">{draftError}</p>}

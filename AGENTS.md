@@ -3833,9 +3833,11 @@ Status Board database tests verify the production payroll coverage check.
 
 ## Gross Board planning entries (206)
 
-- Load, Status or note, and Planned destination are explicit choices in the same
-  day cell. Day-level note/destination text lives separately from load slots,
-  can coexist with loads and never changes their rates or dispatch state.
+- Load identifiers and custom statuses share an inline day-cell input. Free-form
+  text uses Add as custom status; there is no planning chooser/modal. New statuses
+  use note storage, and legacy destinations use the same visual style without
+  migration. Inline Enter/blur saves and Escape cancels; failed drafts recover.
+  Day-level text remains separate from loads and never changes dispatch or pay.
 - `gross_board_planning_entries` uses independent versions and empty-text
   tombstones. GET/live Gross Board responses carry `planningEntries`; the
   dedicated PUT `/gross-board/planning-entries` cannot be overwritten by older

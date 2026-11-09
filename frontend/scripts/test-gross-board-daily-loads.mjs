@@ -107,7 +107,7 @@ try {
   const clearCell = name => page.getByLabel(`Daily Driver, ${clearDay}, ${name}`, { exact: true });
   await expect(clearCell('driver rate')).toHaveValue('$800.00');
   await clearCell('load number or status').fill('');
-  await page.getByRole('option', { name: 'Clear load number', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Clear load number', exact: true })).toHaveCount(0);
   await clearCell('load number or status').blur();
   for (const name of ['total gross', 'driver rate', 'miles']) await expect(clearCell(name)).toHaveValue('');
   await expect.poll(() => saved(clearDay)).toMatchObject({ loadNumber: '', loadRecordId: null, originalRate: '', driverRate: '', miles: '' });
@@ -116,20 +116,20 @@ try {
 
   // Reuse two removed slots in one editor, matching the reported disappearing loads.
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
-  await field(secondDay, 'load number or status', 1).fill('SECOND');
-  await page.getByRole('option', { name: 'Add as manual load: SECOND', exact: true }).click();
+  await field(secondDay, 'load number or status', 1).fill('SECOND-2');
+  await page.getByRole('option', { name: 'Add as manual load: SECOND-2', exact: true }).click();
   await field(secondDay, 'total gross', 1).fill('250');
   await field(secondDay, 'miles', 1).fill('125');
   await daily.getByRole('button', { name: 'Add load', exact: true }).click();
-  await field(secondDay, 'load number or status', 2).fill('THIRD');
-  await page.getByRole('option', { name: 'Add as manual load: THIRD', exact: true }).click();
+  await field(secondDay, 'load number or status', 2).fill('THIRD-3');
+  await page.getByRole('option', { name: 'Add as manual load: THIRD-3', exact: true }).click();
   await field(secondDay, 'total gross', 2).fill('300');
   await field(secondDay, 'miles', 2).fill('150');
   holdNextSave = true;
   await apply(); await expect.poll(() => typeof releaseSave).toBe('function');
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
-  await field(secondDay, 'load number or status', 3).fill('FOURTH');
-  await page.getByRole('option', { name: 'Add as manual load: FOURTH', exact: true }).click();
+  await field(secondDay, 'load number or status', 3).fill('FOURTH-4');
+  await page.getByRole('option', { name: 'Add as manual load: FOURTH-4', exact: true }).click();
   await field(secondDay, 'total gross', 3).fill('400');
   await field(secondDay, 'miles', 3).fill('200');
   releaseSave(); await expect.poll(() => saved(secondDay, 1)?.version).toBe(6);
@@ -137,16 +137,16 @@ try {
   // Also change a field on the just-saved second load; retain its committed version.
   await field(secondDay, 'driver rate', 1).click(); await page.keyboard.type('200'); await page.keyboard.press('Enter');
   await apply();
-  await expect.poll(() => saved(secondDay, 2)?.loadNumber).toBe('THIRD');
-  await expect.poll(() => saved(secondDay, 3)?.loadNumber).toBe('FOURTH');
+  await expect.poll(() => saved(secondDay, 2)?.loadNumber).toBe('THIRD-3');
+  await expect.poll(() => saved(secondDay, 3)?.loadNumber).toBe('FOURTH-4');
   await expect.poll(() => saved(secondDay, 1)?.driverRate).toBe('200.00');
   expect(conflicts).toEqual([]);
   expect(writes.at(-1).map(e => e.slot).sort()).toEqual([1, 3]);
   await page.reload();
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, load numbers and details`, exact: true }).click();
-  await expect(field(secondDay, 'load number or status', 1)).toHaveValue('SECOND');
-  await expect(field(secondDay, 'load number or status', 2)).toHaveValue('THIRD');
-  await expect(field(secondDay, 'load number or status', 3)).toHaveValue('FOURTH');
+  await expect(field(secondDay, 'load number or status', 1)).toHaveValue('SECOND-2');
+  await expect(field(secondDay, 'load number or status', 2)).toHaveValue('THIRD-3');
+  await expect(field(secondDay, 'load number or status', 3)).toHaveValue('FOURTH-4');
   await daily.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   // Stale row counters do not block field patches; unrelated remote notes survive.
