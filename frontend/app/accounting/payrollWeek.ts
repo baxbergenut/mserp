@@ -24,12 +24,12 @@ export function payrollWeekRangeLabel(monday: string) {
 
 export function payrollWeekGroups(weeks: string[]) {
   const groups = new Map<number, { date: string; label: string }[]>();
-  for (const date of Array.from(new Set(weeks)).sort()) {
+  for (const date of Array.from(new Set(weeks)).sort().reverse()) {
     const { year, label } = payrollWeekRangeLabel(date);
     if (!groups.has(year)) groups.set(year, []);
     groups.get(year)!.push({ date, label });
   }
-  return Array.from(groups).reverse();
+  return Array.from(groups);
 }
 
 export function payrollWeekOptions(first: string, latest: string) {
