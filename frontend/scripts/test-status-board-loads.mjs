@@ -125,21 +125,22 @@ try {
   await expect(panel.getByText('Remove this plan in Gross Board.', { exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
   await page.screenshot({ path: '../artifacts/overdue-load-window.png', fullPage: true });
-  // An upstream In Transit plan leaves Next and remains below Current in history.
+  // An upstream In Transit plan remains Next, in queue order, without Overdue.
   // An in-transit driver/current load must not suppress its other pending plans.
-  full = { ...full, current: { ...current, sourceStatus: 'in_transit' }, next: [later], earlier: [earlier, { ...next, sourceStatus: ' In Transit ', overdue: false }], revision: 'in-transit-history' };
+  full = { ...full, current: { ...current, sourceStatus: 'in_transit' }, next: [{ ...next, sourceStatus: ' In Transit ', overdue: false }, later], earlier: [earlier], revision: 'in-transit-active' };
   entry = { ...entry, status: 'ENROUTE' };
   await push();
-  await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toHaveText('LATER');
-  await expect(panel.locator('[data-queued-load]')).toHaveCount(1);
-  await expect(panel.locator('[data-queued-load="NEXT"]')).toHaveCount(0);
-  const transitHistory = panel.getByRole('button', { name: 'NEXT · In Transit load', exact: true });
-  await expect(transitHistory).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toHaveText('NEXT');
+  await expect(panel.locator('[data-queued-load]')).toHaveCount(2);
+  await expect(panel.locator('[data-queued-load="NEXT"]')).toHaveCount(1);
+  await expect(panel.locator('[data-queued-load]').last()).toHaveAttribute('data-queued-load', 'NEXT');
+  const transitNext = panel.getByRole('button', { name: 'NEXT', exact: true });
+  await expect(transitNext).toBeVisible();
   await expect(panel.getByRole('button', { name: 'CURRENT · Current load', exact: true })).toBeVisible();
-  const labels = await panel.getByRole('region', { name: 'Load sequence' }).locator('article > div > button[aria-expanded]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
-  expect(labels.indexOf('NEXT · In Transit load')).toBeGreaterThan(labels.indexOf('CURRENT · Current load'));
-  await expect(transitHistory).not.toContainText('Overdue');
-  await page.screenshot({ path: '../artifacts/in-transit-load-history.png', fullPage: true });
+  const labels = await panel.getByRole('region', { name: 'Load sequence' }).locator('article > div > button[aria-expanded]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label') || button.textContent));
+  expect(labels.indexOf('NEXT')).toBe(labels.indexOf('CURRENT · Current load') - 1);
+  await expect(transitNext).not.toContainText('Overdue');
+  await page.screenshot({ path: '../artifacts/in-transit-load-active.png', fullPage: true });
   await panel.getByLabel('Add next load', { exact: true }).fill('NEXT');
   await panel.getByRole('button', { name: 'Add next load', exact: true }).click();
   await expect(panel.getByRole('alert')).toHaveText('This load is already listed. Use its existing entry.');

@@ -83,3 +83,18 @@ func TestBoardLoadOverdueSourceProjection(t *testing.T) {
 		t.Fatal("appointment start used as pickup end")
 	}
 }
+
+func TestBoardLoadInTransitNotOverdue(t *testing.T) {
+	id := 1
+	now := time.Date(2026, 11, 9, 18, 0, 0, 0, time.UTC)
+	for _, status := range []string{"in_transit", " In Transit ", "IN-TRANSIT"} {
+		p := BoardLoad{LoadID: &id, SourceStatus: status, Date: "2026-01-01", Stops: []BoardStop{{Type: "pickup", Schedule: &BoardSchedule{Kind: "window", EndAt: "2026-11-08T16:00:00Z"}}}}
+		if boardLoadOverdue(p, "2026-11-09", now) {
+			t.Fatal("in-transit pickup marked overdue", status)
+		}
+		p.SourceStatus = "Dispatched"
+		if !boardLoadOverdue(p, "2026-11-09", now) {
+			t.Fatal("pending pickup lost overdue status")
+		}
+	}
+}

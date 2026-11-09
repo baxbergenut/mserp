@@ -1588,13 +1588,13 @@ assignment lookup lists.
   Linked system loads become Overdue strictly after the first pickup's explicit
   timezone-bearing scheduled_end_at. Missing/invalid/unzoned end times, reversed
   absolute windows, and free-text pickup overrides do not infer a deadline from
-  pickup start or Gross Board date. Manual-only queue entries remain excluded. Loads whose own DataTruck status is In transit
-  stay out of Next, including manual/restored plans; they remain inspectable in
-  Earlier, below current with an In Transit label. Explicit current selections
-  stay visible. This does not complete loads, alter Gross Board, or suppress
-  unmatched/pending plans based on a driver's separate dispatch status. Completed
-  In transit loads cannot restore to Next; history entries cannot be re-added as
-  duplicate manual plans. Older plans stay in Earlier unless explicitly restored;
+  pickup start or Gross Board date. Manual-only queue entries remain excluded. Loads whose own
+  DataTruck status is In transit stay active in Next, including older,
+  manual and restored plans, without a pickup-overdue warning. Explicit current
+  selections stay visible. Transit alone never moves a load into history or
+  completes it. Explicit completion, cancellation and previously-active history
+  safeguards still apply; a board-completed transit load can be restored.
+  Older non-transit plans stay in Earlier unless explicitly restored;
   current selections stay visible. Completion, cancellation, removal
   safeguards remain. Gross Board plans cannot be hidden from Status Board; remove
   the plan in Gross Board. The API rejects hide even through a manual duplicate,

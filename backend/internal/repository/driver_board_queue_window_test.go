@@ -36,12 +36,15 @@ func TestBoardLoadQueueWindow(t *testing.T) {
 		{BoardLoad{Date: "2026-11-20"}, true},
 		{BoardLoad{Date: "2026-01-01", Manual: true}, true},
 		{BoardLoad{Date: "2026-01-01", PlanID: "restored"}, true},
-		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: "in_transit"}, false},
-		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: " In Transit "}, false},
-		{BoardLoad{Date: "2026-11-20", LoadID: &loadID, SourceStatus: "IN-TRANSIT"}, false},
-		{BoardLoad{Manual: true, LoadID: &loadID, SourceStatus: "in_transit"}, false},
-		{BoardLoad{Date: "2026-01-01", PlanID: "restored", LoadID: &loadID, SourceStatus: "in_transit"}, false},
-		{BoardLoad{Date: "2026-11-09", SourceStatus: "in_transit"}, true}, // Unmatched is not proof of transit.
+		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: "in_transit"}, true},
+		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: " In Transit "}, true},
+		{BoardLoad{Date: "2026-11-20", LoadID: &loadID, SourceStatus: "IN-TRANSIT"}, true},
+		{BoardLoad{Manual: true, LoadID: &loadID, SourceStatus: "in_transit"}, true},
+		{BoardLoad{Date: "2026-01-01", PlanID: "restored", LoadID: &loadID, SourceStatus: "in_transit"}, true},
+		{BoardLoad{Date: "2026-01-01", LoadID: &loadID, SourceStatus: "in_transit"}, true},
+		{BoardLoad{Date: "2026-01-01", SourceStatus: "in_transit"}, false},
+		{BoardLoad{Date: "2026-11-09", PreviouslyActive: true, LoadID: &loadID, SourceStatus: "in_transit"}, false},
+		{BoardLoad{Date: "2026-11-09", SourceStatus: "in_transit"}, true}, // Unmatched follows the ordinary date window.
 		{BoardLoad{Date: "2026-11-09", LoadID: &loadID, SourceStatus: "Dispatched"}, true},
 	} {
 		state := boardLoadState{RestoredPlans: map[string]bool{"restored": true}}

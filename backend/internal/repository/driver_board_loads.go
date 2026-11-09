@@ -186,14 +186,14 @@ func boardLoadQueueStart(from string) string {
 }
 
 func boardPlanQueued(p BoardLoad, s boardLoadState, from string) bool {
-	return !p.PreviouslyActive && !boardLoadInTransit(p) && (p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID])
+	return !p.PreviouslyActive && (boardLoadInTransit(p) || p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID])
 }
 
 // System loads need an actual pickup deadline, never a Gross Board date or
 // pickup-start guess. Local-only schedules cannot establish an instant without
 // a facility timezone. Free-text overrides are likewise deliberately unknown.
 func boardLoadOverdue(p BoardLoad, from string, now time.Time) bool {
-	if p.Manual {
+	if p.Manual || boardLoadInTransit(p) {
 		return false
 	}
 	if p.LoadID == nil {
@@ -223,8 +223,8 @@ func boardLoadOverdue(p BoardLoad, from string, now time.Time) bool {
 }
 
 func boardLoadInTransit(p BoardLoad) bool {
-	// DataTruck often retains In transit after delivery. Exclude these loads
-	// from Next without completing them or clearing an explicit current load.
+	// A source still in transit remains active, even after its planned date.
+	// Only explicit completion or other existing history safeguards retire it.
 	// A driver's dispatch status says nothing about other queued plans.
 	if p.LoadID != nil {
 		switch strings.ToLower(strings.TrimSpace(p.SourceStatus)) {
@@ -670,7 +670,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 				if p.Completed && sourceUnavailable {
 					p.Warning = ""
 				}
-				p.CanRestoreToQueue = completedHere && !sourceUnavailable && !boardLoadInTransit(p) &&
+				p.CanRestoreToQueue = completedHere && !sourceUnavailable &&
 					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
 			} else if !boardPlanQueued(p, s, from) {
