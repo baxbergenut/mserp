@@ -166,21 +166,23 @@ export default function DriverBoardPage() {
     menu.querySelector("button")?.focus({ preventScroll: true });
   }
   const groupColumns = useMemo(() => {
-    const runs: { total?: "originalGross" | "driverGross"; autoOrder?: boolean; span: number; width: number }[] = [];
+    const runs: { total?: "originalGross" | "driverGross"; autoOrder?: boolean; updater?: boolean; span: number; width: number }[] = [];
     for (const column of columns) {
       const previous = runs.at(-1);
       if (column === "originalGross" || column === "driverGross") {
         runs.push({ total: column, span: 1, width: columnWidth(column) });
       } else if (column === "loadPlan") {
         runs.push({ autoOrder: true, span: 1, width: columnWidth(column) });
-      } else if (previous && !previous.total && !previous.autoOrder) {
+      } else if (column === "phone") {
+        runs.push({ updater: true, span: 1, width: columnWidth(column) });
+      } else if (previous && !previous.total && !previous.autoOrder && !previous.updater) {
         previous.span++;
         previous.width += columnWidth(column);
       } else {
         runs.push({ span: 1, width: columnWidth(column) });
       }
     }
-    const spaces = runs.filter(run => !run.total && !run.autoOrder);
+    const spaces = runs.filter(run => !run.total && !run.autoOrder && !run.updater);
     const widest = [...spaces].sort((a, b) => b.width - a.width)[0];
     const heading = spaces[0].width >= 200 ? spaces[0] : widest;
     const last = spaces.at(-1)!;
@@ -253,13 +255,15 @@ export default function DriverBoardPage() {
       {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
     </div>;
     const details = <>
-      {d.afterHoursUpdaterName && <span title={`${d.afterHoursUpdaterName}${d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}`} className="status-board-updater min-w-0 truncate">{d.afterHoursUpdaterName}{d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}</span>}
       <span className="ml-auto text-zinc-400">{decimalDisplay(group.miles)} mi</span>
     </>;
     const groupCell = "border-b border-zinc-700";
     const groupContent = "flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap";
     return <tr key={`dispatcher:${d.dispatcherId}`} data-dispatcher-id={d.dispatcherId} className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
       {groupColumns.map((run, i) => {
+        if (run.updater) return <td key="phone" data-board-column="phone" colSpan={run.span} className={`${groupCell} px-1 text-[11px]`}><div className="flex min-w-0 items-center overflow-hidden whitespace-nowrap">
+          {d.afterHoursUpdaterName && <span title={`${d.afterHoursUpdaterName}${d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}`} className="status-board-updater min-w-0 truncate">{d.afterHoursUpdaterName}{d.afterHoursUpdaterExtension == null ? "" : ` (${d.afterHoursUpdaterExtension})`}</span>}
+        </div></td>;
         if (run.autoOrder) return <td key="loadPlan" data-board-column="loadPlan" className={`${groupCell} overflow-hidden px-1 text-right`}><div className="flex justify-end">{autoOrderToggle}</div></td>;
         if (run.total) return <td key={run.total} data-board-column={run.total} className={`${groupCell} overflow-hidden text-ellipsis border-r px-2 text-center font-mono`}>{decimalDisplay(run.total === "originalGross" ? group.original : group.driver, true)}</td>;
         if (run.heading) return <th key={i} scope="rowgroup" colSpan={run.span} className={`${groupCell} border-r bg-zinc-900 px-3 text-left font-medium`}>

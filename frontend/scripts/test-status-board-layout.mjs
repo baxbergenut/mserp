@@ -18,7 +18,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 const base = `http://127.0.0.1:${server.address().port}`;
 const drivers = Array.from({ length: 100 }, (_, i) => ({ id: `driver-${i}`, fullName: `Scroll Driver ${i}`, active: true, driverType: 'M',
-  truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', dispatcherExtension: 202, phone: i === 0 ? '+1 (470) 334-4443' : i === 1 ? '+44 20 7946 0958' : '', location: null,
+  truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', dispatcherExtension: 202, mainUpdaterName: 'Main Updater', mainUpdaterExtension: 301, afterHoursUpdaterName: 'Night Updater', afterHoursUpdaterExtension: 302, phone: i === 0 ? '+1 (470) 334-4443' : i === 1 ? '+44 20 7946 0958' : '', location: null,
   city: i === 0 ? 'Louisville' : '', state: i === 0 ? 'Kentucky' : '' }));
 let entries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: 'ENROUTE', destination: '', eta: d.id === 'driver-0' ? '13:00 · 300 mi' : '', notes: '', homeTime: '', version: 1 }));
 const grossEntries = ['9999.99', '10000.00', '11999.99', '12000.00'].map((originalRate, i) => ({
@@ -66,6 +66,24 @@ try {
   await expect(dispatcherGroup.getByText('Dispatch (202) - 100', { exact: true })).toBeVisible();
   await page.getByLabel('Search Status Board').fill('');
   await expect(grid.locator('tr[data-driver-id]')).toHaveCount(100);
+  const assertUpdaters = async () => {
+    const afterHours = dispatcherGroup.locator('[data-board-column="phone"]');
+    await expect(afterHours).toHaveText('Night Updater (302)');
+    await expect(dispatcherGroup.locator('th[scope="rowgroup"]')).toContainText('Main Updater (301)');
+    const phoneHeader = await header('phone').boundingBox();
+    const updaterCell = await afterHours.boundingBox();
+    expect(Math.abs(phoneHeader.x - updaterCell.x)).toBeLessThan(1);
+    expect(Math.abs(phoneHeader.width - updaterCell.width)).toBeLessThan(1);
+    await expect(dispatcherGroup.locator('[data-board-column="loadPlan"]')).not.toContainText('Updater');
+  };
+  await assertUpdaters();
+  await header('phone').press('ArrowRight');
+  await assertUpdaters();
+  await page.reload();
+  await expect.poll(columnOrder).toEqual(defaults.map(column => column === 'phone' ? 'status' : column === 'status' ? 'phone' : column));
+  await assertUpdaters();
+  await header('phone').press('ArrowLeft');
+  await expect.poll(columnOrder).toEqual(defaults);
   const autoOrder = dispatcherGroup.getByRole('switch', { name: 'Auto-order for Dispatch', exact: true });
   const assertAutoOrderColumn = async () => {
     await expect(dispatcherGroup.locator('[data-board-column="loadPlan"]')).toContainText('Auto-order');
