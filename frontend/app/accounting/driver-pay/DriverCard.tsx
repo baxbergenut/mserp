@@ -211,7 +211,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
         {driver.teamNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.teamNotice}</p>}
         {placementError && <p role="alert" className="px-3 py-2 text-xs text-red-300">{placementError}</p>}
         <ChargeActions driver={driver} edits={edits} disabled={chargeActionsDisabled} onReload={onReload} />
- {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">{investor ? "Negative payable — adjust deductions to what was collected. Unpaid balances carry forward." : driver.settlement?.finalized ? "Cash payable is $0. This statement closed with a salary shortfall." : "Cash payable is $0. Finalizing carries the salary shortfall to later open payroll."}</p>}
+ {totals.payable < BigInt(0) && <p role="status" className="px-3 py-2 text-xs text-amber-300">{driver.settlement?.finalized ? "Cash payable is $0. This statement closed with a salary shortfall." : "Cash payable is $0. Finalizing carries the salary shortfall to later open payroll."}</p>}
         <div data-payroll-scroll={`${driver.id}:loads`} className="overflow-x-auto" role="region" aria-label={`${driver.fullName} weekly loads`} tabIndex={0}>
           <table onMouseDown={selectPayCell} onDoubleClick={editPayCell} onCopy={copyPayCell} onPaste={pastePayCell} onKeyDown={navigatePayGrid} className={`${styles.grid} w-full min-w-[1504px] table-fixed border-separate border-spacing-0 text-left text-xs`}>
             <colgroup>{displayColumns.map(([label, width]) => <col key={label} style={{ width }} />)}</colgroup>

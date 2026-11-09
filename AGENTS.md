@@ -106,7 +106,10 @@ Existing finalized negatives qualify when they are still the latest settlement.
 Drafts neither originate nor consume the balance. Source deductions and credits
 keep their native posting rules. Reopen later finalized statements before changing
 an earlier carry-bearing statement. The Driver Pay page shows zero cash payable
-when the statement has a shortfall. Investor Pay keeps its own balance rules.
+when the statement has a shortfall. Investor Pay uses the same finalized-net carry
+rules per truck and investor, never transferring debt on ownership changes.
+Finalization and reopening republish affected later open weeks. The calculator
+version invalidates old prepared statements; frozen source reports are unchanged.
 The carry row labels the finalized source week using its ISO week number and
 Monday. Older snapshots recover the label from verified prior settlement data.
 Driver and Investor Pay group selectable completed Mondays by ISO week year.

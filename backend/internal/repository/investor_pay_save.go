@@ -281,6 +281,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		if closed != reopen {
 			continue
 		}
+		if err = guardInvestorSalaryCarryOrder(ctx, tx, d, report.WeekStart); err != nil {
+			return empty, err
+		}
 		count++
 		selectedIDs[d.ID] = true
 		if prepared && reopen && truck == "" {

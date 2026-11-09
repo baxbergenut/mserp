@@ -178,3 +178,9 @@ console.log('Expense reimbursements add exact positive payouts with ordinary bal
 
 const calendar = await import(compile(readFileSync(new URL("../app/accounting/payrollWeek.ts", import.meta.url), "utf8")));
 for (const [now, week] of [["2026-11-02T04:59:59Z", "2026-10-19"], ["2026-11-02T05:00:00Z", "2026-10-26"], ["2026-03-09T04:00:00Z", "2026-03-02"]]) assert.equal(calendar.latestPayrollWeek(new Date(now)), week);
+
+const investorCarry = { id: "truck", investorId: "owner", truckId: "truck", loads: [], salaryCarry: "150.00", salaryCarryWeek: "2026-09-28" };
+const investorCarryEdits = { ...edits, adjustments: [{ kind: "addition", name: "Earnings", amount: "60.00" }] };
+assert.equal(driverTotals(investorCarry, investorCarryEdits).payable, -9000n);
+assert.equal(driverTotals({ ...investorCarry, salaryCarry: "90.00" }, { ...investorCarryEdits, adjustments: [{ kind: "addition", name: "Earnings", amount: "120.00" }] }).payable, 3000n);
+console.log("Investor carry uses the same exact-cent net calculation without mutating source deductions.");
