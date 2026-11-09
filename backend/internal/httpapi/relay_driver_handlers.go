@@ -84,6 +84,14 @@ func registerRelayDriverRoutes(router chi.Router, logger *slog.Logger, repo *rep
 			writeAPIError(w, 500, "Relay drivers could not be loaded or saved. Refresh before retrying.")
 		}
 	}
+	router.Get("/relay-drivers/status-policy-preview", func(w http.ResponseWriter, r *http.Request) {
+		result, err := repo.PreviewRelayStatusPolicyReport(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
 	router.Get("/relay-drivers", func(w http.ResponseWriter, r *http.Request) {
 		data, err := repo.RelayDrivers(r.Context())
 		if err != nil {

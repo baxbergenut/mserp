@@ -83,3 +83,19 @@ func TestParseDailySyncTimeRejectsInvalidValue(t *testing.T) {
 		t.Fatal("parseDailySyncTime() error = nil, want an error")
 	}
 }
+
+func TestRelayStatusPolicyDefaultOff(t *testing.T) {
+	for key, value := range map[string]string{"DATABASE_URL": "postgres://localhost/mserp_test", "DATATRUCK_API_KEY": "test-key", "DATATRUCK_COMPANY_NAME": "Test", "RELAY_API_KEY": "test-key", "PREPASS_CLIENT_ID": "test-client", "PREPASS_CLIENT_SECRET": "test-secret"} {
+		t.Setenv(key, value)
+	}
+	for _, value := range []string{"", "false", "1", "true"} {
+		t.Setenv("RELAY_STATUS_POLICY_ENABLED", value)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.RelayStatusPolicyEnabled != (value == "true") {
+			t.Fatalf("unexpected enable for %q", value)
+		}
+	}
+}

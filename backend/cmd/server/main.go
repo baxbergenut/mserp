@@ -255,6 +255,7 @@ func main() {
 	aiExtractor := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIExpenseModel)
 	relayClient := relay.NewClient(cfg.RelayAPIURL, cfg.RelayAPIKey)
 	fuelRepo.ConfigureRelayDrivers(relayClient, cfg.RelayEnvironment)
+	fuelRepo.ConfigureRelayStatusPolicy(cfg.RelayStatusPolicyEnabled)
 	fuelJob := jobs.NewSyncFuelJob(
 		relayClient,
 		fuelRepo,
@@ -412,7 +413,11 @@ func main() {
 	go func() {
 		defer close(relayAutomationDone)
 		if cfg.RelayAPIKey != "" {
-			jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "relay-offboarding", Interval: time.Minute, Run: fuelRepo.ProcessRelayOffboarding})
+			jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "relay-offboarding", Interval: time.Minute, Run: func(runCtx context.Context) error {
+				offErr := fuelRepo.ProcessRelayOffboarding(runCtx)
+				statusErr := fuelRepo.ProcessRelayStatusPolicy(runCtx)
+				return errors.Join(offErr, statusErr)
+			}})
 		}
 	}()
 	go func() {

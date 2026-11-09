@@ -261,6 +261,7 @@ var routeAccessPolicies = []routeAccess{
 	{"POST", "/prepass-fleet/operations/{id}/verify", "tolls.fleet.recover"},
 	{"POST", "/prepass-fleet/refresh", "tolls.fleet.sync"},
 	{"GET", "/relay-drivers", "fuel.read"},
+	{"GET", "/relay-drivers/status-policy-preview", "fuel.read"},
 	{"POST", "/relay-drivers/{id}/link", "tasks.review"},
 	{"POST", "/relay-drivers/bulk", "authenticated"},
 	{"POST", "/relay-drivers/change", "authenticated"},

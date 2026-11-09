@@ -16,9 +16,10 @@ import (
 )
 
 type FuelRepository struct {
-	pool             *pgxpool.Pool
-	relayDrivers     RelayDriverProvider
-	relayEnvironment string
+	pool              *pgxpool.Pool
+	relayDrivers      RelayDriverProvider
+	relayEnvironment  string
+	relayStatusPolicy bool
 }
 
 func NewFuelRepository(pool *pgxpool.Pool) *FuelRepository {

@@ -1,13 +1,15 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"mserp/internal/repository"
+	"strings"
 	"testing"
 )
 
 func TestRelayDriverPermissions(t *testing.T) {
 	for _, v := range []struct{ method, path, permission string }{
-		{"GET", "/relay-drivers", "fuel.read"}, {"POST", "/relay-drivers/refresh", "fuel.drivers.sync"},
+		{"GET", "/relay-drivers", "fuel.read"}, {"GET", "/relay-drivers/status-policy-preview", "fuel.read"}, {"POST", "/relay-drivers/refresh", "fuel.drivers.sync"},
 		{"POST", "/relay-drivers/change", "authenticated"}, {"POST", "/relay-drivers/dr_one/link", "tasks.review"},
 		{"POST", "/relay-drivers/operations/id/verify", "fuel.drivers.recover"},
 	} {
@@ -29,5 +31,17 @@ func TestRelayChangeValidation(t *testing.T) {
 	input.Phone = "invalid"
 	if validateRelayChange(&input) {
 		t.Fatal("accepted invalid phone")
+	}
+}
+
+func TestRelayStatusPreviewRedaction(t *testing.T) {
+	raw, err := json.Marshal(repository.RelayStatusImpact{Status: "Health issue", Context: "private context", Revision: "private revision", Action: "disable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"Health issue", "private context", "private revision", "status\""} {
+		if strings.Contains(string(raw), value) {
+			t.Fatalf("private status evidence leaked: %s", raw)
+		}
 	}
 }

@@ -316,6 +316,7 @@ func TestRelayDriverDatabase(t *testing.T) {
 			}
 			testSidebarCounts(t, ctx, pool, driverID, second)
 			testRelayOffboarding(t, ctx, pool, actor)
+			testRelayStatusPolicy(t, ctx, pool, actor)
 			testPrePassTruckLinks(t, ctx, pool, actor)
 			testDriverServices(t, ctx, pool, actor)
 			testDataTruckEnrollment(t, ctx, pool, actor)

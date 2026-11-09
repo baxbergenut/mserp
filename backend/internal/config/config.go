@@ -38,6 +38,7 @@ type Config struct {
 	GroqModel                    string
 	OpenAIAPIKey                 string
 	OpenAIExpenseModel           string
+	RelayStatusPolicyEnabled     bool
 	RelayEnvironment             string
 	RelayAPIURL                  string
 	RelayAPIKey                  string
@@ -250,6 +251,7 @@ func Load() (Config, error) {
 		GroqModel:                    envOrDefault("GROQ_MODEL", "qwen/qwen3.6-27b"),
 		OpenAIAPIKey:                 strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 		OpenAIExpenseModel:           envOrDefault("OPENAI_EXPENSE_MODEL", "gpt-6-luna"),
+		RelayStatusPolicyEnabled:     strings.EqualFold(strings.TrimSpace(os.Getenv("RELAY_STATUS_POLICY_ENABLED")), "true"),
 		RelayEnvironment:             relayEnvironment,
 		PayrollProjectionMode:        payrollMode,
 		PayrollPreparedReads:         payrollPreparedReads,
