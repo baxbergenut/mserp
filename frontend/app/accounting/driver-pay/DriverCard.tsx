@@ -224,8 +224,12 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
               const date = addDays(edits.weekStart, dayIndex);
               const loads = day === "Extra" ? extraLoads : driver.loads.filter(load => !load.payrollSupplement && load.date === date);
               const moved = day === "Extra" ? [] : outgoing.filter(row => row.sourceDate === date);
-              const statuses = [...new Set((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => item.status))];
-              const statusColor = statuses.length === 1 ? dayStatuses.find(item => item.value === statuses[0])?.color : undefined;
+              const statuses = [...new Map((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => {
+                const label = item.status === "CUSTOM" ? item.text?.trim() ?? "" : item.status;
+                const key = `${item.status}:${label}`;
+                return [key, { key, label, color: item.status === "CUSTOM" ? undefined : dayStatuses.find(status => status.value === item.status)?.color }] as const;
+              })).values()].filter(item => item.label);
+              const statusColor = statuses.length === 1 ? statuses[0].color : undefined;
               const dayLabel = <>{day}{day !== "Extra" && <span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span>}</>;
               return <Fragment key={date}>{loads.length || moved.length ? <>{loads.map((load, index) => <tr key={load.commentKey} onContextMenu={event => {
  const day=new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay();
@@ -249,8 +253,8 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
                 {!loads.length && index === 0 && <th rowSpan={moved.length} scope="rowgroup" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th>}
                 <td colSpan={10} className={cell}><OutgoingTransferNote row={row} /></td>
                 {dayIndex === 0 && !loads.length && index === 0 && adjustmentCells}<td className={cell} />
-              </tr>)}</> : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} text-center ${statusColor ?? "text-zinc-600"}`}>
-                {statuses.length === 1 ? statuses[0] : statuses.length ? <div className="flex items-center justify-center gap-2">{statuses.map(status => <span key={status} className={`rounded px-2 font-medium ${dayStatuses.find(item => item.value === status)?.color ?? ""}`}>{status}</span>)}</div> : "No load"}
+              </tr>)}</> : <tr><th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th><td colSpan={10} className={`${cell} whitespace-pre-wrap break-words text-center ${statusColor ?? (statuses.length ? "text-zinc-300" : "text-zinc-600")}`}>
+                {statuses.length === 1 ? statuses[0].label : statuses.length ? <div className="flex flex-wrap items-center justify-center gap-2">{statuses.map(status => <span key={status.key} className={`min-w-0 rounded px-2 font-medium ${status.color ?? "text-zinc-300"}`}>{status.label}</span>)}</div> : "No load"}
               </td>{dayIndex === 0 && adjustmentCells}<td className={cell} /></tr>}</Fragment>;
             })}
             {(onPlacement || hasStatementActions) && <tr data-pay-extra-row data-grid-ignore>

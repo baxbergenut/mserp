@@ -103,7 +103,7 @@ func (r *DriverPayRepository) History(ctx context.Context, driver string, page P
 			continue
 		}
 		week, _ := time.Parse(time.DateOnly, w)
-		report, e := r.cachedWeek(ctx, tx, "driver", week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, "") })
+		report, e := r.cachedPayrollWeek(ctx, tx, "driver", week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, "") })
 		if e != nil {
 			return Page[DriverPayHistoryRow]{}, e
 		}

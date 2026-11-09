@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// GrossBoardPlanningEntry is dispatch-only free text, never a load or a payroll
+// GrossBoardPlanningEntry is display-only free text, never a load or a financial
 // source. Empty text is a versioned tombstone, retained for safe recreation.
 type GrossBoardPlanningEntry struct {
 	DriverID string `json:"driverId"`
@@ -20,9 +20,9 @@ type GrossBoardPlanningEntry struct {
 	Version  int    `json:"version"`
 }
 
-// SavePlanningChanges does not enter the financial source gate or touch load
-// slots. Shared day-mode locks prevent races with load saves; the unique row
-// lock then serializes absent-row creation as well as updates.
+// SavePlanningChanges enters the source gate before day/row locks so finalization
+// freezes one coherent planning snapshot. It does not invalidate financial inputs
+// or touch load slots. Shared day locks also serialize competing day types.
 // Unchanged retries return the current version without a write/notification.
 func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries []GrossBoardPlanningEntry, actor string) ([]GrossBoardPlanningEntry, error) {
 	entries = append([]GrossBoardPlanningEntry{}, entries...)
@@ -36,6 +36,12 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	// Finalization holds this gate before pinning its snapshot in both global and
+	// resource mode. Take it first, including when changing an absent/tombstoned row.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
+		return nil, err
+	}
+	changed := false
 	days := grossBoardDays(nil, entries)
 	if err = lockGrossBoardDays(ctx, tx, days); err != nil {
 		return nil, err
@@ -72,6 +78,7 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 			return nil, ErrGrossBoardConflict
 		}
 		if current.Text != e.Text {
+			changed = true
 			err = tx.QueryRow(ctx, `UPDATE gross_board_planning_entries SET text=$4,version=version+1,updated_at=now(),updated_by=NULLIF($5,'')::uuid
  WHERE driver_id=$1 AND service_date=$2::date AND kind=$3 RETURNING version`, e.DriverID, e.Date, e.Kind, e.Text, actor).Scan(&current.Version)
 			if err != nil {
@@ -80,6 +87,13 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 			current.Text = e.Text
 		}
 		result[i] = current
+	}
+	if changed {
+		// Commit-only refresh of open pay-page display overlays, without enqueuing
+		// a financial calculator or changing its reviewed source revision.
+		if _, err = tx.Exec(ctx, `SELECT pg_notify('payroll_projection_visible','')`); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err

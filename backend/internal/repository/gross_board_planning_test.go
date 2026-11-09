@@ -219,7 +219,8 @@ func verifyGrossBoardPlanning(t *testing.T, ctx context.Context, pool *pgxpool.P
 		t.Fatal(err)
 	}
 	before := financial()
-	// Planning saves must work while a financial command owns its source gate.
+	// Planning labels participate in the finalization snapshot: even an exact
+	// retry waits at the source gate before day or row locks.
 	hold, err := admin.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -227,11 +228,15 @@ func verifyGrossBoardPlanning(t *testing.T, ctx context.Context, pool *pgxpool.P
 	if _, err = hold.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(736281940)`); err != nil {
 		t.Fatal(err)
 	}
-	work, cancel := context.WithTimeout(ctx, 5*time.Second)
+	work, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
 	entries := []GrossBoardPlanningEntry{{DriverID: projectionDriver, Date: "2026-10-07", Kind: "note", Text: "private family emergency"}, {DriverID: projectionDriver, Date: "2026-10-07", Kind: "destination", Text: "Dallas, TX"}}
-	saved, err := repo.SavePlanningChanges(work, entries, "")
+	_, err = repo.SavePlanningChanges(work, entries, "")
 	cancel()
 	_ = hold.Rollback(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("planning bypassed finalization source gate", err)
+	}
+	saved, err := repo.SavePlanningChanges(ctx, entries, "")
 	if err != nil || len(saved) != 2 || saved[0].Version != 1 || saved[1].Version != 1 {
 		t.Fatal("independent planning save", saved, err)
 	}

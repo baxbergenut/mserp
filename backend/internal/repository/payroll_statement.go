@@ -46,7 +46,7 @@ func (r *DriverPayRepository) payrollDetails(ctx context.Context, tx pgx.Tx, kin
 	var calculated *DriverPayWeek
 	result := DriverPayWeek{WeekStart: week.Format(time.DateOnly), Drivers: []DriverPayDriver{}}
 	for _, id := range ids {
-		value, err := r.cachedWeek(ctx, tx, "detail:"+kind+":"+id, week, func() (DriverPayWeek, error) {
+		value, err := r.cachedPayrollWeek(ctx, tx, "detail:"+kind+":"+id, week, func() (DriverPayWeek, error) {
 			if calculated == nil {
 				// An entry can be evicted between the peek and use. Including all requested
 				// roots is conservative and keeps the batch independent of cache pressure.
@@ -117,7 +117,7 @@ func (r *DriverPayRepository) PayrollPreview(ctx context.Context, kind string, w
 }
 
 func (r *DriverPayRepository) payrollSummary(ctx context.Context, tx pgx.Tx, kind string, week time.Time, compact bool) (DriverPayWeek, error) {
-	return r.cachedWeek(ctx, tx, "summary:"+kind, week, func() (DriverPayWeek, error) {
+	return r.cachedPayrollWeek(ctx, tx, "summary:"+kind, week, func() (DriverPayWeek, error) {
 		var report DriverPayWeek
 		var err error
 		readCtx := context.WithValue(ctx, payrollSummaryKey{}, compact)

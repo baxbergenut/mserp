@@ -57,11 +57,34 @@ per-load notes remain separate from these day-level planning entries.
 
 ## Financial and privacy boundary
 
-Free-form planning text is not a `day_status` or a `load_number`. It is excluded
-from Status Board load queues and overdue rules, load resolution, payroll
-source inputs, statements, exports, and provider payloads. It is loaded only
-for dispatch Gross Board reads, not the shared payroll board projection.
-Canonical day-status shortcuts keep their existing display and payroll rules.
+Free-form planning text is not a `day_status` or a `load_number`. It stays outside
+Status Board load queues and overdue rules, load resolution, financial source
+inputs, exports and provider payloads. The shared financial board projection
+does not load it. Canonical shortcuts retain their existing payroll rules.
+
+Driver and Investor Pay show custom text as display metadata in `dayStatuses`:
+`{date, status: "CUSTOM", text, kind}`, where kind is `note` or `destination`.
+Literal text such as HOME does not become a fixed status. A dated team member
+routes to the main statement; Investor Pay uses that driver's unique truck
+assignment at the end of the service day. Ambiguous truck assignments are not
+guessed. Cleared/versioned tombstones never produce labels. Planning alone does
+not create payroll roster membership.
+
+Open summary and detail reads overlay live planning in their database snapshot,
+including legacy in-memory caches and pinned prepared detail. Prior CUSTOM rows
+are replaced, not accumulated, so edits and clears cannot leave stale labels.
+Financial caches and native day-status facts remain independent; planning does
+not recalculate amounts, advance reviewed financial revisions or enqueue payroll
+preparation. Changed planning saves publish a commit-only payroll live refresh;
+clients compare day metadata even when financial statement revisions are equal.
+
+Finalization, including the prepared fast path, overlays current text before
+freezing the report. Planning API writes take the existing source gate before
+day-mode and row locks, serializing with both global and resource finalizers.
+Existing frozen labels and legacy finalized snapshots without day metadata are
+never backfilled from mutable planning. No schema migration is needed for this
+display projection; migration 206's financial-source classification remains
+unrelated.
 
 A manual load remains eligible for the Status Board even if DataTruck has no
 matching record yet. Manual identifiers do not require an upstream match. Free-form text is committed
@@ -91,7 +114,14 @@ The inline flow is covered by `frontend/scripts/test-gross-board-inline-entry.mj
 (the existing planning script delegates to it). It uses intercepted synthetic API
 fixtures, not live data, and covers mutually exclusive day types, direct clearing,
 old note/destination records, failed saves, reload recovery and stale conflicts.
-Native financial/finalization protection remains intact. New day-mode tests
+Native financial/finalization protection remains intact. The payroll display
+regressions cover cached and prepared summary/detail reads, custom note and
+destination routing, tombstones, finalization and legacy frozen reports, unchanged
+financial values, commit-only refresh, and source-gate blocking. Run
+`TestPayrollPlanningDisplayDatabase`, `TestPayrollPlanningRoutingDatabase` and
+`TestPayrollPlanningNotificationsDatabase`, `TestPayrollPlanningSaveReceiptDatabase`
+and `TestPayrollPlanningFinalizationRaceDatabase` with the disposable
+`MSERP_DRIVER_PAY_TEST_DATABASE_URL`. New day-mode tests
 also cover competing load/status writes, split companion scope and transfers
 on a disposable localhost PostgreSQL instance.
 

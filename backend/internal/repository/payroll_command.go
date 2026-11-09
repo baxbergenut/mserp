@@ -665,7 +665,12 @@ func preparedSaveCard(ctx context.Context, tx pgx.Tx, kind, id, week string, c *
 		}
 	}
 	if err == nil {
-		c.before = &d
+		report := DriverPayWeek{WeekStart: week, Drivers: []DriverPayDriver{d}}
+		err = decoratePayPlanningStatuses(ctx, tx, kind, &report)
+		if err == nil {
+			d = report.Drivers[0]
+			c.before = &d
+		}
 	}
 	return d, err
 }

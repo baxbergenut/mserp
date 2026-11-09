@@ -11,6 +11,7 @@ export function LazyDriverCard({ onDetails, detailRevision, ...props }: DriverCa
   useLayoutEffect(() => { expected.current = driver; }, [driver]);
   const id = driver.id, week = driver.edits.weekStart, investor = !!driver.investorId, summary = !!driver.summary, version = driver.edits.version;
   const statementRevision = driver.statementRevision, expenseRevision = driver.expenseRevision;
+  const dayStatusRevision = JSON.stringify(driver.dayStatuses ?? []);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -32,7 +33,7 @@ export function LazyDriverCard({ onDetails, detailRevision, ...props }: DriverCa
       onDetails(shown, detail, report.revision);
     }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Unable to load statement"); });
     return () => controller.abort();
-  }, [id, week, investor, summary, version, statementRevision, expenseRevision, detailRevision, open, onDetails, attempt]);
+  }, [id, week, investor, summary, version, statementRevision, expenseRevision, dayStatusRevision, detailRevision, open, onDetails, attempt]);
   const retry = useCallback(() => { setError(""); setAttempt(value => value + 1); }, []);
   return <DriverCard {...props} detailError={error} onRetryDetails={retry} />;
 }

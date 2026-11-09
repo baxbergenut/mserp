@@ -1433,6 +1433,13 @@ export interface PayAutoCharge {
   scaleDue?: string;
   scaleOriginalAmount?: string;
 }
+export interface PayDayStatus {
+  date: string;
+  status: Exclude<GrossBoardDayStatus, ""> | "CUSTOM";
+  /** Display-only Gross Board text; never a payroll amount or fixed status. */
+  text?: string;
+  kind?: GrossBoardPlanningKind;
+}
 export interface DriverPayDriver {
   escrowCollectionChange?: boolean;
   manualAddition?: boolean;
@@ -1445,7 +1452,7 @@ export interface DriverPayDriver {
   brokerReimbursements?: { expenseId: string; loadNumber: string; expenseType: string; expenseDate: string; amount: string }[];
   displayEmploymentTypes?: EmploymentType[];
   homeWeek?: boolean;
-  dayStatuses?: { date: string; status: Exclude<GrossBoardDayStatus, ""> }[];
+  dayStatuses?: PayDayStatus[];
   dispatchers?: { id: string; name: string }[];
   summary?: { loads: number; missingFees: number; review: number; fee: string; payable: string };
   /** Recorded bonuses from legacy finalized statements only. */

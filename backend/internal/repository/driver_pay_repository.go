@@ -208,7 +208,7 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	result, err := r.cachedWeek(ctx, tx, "driver:"+driverID, week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, driverID) })
+	result, err := r.cachedPayrollWeek(ctx, tx, "driver:"+driverID, week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, driverID) })
 	result = selectPayDriver(result, driverID)
 	if err != nil {
 		return result, err

@@ -58,7 +58,7 @@ func (r *DriverPayRepository) InvestorHistory(ctx context.Context, owner string,
 	result := []InvestorStatementWeek{}
 	for _, w := range weeks[page.Offset():min(page.Offset()+page.PageSize, len(weeks))] {
 		week, _ := time.Parse(time.DateOnly, w)
-		report, e := r.cachedWeek(ctx, tx, "investor", week, func() (DriverPayWeek, error) { return readInvestorPay(ctx, tx, week) })
+		report, e := r.cachedPayrollWeek(ctx, tx, "investor", week, func() (DriverPayWeek, error) { return readInvestorPay(ctx, tx, week) })
 		if e != nil {
 			return Page[InvestorStatementWeek]{}, e
 		}

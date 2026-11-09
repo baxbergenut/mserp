@@ -14,7 +14,7 @@ func TestPayHomeWeek(t *testing.T) {
 	start, _ := time.Parse(time.DateOnly, week)
 	d := DriverPayDriver{Edits: DriverPayEdits{WeekStart: week}}
 	for i := 0; i < 7; i++ {
-		d.DayStatuses = append(d.DayStatuses, PayDayStatus{start.AddDate(0, 0, i).Format(time.DateOnly), "HOME"})
+		d.DayStatuses = append(d.DayStatuses, PayDayStatus{Date: start.AddDate(0, 0, i).Format(time.DateOnly), Status: "HOME"})
 	}
 	if !payHomeWeek(week, d) || !summarizePayStatement(d).HomeWeek {
 		t.Fatal("full no-load Home week must survive compact summaries")
@@ -25,7 +25,9 @@ func TestPayHomeWeek(t *testing.T) {
 	}{
 		{"partial week", func(d *DriverPayDriver) { d.DayStatuses = d.DayStatuses[:6] }},
 		{"duplicate day", func(d *DriverPayDriver) { d.DayStatuses[6] = d.DayStatuses[0] }},
-		{"conflicting status", func(d *DriverPayDriver) { d.DayStatuses = append(d.DayStatuses, PayDayStatus{week, "SHOP"}) }},
+		{"conflicting status", func(d *DriverPayDriver) {
+			d.DayStatuses = append(d.DayStatuses, PayDayStatus{Date: week, Status: "SHOP"})
+		}},
 		{"actual load", func(d *DriverPayDriver) { d.Loads = []DriverPayLoad{{Date: week}} }},
 		{"compact loads", func(d *DriverPayDriver) { d.Summary = &PayStatementSummary{Loads: 1} }},
 	} {
@@ -73,7 +75,7 @@ func testPayrollDayStatusRouting(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err := decoratePayDayStatuses(ctx, tx, "driver", &driverReport); err != nil {
 		t.Fatal(err)
 	}
-	want := []PayDayStatus{{"2026-10-05", "HOME"}, {"2026-10-07", "IN TRANSIT"}}
+	want := []PayDayStatus{{Date: "2026-10-05", Status: "HOME"}, {Date: "2026-10-07", Status: "IN TRANSIT"}}
 	if !reflect.DeepEqual(driverReport.Drivers[0].DayStatuses, want) {
 		t.Fatalf("team statuses, duplicates, deleted rows and week boundaries: %+v", driverReport)
 	}
@@ -118,10 +120,11 @@ func testPayrollDayStatusRouting(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err := decoratePayDayStatuses(ctx, tx, "driver", &driverReport); err != nil || !reflect.DeepEqual(driverReport.Drivers[0].DayStatuses, want) {
 		t.Fatalf("frozen day labels changed: %+v %v", driverReport, err)
 	}
-	// Old snapshots without metadata gain labels on read, retaining all amounts.
+	// Old snapshots without metadata stay frozen; today's mutable labels cannot
+	// reconstruct the display reviewed at the original finalization.
 	driverReport.Drivers[0].DayStatuses = nil
 	driverReport.Drivers[0].FuelTotal = "25.00"
-	if err := decoratePayDayStatuses(ctx, tx, "driver", &driverReport); err != nil || driverReport.Drivers[0].DayStatuses[1].Status != "RESET" || driverReport.Drivers[0].FuelTotal != "25.00" {
+	if err := decoratePayDayStatuses(ctx, tx, "driver", &driverReport); err != nil || driverReport.Drivers[0].DayStatuses != nil || driverReport.Drivers[0].FuelTotal != "25.00" {
 		t.Fatalf("legacy display metadata: %+v %v", driverReport, err)
 	}
 }

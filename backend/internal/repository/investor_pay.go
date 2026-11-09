@@ -571,7 +571,7 @@ func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, t
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	result, err := r.cachedWeek(ctx, tx, "investor", week, func() (DriverPayWeek, error) { return readInvestorPay(ctx, tx, week) })
+	result, err := r.cachedPayrollWeek(ctx, tx, "investor", week, func() (DriverPayWeek, error) { return readInvestorPay(ctx, tx, week) })
 	if err != nil {
 		return result, err
 	}
@@ -599,7 +599,7 @@ func (r *DriverPayRepository) InvestorStatement(ctx context.Context, week time.T
 		return DriverPayWeek{}, err
 	}
 	defer tx.Rollback(ctx)
-	result, err := r.cachedWeek(ctx, tx, "investor:"+id, week, func() (DriverPayWeek, error) {
+	result, err := r.cachedPayrollWeek(ctx, tx, "investor:"+id, week, func() (DriverPayWeek, error) {
 		selected, err := selectPayrollContext(payrollWeekContext(ctx, week.Format(time.DateOnly)), tx, "truck", id)
 		if err != nil {
 			return DriverPayWeek{}, err

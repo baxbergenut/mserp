@@ -3837,7 +3837,7 @@ Status Board database tests verify the production payroll coverage check.
   text uses Add as status/destination; there is no planning chooser/modal. New statuses
   use note storage, and legacy destinations use the same visual style without
   migration. Inline Enter/blur saves and Escape cancels; failed drafts recover.
-  Day-level text remains separate from loads and never changes dispatch or pay.
+  Day-level text remains separate from loads and never changes dispatch or pay amounts.
   A day defaults to load entry and can hold loads OR a custom/fixed status, not
   both. Load identifiers save on Enter/blur; free text requires the explicit
   custom-status alternative. Clear the current type before switching. Shared per-day transactional
@@ -3847,10 +3847,18 @@ Status Board database tests verify the production payroll coverage check.
   tombstones. GET/live Gross Board responses carry `planningEntries`; the
   dedicated PUT `/gross-board/planning-entries` cannot be overwritten by older
   full-row load clients. See `docs/GROSS_BOARD_PLANNING.md`.
-- Planning text is dispatch-only: never copy it into Status Board queue inputs,
-  payroll snapshots, exports or provider payloads. Keep manual unmatched loads
-  eligible and existing fixed status shortcuts intact. Migration 206 does not
-  reclassify existing text or alter historical load records.
+- Planning text appears as display-only CUSTOM day metadata in Driver and Investor
+  Pay, routed through the dated team main and unique dated truck assignment.
+  Open summary/detail reads overlay current text after financial caches; edits
+  and tombstones refresh through the existing payroll live channel without
+  recalculating amounts or changing financial revisions. Finalization freezes
+  the labels under the source gate. Frozen statements, including legacy snapshots
+  without labels, never receive mutable planning backfills. Planning writers
+  acquire that gate before day/row locks. Keep text out of Status Board queues,
+  financial inputs, exports and provider payloads. Migration 206 and its unrelated
+  financial-source classification stay unchanged. Check TestPayrollPlanningDisplayDatabase,
+  TestPayrollPlanningRoutingDatabase, TestPayrollPlanningNotificationsDatabase,
+  TestPayrollPlanningSaveReceiptDatabase and TestPayrollPlanningFinalizationRaceDatabase.
 - Install the matching deploy helper before migration 206. It quiesces writers
   and rejects rollback binaries without -gross-board-planning-capability.
 ## Previously active Status Board loads

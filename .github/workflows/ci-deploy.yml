@@ -229,6 +229,11 @@ jobs:
         working-directory: frontend
         run: node scripts/test-payroll-completed-week.mjs
 
+      - name: Verify Gross Board status labels on payroll
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-payroll-day-statuses.mjs
+
       - name: Verify prepared payroll drafts and command recovery
         if: inputs.full_browser_tests == true
         working-directory: frontend

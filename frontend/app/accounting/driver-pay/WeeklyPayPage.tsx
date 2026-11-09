@@ -231,7 +231,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
         retryDelay = 1000;
         if (!cancelled && !settlementPending.current.size && !draftEditors.current.size && !savingRef.current && !Object.keys(changesRef.current).length) {
           setPreparationError("");
-          setReport(current => current && current.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state && JSON.stringify(current.pagination) === JSON.stringify(value.pagination) && current.drivers.length === value.drivers.length && current.drivers.every((row, i) => row.id === value.drivers[i].id && row.statementRevision === value.drivers[i].statementRevision && row.expenseRevision === value.drivers[i].expenseRevision && row.preparationState === value.drivers[i].preparationState) ? current : value);
+          setReport(current => current && current.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state && JSON.stringify(current.pagination) === JSON.stringify(value.pagination) && current.drivers.length === value.drivers.length && current.drivers.every((row, i) => row.id === value.drivers[i].id && row.statementRevision === value.drivers[i].statementRevision && row.expenseRevision === value.drivers[i].expenseRevision && row.preparationState === value.drivers[i].preparationState && JSON.stringify(row.dayStatuses ?? []) === JSON.stringify(value.drivers[i].dayStatuses ?? [])) ? current : value);
         }
       }).catch(reason => {
         if (!cancelled) {

@@ -202,6 +202,11 @@ func preparedSettlementReport(ctx context.Context, tx pgx.Tx, c *payrollCommand,
 			return report, err
 		}
 	}
+	// Prepared financial values are reusable; mutable display text is not. The
+	// caller holds the source gate before this snapshot and freezes these labels.
+	if err = decoratePayPlanningStatuses(ctx, tx, kind, &report); err != nil {
+		return report, err
+	}
 	// Match the authoritative allocator's order, independently of database collation.
 	sort.SliceStable(report.Drivers, func(i, j int) bool {
 		a, b := report.Drivers[i], report.Drivers[j]
