@@ -25,14 +25,16 @@ export function useDispatcherOrder(drivers: DriverBoardDriver[]) {
   }, [key]);
   const ids = useMemo(() => {
     const current = new Set(drivers.map(driver => driver.dispatcherId));
-    return ["", ...preferred.filter(id => id && current.has(id)), ...Array.from(current).filter(id => id && !preferred.includes(id))];
+    current.add(""); // The empty/pending-hire group is always available.
+    const defaults = ["", ...Array.from(current).filter(Boolean)];
+    return [...preferred.filter(id => current.has(id)), ...defaults.filter(id => !preferred.includes(id))];
   }, [drivers, preferred]);
   const ordered = useMemo(() => {
     const ranks = new Map(ids.map((id, index) => [id, index]));
     return [...drivers].sort((a, b) => ranks.get(a.dispatcherId)! - ranks.get(b.dispatcherId)!);
   }, [drivers, ids]);
   function reorder(id: string, target: string, after: boolean) {
-    if (!id || !target || id === target || !ids.includes(id) || !ids.includes(target)) {
+    if (id === target || !ids.includes(id) || !ids.includes(target)) {
       throw new Error("The dispatcher list changed. Try again.");
     }
     const next = ids.filter(value => value !== id);
@@ -44,5 +46,5 @@ export function useDispatcherOrder(drivers: DriverBoardDriver[]) {
     setPreferred(saved);
     return persisted;
   }
-  return { drivers: ordered, reorder };
+  return { drivers: ordered, ids, reorder };
 }

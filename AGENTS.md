@@ -1090,7 +1090,7 @@ positive Reimburse-method expense credits already included in net payable.
   blocked. Turning Auto-order off saves the current sorted roster as manual order.
   PUT /driver-board/auto-order requires driver_board.write and uses the same
   dispatcher lock as row moves. Status/assignment records are left intact.
-  Unassigned is pinned first, uses the same group heading and remains a drop
+  Unassigned defaults first, uses the same group heading and remains a drop
   target when empty. Dragging between dispatcher groups assigns/unassigns the
   native driver immediately at the database clock and saves the shared placement,
   with actor-attributed assignment history. POST /driver-board/order fences and
@@ -1099,8 +1099,11 @@ positive Reimburse-method expense credits already included in net payable.
   Pointer/touch, edge scrolling, Escape, failed-save rollback and Up/Down work;
   Alt+Up unassigns.
   Dispatcher-group order is personal browser localStorage, keyed by signed-in user.
-  Read-only users can reorder groups; Unassigned stays first. Live snapshots retain
-  the local preference. Migration 125's shared order is ignored and retained only
+  Read-only users can reorder all groups, including Unassigned and its pending hires. Live snapshots retain
+  the local preference, including filtered views and custom column layouts.
+  Presence geometry is written directly each animation frame while peers exist,
+  following scroll, sidebar/ancestor transforms and row motion without React queue lag.
+  Migration 125's shared order is ignored and retained only
   for compatibility; POST /driver-board/dispatcher-order returns 410 for old clients.
   Browser regressions: frontend/scripts/test-dispatcher-order.mjs and
   frontend/scripts/status-board-order-e2e.mjs.

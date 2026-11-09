@@ -192,7 +192,8 @@ export default function DriverBoardPage() {
       gap: run === details && run !== heading && run.span >= 5 ? 2 : 0,
     }));
   }, [columns, columnWidth]);
-  const dispatchers: [string, string][] = [["", "Unassigned"], ...Array.from(new Map((board?.drivers ?? []).filter(d => d.dispatcherId).map(d => [d.dispatcherId, d.dispatcherName])).entries())];
+  const dispatcherNames = new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName]));
+  const dispatchers: [string, string][] = dispatcherOrder.ids.map(id => [id, id === "" ? "Unassigned" : dispatcherNames.get(id) ?? id]);
   const pendingDrivers = (board?.pendingDrivers ?? []).filter(d => (selectedDispatchers === null || selectedDispatchers.includes("")) && (selectedStatuses === null || selectedStatuses.includes("NEW DRIVER")) && d.fullName.toLowerCase().includes(search.trim().toLowerCase()));
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
   const ids = new Set(drivers.map(d => d.id));
@@ -293,7 +294,7 @@ export default function DriverBoardPage() {
       <input aria-label="Search Status Board" placeholder="Search driver, truck, trailer or load…" value={search} onChange={event => setSearch(event.target.value)} className={`${controlClass} max-w-80`} />
 
 
-      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={moveDispatcher} reorderDisabled={loading || leaving || rowDrag.active || state.actionBusy} pinnedFirst="" />
+      <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setSelectedDispatchers} onReorder={moveDispatcher} reorderDisabled={loading || leaving || rowDrag.active || state.actionBusy} />
       <BoardFilter label="Status" options={[["", "No status"], ...statusChoices.map(s => [s, statusLabel(s)] as [string, string])]} selected={selectedStatuses} onChange={setSelectedStatuses} />
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={state.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${state.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{state.connected ? "Live" : "Connecting…"}</span>
@@ -342,8 +343,11 @@ export default function DriverBoardPage() {
             onDoubleClick={() => resizeColumn(column)} />
         </th>)}</tr></thead>
         <tbody>
-          {!loading && (selectedDispatchers === null || selectedDispatchers.includes("")) && groupHeader({ dispatcherId: "", dispatcherName: "Unassigned" })}
-          {!loading && pendingDrivers.map(d => <tr key={d.intakeId} data-pending-intake-id={d.intakeId} className="bg-zinc-950/20">
+          {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(column => <td key={column} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : dispatcherOrder.ids.flatMap(dispatcherId => {
+            const members = renderedDrivers.filter(d => d.dispatcherId === dispatcherId);
+            if (!members.length && (dispatcherId !== "" || (selectedDispatchers !== null && !selectedDispatchers.includes("")))) return [];
+            return [groupHeader(members[0] ?? { dispatcherId: "", dispatcherName: "Unassigned" }),
+              ...(dispatcherId === "" ? pendingDrivers.map(d => <tr key={d.intakeId} data-pending-intake-id={d.intakeId} className="bg-zinc-950/20">
             {columns.map(column => {
               if (column === "driver") return <th key={column} scope="row" className={`${cellClass} bg-zinc-950 h-8 px-1.5 text-left font-medium text-zinc-200`} title={d.fullName}>{d.fullName}</th>;
               if (column === "status") return <td key={column} className={`${cellClass} px-1.5 text-center ${statusColor("NEW DRIVER")}`}>New driver</td>;
@@ -352,8 +356,9 @@ export default function DriverBoardPage() {
               </td>;
               return <td key={column} className={column === "currentLoad" ? `${cellClass} bg-zinc-950` : cellClass} />;
             })}
-          </tr>)}
-          {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(column => <td key={column} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : renderedDrivers.flatMap((d, i) => {
+          </tr>) : []),
+              ...members.map(d => {
+            const i = renderedDrivers.indexOf(d);
             const entry = entries[d.id];
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
             const atHome = ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status);
@@ -425,12 +430,10 @@ export default function DriverBoardPage() {
               homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,
               driverAddress: <td key="driverAddress" data-board-column="driverAddress" className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>,
             };
-            return [
-              d.dispatcherId !== "" && (i === 0 || renderedDrivers[i - 1].dispatcherId !== d.dispatcherId) ? groupHeader(d) : null,
-              <tr key={d.id} className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
+            return <tr key={d.id} className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 {columns.map(column => cells[column])}
-              </tr>,
-            ];
+              </tr>;
+          })];
           })}
           {!loading && drivers.length === 0 && pendingDrivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
         </tbody>

@@ -155,6 +155,36 @@ try {
   await expect(peer).toHaveAttribute('aria-label', /Scroll Driver 0.*Current load/);
   await expect.poll(async () => Math.abs((await peer.boundingBox()).x - (await currentLoad.boundingBox()).x)).toBeLessThan(1);
 
+  // Pure ancestor transforms emit neither scroll nor resize. Track them without
+  // waiting for a presence heartbeat; repeated moves must not trail behind.
+  await page.evaluate(async () => {
+    const main = document.querySelector('main');
+    const cell = document.querySelector('tr[data-driver-id="driver-0"] [data-board-column="currentLoad"]');
+    const peer = document.querySelector('[data-board-presence="Peer dispatcher"]');
+    for (const x of [80, 160, 40, 0]) {
+      main.style.transform = 'translateX(' + x + 'px)';
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (Math.abs(peer.getBoundingClientRect().left - cell.getBoundingClientRect().left) > 1) throw new Error('Presence trails transformed cell');
+    }
+    main.style.transform = '';
+  });
+  for (const name of ['Expand sidebar', 'Collapse sidebar']) {
+    const toggle = page.getByRole('button', { name, exact: true });
+    if (await toggle.count()) {
+      await toggle.click();
+      await expect.poll(async () => Math.abs((await peer.boundingBox()).x - (await currentLoad.boundingBox()).x)).toBeLessThan(1);
+    }
+  }
+
+  const presenceArea = page.locator('[data-scroll-key="driver-board"]');
+  await presenceArea.evaluate(area => { area.scrollTop = 500; });
+  await expect(peer).not.toBeVisible();
+  await presenceArea.evaluate(area => { area.scrollTop = 0; area.scrollLeft = 800; });
+  await expect(peer).not.toBeVisible();
+  await presenceArea.evaluate(area => { area.scrollLeft = 0; });
+  await expect(peer).toBeVisible();
+  await expect.poll(async () => Math.abs((await peer.boundingBox()).y - (await currentLoad.boundingBox()).y)).toBeLessThan(1);
+
   const resizeEdge = header('driver').locator('span');
   const resizeBox = await resizeEdge.boundingBox();
   await page.mouse.move(resizeBox.x + 3, resizeBox.y + 12);

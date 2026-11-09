@@ -23,8 +23,9 @@ const errors = [], writes = [];
 const makeDriver = (id, dispatcherId, dispatcherName) => ({ id, fullName: id, active: true, driverType: 'M', truckId: '', truckUnit: '', phone: '', location: null, dispatcherId, dispatcherName });
 const original = [makeDriver('unassigned', '', 'Unassigned'), makeDriver('a2', 'a', 'Alpha'), makeDriver('a1', 'a', 'Alpha'), makeDriver('b1', 'b', 'Beta'), makeDriver('c1', 'c', 'Charlie')];
 let snapshotDrivers = original;
+let pendingDrivers = [];
 const emptyLoads = { current: null, week: [], next: [{ planId: 'plan-1', number: '85A2193', loadId: 1, stops: [{ key: 'pickup', type: 'pickup', location: 'Chicago', schedule: { kind: 'window', label: 'PU 24/7 TUE', detail: 'Pickup any time Tuesday' } }] }], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: '2026-11-02', revision: 'fixture', customOrder: false };
-const board = (drivers = original) => ({ weekStart: '2026-11-02', drivers, entries: drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: '', destination: '', eta: '', notes: '', homeTime: '', version: 1 })), driverOrderRevisions: {}, dispatcherOrderRevision: '', grossEntries: [], loads: Object.fromEntries(drivers.map(d => [d.id, emptyLoads])), eld: { configured: false } });
+const board = (drivers = original) => ({ weekStart: '2026-11-02', drivers, pendingDrivers, entries: drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: '', destination: '', eta: '', notes: '', homeTime: '', version: 1 })), driverOrderRevisions: {}, dispatcherOrderRevision: '', grossEntries: [], loads: Object.fromEntries(drivers.map(d => [d.id, emptyLoads])), eld: { configured: false } });
 async function setup(page, identity) {
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
@@ -52,7 +53,7 @@ async function moveUp(page, name) {
   const filter = page.getByRole('button', { name: 'Dispatcher filter', exact: true });
   if (await filter.getAttribute('aria-expanded') !== 'true') await filter.click();
   const choices = page.getByRole('group', { name: 'Dispatcher choices', exact: true });
-  await expect(choices.getByRole('button', { name: 'Move Unassigned', exact: true })).toHaveCount(0);
+  await expect(choices.getByRole('button', { name: 'Move Unassigned', exact: true })).toHaveCount(1);
   await choices.getByRole('button', { name: 'Move ' + name, exact: true }).press('ArrowUp');
 }
 try {
@@ -105,6 +106,29 @@ try {
   await expectOrder(page, ['', 'c', 'b', 'd']);
   await choices.getByLabel('Alpha', { exact: true }).check();
   await expectOrder(page, ['', 'c', 'a', 'b', 'd']);
+  // Move Unassigned with keyboard and pointer, then retain it across reload and custom columns.
+  await choices.getByRole('button', { name: 'Move Unassigned', exact: true }).press('ArrowDown');
+  await expectOrder(page, ['c', '', 'a', 'b', 'd']);
+  await page.keyboard.press('Escape');
+  await page.locator('thead [data-board-column="driver"]').press('ArrowRight');
+  await page.reload();
+  await expectOrder(page, ['c', '', 'a', 'b', 'd']);
+  await page.getByRole('button', { name: 'Dispatcher filter', exact: true }).click();
+  await choices.getByRole('button', { name: 'Move Unassigned', exact: true }).dragTo(choices.getByRole('button', { name: 'Move Delta', exact: true }), { targetPosition: { x: 5, y: 25 } });
+  await expectOrder(page, ['c', 'a', 'b', 'd', '']);
+  await page.reload();
+  await expectOrder(page, ['c', 'a', 'b', 'd', '']);
+  pendingDrivers = [{ intakeId: 'pending-hire', fullName: 'Pending Hire' }];
+  snapshotDrivers = snapshotDrivers.filter(driver => driver.dispatcherId !== '');
+  await page.reload();
+  await expectOrder(page, ['c', 'a', 'b', 'd', '']);
+  await page.getByRole('button', { name: 'Dispatcher filter', exact: true }).click();
+  await choices.getByLabel('Unassigned', { exact: true }).uncheck();
+  await expectOrder(page, ['c', 'a', 'b', 'd']);
+  await choices.getByLabel('Unassigned', { exact: true }).check();
+  await expectOrder(page, ['c', 'a', 'b', 'd', '']);
+  expect(await page.locator('tbody > tr').last().getAttribute('data-pending-intake-id')).toBe('pending-hire');
+  pendingDrivers = [];
   // Corrupt preferences recover to the default order.
   snapshotDrivers = original;
   await page.evaluate(() => localStorage.setItem('mserp:dispatcher-order:v1:user-a', '{broken'));

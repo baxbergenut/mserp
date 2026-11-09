@@ -181,9 +181,9 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await page.screenshot({path:join(temp,'status-board-pending-hire.png'),fullPage:true});
   expect((await (await viewer.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).pendingDrivers).toEqual([]);
   await expect(viewer.locator('[data-pending-intake-id]')).toHaveCount(0);
-  // Unassigned stays pinned, while ordinary dispatcher ordering still works.
+  // All dispatcher groups expose personal ordering, including Unassigned.
   await page.getByLabel('Dispatcher filter',{exact:true}).click();
-  await expect(page.getByRole('button',{name:'Move Unassigned',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Move Unassigned',exact:true})).toHaveCount(1);
   const second=page.getByRole('button',{name:'Move Order Second',exact:true});
   await second.focus();await page.keyboard.press('ArrowUp');await page.keyboard.press('Escape');
   await expect.poll(()=>order(page)).toEqual([ids[3],ids[2],ids[0],ids[1]]);
@@ -217,5 +217,5 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   expect(page.url()).toBe(`${base}/driver-board`);expect(navigations).toBe(0);
   page.off('framenavigated',navigation);
   await page.getByLabel('Search Status Board',{exact:true}).fill('');
-  console.log('Status Board order E2E passed: within/cross-group mouse, keyboard and touch, empty Unassigned, live viewers, history time/actor, reload, hidden rows, cancellation, failures, stale fences, pending-hire visibility, pinned group, and inline setup with immediate loading, cancel/retry, retained save drafts and no navigation.');
+  console.log('Status Board order E2E passed: within/cross-group mouse, keyboard and touch, empty Unassigned, live viewers, history time/actor, reload, hidden rows, cancellation, failures, stale fences, pending-hire visibility, movable group, and inline setup with immediate loading, cancel/retry, retained save drafts and no navigation.');
 }
