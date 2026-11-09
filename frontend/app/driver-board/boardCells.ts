@@ -1,6 +1,6 @@
 export const boardColumns = {
   currentLoad: ["Current load", 90], driver: ["Driver", 180], truck: ["Truck", 64], trailerNumber: ["Trailer", 100],
-  originalGross: ["Total gross", 110], driverGross: ["Driver gross", 110], phone: ["Phone", 124], status: ["Status", 70],
+  originalGross: ["Total gross", 110], driverGross: ["Driver gross", 110], phone: ["Phone", 108], status: ["Status", 70],
   destination: ["Destination", 160], eta: ["ETA", 180], loadPlan: ["Next load", 180], notes: ["Notes", 130],
   homeTime: ["Home time", 120], driverAddress: ["Driver address", 140],
 } as const;

@@ -58,6 +58,19 @@ try {
   const header = column => grid.locator(`thead [data-board-column="${column}"]`);
   const columnOrder = () => grid.locator('thead th').evaluateAll(cells => cells.map(cell => cell.dataset.boardColumn));
   const defaults = await columnOrder();
+  await expect.poll(async () => (await header('phone').boundingBox()).width).toBe(108);
+  const phoneText = grid.locator('tr[data-driver-id="driver-0"] [data-board-column="phone"] button > span').first();
+  expect(await phoneText.evaluate(label => {
+    const range = document.createRange(); range.selectNodeContents(label);
+    return range.getBoundingClientRect().width <= label.parentElement.clientWidth - 8;
+  })).toBe(true); // The shorter national number fits without clipping.
+  await header('phone').press('Shift+ArrowRight');
+  await expect.poll(async () => (await header('phone').boundingBox()).width).toBe(120);
+  await page.reload();
+  await expect.poll(async () => (await header('phone').boundingBox()).width).toBe(120); // Preserve explicit user width.
+  await header('phone').locator('span').dblclick();
+  await expect.poll(async () => (await header('phone').boundingBox()).width).toBe(108); // Auto-size returns to the new default.
+
   const dispatcherGroup = grid.locator('tr[data-dispatcher-id="dispatch"]');
   await expect(dispatcherGroup.getByText('Dispatch (202) - 100', { exact: true })).toBeVisible();
   await expect(grid.locator('tr[data-dispatcher-id=""]')).toContainText('Unassigned - 0');
