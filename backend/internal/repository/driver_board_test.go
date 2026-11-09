@@ -145,6 +145,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testManualNextLoads(t, ctx, pool, repo, fleet)
 			testCurrentLoadAutofill(t, ctx, pool, repo, fleet)
 			testBoardProgress(t, ctx, pool, repo, fleet)
+			testBoardQueuedCompletion(t, ctx, pool, repo, fleet)
 			testOperationalLoadSync(t, ctx, pool, repo, fleet)
 			testBoardAutomationDatabase(t, ctx, pool, repo, fleet)
 			testNextPickupTimesDatabase(t, ctx, pool, repo, fleet)

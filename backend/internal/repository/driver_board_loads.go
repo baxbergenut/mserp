@@ -976,6 +976,21 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		s.RestoredPlans[p.PlanID] = true
 		s.Hidden = slices.DeleteFunc(s.Hidden, func(id string) bool { return id == p.PlanID })
 		e.Status = boardProgressStatus(e.Status, []BoardLoad{p})
+	case "complete_queued":
+		// Complete only the exact noncurrent queue entry the editor reviewed.
+		// This is operational state, not a Gross Board or provider mutation.
+		index := slices.IndexFunc(view.Next, func(p BoardLoad) bool { return p.PlanID == a.PlanID })
+		if index < 0 || strings.EqualFold(strings.TrimSpace(view.Next[index].Number), strings.TrimSpace(e.CurrentLoad)) {
+			return result, ErrBoardLoadSelection
+		}
+		p := view.Next[index]
+		s.Completed = append(s.Completed, boardCompletionKey(p))
+		if p.Manual {
+			s.Completed = append(s.Completed, "plan:"+p.PlanID)
+		}
+		delete(s.RestoredPlans, p.PlanID)
+		next := slices.Delete(slices.Clone(view.Next), index, index+1)
+		e.Status = boardProgressStatus(e.Status, next)
 	case "restore_completed":
 		index := slices.IndexFunc(view.Unavailable, func(p BoardLoad) bool {
 			return p.PlanID == a.PlanID && p.CanRestoreToQueue

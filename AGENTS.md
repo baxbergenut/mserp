@@ -3887,3 +3887,13 @@ settings never bypass it. See docs/integrations/STATUS_BOARD_AUTOMATION.md.
 Automatic READY locations display city and state from TomTom structured fields.
 The ready-city-state-v1 context refreshes legacy full-address caches once under
 the existing budget/backoff; manual destination text stays untouched.
+
+## Status Board queued completion
+
+- Editors can Mark completed on a noncurrent Next entry, including Gross-origin
+  and in-transit loads. The exact plan is fenced by driver version and load revision.
+  Only operational completion/history changes; Gross Board, provider status,
+  payroll and the current selection remain untouched. Existing Restore to queue
+  corrects a local completion. Provider-terminal loads remain non-restorable.
+- Check testBoardQueuedCompletion in TestDriverBoardDatabase (fresh/migrated)
+  and frontend/scripts/test-status-board-loads.mjs.

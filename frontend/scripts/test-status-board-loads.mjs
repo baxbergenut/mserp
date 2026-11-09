@@ -31,6 +31,7 @@ let full = { current, week: [current, next, later], next: [next, later], earlier
 let entry = { driverId: driver.id, currentLoad: current.number, trailerNumber: '', trailerNote: '', status: 'DISPATCHED', destination: '', eta: '', notes: '', homeTime: '', version: 1 };
 const overview = () => ({ ...full, detailsOmitted: true, earlier: [], hidden: [], unavailable: [] });
 const board = () => ({ weekStart: '2026-10-26', drivers: [driver], entries: [entry], grossEntries: [], loads: { [driver.id]: overview() }, eld: { configured: false } });
+let editable = true;
 let detailReads = 0, boardReads = 0, mutations = 0, holdDetails = false, failDetails = false;
 const pending = [], errors = [];
 try {
@@ -53,6 +54,20 @@ try {
         if (input.action === 'order') {
           expect(input.order).toEqual(full.next.map(load => load.planId).reverse());
           full = { ...full, next: [...full.next].reverse(), revision: `order-${entry.version}`, customOrder: true };
+          entry = { ...entry, version: entry.version + 1 };
+          return route.fulfill({ json: { entry, loads: full } });
+        }
+        if (input.action === 'complete_queued') {
+          const target = full.next.find(load => load.planId === input.planId);
+          expect(target?.number).toBe('84V7859');
+          expect(full.current.number).toBe('NEXT');
+          full = { ...full, next: full.next.filter(load => load.planId !== input.planId), unavailable: [...full.unavailable, { ...target, completed: true, canRestoreToQueue: true }], revision: 'queued-completed' };
+          entry = { ...entry, version: entry.version + 1 };
+          return route.fulfill({ json: { entry, loads: full } });
+        }
+        if (input.action === 'restore_completed' && input.planId === '84V7859') {
+          const target = full.unavailable.find(load => load.planId === input.planId);
+          full = { ...full, next: [...full.next, { ...target, completed: false, canRestoreToQueue: false }], unavailable: full.unavailable.filter(load => load.planId !== input.planId), revision: 'queued-restored' };
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
@@ -95,7 +110,7 @@ try {
     }
     if (path === '/driver-board') { boardReads++; return route.fulfill({ json: board() }); }
     const fixtures = {
-      '/auth/session': { user: { id: 'loads-test', username: 'Loads Test', permissions: ['driver_board.read', 'driver_board.write'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'loads-test', username: 'Loads Test', permissions: editable ? ['driver_board.read', 'driver_board.write'] : ['driver_board.read'] }, csrfToken: 'fixture' },
       '/tasks/count': { count: 0 }, '/sidebar-counts': {},
     };
     await route.fulfill({ json: fixtures[path] ?? [] });
@@ -343,8 +358,27 @@ try {
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
   await expect(duplicateButtons).toHaveCount(1);
+  // Complete an old Gross-origin transit load without touching the current load.
+  full = { ...full, next: [{ ...load('84V7859'), date: '2026-11-02', sourceStatus: 'in_transit', canRemoveFromQueue: false }], revision: 'old-transit' };
+  await push();
+  await panel.getByRole('button', { name: '84V7859', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: '../artifacts/queued-mark-completed.png', fullPage: true });
+  await panel.getByRole('button', { name: 'Mark completed', exact: true }).click();
+  await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: /84V7859.*Completed load/ })).toBeVisible();
+  await expect(panel.getByRole('button', { name: /NEXT.*Current load/ })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: /Restore to queue.*84V7859/ }).click();
+  await expect(panel.locator('[data-queued-load="84V7859"]')).toBeVisible();
+  await expect(panel.getByRole('button', { name: /NEXT.*Current load/ })).toBeVisible();
+  editable = false;
+  await page.reload();
+  await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
+  await panel.getByRole('button', { name: '84V7859', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('Status Board loads passed: animated drag, keyboard reorder, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
+  console.log('Status Board loads passed: animated drag, keyboard reorder, queued completion/read-only permissions, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

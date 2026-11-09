@@ -137,6 +137,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
           onClick={() => void act({ action: load.previouslyActive ? "restore_previous" : "restore_completed", planId: load.planId })}>Restore to queue</button>}
         {(kind === "next" || kind === "earlier") && !load.canRemoveFromQueue && <p className="mt-3 text-xs text-zinc-500">Remove this plan in Gross Board.</p>}
         {(kind === "next" || kind === "earlier") && canEdit && <div className="mt-3 flex flex-wrap gap-2"><button className={buttonClass} disabled={locked} onClick={() => choose(load)}>Set current</button>{load.canRemoveFromQueue && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "hide", planId: load.planId })}>Remove from queue</button>}{kind === "next" && <>
+            <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "complete_queued", planId: load.planId })}>Mark completed</button>
             <button aria-label={`Move ${load.number} up`} className={buttonClass} disabled={locked || index === view.next.length - 1} onClick={() => move(index, 1)}><ArrowUp className="h-3 w-3" /></button>
             <button aria-label={`Move ${load.number} down`} className={buttonClass} disabled={locked || index === 0} onClick={() => move(index, -1)}><ArrowDown className="h-3 w-3" /></button>
           </>}</div>}</div>}

@@ -603,7 +603,7 @@ export interface BoardLoads {
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "restore_completed" | "restore_previous" | "source" | "manual" | "stop_time";
+  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "complete_queued" | "restore_completed" | "restore_previous" | "source" | "manual" | "stop_time";
   number?: string; planId?: string; order?: string[]; stopKey?: string; manualStopTime?: string;
 }
 
