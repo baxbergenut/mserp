@@ -574,6 +574,7 @@ export interface SyncFiveELDResult {
 
 export interface BoardSchedule { kind: string; label: string; detail: string; reason?: string; beginAt?: string; endAt?: string }
 export interface BoardAutomation {
+  readyLocationAddress?: string; readyLocationStale?: boolean;
   context: string; appointment?: BoardSchedule; manualStopTime: string; stopType?: "pickup" | "delivery"; arrived: boolean;
   arrivalOverride: "auto" | "arrived" | "not_arrived"; observedAt: string; stale: boolean;
   travelMode: "auto" | "manual"; travelValue: string; reason?: string;

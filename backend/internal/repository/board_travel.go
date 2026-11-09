@@ -234,6 +234,15 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 		if a == nil {
 			continue
 		}
+		if a.ready {
+			if onlyDriver != "" {
+				return ErrETARetryUnavailable
+			}
+			if err := r.refreshReadyLocation(ctx, routes, d, view); err != nil {
+				return err
+			}
+			continue
+		}
 		var stop BoardStop
 		if view.Current != nil {
 			for _, s := range view.Current.Stops {

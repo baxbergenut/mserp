@@ -110,6 +110,11 @@ func boardStopCoordinates(s datatruck.LoadStop) (*float64, *float64) {
 }
 
 type BoardAutomation struct {
+	ReadyLocationAddress string `json:"readyLocationAddress,omitempty"`
+	ReadyLocationStale   bool   `json:"readyLocationStale"`
+	ready                bool
+	readyLocation        BoardReadyLocation
+
 	Context              string          `json:"context"`
 	Appointment          *BoardSchedule  `json:"appointment,omitempty"`
 	ManualStopTime       string          `json:"manualStopTime"`
@@ -243,7 +248,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 	rows, err := tx.Query(ctx, `WITH vin_counts AS MATERIALIZED (
  SELECT upper(regexp_replace(vin,'[^A-Za-z0-9]','','g')) vin,count(*) matches FROM trucks WHERE vin IS NOT NULL GROUP BY 1
  ) SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(c.travel,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
- (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND coalesce(vc.matches,0)=1),coalesce(el.source,''),el.reported_at
+ (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND coalesce(vc.matches,0)=1),coalesce(el.source,''),el.reported_at,coalesce(c.ready_location,'{}'::jsonb),c.ready_location_requested_at
  FROM drivers d LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN vin_counts vc ON vc.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
  LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+statusBoardELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids)
@@ -257,7 +262,9 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		var travel BoardTravel
 		var telemetrySafe bool
 		var gpsAt *time.Time
-		if err = rows.Scan(&id, &truck, &evidence, &travel, &etaContext, &eta, &telemetrySafe, &telemetrySource, &gpsAt); err != nil {
+		var readyLocation BoardReadyLocation
+		var readyRequestedAt *time.Time
+		if err = rows.Scan(&id, &truck, &evidence, &travel, &etaContext, &eta, &telemetrySafe, &telemetrySource, &gpsAt, &readyLocation, &readyRequestedAt); err != nil {
 			return err
 		}
 		v := views[id]
@@ -343,6 +350,15 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		}
 		if !telemetrySafe && a.Reason == "" {
 			a.Reason = "GPS automation requires a unique assigned truck VIN"
+		}
+
+		if entry.Status == "READY" {
+			// READY is a location, never a route. Keep saved manual data untouched.
+			a = &BoardAutomation{Context: readyLocationContext(truck, readyRequestedAt), TravelMode: "none", TelemetrySafe: telemetrySafe, ready: true, readyLocation: readyLocation}
+			if telemetrySafe && readyLocation.Context == a.Context && sameTelemetrySource(readyLocation.Source, telemetrySource) {
+				a.ReadyLocationAddress = readyLocation.Address
+				a.ReadyLocationStale = readyLocation.stale(time.Now(), gpsAt)
+			}
 		}
 		v.Automation = a
 		views[id] = v

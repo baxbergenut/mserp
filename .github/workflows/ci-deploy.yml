@@ -209,6 +209,11 @@ jobs:
         timeout-minutes: 5
         run: npx playwright install chromium
 
+      - name: Verify READY location and ETA suppression in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-board-ready-location.mjs
+
       - name: Verify administrator dashboard in Chromium
         if: inputs.full_browser_tests == true
         working-directory: frontend

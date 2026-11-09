@@ -333,3 +333,39 @@ unknown motion and provider failures can still prevent a usable ETA.
 Check `TestBoardTravelManualRetry`, `TestBoardTravelPreserveInFlightRetry`, the
 fresh/migration `TestDriverBoardDatabase` retry fixture, and
 `node scripts/test-board-eta-retry.mjs` after a `/api` frontend build.
+
+## READY current location
+
+Migration 207 adds a separate operational address cache. READY never displays
+ETA, mileage, or load appointments, including saved manual ETA values. Those
+saved values and manual destinations remain untouched. With no manual destination,
+the Destination cell shows the full TomTom reverse-geocoded Five ELD location.
+A manual address always wins; clearing it restores automatic location display.
+Missing location/address stays blank; stale last-known addresses are yellow.
+
+A committed transition to READY notifies a dedicated listener immediately. It
+uses the latest shared GPS cache, not a new tracking call, and does not wait for
+the minute sweep or five-second routing edit pause. Provider pacing, availability,
+and budgets still apply. The durable request timestamp survives restarts; the
+minute worker recovers missed notifications. Lookup failures never undo status
+saves. Concurrent workers deduplicate with a per-driver lock and fence results
+against status, truck/assignment and transition identity.
+
+Subsequent checks run on the existing one-minute automation sweep. Successful
+addresses refresh after 90 minutes AND one mile of movement from the last
+successful lookup, just like ETA routes. A new READY transition or truck context
+bypasses those gates. Failed lookups back off five minutes. Unchanged GPS is
+reused; missing, invalid, future and non-Five-ELD positions never call TomTom.
+Last-known GPS can resolve once, labeled stale rather than current evidence.
+
+Reverse search is a different SKU from routing. Attempts use the durable
+`tomtom_reverse` accounting row and a separate hard monthly cap of 1,000:
+`BOARD_REVERSE_GEOCODE_MONTHLY_LIMIT` may reduce it to 0 to disable. This is a
+safety cap, not a claim of free account entitlement. Paid routing configuration
+never bypasses it. Reverse requests share provider pacing/cooldown, and all
+attempts (including failed/unknown outcomes) count before HTTP. GET board reads
+never call a provider. Keys and provider error bodies stay server-side.
+
+Validation: `go test ./internal/boardroutes ./internal/repository`,
+`node scripts/test-driver-board.mjs`, and
+`node scripts/test-board-ready-location.mjs`.

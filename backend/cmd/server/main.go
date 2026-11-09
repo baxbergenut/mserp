@@ -462,6 +462,12 @@ func main() {
 	router.(interface {
 		ConfigureBoardETARetry(*boardroutes.Client, *fiveeld.Client, string)
 	}).ConfigureBoardETARetry(boardRoutes, fiveELDTelemetry, cfg.FiveELDUSDOT)
+	readyLocationDone := make(chan struct{})
+	go func() {
+		defer close(readyLocationDone)
+		repo := repository.NewDriverBoardRepository(pool, cfg.FiveELDEnabled || cfg.Samsara.Token != "")
+		repo.RunReadyLocationListener(ctx, boardRoutes, logger)
+	}()
 	boardAutomationDone := make(chan struct{})
 	go func() {
 		defer close(boardAutomationDone)
@@ -633,6 +639,10 @@ func main() {
 	case <-schedulerDone:
 	case <-shutdownCtx.Done():
 		logger.Warn("scheduled syncs did not stop before shutdown timeout")
+	}
+	select {
+	case <-readyLocationDone:
+	case <-shutdownCtx.Done():
 	}
 	select {
 	case <-boardAutomationDone:

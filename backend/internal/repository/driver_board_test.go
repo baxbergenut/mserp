@@ -298,6 +298,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			if _, err = repo.Save(ctx, clearedRows); !errors.Is(err, ErrDriverBoardConflict) {
 				t.Fatal("inactive driver save accepted", err)
 			}
+			testReadyLocationDatabase(t, ctx, pool, repo, fleet)
 		})
 	}
 }

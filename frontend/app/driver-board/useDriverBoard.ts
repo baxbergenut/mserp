@@ -214,7 +214,7 @@ export function useDriverBoard(lockedDriverId?: string) {
         for (const entry of committed) {
           const view = loads[entry.driverId];
           if (view && entries[entry.driverId]?.destination !== entry.destination) {
-            loads[entry.driverId] = { ...view, automation: undefined, destinationSource: !entry.destination.trim() && !!view.stopKey };
+            loads[entry.driverId] = { ...view, automation: entry.status === "READY" ? view.automation : undefined, destinationSource: entry.status !== "READY" && !entry.destination.trim() && !!view.stopKey };
           }
         }
         committed.forEach(e => { entries[e.driverId] = e; });

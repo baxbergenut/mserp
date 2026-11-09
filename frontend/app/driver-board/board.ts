@@ -14,13 +14,19 @@ export function progressStatus(status: string, loads?: BoardLoads) {
   return loads && (status === "ENROUTE" || status === "RESERVED") ? (loads.next.length ? "RESERVED" : "ENROUTE") : status;
 }
 
+// READY uses the current-position address only while no human override is saved.
+// Never fall back to a retained load stop, which is not the truck's location.
+export function readyDestination(entry: DriverBoardEntry, loads?: BoardLoads) {
+  return entry.destination.trim() ? entry.destination : loads?.automation?.readyLocationAddress ?? "";
+}
+
 // Preview a draft immediately; autosave resolves the same match transactionally.
 export function previewCurrentLoad(loads: BoardLoads | undefined, entry: DriverBoardEntry, saved?: DriverBoardEntry): BoardLoads | undefined {
   if (!loads) return loads;
   const number = entry.currentLoad.trim().toLowerCase();
   const aligned = !loads.current || loads.current.number.trim().toLowerCase() === number;
   if (aligned && !entry.resolveCurrentLoad && entry.currentLoad === saved?.currentLoad) {
-    if (entry.destination !== saved?.destination) return { ...loads, automation: undefined, destinationSource: !entry.destination.trim() && !!loads.stopKey };
+    if (entry.destination !== saved?.destination) return { ...loads, automation: entry.status === "READY" ? loads.automation : undefined, destinationSource: entry.status !== "READY" && !entry.destination.trim() && !!loads.stopKey };
     if (!entry.statusEdited || entry.status === saved?.status) return loads;
     const kind = entry.status === "DISPATCHED" ? "pickup" : ["ENROUTE", "RESERVED"].includes(entry.status) ? "delivery" : "";
     if (!kind) return loads;

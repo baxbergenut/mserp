@@ -22,19 +22,20 @@ const TravelMode = "DRIVE"
 const EstimateAssumptions = "car route estimate; truck restrictions, HOS and breaks are not included"
 
 type Options struct {
-	Enabled               bool
-	APIKey                string
-	SpeedUnit             string
-	RequestsPerMinute     int
-	TomTomAPIKey          string
-	GoogleMonthlyFree     int
-	TomTomMonthlyFree     int
-	PaidProvider          string
-	TomTomBillingTimezone string
+	Enabled                    bool
+	APIKey                     string
+	SpeedUnit                  string
+	RequestsPerMinute          int
+	TomTomAPIKey               string
+	GoogleMonthlyFree          int
+	TomTomMonthlyFree          int
+	PaidProvider               string
+	TomTomBillingTimezone      string
+	ReverseGeocodeMonthlyLimit int
 }
 
 func LoadOptions() (Options, error) {
-	o := Options{Enabled: os.Getenv("BOARD_ROUTES_ENABLED") == "true", RequestsPerMinute: 30, GoogleMonthlyFree: 10000, TomTomMonthlyFree: 20000, PaidProvider: "off", TomTomBillingTimezone: "UTC"}
+	o := Options{Enabled: os.Getenv("BOARD_ROUTES_ENABLED") == "true", RequestsPerMinute: 30, GoogleMonthlyFree: 10000, TomTomMonthlyFree: 20000, PaidProvider: "off", TomTomBillingTimezone: "UTC", ReverseGeocodeMonthlyLimit: 1000}
 	if !o.Enabled {
 		return o, nil
 	}
@@ -57,6 +58,13 @@ func LoadOptions() (Options, error) {
 			}
 			*dst = n
 		}
+	}
+	if v := os.Getenv("BOARD_REVERSE_GEOCODE_MONTHLY_LIMIT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 1000 {
+			return o, errors.New("invalid reverse geocoding monthly limit")
+		}
+		o.ReverseGeocodeMonthlyLimit = n
 	}
 	if v := os.Getenv("BOARD_ROUTES_PAID_PROVIDER"); v != "" {
 		o.PaidProvider = v
@@ -82,18 +90,19 @@ func LoadOptions() (Options, error) {
 }
 
 type Client struct {
-	Options      Options
-	HTTP         *http.Client
-	URL          string
-	TomTomURL    string
-	Budget       Budget
-	mu           sync.Mutex
-	next         time.Time
-	blockedUntil time.Time
+	Options          Options
+	HTTP             *http.Client
+	URL              string
+	TomTomURL        string
+	TomTomReverseURL string
+	Budget           Budget
+	mu               sync.Mutex
+	next             time.Time
+	blockedUntil     time.Time
 }
 
 func NewClient(o Options) *Client {
-	return &Client{Options: o, HTTP: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, URL: "https://routes.googleapis.com/directions/v2:computeRoutes", TomTomURL: "https://api.tomtom.com/routing/1/calculateRoute"}
+	return &Client{Options: o, HTTP: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, URL: "https://routes.googleapis.com/directions/v2:computeRoutes", TomTomURL: "https://api.tomtom.com/routing/1/calculateRoute", TomTomReverseURL: "https://api.tomtom.com/search/2/reverseGeocode"}
 }
 
 type Estimate struct {
@@ -148,27 +157,8 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 	if err := ctx.Err(); err != nil {
 		return Estimate{}, err
 	}
-	c.mu.Lock()
-	now := time.Now()
-	at := c.next
-	if at.Before(now) {
-		at = now
-	}
-	if at.Before(c.blockedUntil) {
-		at = c.blockedUntil
-	}
-	rpm := c.Options.RequestsPerMinute
-	if rpm < 1 {
-		rpm = 30
-	}
-	c.next = at.Add(time.Minute / time.Duration(rpm))
-	c.mu.Unlock()
-	timer := time.NewTimer(time.Until(at))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return Estimate{}, ctx.Err()
-	case <-timer.C:
+	if err := c.waitForProvider(ctx); err != nil {
+		return Estimate{}, err
 	}
 	// Commit the reservation before sending; failed/unknown outcomes are not refunded.
 	provider, err := c.Budget.Reserve(ctx, options)
