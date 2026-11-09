@@ -103,77 +103,12 @@ func TestExpensePaymentsDatabase(t *testing.T) {
 					t.Fatal(truckErr)
 				}
 				exec(string(expenseAccessMigration))
-				for _, name := range []string{"057_driver_escrow.sql", "058_rename_driver_escrow.sql", "059_standalone_escrow.sql", "060_escrow_releases.sql", "061_escrow_replenishment.sql", "062_assignment_week_boundaries.sql", "064_load_truck_identity.sql", "068_reporting_performance.sql", "069_driver_status_escrow_tasks.sql", "074_weighmytruck_settlements.sql"} {
-					body, readErr := os.ReadFile("../../sql/" + name)
-					if readErr != nil {
-						t.Fatal(readErr)
-					}
-					exec(string(body))
-				}
+				// Exercise the legacy balances above, then restore every later production
+				// dependency before calling current payroll. A handpicked partial tail
+				// omitted planning display storage and its capture/notification prerequisites.
+				applyLaterTestMigrations(t, ctx, admin, "056")
 				// This fixture exercises ordinary expenses independently of onboarding escrow.
 				exec(`DELETE FROM driver_escrows`)
-
-			}
-			if mode == "migration" {
-				applyDriverTeams(t, ctx, admin)
-				bridge, readErr := os.ReadFile("../../sql/087_retire_expense_company.sql")
-				if readErr != nil {
-					t.Fatal(readErr)
-				}
-				exec(string(bridge))
-				for _, name := range []string{"084_gross_board_notes.sql", "085_expense_verification.sql", "086_driver_pay_layover.sql", "089_expense_efs.sql", "090_payroll_cache_revisions.sql", "093_pay_source_collections.sql", "095_expense_cost_breakdown.sql", "106_driver_only_penalties.sql", "109_expense_settlement_efs.sql"} {
-					body, readErr := os.ReadFile("../../sql/" + name)
-					if readErr != nil {
-						t.Fatal(readErr)
-					}
-					exec(string(body))
-				}
-			}
-			if mode == "migration" {
-				applyExpenseApplicantTestSchema(t, ctx, admin)
-				// This intentionally partial migration fixture omits fleet operations;
-				// payroll now also reads availability and its dated history.
-				exec(`ALTER TABLE drivers ADD COLUMN availability_status text NOT NULL DEFAULT 'active';
- CREATE TABLE fleet_status_history(id bigint,entity_kind text,entity_id uuid,track text,status text,effective_at timestamptz,recorded_at timestamptz,source text,source_ref text,baseline boolean);
- GRANT SELECT ON fleet_status_history TO mserp_app;`)
-				// Current payroll also reads durable owner-driver offboarding evidence.
-				body, readErr := os.ReadFile("../../sql/148_termination_truck_actions.sql")
-				if readErr != nil {
-					t.Fatal(readErr)
-				}
-				exec(string(body))
-			}
-			if mode == "migration" {
-				body, readErr := os.ReadFile("../../sql/152_gross_board_load_trips.sql")
-				if readErr != nil {
-					t.Fatal(readErr)
-				}
-				exec(string(body))
-			}
-			if mode == "migration" {
-				body, readErr := os.ReadFile("../../sql/159_load_week_transfers.sql")
-				if readErr != nil {
-					t.Fatal(readErr)
-				}
-				exec(string(body))
-			}
-			if mode == "migration" {
-				applyAccountingCutoverMigration(t, ctx, admin)
-				for _, name := range []string{"174_payroll_load_placements.sql", "177_broker_expenses.sql", "202_driver_scale_deductions.sql"} {
-					body, readErr := os.ReadFile("../../sql/" + name)
-					if readErr != nil {
-						t.Fatal(readErr)
-					}
-					exec(string(body))
-				}
-			}
-			if mode == "migration" {
-				exec("ALTER TABLE driver_pay_weeks ADD COLUMN expense_choices jsonb NOT NULL DEFAULT '{}'; ALTER TABLE investor_pay_weeks ADD COLUMN expense_choices jsonb NOT NULL DEFAULT '{}'; ALTER TABLE expense_payments ADD COLUMN statement_kind text, ADD COLUMN statement_id uuid;")
-				migration, readErr := os.ReadFile("../../sql/204_driver_pay_escrow_settlement.sql")
-				if readErr != nil {
-					t.Fatal(readErr)
-				}
-				exec(string(migration))
 			}
 			cfg, err := pgxpool.ParseConfig(dsn)
 			if err != nil {
