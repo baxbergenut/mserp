@@ -47,7 +47,7 @@ try {
   const base = `http://127.0.0.1:${server.address().port}`;
   const destination = page.getByRole('textbox', { name: /Appointment Driver .* Destination/, exact: true });
   const eta = page.locator('[data-driver-id="driver"] [data-board-column="eta"]');
-  loads.automation.readyLocationAddress = '123 Main Street, Chicago, IL 60601';
+  loads.automation.readyLocationAddress = 'Chicago, IL';
   entry.eta = '133 mi'; // Must hide retained manual input as well as automatic data.
   await page.goto(base + '/driver-board');
   await expect(destination).toHaveValue(loads.automation.readyLocationAddress);

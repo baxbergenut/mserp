@@ -129,12 +129,12 @@ assert.equal(leaveToday(new Date('2026-10-24T04:00:00Z')),'2026-10-24');
 console.log('Home time display passed: New York dates, Monday–Sunday, Home/Back switch, month precision, overdue and legacy values.');
 
 const ready = { currentLoad: 'EARLIER', status: 'READY', destination: '' };
-const readyLoads = { ...linked, stopKey: 'del', automation: { readyLocationAddress: '123 Main St, Chicago, IL 60601', readyLocationStale: false } };
-assert.equal(readyDestination(ready, readyLoads), '123 Main St, Chicago, IL 60601');
+const readyLoads = { ...linked, stopKey: 'del', automation: { readyLocationAddress: 'Chicago, IL', readyLocationStale: false } };
+assert.equal(readyDestination(ready, readyLoads), 'Chicago, IL');
 assert.equal(readyDestination({ ...ready, destination: 'Dispatcher override' }, readyLoads), 'Dispatcher override');
 assert.equal(readyDestination(ready, { ...readyLoads, automation: undefined }), '');
 assert.equal(readyDestination(ready, undefined), '');
 const readyCleared = previewCurrentLoad(readyLoads, ready, { ...ready, destination: 'Dispatcher override' });
 assert.equal(readyCleared.destinationSource, false);
 assert.equal(readyDestination(ready, readyCleared), readyLoads.automation.readyLocationAddress);
-console.log('READY destinations passed: full address, manual override precedence, missing GPS fallback and clearing override.');
+console.log('READY destinations passed: city/state, manual override precedence, missing GPS fallback and clearing override.');

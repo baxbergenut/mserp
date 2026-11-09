@@ -3880,3 +3880,7 @@ notify the immediate listener; minute sweeps recover missed work and refresh at
 and reject obsolete results. Reverse search has a separate durable 1,000/month
 hard cap (BOARD_REVERSE_GEOCODE_MONTHLY_LIMIT, reducible to zero); routing paid
 settings never bypass it. See docs/integrations/STATUS_BOARD_AUTOMATION.md.
+
+Automatic READY locations display city and state from TomTom structured fields.
+The ready-city-state-v1 context refreshes legacy full-address caches once under
+the existing budget/backoff; manual destination text stays untouched.

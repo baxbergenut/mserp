@@ -36,11 +36,19 @@ func TestReverseGeocodeResponses(t *testing.T) {
 		status     int
 		want       string
 	}{
-		{"address", `{"addresses":[{"address":{"freeformAddress":"  123 Main St, Toledo, OH 43604  "}}]}`, 200, "123 Main St, Toledo, OH 43604"},
+		{"city state", `{"addresses":[{"address":{"municipality":"  Toledo  ","countrySubdivisionCode":" OH ","countrySubdivision":"Ohio","freeformAddress":"123 Main St, Toledo, OH 43604"}}]}`, 200, "Toledo, OH"},
+		{"ISO code", `{"addresses":[{"address":{"municipality":"Toledo","countrySubdivisionCode":"US-OH"}}]}`, 200, "Toledo, OH"},
+		{"full state fallback", `{"addresses":[{"address":{"municipality":"Toledo","countrySubdivision":"Ohio"}}]}`, 200, "Toledo, Ohio"},
+		{"blank code fallback", `{"addresses":[{"address":{"municipality":"Toledo","countrySubdivisionCode":" ","countrySubdivision":"OH"}}]}`, 200, "Toledo, OH"},
 		{"empty", `{"addresses":[]}`, 200, ""},
 		{"missing address", `{"addresses":[{}]}`, 200, ""},
-		{"blank", `{"addresses":[{"address":{"freeformAddress":" "}}]}`, 200, ""},
-		{"control", `{"addresses":[{"address":{"freeformAddress":"Street\nCity"}}]}`, 200, ""},
+		{"no city", `{"addresses":[{"address":{"countrySubdivisionCode":"OH","countrySecondarySubdivision":"Lucas","freeformAddress":"123 Main St, Toledo, OH 43604"}}]}`, 200, ""},
+		{"no state", `{"addresses":[{"address":{"municipality":"Toledo","freeformAddress":"123 Main St, Toledo, OH 43604"}}]}`, 200, ""},
+		{"blank city", `{"addresses":[{"address":{"municipality":" ","countrySubdivisionCode":"OH"}}]}`, 200, ""},
+		{"control city", `{"addresses":[{"address":{"municipality":"Toledo\n","countrySubdivisionCode":"OH"}}]}`, 200, ""},
+		{"control state", `{"addresses":[{"address":{"municipality":"Toledo","countrySubdivision":"Ohio\t"}}]}`, 200, ""},
+		{"overlong city", `{"addresses":[{"address":{"municipality":"` + strings.Repeat("a", 201) + `","countrySubdivisionCode":"OH"}}]}`, 200, ""},
+		{"overlong state", `{"addresses":[{"address":{"municipality":"Toledo","countrySubdivision":"` + strings.Repeat("a", 101) + `"}}]}`, 200, ""},
 		{"invalid", "{", 200, ""},
 		{"limit", `{"message":"private-test-key"}`, 429, ""},
 		{"denied", `{"message":"private-test-key"}`, 403, ""},

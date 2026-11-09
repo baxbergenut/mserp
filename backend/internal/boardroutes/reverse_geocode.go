@@ -49,7 +49,7 @@ func (c *Client) waitForProvider(ctx context.Context) error {
 	}
 }
 
-// ReverseGeocode resolves one cached fleet coordinate to a street address. The
+// ReverseGeocode resolves one cached fleet coordinate to its municipality and state. The
 // background worker controls cache freshness; board reads never call this method.
 func (c *Client) ReverseGeocode(ctx context.Context, lat, lng float64) (string, error) {
 	if !c.Options.Enabled || strings.TrimSpace(c.Options.TomTomAPIKey) == "" || c.Options.ReverseGeocodeMonthlyLimit <= 0 {
@@ -101,16 +101,29 @@ func (c *Client) ReverseGeocode(ctx context.Context, lat, lng float64) (string, 
 	var response struct {
 		Addresses []struct {
 			Address struct {
-				FreeformAddress string `json:"freeformAddress"`
+				Municipality           string `json:"municipality"`
+				CountrySubdivisionCode string `json:"countrySubdivisionCode"`
+				CountrySubdivision     string `json:"countrySubdivision"`
 			} `json:"address"`
 		} `json:"addresses"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&response); err != nil || len(response.Addresses) == 0 {
 		return "", errors.New("reverse geocoding address unavailable")
 	}
-	address := strings.TrimSpace(response.Addresses[0].Address.FreeformAddress)
-	if address == "" || len(address) > 1000 || strings.ContainsFunc(address, unicode.IsControl) {
+	address := response.Addresses[0].Address
+	city := strings.TrimSpace(address.Municipality)
+	state := strings.TrimSpace(address.CountrySubdivisionCode)
+	if state == "" {
+		state = strings.TrimSpace(address.CountrySubdivision)
+	}
+	// TomTom can return an ISO subdivision code (US-OH) or a short code
+	// (OH). Never derive locality from freeformAddress or a county field.
+	state = strings.TrimPrefix(state, "US-")
+	if city == "" || state == "" || len(city) > 200 || len(state) > 100 ||
+		strings.ContainsFunc(address.Municipality, unicode.IsControl) ||
+		strings.ContainsFunc(address.CountrySubdivisionCode, unicode.IsControl) ||
+		strings.ContainsFunc(address.CountrySubdivision, unicode.IsControl) {
 		return "", errors.New("reverse geocoding address unavailable")
 	}
-	return address, nil
+	return city + ", " + state, nil
 }

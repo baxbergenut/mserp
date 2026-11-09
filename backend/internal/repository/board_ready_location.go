@@ -23,7 +23,7 @@ type BoardReadyLocation struct {
 }
 
 func readyLocationContext(truck string, requested *time.Time) string {
-	body, _ := json.Marshal([]any{"ready", truck, requested})
+	body, _ := json.Marshal([]any{"ready-city-state-v1", truck, requested})
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
 }

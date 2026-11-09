@@ -339,7 +339,7 @@ fresh/migration `TestDriverBoardDatabase` retry fixture, and
 Migration 207 adds a separate operational address cache. READY never displays
 ETA, mileage, or load appointments, including saved manual ETA values. Those
 saved values and manual destinations remain untouched. With no manual destination,
-the Destination cell shows the full TomTom reverse-geocoded Five ELD location.
+the Destination cell shows the TomTom reverse-geocoded Five ELD city and state.
 A manual address always wins; clearing it restores automatic location display.
 Missing location/address stays blank; stale last-known addresses are yellow.
 
@@ -369,3 +369,8 @@ never call a provider. Keys and provider error bodies stay server-side.
 Validation: `go test ./internal/boardroutes ./internal/repository`,
 `node scripts/test-driver-board.mjs`, and
 `node scripts/test-board-ready-location.mjs`.
+
+Automatic READY locations use structured municipality and state fields, never
+street-address parsing. Missing locality stays unavailable. The city/state cache
+context version triggers one budgeted refresh of legacy full-address caches;
+manual overrides are neither shortened nor rewritten.

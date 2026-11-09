@@ -2,6 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"math"
 	"mserp/internal/boardroutes"
 	"net/http"
@@ -125,7 +128,7 @@ func testReadyLocationDatabase(t *testing.T, ctx context.Context, pool *pgxpool.
 	if _, err = pool.Exec(ctx, `INSERT INTO five_eld_locations(vin,latitude,longitude,reported_at,fetched_at) VALUES($1,40,-74,$2,now())`, vin, now); err != nil {
 		t.Fatal(err)
 	}
-	cache := BoardReadyLocation{Context: before, Source: "five_eld", Address: "123 Main St, Test City", CalculatedAt: now, ReportedAt: now, Position: &boardRoutePosition{Latitude: 40, Longitude: -74}}
+	cache := BoardReadyLocation{Context: before, Source: "five_eld", Address: "Test City, OH", CalculatedAt: now, ReportedAt: now, Position: &boardRoutePosition{Latitude: 40, Longitude: -74}}
 	accepted, err := repo.storeReadyLocation(ctx, d.ID, truck.ID, before, cache)
 	if err != nil || !accepted {
 		t.Fatal("current READY cache rejected", err)
@@ -183,7 +186,7 @@ func testReadyLocationDatabase(t *testing.T, ctx context.Context, pool *pgxpool.
 			t.Errorf("unexpected geocode path %s", request.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"addresses":[{"address":{"freeformAddress":"456 Current St, Test City"}}]}`))
+		_, _ = w.Write([]byte(`{"addresses":[{"address":{"freeformAddress":"456 Current St, Test City, OH 43604","municipality":"Test City","countrySubdivisionCode":"OH"}}]}`))
 	}))
 	defer server.Close()
 	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, TomTomAPIKey: "local-test-only", TomTomBillingTimezone: "UTC", RequestsPerMinute: 120, ReverseGeocodeMonthlyLimit: 1000})
@@ -193,7 +196,7 @@ func testReadyLocationDatabase(t *testing.T, ctx context.Context, pool *pgxpool.
 		t.Fatal(err)
 	}
 	view, err = repo.Loads(ctx, d.ID, "")
-	if err != nil || view.Automation.ReadyLocationAddress != "456 Current St, Test City" || calls.Load() != 1 {
+	if err != nil || view.Automation.ReadyLocationAddress != "Test City, OH" || calls.Load() != 1 {
 		t.Fatal("worker did not publish reverse-geocoded address", calls.Load(), view.Automation, err)
 	}
 	if err = repo.RefreshReadyLocation(ctx, routes, d.ID); err != nil {
@@ -208,5 +211,25 @@ func testReadyLocationDatabase(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 	if err = pool.QueryRow(ctx, `SELECT destination FROM driver_board WHERE driver_id=$1`, d.ID).Scan(&preserved); err != nil || preserved != "" {
 		t.Fatal("worker persisted automatic destination as manual", preserved, err)
+	}
+}
+
+func TestReadyCityStateRefreshesLegacyCache(t *testing.T) {
+	now := time.Now().UTC()
+	body, _ := json.Marshal([]any{"ready", "truck/assignment/vin", &now})
+	sum := sha256.Sum256(body)
+	old := hex.EncodeToString(sum[:])
+	key := readyLocationContext("truck/assignment/vin", &now)
+	if old == key {
+		t.Fatal("legacy street-address cache must be renewed")
+	}
+	p := &DriverBoardLocation{Source: "five_eld", Latitude: 40, Longitude: -74, ReportedAt: now}
+	cache := BoardReadyLocation{Context: old, Source: "five_eld", Address: "123 Main St, Toledo, OH 43604", AttemptedAt: now, CalculatedAt: now, ReportedAt: now, Position: &boardRoutePosition{Latitude: 40, Longitude: -74}}
+	if !cache.due(key, p, now) {
+		t.Fatal("legacy cache did not bypass cadence once")
+	}
+	cache.Context = key
+	if cache.due(key, p, now) {
+		t.Fatal("renewed cache bypassed retry backoff")
 	}
 }
