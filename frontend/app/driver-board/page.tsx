@@ -166,19 +166,21 @@ export default function DriverBoardPage() {
     menu.querySelector("button")?.focus({ preventScroll: true });
   }
   const groupColumns = useMemo(() => {
-    const runs: { total?: "originalGross" | "driverGross"; span: number; width: number }[] = [];
+    const runs: { total?: "originalGross" | "driverGross"; autoOrder?: boolean; span: number; width: number }[] = [];
     for (const column of columns) {
       const previous = runs.at(-1);
       if (column === "originalGross" || column === "driverGross") {
         runs.push({ total: column, span: 1, width: columnWidth(column) });
-      } else if (previous && !previous.total) {
+      } else if (column === "loadPlan") {
+        runs.push({ autoOrder: true, span: 1, width: columnWidth(column) });
+      } else if (previous && !previous.total && !previous.autoOrder) {
         previous.span++;
         previous.width += columnWidth(column);
       } else {
         runs.push({ span: 1, width: columnWidth(column) });
       }
     }
-    const spaces = runs.filter(run => !run.total);
+    const spaces = runs.filter(run => !run.total && !run.autoOrder);
     const widest = [...spaces].sort((a, b) => b.width - a.width)[0];
     const heading = spaces[0].width >= 200 ? spaces[0] : widest;
     const last = spaces.at(-1)!;
@@ -233,9 +235,10 @@ export default function DriverBoardPage() {
   function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
     const group = groups.get(d.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) };
     const enabled = !!autoOrder?.[d.dispatcherId];
-    const heading = <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap">
-      <span className="truncate" title={d.dispatcherName}>{d.dispatcherName}{d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`}</span>
-      <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-order for ${d.dispatcherName}`} data-grid-ignore
+    const count = (board?.drivers ?? []).filter(driver => driver.dispatcherId === d.dispatcherId).length
+      + (d.dispatcherId === "" ? board?.pendingDrivers?.length ?? 0 : 0);
+    const label = `${d.dispatcherName}${d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`} - ${count}`;
+    const autoOrderToggle = <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-order for ${d.dispatcherName}`} data-grid-ignore
         disabled={orderDisabled || rowDrag.active || !board}
         title="Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses"
         onClick={() => void toggleAutoOrder(d.dispatcherId, d.dispatcherName)}
@@ -244,7 +247,9 @@ export default function DriverBoardPage() {
         <span aria-hidden="true" className={`inline-flex h-5 w-9 items-center rounded-full p-0.5 ${enabled ? "bg-linear-to-r from-emerald-300 to-blue-500" : "bg-zinc-600"}`}>
           <span className={`size-4 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${enabled ? "translate-x-4" : "translate-x-0"}`} />
         </span>
-      </button>
+      </button>;
+    const heading = <div className="flex min-w-0 items-center justify-between gap-2 whitespace-nowrap">
+      <span className="truncate" title={label}>{label}</span>
       {d.mainUpdaterName && <span title={`${d.mainUpdaterName}${d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}`} className="status-board-updater truncate text-right text-[11px]">{d.mainUpdaterName}{d.mainUpdaterExtension == null ? "" : ` (${d.mainUpdaterExtension})`}</span>}
     </div>;
     const details = <>
@@ -255,6 +260,7 @@ export default function DriverBoardPage() {
     const groupContent = "flex min-w-0 items-center justify-between gap-3 overflow-hidden whitespace-nowrap";
     return <tr key={`dispatcher:${d.dispatcherId}`} data-dispatcher-id={d.dispatcherId} className="h-8 bg-blue-500/10 text-blue-200" aria-label={`${d.dispatcherName} totals`}>
       {groupColumns.map((run, i) => {
+        if (run.autoOrder) return <td key="loadPlan" data-board-column="loadPlan" className={`${groupCell} overflow-hidden px-1 text-right`}><div className="flex justify-end">{autoOrderToggle}</div></td>;
         if (run.total) return <td key={run.total} data-board-column={run.total} className={`${groupCell} overflow-hidden text-ellipsis border-r px-2 text-center font-mono`}>{decimalDisplay(run.total === "originalGross" ? group.original : group.driver, true)}</td>;
         if (run.heading) return <th key={i} scope="rowgroup" colSpan={run.span} className={`${groupCell} border-r bg-zinc-900 px-3 text-left font-medium`}>
           {run.details ? <div className={groupContent}><div className="min-w-0 flex-1">{heading}</div>{details}</div> : heading}

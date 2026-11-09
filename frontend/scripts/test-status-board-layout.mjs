@@ -18,7 +18,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 const base = `http://127.0.0.1:${server.address().port}`;
 const drivers = Array.from({ length: 100 }, (_, i) => ({ id: `driver-${i}`, fullName: `Scroll Driver ${i}`, active: true, driverType: 'M',
-  truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', phone: '', location: null,
+  truckId: '', truckUnit: `T${i}`, dispatcherId: 'dispatch', dispatcherName: 'Dispatch', dispatcherExtension: 202, phone: i === 0 ? '+1 (470) 334-4443' : i === 1 ? '+44 20 7946 0958' : '', location: null,
   city: i === 0 ? 'Louisville' : '', state: i === 0 ? 'Kentucky' : '' }));
 let entries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: 'ENROUTE', destination: '', eta: d.id === 'driver-0' ? '13:00 · 300 mi' : '', notes: '', homeTime: '', version: 1 }));
 const grossEntries = ['9999.99', '10000.00', '11999.99', '12000.00'].map((originalRate, i) => ({
@@ -58,6 +58,36 @@ try {
   const header = column => grid.locator(`thead [data-board-column="${column}"]`);
   const columnOrder = () => grid.locator('thead th').evaluateAll(cells => cells.map(cell => cell.dataset.boardColumn));
   const defaults = await columnOrder();
+  const dispatcherGroup = grid.locator('tr[data-dispatcher-id="dispatch"]');
+  await expect(dispatcherGroup.getByText('Dispatch (202) - 100', { exact: true })).toBeVisible();
+  await expect(grid.locator('tr[data-dispatcher-id=""]')).toContainText('Unassigned - 0');
+  await page.getByLabel('Search Status Board').fill('Scroll Driver 99');
+  await expect(grid.locator('tr[data-driver-id]')).toHaveCount(1);
+  await expect(dispatcherGroup.getByText('Dispatch (202) - 100', { exact: true })).toBeVisible();
+  await page.getByLabel('Search Status Board').fill('');
+  await expect(grid.locator('tr[data-driver-id]')).toHaveCount(100);
+  const autoOrder = dispatcherGroup.getByRole('switch', { name: 'Auto-order for Dispatch', exact: true });
+  const assertAutoOrderColumn = async () => {
+    await expect(dispatcherGroup.locator('[data-board-column="loadPlan"]')).toContainText('Auto-order');
+    const column = await header('loadPlan').boundingBox();
+    const cell = await dispatcherGroup.locator('[data-board-column="loadPlan"]').boundingBox();
+    const toggle = await autoOrder.boundingBox();
+    expect(Math.abs(cell.x - column.x)).toBeLessThan(1);
+    expect(Math.abs(cell.width - column.width)).toBeLessThan(1);
+    expect(Math.abs(toggle.x + toggle.width - cell.x - cell.width)).toBeLessThan(8);
+  };
+  await assertAutoOrderColumn();
+  await header('loadPlan').press('ArrowLeft');
+  await assertAutoOrderColumn();
+  await header('loadPlan').press('ArrowRight');
+  await expect.poll(columnOrder).toEqual(defaults);
+
+  await expect(grid.locator('tr[data-driver-id="driver-0"] [data-board-column="phone"] button')).toHaveText('(470) 334-4443');
+  await expect(grid.locator('tr[data-driver-id="driver-0"] [data-board-column="phone"] a')).toHaveAttribute('href', 'rcapp://r/call?number=%2B14703344443');
+  await expect(grid.locator('tr[data-driver-id="driver-1"] [data-board-column="phone"]')).toHaveText('\u2014'); // Unsupported international values are not rewritten into US numbers.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await grid.locator('tr[data-driver-id="driver-0"] [data-board-column="phone"] button').press('Enter');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('+14703344443');
   const firstRow = grid.locator('tr[data-driver-id]').first();
   const grossCell = (i, column) => grid.locator(`tr[data-driver-id="driver-${i}"] [data-board-column="${column}"]`);
   const untieredPink = 'rgb(244, 204, 204)';
@@ -69,6 +99,8 @@ try {
   }
   await expect(grossCell(1, 'originalGross')).toHaveText('$10,000.00');
   await expect(grossCell(1, 'driverGross')).toHaveText('$6,000.00');
+  await header("driver").scrollIntoViewIfNeeded();
+  await page.locator('[data-scroll-key="driver-board"]').evaluate(area => { area.scrollLeft = 0; area.scrollTop = 0; });
   const writes = [];
   const trackWrites = request => {
     if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/driver-board')) writes.push(request.url());
@@ -367,6 +399,9 @@ try {
     }
   });
   await expect.poll(() => mobile.locator('[data-scroll-key="driver-board"]').evaluate(e => e.scrollTop)).toBeGreaterThan(0);
+  await page.setViewportSize({ width: 2400, height: 900 });
+  await page.locator('[data-scroll-key="driver-board"]').evaluate(area => { area.scrollLeft = 0; area.scrollTop = 0; });
+  await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-header-layout.png') });
   expect(errors).toEqual([]);
   console.log('Status Board layout passed: home city/state column and destination precedence, missing/partial/updated addresses, restored load/manual destinations, 23 sheet statuses/colors, save/reload/filter, legacy preservation, persisted ETA, page/table scrolling, horizontal overflow, resize and touch.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
