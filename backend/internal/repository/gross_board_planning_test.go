@@ -111,6 +111,7 @@ func TestGrossBoardPlanningDatabase(t *testing.T) {
 				t.Fatal("planning payroll classification", classification, err)
 			}
 			verifyGrossBoardPlanning(t, ctx, pool, admin)
+			verifyGrossBoardModeWrites(t, ctx, pool)
 		})
 	}
 }
@@ -208,6 +209,14 @@ func verifyGrossBoardPlanning(t *testing.T, ctx context.Context, pool *pgxpool.P
 			t.Fatal(err)
 		}
 		return string(raw)
+	}
+	// New mixed days are rejected. Explicitly seed historical coexistence to
+	// verify that upgrading does not erase old planning or financial records.
+	if _, err = repo.SavePlanningChanges(ctx, []GrossBoardPlanningEntry{{DriverID: projectionDriver, Date: "2026-10-07", Kind: "note", Text: "new conflicting status"}}, ""); err == nil {
+		t.Fatal("planning accepted on an occupied load day")
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO gross_board_planning_entries(driver_id,service_date,kind,text,version) VALUES($1,'2026-10-07','note','private family emergency',1),($1,'2026-10-07','destination','Dallas, TX',1)`, projectionDriver); err != nil {
+		t.Fatal(err)
 	}
 	before := financial()
 	// Planning saves must work while a financial command owns its source gate.
@@ -412,5 +421,93 @@ func verifyGrossBoardPlanning(t *testing.T, ctx context.Context, pool *pgxpool.P
 		if d.ID == inactive {
 			t.Fatal("empty planning retained inactive roster")
 		}
+	}
+}
+
+func verifyGrossBoardModeWrites(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	var driver string
+	if err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active,hire_date) VALUES('Mode Test Driver','mode test driver','cpm',0.5,true,'2026-01-01') RETURNING id::text`).Scan(&driver); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewGrossBoardRepository(pool)
+	date := "2026-10-19"
+	status, err := repo.SavePlanningChanges(ctx, []GrossBoardPlanningEntry{{DriverID: driver, Date: date, Kind: "note", Text: "Dallas, TX"}}, "")
+	if err != nil {
+		t.Fatal("empty day to custom status", err)
+	}
+	load := GrossBoardEntry{DriverID: driver, Date: date, LoadNumber: "MODE-101", OriginalRate: "100", DriverRate: "90", Miles: "50"}
+	if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{load}, ""); err == nil {
+		t.Fatal("load accepted while custom status exists")
+	}
+	status[0].Text = ""
+	if _, err = repo.SavePlanningChanges(ctx, status, ""); err != nil {
+		t.Fatal("clear custom status", err)
+	}
+	sibling := load
+	sibling.Slot = 1
+	sibling.LoadNumber = "MODE-102"
+	if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{load, sibling}, ""); err != nil {
+		t.Fatal("multiple loads", err)
+	}
+	if _, err = repo.SavePlanningChanges(ctx, []GrossBoardPlanningEntry{{DriverID: driver, Date: date, Kind: "destination", Text: "Austin, TX"}}, ""); err == nil {
+		t.Fatal("custom status accepted on load day")
+	}
+	fixed := GrossBoardEntry{DriverID: driver, Date: date, Slot: 1, DayStatus: "HOME"}
+	if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{fixed}, ""); err == nil {
+		t.Fatal("fixed status accepted beside sibling load")
+	}
+	cleared := GrossBoardEntry{DriverID: driver, Date: date, Slot: 0}
+	if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{cleared, fixed}, ""); err != nil {
+		t.Fatal("atomic clear loads and select fixed status", err)
+	}
+	if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{load}, ""); err == nil {
+		t.Fatal("load accepted beside fixed status")
+	}
+	if _, err = repo.SavePlanningChanges(ctx, []GrossBoardPlanningEntry{{DriverID: driver, Date: date, Kind: "destination", Text: "Also status"}}, ""); err == nil {
+		t.Fatal("custom status accepted beside fixed status")
+	}
+	// Shared day locks must serialize both endpoints, even when no row exists.
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	raceDate := "2026-10-20"
+	go func() {
+		<-start
+		_, err := repo.SaveChanges(ctx, []GrossBoardEntry{{DriverID: driver, Date: raceDate, LoadNumber: "MODE-RACE-103"}}, "")
+		results <- err
+	}()
+	go func() {
+		<-start
+		_, err := repo.SavePlanningChanges(ctx, []GrossBoardPlanningEntry{{DriverID: driver, Date: raceDate, Kind: "note", Text: "Resting"}}, "")
+		results <- err
+	}()
+	close(start)
+	successes, rejections := 0, 0
+	for range 2 {
+		err := <-results
+		if err == nil {
+			successes++
+		} else {
+			var invalid *ChargeValidationError
+			if !errors.As(err, &invalid) {
+				t.Fatal("unexpected race error", err)
+			}
+			rejections++
+		}
+	}
+	if successes != 1 || rejections != 1 {
+		t.Fatalf("cross-endpoint race successes=%d rejections=%d", successes, rejections)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	state, err := readGrossBoardDayModes(ctx, tx, grossBoardDay{driver, raceDate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.loads) > 0 && len(state.statuses) > 0 {
+		t.Fatal("race stored both a load and status")
 	}
 }

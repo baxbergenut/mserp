@@ -13,16 +13,23 @@ inline; Enter or blur saves, Shift+Enter inserts a newline, and Escape cancels a
 unsaved edit. Failed saves retain recoverable drafts. Conflicting changes require
 explicit inline replacement or choosing the saved text.
 
-Custom statuses fill otherwise empty days. An inline load input remains available
-to add a load without erasing the status. Days with loads retain their financial
-fields and show custom statuses below. Multiple loads retain the existing daily
-load editor. Adding custom text never clears existing loads or amounts.
+A day defaults to load entry. Custom status is an explicit alternative and fills
+the day without a load input. A day must contain loads or a status, never both.
+To switch types, clear the current status or all loads first; no financial load
+is silently replaced by a planning write. Multiple loads remain supported.
+Fixed day statuses also cannot be added beside another load.
+
+Legacy mixed days are not migrated or erased. They show a Review saved status
+disclosure for explicit cleanup, with normal financial edits and clearing
+preserved. The API serializes both save paths per driver/day and rejects newly
+introduced overlap, including stale-client races.
 
 Deleting the load input clears its load identity, notes and amounts immediately
 and uses the ordinary guarded load autosave; there is no empty unconfirmed draft
-or extra Clear load number action. Typing nonempty text alone still does not
-commit a load. Select a result, explicitly add a manual identifier, or choose the
-custom-status suggestion. Escape discards unselected typing.
+or extra Clear load number action. Load identifiers save as loads on Enter or blur without an extra confirmation
+choice. A unique exact search result can supply the source; unmatched identifiers
+remain manual loads. Free-form text commits only through the explicit custom-
+status suggestion. Escape discards unselected typing.
 
 Weekly cards and all table totals use Total gross, Driver gross, Total miles,
 Total RPM, Driver RPM, Rate balance. Both RPM values use the existing exact
@@ -44,7 +51,8 @@ The usual Gross Board read/write permissions apply.
 
 Load saves, including old full-row clients, never write planning storage.
 Planning edits never clear a load, change its gross or miles, select a current
-load, change driver availability, or set an active destination. Existing
+load, change driver availability, or set an active destination. Nonempty planning
+text cannot be added to a day with load/financial or fixed-status content. Existing
 per-load notes remain separate from these day-level planning entries.
 
 ## Financial and privacy boundary
@@ -81,9 +89,11 @@ This change itself does not apply migrations to any live environment.
 
 The inline flow is covered by `frontend/scripts/test-gross-board-inline-entry.mjs`
 (the existing planning script delegates to it). It uses intercepted synthetic API
-fixtures, not live data, and covers same-day load coexistence, direct clearing,
+fixtures, not live data, and covers mutually exclusive day types, direct clearing,
 old note/destination records, failed saves, reload recovery and stale conflicts.
-Backend financial/finalization protection remains unchanged.
+Native financial/finalization protection remains intact. New day-mode tests
+also cover competing load/status writes, split companion scope and transfers
+on a disposable localhost PostgreSQL instance.
 
 Use only a disposable localhost database whose name contains `_test` for
 PostgreSQL checks. Build the frontend with `NEXT_PUBLIC_API_URL=/api` before

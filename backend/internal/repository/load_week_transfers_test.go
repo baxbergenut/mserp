@@ -334,6 +334,14 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					exec(`INSERT INTO gross_board_entries(driver_id,service_date,day_status) VALUES($1,$2,'SHOP');INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,deleted,version,note) VALUES($1,$2,1,'',$3,25,'Cleared draft')`, driver, mondayDay, i == 1)
 				}
 				move := LoadWeekTransferInput{DriverID: driver, Date: sourceDay.Format(time.DateOnly), Slot: 0, BoardVersion: 1, Mode: "everyone"}
+				if i > 0 {
+					if e = pay.TransferLoadWeek(ctx, move, "accountant"); e == nil {
+						t.Fatal("transfer accepted on fixed-status day")
+					}
+					// Keep slot zero occupied by a load, rather than mixing a day status
+					// with the transferred load in another slot.
+					exec(`UPDATE gross_board_entries SET day_status='',load_number='OCCUPIED-100' WHERE driver_id=$1 AND service_date=$2`, driver, mondayDay)
+				}
 				if e = pay.TransferLoadWeek(ctx, move, "accountant"); e != nil {
 					t.Fatal(kind, e)
 				}

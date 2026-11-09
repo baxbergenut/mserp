@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useContext, useState, useSyncExternalStore } from "react";
+import { useContext, useState, useSyncExternalStore } from "react";
 import { CurrentUserIDContext } from "@/app/lib/access";
 import { fetchGrossBoard, saveGrossBoardPlanningEntries } from "@/app/lib/api";
 import type { GrossBoardPlanningEntry, GrossBoardPlanningKind } from "@/app/lib/types";
@@ -25,9 +25,9 @@ function updatePlanningSession(key: string, value: Partial<PlanningSession>) {
 }
 const kinds = ["note", "destination"] as const;
 
-export function useDayPlanning({ entries, driverId, driverName, date, week, readOnly, fullDayEligible, loadInput, onSaved }: {
+export function useDayPlanning({ entries, driverId, driverName, date, week, readOnly, fullDayEligible, onSaved }: {
   entries: GrossBoardPlanningEntry[]; driverId: string; driverName: string; date: string; week: string; readOnly: boolean; fullDayEligible: boolean;
-  loadInput?: (create: (text: string) => Promise<void>) => ReactNode; onAddLoad?: () => void; onSaved: (entries: GrossBoardPlanningEntry[]) => void;
+  onSaved: (entries: GrossBoardPlanningEntry[]) => void;
 }) {
   const userId = useContext(CurrentUserIDContext);
   const storageKey = ["gross-board-planning-drafts:v1", userId, week, driverId, date].join(":");
@@ -97,6 +97,7 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   };
   const createCustomStatus = async (text: string): Promise<void> => {
     if (readOnly) return;
+    if (!fullDayEligible) throw new Error("Clear this day’s loads before adding a custom status.");
     const value = text.trim();
     if (!value) return;
     const current = session.value.drafts.note ?? saved("note");
@@ -109,8 +110,8 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   };
   const fullDay = fullDayEligible && kinds.some(kind => !!saved(kind).text || (!readOnly && !!drafts[kind]));
   const hasPlanning = kinds.some(kind => !!saved(kind).text || (!readOnly && !!drafts[kind]));
-  const planning = hasPlanning ? <div data-gross-planning data-gross-planning-full-day={fullDay || undefined}
-    className={fullDay ? "flex h-full min-h-40 flex-col px-1 py-1 font-sans text-xs" : "border-t border-zinc-800/70 px-1 py-1 text-left font-sans text-xs"}
+  const planningContent = hasPlanning ? <div data-gross-planning data-gross-planning-full-day={fullDay || undefined}
+    className={fullDay ? "flex h-full min-h-[152px] flex-col px-1 py-1 font-sans text-xs" : "border-t border-zinc-800/70 px-1 py-1 text-left font-sans text-xs"}
     onContextMenu={event => event.stopPropagation()}>
     <div className={fullDay ? "flex flex-1 flex-col" : undefined}>
       {kinds.map(kind => {
@@ -144,12 +145,16 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
         </button>;
       })}
     </div>
-    {fullDay && !readOnly && loadInput?.(createCustomStatus)}
     {!readOnly && saving && <p role="status" className="text-[10px] text-zinc-400">Saving…</p>}
     {!readOnly && error && <div role="alert" className="text-xs text-red-300">{error} Your draft is kept. <button type="button" disabled={saving} className="underline" onClick={() => {
       const kind = kinds.find(type => session.value.drafts[type]); if (kind) { setEditing(kind); finish(kind); }
     }}>Retry</button></div>}
     {!readOnly && storageError && <p role="alert" className="text-xs text-amber-300">Keep this page open; draft recovery is unavailable.</p>}
   </div> : null;
+  const planning = hasPlanning && !fullDayEligible ? <details className="border-t border-amber-500/30 p-1 text-[10px] text-amber-300">
+    <summary className="cursor-pointer">Review saved status</summary>
+    <p className="py-1">This older day contains both load data and a saved status. Clear the saved status, or clear the loads before using it. Nothing has been removed.</p>
+    {planningContent}
+  </details> : planningContent;
   return { planning, fullDay, dialog: null, createCustomStatus };
 }

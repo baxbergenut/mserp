@@ -459,6 +459,10 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 			err = locateGrossBoardRejection(*editing, err)
 		}
 	}()
+	days := grossBoardDays(entries, nil)
+	if err = lockGrossBoardDays(ctx, tx, days); err != nil {
+		return nil, err
+	}
 	allUnchanged := len(entries) > 0
 	for i := range entries {
 		if entries[i].Fields != nil {
@@ -482,6 +486,12 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 	}
 	entries, err = prepareSplitReviews(ctx, tx, entries)
 	if err != nil {
+		return nil, err
+	}
+	// Reviewed companions are fenced by the request day locks too. Validate the
+	// expanded batch before any canonical board write. Split source edits roll
+	// back with this transaction if the final modes conflict.
+	if err = validateGrossBoardDayModes(ctx, tx, days, entries, nil); err != nil {
 		return nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool {

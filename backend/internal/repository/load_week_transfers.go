@@ -63,6 +63,10 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 	if err = lockTruckAccounting(ctx, tx); err != nil {
 		return err
 	}
+	days := grossBoardDays([]GrossBoardEntry{{DriverID: input.DriverID, Date: input.Date}, {DriverID: input.DriverID, Date: next}}, nil)
+	if err = lockGrossBoardDays(ctx, tx, days); err != nil {
+		return err
+	}
 	command, replay, err := beginPayrollSourceCommand(ctx, tx, actor, "load.transfer", input.PayrollCommandMetadata, input)
 	if err != nil {
 		return err
@@ -109,6 +113,13 @@ func (r *DriverPayRepository) TransferLoadWeek(ctx context.Context, input LoadWe
 		return ErrDriverPayConflict
 	}
 	if !active {
+		destination, e := readGrossBoardDayModes(ctx, tx, grossBoardDay{input.DriverID, next})
+		if e != nil {
+			return e
+		}
+		if len(destination.statuses) > 0 {
+			return chargeInvalid("Clear the status on %s before moving a load to that day", next)
+		}
 		assignments, e := readDailyAssignments(ctx, tx, week.Format(time.DateOnly), []string{input.DriverID})
 		if e != nil {
 			return e

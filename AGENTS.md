@@ -3838,6 +3838,11 @@ Status Board database tests verify the production payroll coverage check.
   use note storage, and legacy destinations use the same visual style without
   migration. Inline Enter/blur saves and Escape cancels; failed drafts recover.
   Day-level text remains separate from loads and never changes dispatch or pay.
+  A day defaults to load entry and can hold loads OR a custom/fixed status, not
+  both. Load identifiers save on Enter/blur; free text requires the explicit
+  custom-status alternative. Clear the current type before switching. Shared per-day transactional
+  locks guard new overlap across load and planning APIs; legacy mixed records
+  remain available for explicit cleanup without destructive migration.
 - `gross_board_planning_entries` uses independent versions and empty-text
   tombstones. GET/live Gross Board responses carry `planningEntries`; the
   dedicated PUT `/gross-board/planning-entries` cannot be overwritten by older

@@ -25,6 +25,8 @@ const loadWrites = [], planningWrites = [], errors = [];
 const same = (a, b) => a.driverId === b.driverId && a.date === b.date && a.kind === b.kind;
 const snapshot = () => ({ weekStart: week, drivers: [driver], entries, planningEntries: planning, balances: [] });
 const saved = (date, slot = 0) => entries.find(e => e.date === date && e.slot === slot);
+const hasContent = e => !e.deleted && !!(e.dayStatus || e.loadNumber || e.loadRecordId != null || e.note || e.originalRate || e.driverRate || e.miles);
+const hasLoad = e => !e.deleted && !e.dayStatus && hasContent(e);
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
   await page.clock.setFixedTime(new Date('2026-11-03T12:00:00Z'));
@@ -36,6 +38,7 @@ try {
     if (path === '/gross-board/planning-entries' && req.method() === 'PUT') {
       const changes = req.postDataJSON().entries; planningWrites.push(changes);
       if (failPlanning) return route.fulfill({ status: 503, json: { error: 'Temporary planning save failure' } });
+      if (changes.some(c => c.text.trim() && entries.some(e => e.date === c.date && hasContent(e)))) return route.fulfill({ status: 409, json: { error: 'Clear this day’s loads before adding a custom status.' } });
       const committed = [];
       for (const change of changes) {
         const prior = planning.find(e => same(e, change));
@@ -53,7 +56,14 @@ try {
         for (const field of change.fields ?? Object.keys(change)) if (field !== 'version') next[field] = change[field];
         return next;
       });
-      entries = [...entries.filter(e => !committed.some(c => c.date === e.date && c.slot === e.slot)), ...committed];
+      const proposed = [...entries.filter(e => !committed.some(c => c.date === e.date && c.slot === e.slot)), ...committed];
+      for (const next of committed) {
+        const prior = saved(next.date, next.slot);
+        const isNewIdentity = hasContent(next) && (!prior || !hasContent(prior) || prior.loadNumber !== next.loadNumber || prior.dayStatus !== next.dayStatus);
+        if (isNewIdentity && planning.some(p => p.date === next.date && p.text.trim())) return route.fulfill({ status: 409, json: { error: 'Clear the custom status before adding a load.' } });
+        if (isNewIdentity && proposed.some(e => e.date === next.date && e.dayStatus && !e.deleted) && proposed.some(e => e.date === next.date && hasLoad(e))) return route.fulfill({ status: 409, json: { error: 'A day can have loads or a status, not both.' } });
+      }
+      entries = proposed;
       return route.fulfill({ json: { entries: committed, issues: [] } });
     }
     const fixtures = { '/auth/session': { user: { id: 'inline-test', username: 'Inline Test', permissions: ['board.read', ...(readOnly ? [] : ['board.write'])] }, csrfToken: 'fixture' }, '/gross-board': snapshot(), '/sidebar-counts': {}, '/tasks/count': { count: 0 } };
@@ -75,16 +85,57 @@ try {
   await expect(cell('2026-11-03')).toContainText('Legacy note');
   expect(planningWrites).toHaveLength(0);
 
+  // Identifiers are loads by default: Enter and blur commit without an extra choice.
+  const defaultDate = '2026-11-04', defaultInput = cell(defaultDate).getByRole('combobox');
+  await expect(defaultInput).toHaveAttribute('placeholder', 'Load number');
+  await defaultInput.fill('23423423'); await defaultInput.blur();
+  await expect.poll(() => saved(defaultDate)?.loadNumber).toBe('23423423');
+  await expect(cell(defaultDate).getByText('Choose load or custom status', { exact: true })).toHaveCount(0);
+  expect(planning.some(e => e.date === defaultDate && e.text)).toBe(false);
+  await defaultInput.fill('23423424'); await defaultInput.press('Enter');
+  await expect.poll(() => saved(defaultDate)?.loadNumber).toBe('23423424');
+  await defaultInput.fill('AB-23423424'); await defaultInput.press('Enter');
+  await expect.poll(() => saved(defaultDate)?.loadNumber).toBe('AB-23423424');
+  await defaultInput.fill(''); await defaultInput.blur();
+  await expect.poll(() => saved(defaultDate)?.loadNumber).toBe('');
+  const beforeFreeText = [loadWrites.length, planningWrites.length];
+  await defaultInput.fill('Available after noon'); await defaultInput.blur();
+  // Wait beyond ordinary load autosave debounce; free text must remain only a local draft.
+  await page.waitForTimeout(700);
+  expect([loadWrites.length, planningWrites.length]).toEqual(beforeFreeText);
+  expect(saved(defaultDate)?.loadNumber).toBe('');
+  await expect(cell(defaultDate).getByText('Choose load or custom status', { exact: true })).toHaveCount(0);
+  await defaultInput.focus(); await defaultInput.press('Escape');
+  // Explicit alternative wins even for numeric text: menu selection must beat blur.
+  const beforeNumericStatus = loadWrites.length;
+  await defaultInput.fill('23423423');
+  await page.getByRole('option', { name: 'Add as custom status: 23423423', exact: true }).click();
+  await expect.poll(() => planning.find(e => e.date === defaultDate)?.text).toBe('23423423');
+  await expect(fullDay(defaultDate)).toContainText('23423423');
+  await expect(cell(defaultDate).getByRole('combobox')).toHaveCount(0);
+  expect(saved(defaultDate)?.loadNumber).toBe('');
+  expect(loadWrites).toHaveLength(beforeNumericStatus);
+  await statusButton(defaultDate).click(); await editor(defaultDate).fill(''); await editor(defaultDate).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === defaultDate)?.text).toBe('');
+  await expect(defaultInput).toHaveValue('');
+  const loadsBeforeCustom = loadWrites.length;
+
+  // Status siblings must not stretch the row below the final Miles field.
+  const loadCellBounds = await cell(week).boundingBox();
+  const milesBounds = await cell(week).getByLabel(name + ', ' + week + ', miles', { exact: true }).boundingBox();
+  expect(loadCellBounds).not.toBeNull(); expect(milesBounds).not.toBeNull();
+  expect(Math.abs((loadCellBounds.y + loadCellBounds.height) - (milesBounds.y + milesBounds.height))).toBeLessThanOrEqual(2);
+
   // Free-form text is explicitly saved as planning, never as a dispatch load.
   const statusDate = '2026-11-04';
   await cell(statusDate).getByRole('combobox').fill('Dallas, TX');
   await expect(page.getByRole('option', { name: 'Add as manual load: Dallas, TX', exact: true })).toHaveCount(0);
   await page.getByRole('option', { name: 'Add as custom status: Dallas, TX', exact: true }).click();
   await expect(fullDay(statusDate)).toBeVisible();
-  await expect(fullDay(statusDate).getByRole('combobox')).toHaveValue('');
+  await expect(fullDay(statusDate).getByRole('combobox')).toHaveCount(0);
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Dallas, TX');
   expect(planning.find(e => e.date === statusDate).kind).toBe('note');
-  expect(loadWrites).toHaveLength(0);
+  expect(loadWrites).toHaveLength(loadsBeforeCustom);
   await page.reload(); await expect(fullDay(statusDate)).toContainText('Dallas, TX');
   await statusButton(statusDate).click(); await editor(statusDate).fill('Chicago, IL'); await editor(statusDate).press('Enter');
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Chicago, IL');
@@ -94,15 +145,22 @@ try {
   await statusButton(statusDate).click(); await editor(statusDate).fill('Available Friday'); await editor(statusDate).blur();
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Available Friday');
 
-  // A full-day status can accept a load directly without losing its planning text.
-  await fullDay(statusDate).getByRole('combobox').fill('STATUS-123');
+  // A status day has no load input: explicitly clear status before switching types.
+  await expect(cell(statusDate).getByRole('combobox')).toHaveCount(0);
+  await statusButton(statusDate).click(); await editor(statusDate).fill(''); await editor(statusDate).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('');
+  await expect(cell(statusDate).getByRole('combobox')).toHaveValue('');
+  await cell(statusDate).getByRole('combobox').fill('STATUS-123');
   await page.getByRole('option', { name: 'Add as manual load: STATUS-123', exact: true }).click();
   await expect.poll(() => saved(statusDate)?.loadNumber).toBe('STATUS-123');
   await expect(fullDay(statusDate)).toHaveCount(0);
-  await expect(cell(statusDate)).toContainText('Available Friday');
+  expect(planning.find(e => e.date === statusDate).text).toBe('');
   await cell(statusDate).getByRole('combobox').fill('');
   await expect.poll(() => saved(statusDate)?.loadNumber).toBe('');
+  await cell(statusDate).getByRole('combobox').fill('Available Friday');
+  await page.getByRole('option', { name: 'Add as custom status: Available Friday', exact: true }).click();
   await expect(fullDay(statusDate)).toContainText('Available Friday');
+  await expect(cell(statusDate).getByRole('combobox')).toHaveCount(0);
 
   // Unmatched identifiers still become real manual loads only on explicit choice.
   const manualDate = '2026-11-05';
@@ -128,26 +186,36 @@ try {
   await expect(cell(removeDate).getByRole('combobox')).toHaveValue('');
   await page.reload(); await expect(cell(removeDate).getByRole('combobox')).toHaveValue('');
 
-  // Legacy destination-only full-day cells can create a new note through the same input.
-  await fullDay('2026-11-08').getByRole('combobox').fill('Available after noon');
-  await page.getByRole('option', { name: 'Add as custom status: Available after noon', exact: true }).click();
-  await expect.poll(() => planning.find(e => e.date === '2026-11-08' && e.kind === 'note')?.text).toBe('Available after noon');
+  // Legacy destination-only days are statuses too, with no competing load input.
+  await expect(fullDay('2026-11-08').getByRole('combobox')).toHaveCount(0);
   expect(planning.find(e => e.date === '2026-11-08' && e.kind === 'destination').text).toBe('Legacy destination only');
-  await expect(fullDay('2026-11-08').getByRole('combobox')).toHaveValue('');
 
   // Clearing one daily slot preserves its sibling and remains an atomic draft.
   const multiDate = '2026-11-06', sibling = structuredClone(saved(multiDate, 1));
   await cell(multiDate).getByRole('button', { name: `${name}, ${multiDate}, load numbers and details`, exact: true }).click();
   const daily = page.getByRole('dialog', { name: 'Daily loads', exact: true });
+  const pendingPlanning = planningWrites.length;
   await daily.locator('[data-gross-slot="0"]').getByRole('combobox').fill('Wait for dispatch');
-  await page.getByRole('option', { name: 'Add as custom status: Wait for dispatch', exact: true }).click();
-  await expect.poll(() => planning.find(e => e.date === multiDate)?.text).toBe('Wait for dispatch');
-  await expect(daily.locator('[data-gross-slot="0"]').getByRole('combobox')).toHaveValue(saved(multiDate).loadNumber);
+  const customAlternative = page.getByRole('option', { name: /Add as custom status: Wait for dispatch/ });
+  await expect(customAlternative).toHaveAttribute('aria-disabled', 'true');
+  expect(planningWrites).toHaveLength(pendingPlanning);
+  await daily.locator('[data-gross-slot="0"]').getByRole('combobox').press('Escape');
+  await daily.locator('[data-gross-slot="0"]').getByRole('combobox').fill('HOME');
+  const fixedAlternative = page.getByRole('option', { name: 'HOME', exact: true });
+  if (await fixedAlternative.count()) await expect(fixedAlternative).toHaveAttribute('aria-disabled', 'true');
+  await daily.locator('[data-gross-slot="0"]').getByRole('combobox').press('Escape');
   await daily.locator('[data-gross-slot="0"]').getByRole('combobox').fill('');
   await expect(daily.locator('[data-gross-slot="0"]').getByRole('combobox')).toHaveValue('');
   await daily.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await expect.poll(() => saved(multiDate).loadNumber).toBe('');
   expect(saved(multiDate, 1)).toEqual(sibling);
+  // Only after the last load is cleared can the day become a custom status.
+  await cell(multiDate).getByRole('combobox').fill('');
+  await expect.poll(() => saved(multiDate, 1)?.loadNumber).toBe('');
+  await cell(multiDate).getByRole('combobox').fill('Wait for dispatch');
+  await page.getByRole('option', { name: 'Add as custom status: Wait for dispatch', exact: true }).click();
+  await expect(fullDay(multiDate)).toContainText('Wait for dispatch');
+  await expect(cell(multiDate).getByRole('combobox')).toHaveCount(0);
 
   // Existing legacy records retain both independent keys after editing one.
   await statusButton('2026-11-03').filter({ hasText: 'Legacy destination' }).click();
@@ -185,8 +253,30 @@ try {
   await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('');
   await expect(fullDay(statusDate)).toHaveCount(0);
   expect(loadWrites).toHaveLength(beforeClear);
+  await cell(statusDate).getByRole('combobox').fill('HOME');
+  await page.getByRole('option', { name: 'HOME', exact: true }).click();
+  await expect.poll(() => saved(statusDate)?.dayStatus).toBe('HOME');
+  await expect(cell(statusDate).getByRole('button', { name: /add another load/ })).toHaveCount(0);
+  await cell(statusDate).getByRole('combobox').fill('');
+  await expect.poll(() => saved(statusDate)?.dayStatus).toBe('');
+
+  // Old mixed records are disclosed for cleanup, never silently deleted/migrated.
+  entries = entries.map(e => e.date === week ? entry(week) : e);
+  planning.push({ driverId, date: week, kind: 'note', text: 'Historical mixed status', version: 1 });
+  const oldLoad = structuredClone(saved(week)), oldPlanning = structuredClone(planning.find(e => e.date === week));
+  await page.reload();
+  const disclosure = cell(week).getByText('Review saved status', { exact: true });
+  await expect(disclosure).toBeVisible();
+  expect(saved(week)).toEqual(oldLoad); expect(planning.find(e => e.date === week)).toEqual(oldPlanning);
+  await expect(statusButton(week)).not.toBeVisible();
+  await disclosure.click(); await statusButton(week).click();
+  await editor(week).fill(''); await editor(week).press('Enter');
+  await expect.poll(() => planning.find(e => e.date === week)?.text).toBe('');
+  expect(saved(week)).toEqual(oldLoad);
 
   // Capture desktop and narrow layouts with only synthetic data.
+  await page.mouse.click(1050, 50);
+  await page.mouse.move(20, 20);
   await mkdir(new URL('../../artifacts/', import.meta.url), { recursive: true });
   await page.screenshot({ path: fileURLToPath(new URL('../../artifacts/gross-board-inline-desktop.png', import.meta.url)), fullPage: true });
   await page.setViewportSize({ width: 900, height: 900 });
@@ -208,5 +298,5 @@ try {
   if (await readEditor.count()) await expect(readEditor).toHaveAttribute('readonly', '');
   expect([loadWrites.length, planningWrites.length]).toEqual(before);
   expect(errors).toEqual([]);
-  console.log('PASS gross-board inline entry: totals, custom text isolation, editing/clearing, manual loads, multiple slots, legacy entries and read-only');
+  console.log('PASS gross-board exclusive day entries: default load, explicit status, clear-before-switch, multiple slots, legacy cleanup, conflicts and read-only');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

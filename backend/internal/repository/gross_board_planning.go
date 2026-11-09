@@ -21,7 +21,8 @@ type GrossBoardPlanningEntry struct {
 }
 
 // SavePlanningChanges does not enter the financial source gate or touch load
-// slots. The unique row lock serializes absent-row creation as well as updates.
+// slots. Shared day-mode locks prevent races with load saves; the unique row
+// lock then serializes absent-row creation as well as updates.
 // Unchanged retries return the current version without a write/notification.
 func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries []GrossBoardPlanningEntry, actor string) ([]GrossBoardPlanningEntry, error) {
 	entries = append([]GrossBoardPlanningEntry{}, entries...)
@@ -35,6 +36,13 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	days := grossBoardDays(nil, entries)
+	if err = lockGrossBoardDays(ctx, tx, days); err != nil {
+		return nil, err
+	}
+	if err = validateGrossBoardDayModes(ctx, tx, days, nil, entries); err != nil {
+		return nil, err
+	}
 	order := make([]int, len(entries))
 	result := append([]GrossBoardPlanningEntry{}, entries...)
 	for i := range entries {

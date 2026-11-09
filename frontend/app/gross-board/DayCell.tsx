@@ -15,6 +15,8 @@ type DayCellProps = {
   entry: GrossBoardEntry;
   planning?: ReactNode;
   onCustomStatus?: (text: string) => Promise<void>;
+  customStatusUnavailable?: string;
+  allowDayStatus?: boolean;
   id?: string;
   highlighted?: boolean;
   driverName: string;
@@ -24,7 +26,7 @@ type DayCellProps = {
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted, planning, onCustomStatus }: DayCellProps) {
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted, planning, onCustomStatus, customStatusUnavailable, allowDayStatus }: DayCellProps) {
   const notes = useLoadNotes([entry], disabled, onChange);
   const cellRef = useRef<HTMLTableCellElement>(null);
   const resetLoadIntent = useRef<(() => void) | null>(null);
@@ -52,7 +54,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           <button type="button" hidden={disabled} disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => { resetLoadIntent.current?.(); onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 })); }}><X className="h-3 w-3" /></button>
         </div>
       </div>
-      <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker resetRef={resetLoadIntent} entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} onCustomStatus={onCustomStatus} /></div>{notes.popup}
+      <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker resetRef={resetLoadIntent} entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} onCustomStatus={onCustomStatus} customStatusUnavailable={customStatusUnavailable} allowDayStatus={allowDayStatus} /></div>{notes.popup}
       {!entry.dayStatus && (["originalRate", "driverRate", "miles"] as const).map((field) => {
         const valid = validDecimal(entry[field], field === "miles");
         const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : driverMismatch;
@@ -94,7 +96,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
   );
 }, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
-  && previous.planning === next.planning && previous.onCustomStatus === next.onCustomStatus
+  && previous.planning === next.planning && previous.onCustomStatus === next.onCustomStatus && previous.customStatusUnavailable === next.customStatusUnavailable && previous.allowDayStatus === next.allowDayStatus
   && previous.entry.sourceMissing === next.entry.sourceMissing && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)
   && JSON.stringify(previous.entry.splitReview) === JSON.stringify(next.entry.splitReview)
   && previous.entry.note === next.entry.note
