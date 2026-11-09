@@ -517,16 +517,6 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 	for _, id := range ids {
 		s := states[id]
 		view := result[id]
-		// Gross Board owns removal, including when a previously manual queue
-		// identity now represents a Gross Board plan. Never let duplicate manual
-		// identities or legacy hidden markers bypass the native assignment.
-		grossNumbers, grossIDs := map[string]bool{}, map[int]bool{}
-		for _, p := range plans[id] {
-			grossNumbers[strings.ToLower(strings.TrimSpace(p.Number))] = true
-			if p.LoadID != nil {
-				grossIDs[*p.LoadID] = true
-			}
-		}
 		// Manual queue identities survive later imports and Gross Board planning.
 		// Keep the real Gross Board plans in Week, but show each source once in the queue.
 		plans[id] = append(manualPlans[id], plans[id]...)
@@ -627,14 +617,18 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 			if view.Current != nil && p.PlanID == view.Current.PlanID {
 				continue
 			}
+			// A removed manual alias must not suppress its Gross Board counterpart.
+			p.CanRemoveFromQueue = p.Manual
+			if p.Manual && hidden[p.PlanID] {
+				view.Hidden = append(view.Hidden, p)
+				continue
+			}
 			if p.LoadID != nil {
 				if seen[*p.LoadID] {
 					continue
 				}
 				seen[*p.LoadID] = true
 			}
-			p.CanRemoveFromQueue = p.Manual && !grossNumbers[strings.ToLower(strings.TrimSpace(p.Number))] &&
-				(p.LoadID == nil || !grossIDs[*p.LoadID])
 			sourceUnavailable := p.SourceMissing || terminalLoad(p.SourceStatus)
 			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID]
 			if sourceUnavailable || completedHere {
@@ -646,8 +640,6 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				p.CanRestoreToQueue = completedHere && !sourceUnavailable && !boardLoadInTransit(p) &&
 					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
-			} else if hidden[p.PlanID] && p.CanRemoveFromQueue {
-				view.Hidden = append(view.Hidden, p)
 			} else if !boardPlanQueued(p, s, from) {
 				p.CanRestoreToQueue = p.PreviouslyActive && !strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Earlier = append(view.Earlier, p)

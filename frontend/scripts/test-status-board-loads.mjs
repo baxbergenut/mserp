@@ -56,6 +56,14 @@ try {
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
+        if (input.action === 'hide') {
+          const target = full.next.find(load => load.planId === input.planId);
+          expect(target?.manual).toBe(true);
+          expect(target?.canRemoveFromQueue).toBe(true);
+          full = { ...full, next: full.next.filter(load => load.planId !== input.planId), hidden: [...full.hidden, target], revision: 'manual-removed' };
+          entry = { ...entry, version: entry.version + 1 };
+          return route.fulfill({ json: { entry, loads: full } });
+        }
         mutations++;
         if (input.action === 'advance') {
           if (full.stopKey === 'pickup') {
@@ -316,6 +324,23 @@ try {
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await page.getByRole('button', { name: 'Loads Driver · Next load', exact: true }).click();
   await expect(panel.locator('[data-queued-load="PREVIOUSLY-ACTIVE"]')).toBeVisible();
+  // An unresolved manual duplicate is removable without changing the native plan.
+  const grossDuplicate = { ...load('4011151060'), planId: 'gross-duplicate', loadId: 123, canRemoveFromQueue: false };
+  const manualDuplicate = { ...load('4011151060'), planId: 'manual-duplicate', loadId: null, manual: true, canRemoveFromQueue: true, stops: [] };
+  full = { ...full, next: [manualDuplicate, grossDuplicate], revision: 'manual-duplicate' };
+  await push();
+  const duplicateButtons = panel.getByRole('button', { name: '4011151060', exact: true });
+  await expect(duplicateButtons).toHaveCount(2);
+  await duplicateButtons.nth(1).click();
+  await expect(panel.getByText('Manually added next load', { exact: false })).toBeVisible();
+  await panel.getByRole('button', { name: 'Remove from queue', exact: true }).click();
+  await expect(duplicateButtons).toHaveCount(1);
+  await duplicateButtons.click();
+  await expect(panel.getByText('Remove this plan in Gross Board.', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
+  await expect(duplicateButtons).toHaveCount(1);
   expect(errors).toEqual([]);
   console.log('Status Board loads passed: animated drag, keyboard reorder, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
 } finally {

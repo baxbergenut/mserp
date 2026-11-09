@@ -114,12 +114,18 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 	exec(`UPDATE loads SET status='Dispatched' WHERE id=989001`)
 	v = view()
-	if v.Next[0].CanRemoveFromQueue {
-		t.Fatal("Gross-backed manual plan advertised removal")
+	if !v.Next[0].CanRemoveFromQueue {
+		t.Fatal("manual alias is not removable")
 	}
-	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "hide", PlanID: planID}, ""); !errors.Is(err, ErrBoardGrossPlanRemoval) {
-		t.Fatal("Gross-backed manual plan removed", err)
+	r = act(BoardLoadAction{Action: "hide", PlanID: planID})
+	if len(r.Loads.Next) != 1 || r.Loads.Next[0].Manual || r.Loads.Next[0].CanRemoveFromQueue || len(r.Loads.Hidden) != 1 {
+		t.Fatal("manual removal hid the Gross Board load", r.Loads)
 	}
+	v = view()
+	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "hide", PlanID: v.Next[0].PlanID}, ""); !errors.Is(err, ErrBoardGrossPlanRemoval) {
+		t.Fatal("Gross counterpart became removable", err)
+	}
+	act(BoardLoadAction{Action: "restore", PlanID: planID})
 	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1 AND load_record_id=989001`, d.ID)
 	if v = view(); len(v.Next) != 1 || !v.Next[0].CanRemoveFromQueue {
 		t.Fatal("manual-only plan did not regain removal", v)
@@ -163,6 +169,40 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	exec(`UPDATE loads SET load_id='AMBIGUOUS' WHERE id=989002`)
 	if p := view().Next[0]; p.LoadID != nil || len(p.Stops) != 0 || p.Warning == "" {
 		t.Fatal("ambiguous source guessed", p)
+	}
+	// An ambiguous manual number and a pinned Gross Board plan remain distinct.
+	// Removing the placeholder must leave the real planned source untouched.
+	manualAmbiguous := view().Next[0].PlanID
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,$2,'AMBIGUOUS',989003)`, d.ID, now.Format(time.DateOnly))
+	v = view()
+	if len(v.Next) != 2 || !v.Next[0].Manual || !v.Next[0].CanRemoveFromQueue || v.Next[1].CanRemoveFromQueue {
+		t.Fatal("ambiguous duplicate removal policy", v)
+	}
+	r = act(BoardLoadAction{Action: "hide", PlanID: manualAmbiguous})
+	if len(r.Loads.Next) != 1 || r.Loads.Next[0].Manual || len(r.Loads.Hidden) != 1 {
+		t.Fatal("ambiguous removal affected Gross Board", r.Loads)
+	}
+	act(BoardLoadAction{Action: "restore", PlanID: manualAmbiguous})
+	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1 AND load_record_id=989003`, d.ID)
+	// An unresolved number cannot reappear as upcoming when every candidate is finished.
+	exec(`UPDATE loads SET status='Delivered' WHERE id IN (989002,989003)`)
+	v = view()
+	if len(v.Next) != 0 {
+		t.Fatal("finished ambiguous number requeued", v)
+	}
+	foundCompleted := false
+	for _, p := range v.Unavailable {
+		if p.PlanID == manualAmbiguous {
+			foundCompleted = p.Completed && p.LoadID == nil && len(p.Stops) == 0
+		}
+	}
+	if !foundCompleted {
+		t.Fatal("ambiguous completion guessed source or lost history", v)
+	}
+	// One unfinished candidate must keep the placeholder available for review.
+	exec(`UPDATE loads SET status='Dispatched' WHERE id=989003`)
+	if len(view().Next) != 1 || view().Next[0].LoadID != nil {
+		t.Fatal("mixed-status ambiguity was hidden or guessed", view())
 	}
 	// An earlier Gross Board plan can still be entered as the next dispatch.
 	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES($1,$2,1,'EARLIER-NEXT')`, d.ID, now.AddDate(0, 0, -14).Format(time.DateOnly))

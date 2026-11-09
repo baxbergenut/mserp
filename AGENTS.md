@@ -3852,3 +3852,14 @@ Status Board database tests verify the production payroll coverage check.
   requires a new correction. Existing assignment/availability guards still apply.
 - Check TestBoardPreviouslyActiveDeparture, TestDriverBoardDatabase (fresh and
   migrated schema), and frontend/scripts/test-status-board-loads.mjs.
+
+## Manual Status Board queue entries
+
+- Manual queue entries remain removable even when Gross Board has the same load
+  number or source ID. Hiding the manual entry must not consume source deduplication
+  or hide its Gross Board counterpart. Gross-origin entries stay protected.
+- Ambiguous manual numbers keep no guessed source ID or stops. If every available
+  exact-number source is completed, show the placeholder in completed history;
+  mixed-status ambiguity stays available for review and manual removal.
+- Regression coverage: testManualNextLoads in TestDriverBoardDatabase, including
+  fresh/migrated schemas, source-matched and ambiguous aliases, and mixed statuses.

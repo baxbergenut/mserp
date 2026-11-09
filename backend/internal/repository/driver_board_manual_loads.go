@@ -28,6 +28,7 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 	}
 	defer rows.Close()
 	counts := map[string]int{}
+	finished := map[string]int{}
 	missing := map[string]bool{}
 	sources := map[string]BoardLoad{}
 	for rows.Next() {
@@ -44,6 +45,9 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 		}
 		p.LoadID, p.Stops = &id, boardStops(raw)
 		counts[key(p.Number)]++
+		if providerCompletedLoad(p.SourceStatus) {
+			finished[key(p.Number)]++
+		}
 		sources[key(p.Number)] = p
 	}
 	if err = rows.Err(); err != nil {
@@ -56,6 +60,11 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 			if counts[key(saved.Number)] == 1 {
 				p = sources[key(saved.Number)]
 				p.Manual, p.PlanID, p.Number = true, saved.PlanID, saved.Number
+			}
+			// Do not choose an ambiguous source, but all finished candidates prove
+			// that this unresolved number is no longer an upcoming load.
+			if counts[key(saved.Number)] > 1 && finished[key(saved.Number)] == counts[key(saved.Number)] {
+				p.SourceStatus = "Completed"
 			}
 			annotateLoad(&p, driver)
 			result[driver] = append(result[driver], p)
