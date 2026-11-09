@@ -97,6 +97,7 @@ func TestGrossBoardPlanningDatabase(t *testing.T) {
  INSERT INTO gross_board_entries(driver_id,service_date,day_status,version) VALUES('` + projectionDriver + `','2026-10-06','HOME',4)`)
 			if mode == "migration" {
 				exec(string(migration))
+				applyLaterTestMigrations(t, ctx, admin, "206")
 			}
 			var unchanged bool
 			if err := pool.QueryRow(ctx, `SELECT (SELECT load_number='84X0165 transferred to another driver' AND version=7 FROM gross_board_extra_entries WHERE driver_id=$1 AND service_date='2026-10-05' AND slot=1) AND (SELECT day_status='HOME' AND version=4 FROM gross_board_entries WHERE driver_id=$1 AND service_date='2026-10-06')`, projectionDriver).Scan(&unchanged); err != nil || !unchanged {
