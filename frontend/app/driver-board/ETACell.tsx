@@ -47,7 +47,7 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
     </button>
     {freshness && <span id={freshnessId} className="sr-only">{freshness}</span>}
     {showRetry && <button type="button" data-grid-action aria-label={`${name} · Retry automatic ETA`}
-      title={pending ? "Automatic ETA retry queued" : "Retry automatic ETA calculation"}
+      title={pending ? "Recalculating automatic ETA now" : "Retry automatic ETA calculation"}
       disabled={retryDisabled || pending} aria-busy={pending}
       onClick={event => { event.stopPropagation(); onRetry?.(); }}
       className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-zinc-400 enabled:hover:bg-zinc-700 enabled:hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 disabled:opacity-40">

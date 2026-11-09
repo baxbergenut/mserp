@@ -110,11 +110,14 @@ export default function DriverBoardPage() {
     setEtaRetrying(current => ({ ...current, [id]: true }));
     setEtaRetryError(""); setEtaRetryNotice("");
     try {
-      await retryBoardETA(id, context);
-      setEtaRetryNotice(`${name}: automatic ETA retry queued. Recalculation normally starts within a minute.`);
+      const result = await retryBoardETA(id, context);
+      const automatic = result.loads.automation;
+      setEtaRetryNotice(automatic?.travelValue || automatic?.arrived
+        ? `${name}: automatic ETA recalculated.`
+        : `${name}: calculation finished, but an ETA is not available. ${automatic?.reason || "Check the selected stop and truck GPS."}`);
       state.refresh();
     } catch (err) {
-      setEtaRetryError(err instanceof Error ? err.message : "Automatic ETA retry could not be queued. Try again.");
+      setEtaRetryError(err instanceof Error ? err.message : "Automatic ETA could not be recalculated. Try again.");
     } finally {
       etaRetryInFlight.current.delete(id);
       setEtaRetrying(current => ({ ...current, [id]: false }));

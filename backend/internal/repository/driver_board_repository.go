@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"mserp/internal/boardroutes"
+	"mserp/internal/fiveeld"
 	"sort"
 	"strings"
 	"time"
@@ -91,6 +93,9 @@ type DriverBoard struct {
 }
 
 type DriverBoardRepository struct {
+	retryRoutes       *boardroutes.Client
+	retryELD          *fiveeld.Client
+	retryUSDOT        string
 	pool              *pgxpool.Pool
 	now               func() time.Time
 	fiveELDConfigured bool

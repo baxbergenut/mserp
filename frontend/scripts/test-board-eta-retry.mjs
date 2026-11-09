@@ -25,6 +25,7 @@ let retryCount = 0;
 let retryFailure = false;
 let releaseRetry;
 let holdRetry = false;
+let missingResult = false;
 loads.automation.travelArrivalAt = '2026-10-20T17:07:00Z';
 loads.automation.travelStale = false;
 loads.automation.reason = 'Last known miles remaining · GPS data stale · last observed · Assumed semi profile';
@@ -36,8 +37,9 @@ await page.route('**/api/**', async route => {
     expect(req.postDataJSON()).toEqual({ context: loads.automation.context });
     if (holdRetry) await new Promise(resolve => { releaseRetry = resolve; });
     if (retryFailure) return route.fulfill({ status: 429, json: { error: 'Please wait before retrying automatic ETA' } });
-    loads.automation.travelRetryPending = true;
-    return route.fulfill({ status: 202, json: { queued: true } });
+    loads.automation.travelValue = missingResult ? '' : 'ETA 14:00';
+    loads.automation.reason = missingResult ? 'Truck movement is not yet established' : '';
+    return route.fulfill({ status: 200, json: { loads } });
   }
   const fixtures = {
     '/auth/session': { user: { id: 'user', username: 'Updater', permissions: ['driver_board.read', ...(!readOnly ? ['driver_board.write'] : [])] }, csrfToken: 'fixture' },
@@ -70,14 +72,15 @@ try {
   await expect(retry).toHaveAttribute('aria-busy', 'true');
   await expect.poll(() => retryCount).toBe(2);
   releaseRetry(); holdRetry = false;
-  await expect(page.getByRole('status').filter({ hasText: 'automatic ETA retry queued' })).toBeVisible();
-  await page.reload();
-  await expect(retry).toBeDisabled();
-  await expect(retry.locator('svg')).toHaveClass(/animate-spin/);
-  loads.automation.travelRetryPending = false;
-  loads.automation.travelValue = 'ETA 14:00';
-  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: 'automatic ETA recalculated' })).toBeVisible();
+  await expect(cell).toHaveText('DEL 24/7 FRI ETA 14:00');
   await expect(retry).toHaveCount(0);
+  loads.automation.travelValue = ''; missingResult = true;
+  await page.reload();
+  await retry.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Truck movement is not yet established' })).toBeVisible();
+  await expect(retry).toBeEnabled();
+  missingResult = false;
   loads.automation.travelValue = '218mi';
   await page.reload(); await expect(retry).toHaveCount(0);
   loads.automation.travelValue = ''; loads.automation.arrived = true;
@@ -89,5 +92,5 @@ try {
   readOnly = false; loads.automation.routingEnabled = false;
   await page.reload(); await expect(retry).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('ETA retry passed: right-side layout, missing-only visibility, loading/repeat prevention, queue persistence, error recovery, permissions, manual/arrival/mileage guards.');
+  console.log('ETA retry passed: right-side layout, missing-only visibility, loading/repeat prevention, immediate completion and missing-result feedback, error recovery, permissions, manual/arrival/mileage guards.');
 } finally { await browser.close(); await new Promise(done => server.close(done)); }

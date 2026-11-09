@@ -306,17 +306,18 @@ Status Board database tests verify the production payroll coverage check.
 When automatic travel is missing, Status Board editors see a small refresh button
 at the right edge of the ETA cell. Existing mileage, manual ETA and arrival
 markers do not offer a retry. POST `/driver-board/eta-retry/{driverId}` requires
-`driver_board.write` and the exact current automation context. It queues work for
-the minute worker, never calls providers from the HTTP request, and leaves manual
-fields and dispatch progress unchanged. The button spins while the durable request
-is pending; failures to queue are shown above the board.
+`driver_board.write` and the exact current automation context. It starts a targeted
+calculation immediately and returns the resulting load view after the attempt,
+without waiting for the minute worker. The button spins during the request and
+the page reports success, missing-data diagnostics or an actionable error.
+Manual fields and dispatch progress remain unchanged.
 
 Explicit retries bypass the normal 90-minute/movement gates but retain provider
-budgets, pacing and failure backoff. Requests for the same pending calculation
-are idempotent and completed requests have a five-minute cooldown. New requests
-survive in-flight worker results. Changed selections still discard old results.
-The queue is not a guarantee of an ETA: missing GPS, unknown motion and provider
-failures remain explained by the automatic travel diagnostic.
+budgets, pacing and failure backoff. A shared automation lock rejects a busy
+calculation rather than queueing. Requests have a five-minute cooldown. Changed
+selections still discard obsolete results. Even interrupted attempts do not leave
+work queued for a later retry. Missing GPS,
+unknown motion and provider failures can still prevent a usable ETA.
 
 Check `TestBoardTravelManualRetry`, `TestBoardTravelPreserveInFlightRetry`, the
 fresh/migration `TestDriverBoardDatabase` retry fixture, and

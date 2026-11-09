@@ -457,12 +457,16 @@ func main() {
 			return fleetRepo.EnsureCurrentPTIWeek(bounded)
 		}})
 	}()
+	boardRoutes := boardroutes.NewClient(cfg.BoardRoutes)
+	boardRoutes.Budget = boardroutes.NewPostgresBudget(pool)
+	router.(interface {
+		ConfigureBoardETARetry(*boardroutes.Client, *fiveeld.Client, string)
+	}).ConfigureBoardETARetry(boardRoutes, fiveELDTelemetry, cfg.FiveELDUSDOT)
 	boardAutomationDone := make(chan struct{})
 	go func() {
 		defer close(boardAutomationDone)
 		repo := repository.NewDriverBoardRepository(pool, cfg.FiveELDEnabled || cfg.Samsara.Token != "")
-		routes := boardroutes.NewClient(cfg.BoardRoutes)
-		routes.Budget = boardroutes.NewPostgresBudget(pool)
+		routes := boardRoutes
 		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "board-automation", Interval: time.Minute, Run: func(runCtx context.Context) error {
 			bounded, cancel := context.WithTimeout(runCtx, 40*time.Second)
 			defer cancel()

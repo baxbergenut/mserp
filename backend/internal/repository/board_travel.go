@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"math"
 	"sort"
 	"time"
@@ -199,6 +200,10 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		defer cancel()
 		_, _ = conn.Exec(cleanup, `SELECT pg_advisory_unlock(718504115)`)
 	}()
+	return r.reconcileAutomation(ctx, conn, routes, eld, usdot, "", "")
+}
+
+func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *pgxpool.Conn, routes *boardroutes.Client, eld *fiveeld.Client, usdot, onlyDriver, onlyContext string) error {
 	now := r.now().UTC()
 	week, _ := time.Parse(time.DateOnly, boardLoadToday(now))
 	board, err := r.Get(ctx, week)
@@ -215,9 +220,17 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		urgent    bool
 	}
 	targets := []target{}
+	matchedDriver := false
 	for _, d := range board.Drivers {
+		if onlyDriver != "" && d.ID != onlyDriver {
+			continue
+		}
+		matchedDriver = true
 		view := board.Loads[d.ID]
 		a := view.Automation
+		if onlyDriver != "" && (a == nil || a.Context != onlyContext || a.RequiresConfirmation || a.Arrived || a.TravelMode != "auto") {
+			return ErrETARetryUnavailable
+		}
 		if a == nil {
 			continue
 		}
@@ -263,9 +276,12 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			return err
 		}
 		if routeNotBefore != nil && now.Before(*routeNotBefore) {
+			if onlyDriver != "" {
+				return ErrETARetryBusy
+			}
 			continue
 		}
-		if t.Context == a.Context && t.AddressRejected && t.Enabled && !t.retryPending() {
+		if onlyDriver == "" && t.Context == a.Context && t.AddressRejected && t.Enabled && !t.retryPending() {
 			continue
 		}
 		unavailable := ""
@@ -298,7 +314,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			continue
 		}
 		lastKnown := now.Sub(d.Location.ReportedAt) > 10*time.Minute
-		if !t.due(a.Context, d.Location, now) {
+		if onlyDriver == "" && !t.due(a.Context, d.Location, now) {
 			if !t.Enabled {
 				t.Enabled = true
 				if err = r.storeBoardTravel(ctx, d.ID, d.TruckID, view.Revision, a.Context, t); err != nil {
@@ -309,6 +325,9 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		}
 		urgent := t.Context != a.Context || !sameTelemetrySource(t.Source, d.Location.Source) || t.Mode != boardroutes.TravelMode
 		targets = append(targets, target{d, view, stop, t, vin, lastKnown, urgent})
+	}
+	if onlyDriver != "" && !matchedDriver {
+		return ErrETARetryUnavailable
 	}
 	sort.SliceStable(targets, func(i, j int) bool {
 		if targets[i].urgent != targets[j].urgent {
@@ -329,14 +348,26 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 			return err
 		}
 		if !settled {
+			if onlyDriver != "" {
+				return ErrETARetryBusy
+			}
 			continue
+		}
+		if onlyDriver != "" {
+			latest, loadErr := r.Loads(ctx, onlyDriver, "")
+			if loadErr != nil {
+				return loadErr
+			}
+			if latest.Automation == nil || latest.Automation.Context != onlyContext || latest.Revision != job.view.Revision || latest.Automation.TravelMode != "auto" || latest.Automation.Arrived {
+				return ErrETARetryUnavailable
+			}
 		}
 		a := job.view.Automation
 		t := job.travel
 		if job.urgent {
 			t = t.newRouteContext(a.Context, job.driver.Location.Source)
 		}
-		manualRetry := t.retryPending()
+		manualRetry := t.retryPending() || onlyDriver != ""
 		t.Enabled = true
 		t.AttemptedAt = now
 		var point *fiveeld.TrackingPoint

@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"mserp/internal/boardroutes"
+	"mserp/internal/fiveeld"
 	"mserp/internal/fleetscope"
 	"mserp/internal/jobs"
 	"mserp/internal/openai"
@@ -22,6 +24,11 @@ type shutdownRouter struct {
 	*chi.Mux
 	shutdown func()
 	payroll  *repository.DriverPayRepository
+	board    *repository.DriverBoardRepository
+}
+
+func (r *shutdownRouter) ConfigureBoardETARetry(routes *boardroutes.Client, eld *fiveeld.Client, usdot string) {
+	r.board.ConfigureETARetry(routes, eld, usdot)
 }
 
 func (r *shutdownRouter) Shutdown() { r.shutdown() }
@@ -246,7 +253,7 @@ func NewRouter(
 	registerEscrowRoutes(protected, logger, repository.NewEscrowRepository(pool))
 	r.Mount("/", protected)
 
-	return &shutdownRouter{Mux: r, payroll: payRepo, shutdown: func() {
+	return &shutdownRouter{Mux: r, payroll: payRepo, board: boardRepo, shutdown: func() {
 		events.shutdown()
 		boardEvents.shutdown()
 		boardPresence.shutdown()

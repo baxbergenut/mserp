@@ -600,8 +600,18 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	const customAddress = "123 Main Street, Newark, NJ 07102"
 	const invalidAddress = "Incomplete street"
 	var customCalls, routeCalls atomic.Int32
+	var cancelRoute atomic.Bool
+	routeEntered := make(chan struct{}, 1)
 	routeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		routeCalls.Add(1)
+		if cancelRoute.Load() {
+			routeEntered <- struct{}{}
+			select {
+			case <-req.Context().Done():
+			case <-time.After(2 * time.Second):
+			}
+			return
+		}
 		var request struct {
 			Destination struct {
 				Address string `json:"address"`
@@ -854,7 +864,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal("source stop routing did not resume", view.Automation)
 	}
 
-	// Manual retry exercises the real queued SQL and worker without provider traffic.
+	// Immediate retry runs only this driver and completes within the request.
 	trackingAt, trackingLat = time.Now().UTC(), 41.0
 	if _, err = pool.Exec(ctx, `UPDATE five_eld_locations SET latitude=$2,reported_at=$3 WHERE vin=$1`, vin, trackingLat, trackingAt); err != nil {
 		t.Fatal(err)
@@ -871,54 +881,96 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=$2 WHERE driver_id=$1`, d.ID, retryBody); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.RequestETARetry(ctx, d.ID, strings.Repeat("0", 64)); !errors.Is(err, ErrETARetryUnavailable) {
+	repo.ConfigureETARetry(routes, eld, "fixture")
+	if _, err = repo.RetryETANow(ctx, d.ID, strings.Repeat("0", 64)); !errors.Is(err, ErrETARetryUnavailable) {
 		t.Fatal("stale retry context accepted", err)
 	}
 	if _, err = pool.Exec(ctx, `UPDATE driver_board SET eta='15:00' WHERE driver_id=$1`, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryUnavailable) {
+	if _, err = repo.RetryETANow(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryUnavailable) {
 		t.Fatal("manual ETA retried", err)
 	}
 	if _, err = pool.Exec(ctx, `UPDATE driver_board SET eta='' WHERE driver_id=$1`, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); err != nil {
-		t.Fatal("missing travel retry rejected", err)
-	}
-	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.retryPending() {
-		t.Fatal("retry not queued", err, cached)
-	}
-	requested := cached.RetryRequestedAt
-	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); err != nil {
-		t.Fatal("duplicate queue request failed", err)
-	}
-	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.RetryRequestedAt.Equal(requested) {
-		t.Fatal("duplicate changed queue timestamp", err)
-	}
-	// A result from before the accepted request may update good cache, not erase it.
-	if err = repo.storeBoardTravel(ctx, d.ID, truck.ID, view.Revision, view.Automation.Context, retryTravel); err != nil {
+	lockConn, err := pool.Acquire(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.retryPending() {
-		t.Fatal("in-flight result erased retry", err)
+	if _, err = lockConn.Exec(ctx, `SELECT pg_advisory_lock(718504115)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repo.RetryETANow(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryBusy) {
+		t.Fatal("busy worker did not reject immediate retry", err)
+	}
+	_, _ = lockConn.Exec(ctx, `SELECT pg_advisory_unlock(718504115)`)
+	lockConn.Release()
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.RetryRequestedAt.IsZero() {
+		t.Fatal("busy retry left a claim", err)
 	}
 	calls = routeCalls.Load()
-	if err = repo.ReconcileAutomation(ctx, routes, eld, "fixture"); err != nil {
+	// An unrelated stale automation row must not be touched by the immediate pass.
+	unrelated, err := fleet.CreateDriver(ctx, DriverInput{FullName: "Unrelated retry fixture", PayType: "cpm", PayRate: 0.6, Active: true})
+	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, `INSERT INTO driver_board_automation(driver_id,evidence) VALUES($1,'{"context":"untouched"}')`, unrelated.ID); err != nil {
+		t.Fatal(err)
+	}
+	immediate, err := repo.RetryETANow(ctx, d.ID, view.Automation.Context)
+	if err != nil {
+		t.Fatal("immediate calculation failed", err)
+	}
+	if !strings.HasPrefix(immediate.Automation.TravelValue, "ETA ") || immediate.Automation.TravelRetryPending {
+		t.Fatal("request returned before result", immediate.Automation)
+	}
 	if routeCalls.Load() != calls+1 {
-		t.Fatal("manual retry did not force exactly one fresh stationary-origin route", calls, routeCalls.Load())
+		t.Fatal("immediate retry did not force exactly one stationary-origin route", calls, routeCalls.Load())
 	}
-	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.retryPending() || !cached.RetryCompletedAt.Equal(requested) || cached.Motion != "moving" {
-		t.Fatal("worker did not consume retry", err, cached)
+	var unrelatedContext string
+	if err = pool.QueryRow(ctx, `SELECT evidence->>'context' FROM driver_board_automation WHERE driver_id=$1`, unrelated.ID).Scan(&unrelatedContext); err != nil || unrelatedContext != "untouched" {
+		t.Fatal("immediate retry touched another driver", err)
 	}
-	// Simulate missing classification again; cooldown must survive worker completion.
+	_, _ = pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, unrelated.ID)
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.retryPending() || cached.RetryRequestedAt.IsZero() || !cached.RetryCompletedAt.Equal(cached.RetryRequestedAt) {
+		t.Fatal("immediate request left queued work", err, cached)
+	}
 	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{motion}','""') WHERE driver_id=$1`, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryCooldown) {
+	if _, err = repo.RetryETANow(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryCooldown) {
 		t.Fatal("retry cooldown bypassed", err)
+	}
+	// Cancellation while the routing provider is in flight leaves no minute-worker retry.
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=travel-'retryRequestedAt'-'retryCompletedAt' WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancelRetry := context.WithCancel(ctx)
+	cancelRoute.Store(true)
+	retryDone := make(chan error, 1)
+	go func() {
+		_, retryErr := repo.RetryETANow(canceled, d.ID, view.Automation.Context)
+		retryDone <- retryErr
+	}()
+	select {
+	case <-routeEntered:
+	case <-time.After(5 * time.Second):
+		cancelRetry()
+		t.Fatal("immediate request never reached provider")
+	}
+	cancelRetry()
+	select {
+	case retryErr := <-retryDone:
+		if !errors.Is(retryErr, context.Canceled) {
+			t.Fatal("cancellation not returned", retryErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled retry did not return")
+	}
+	cancelRoute.Store(false)
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.retryPending() || cached.RetryRequestedAt.IsZero() {
+		t.Fatal("canceled retry queued work or lost duplicate fence", err)
 	}
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
 	board, err := repo.Get(ctx, now)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mserp/internal/boardroutes"
+	"mserp/internal/fiveeld"
 	"strings"
 	"time"
 )
@@ -11,7 +13,7 @@ import (
 var ErrETARetryUnavailable = errors.New("automatic ETA cannot be retried for this selection")
 var ErrETARetryCooldown = errors.New("please wait five minutes before retrying automatic ETA again")
 
-// RequestETARetry queues provider work; HTTP handlers never call paid providers.
+// RequestETARetry claims a retry while the immediate runner holds the automation lock.
 func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -45,8 +47,15 @@ func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key str
 		return err
 	}
 	now := r.now().UTC()
-	if travel.Context == key && travel.retryPending() {
-		return tx.Commit(ctx)
+	var notBefore *time.Time
+	if err = tx.QueryRow(ctx, `SELECT route_not_before FROM driver_board_automation WHERE driver_id=$1`, id).Scan(&notBefore); err != nil {
+		return err
+	}
+	if notBefore != nil && now.Before(*notBefore) {
+		return ErrETARetryBusy
+	}
+	if travel.Context == key && travel.Error != "" && now.Sub(travel.AttemptedAt) < boardRouteRetryInterval {
+		return ErrETARetryCooldown
 	}
 	if !travel.RetryRequestedAt.IsZero() && now.Sub(travel.RetryRequestedAt) < 5*time.Minute {
 		return ErrETARetryCooldown
@@ -54,7 +63,7 @@ func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key str
 	if travel.Context != key {
 		travel = BoardTravel{Context: key, Enabled: true}
 	}
-	travel.RetryRequestedAt = now
+	travel.RetryRequestedAt, travel.RetryCompletedAt = now, now
 	body, err := json.Marshal(travel)
 	if err != nil {
 		return err
@@ -63,4 +72,60 @@ func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key str
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+var ErrETARetryBusy = errors.New("ETA calculation is busy or the stop is still being edited; please try again shortly")
+var ErrETARetryDisabled = errors.New("automatic ETA routing is unavailable")
+
+// ConfigureETARetry is called once during startup, before serving requests.
+func (r *DriverBoardRepository) ConfigureETARetry(routes *boardroutes.Client, eld *fiveeld.Client, usdot string) {
+	r.retryRoutes, r.retryELD, r.retryUSDOT = routes, eld, usdot
+}
+
+// RetryETANow runs one driver's normal provider calculation before returning.
+// Its claim is consumed before provider work, so cancellation/crashes never queue a retry.
+func (r *DriverBoardRepository) RetryETANow(ctx context.Context, id, key string) (BoardLoads, error) {
+	if r.retryRoutes == nil || !r.retryRoutes.Options.Enabled {
+		return BoardLoads{}, ErrETARetryDisabled
+	}
+	conn, err := r.pool.Acquire(ctx)
+	if err != nil {
+		return BoardLoads{}, err
+	}
+	defer conn.Release()
+	var locked bool
+	if err = conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(718504115)`).Scan(&locked); err != nil {
+		return BoardLoads{}, err
+	}
+	if !locked {
+		return BoardLoads{}, ErrETARetryBusy
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = conn.Exec(cleanup, `SELECT pg_advisory_unlock(718504115)`)
+	}()
+	// Retire a legacy queued claim before handling this explicit immediate request.
+	// Even if validation/backoff rejects it, it must not run later in the background.
+	if _, err = conn.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{retryCompletedAt}',travel->'retryRequestedAt'),updated_at=now() WHERE driver_id=$1 AND travel->>'context'=$2 AND travel ? 'retryRequestedAt' AND travel->>'retryCompletedAt' IS DISTINCT FROM travel->>'retryRequestedAt'`, id, key); err != nil {
+		return BoardLoads{}, err
+	}
+	if err = r.RequestETARetry(ctx, id, key); err != nil {
+		return BoardLoads{}, err
+	}
+	if err = r.reconcileAutomation(ctx, conn, r.retryRoutes, r.retryELD, r.retryUSDOT, id, key); err != nil {
+		return BoardLoads{}, err
+	}
+	view, err := r.Loads(ctx, id, "")
+	if err != nil {
+		return BoardLoads{}, err
+	}
+	if view.Automation == nil || view.Automation.Context != key {
+		return BoardLoads{}, ErrETARetryUnavailable
+	}
+	// A concurrent edit may have imposed its settle fence after the claim.
+	if view.Automation.TravelRetryPending {
+		return BoardLoads{}, ErrETARetryBusy
+	}
+	return view, nil
 }

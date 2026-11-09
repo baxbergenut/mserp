@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"github.com/jackc/pgx/v5/pgconn"
 	"log/slog"
@@ -158,7 +159,21 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 400, "a valid driver and current ETA context are required")
 			return
 		}
-		err := repo.RequestETARetry(r.Context(), id, request.Context)
+		bounded, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+		defer cancel()
+		loads, err := repo.RetryETANow(bounded, id, request.Context)
+		if errors.Is(err, repository.ErrETARetryBusy) {
+			writeAPIError(w, 409, err.Error())
+			return
+		}
+		if errors.Is(err, repository.ErrETARetryDisabled) {
+			writeAPIError(w, 503, err.Error())
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			writeAPIError(w, 504, "ETA calculation timed out; no retry was queued")
+			return
+		}
 		if errors.Is(err, repository.ErrETARetryCooldown) {
 			writeAPIError(w, 429, err.Error())
 			return
@@ -171,7 +186,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			fail(w, err)
 			return
 		}
-		writeJSON(w, http.StatusAccepted, map[string]bool{"queued": true})
+		writeJSON(w, http.StatusOK, map[string]any{"loads": loads})
 	})
 	r.Post("/driver-board/order", func(w http.ResponseWriter, r *http.Request) {
 		var action repository.DriverBoardOrderAction
