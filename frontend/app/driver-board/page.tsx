@@ -3,7 +3,7 @@
 
 import dynamic from "next/dynamic";
 import { Fragment, memo, useCallback, useContext, useMemo, useRef, useState, type ReactElement } from "react";
-import {fetchDriver,fetchFleetStatusCatalog,fetchTruckAssignmentChoices} from "@/app/lib/api";
+import {fetchDriver,fetchFleetStatusCatalog,fetchTruckAssignmentChoices,retryBoardETA} from "@/app/lib/api";
 import {DriverStatusDialog} from "../drivers/DriverStatusDialog";
 import { DriverIntakeSetup } from "../drivers/DriverIntakeSetup";
 import type {Driver,TruckAssignmentChoice} from "@/app/lib/types";
@@ -100,6 +100,26 @@ export default function DriverBoardPage() {
   const [destinationError, setDestinationError] = useState("");
   const [orderError, setOrderError] = useState("");
   const [orderNotice, setOrderNotice] = useState("");
+  const [etaRetryNotice, setEtaRetryNotice] = useState("");
+  const [etaRetryError, setEtaRetryError] = useState("");
+  const [etaRetrying, setEtaRetrying] = useState<Record<string, boolean>>({});
+  const etaRetryInFlight = useRef(new Set<string>());
+  async function retryETA(id: string, name: string, context: string) {
+    if (!canEdit || dirty || saving || loading || leaving || state.actionBusy || etaRetryInFlight.current.has(id)) return;
+    etaRetryInFlight.current.add(id);
+    setEtaRetrying(current => ({ ...current, [id]: true }));
+    setEtaRetryError(""); setEtaRetryNotice("");
+    try {
+      await retryBoardETA(id, context);
+      setEtaRetryNotice(`${name}: automatic ETA retry queued. Recalculation normally starts within a minute.`);
+      state.refresh();
+    } catch (err) {
+      setEtaRetryError(err instanceof Error ? err.message : "Automatic ETA retry could not be queued. Try again.");
+    } finally {
+      etaRetryInFlight.current.delete(id);
+      setEtaRetrying(current => ({ ...current, [id]: false }));
+    }
+  }
   const canAssignTruck = permissions.includes("drivers.edit") && permissions.includes("trucks.read");
   const refreshTruckChoices = useCallback(() => {
     if (canAssignTruck) void fetchTruckAssignmentChoices().then(setTruckChoices).catch(err => setOrderError(err instanceof Error ? err.message : "Could not load trucks"));
@@ -276,6 +296,8 @@ export default function DriverBoardPage() {
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
     {orderError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{orderError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setOrderError(""); void reload(); }}>Reload board</button></div>}
     <span role="status" aria-live="polite" className="sr-only">{orderNotice}</span>
+    {etaRetryError && <p role="alert" className="px-3 py-2 text-xs text-red-400">{etaRetryError}</p>}
+    {etaRetryNotice && !etaRetryError && <p role="status" className="px-3 py-2 text-xs text-zinc-400">{etaRetryNotice}</p>}
     <StatusBoardScrollArea loading={loading} headerPinned={headerPinned}>
       <table ref={table} {...spreadsheetGridEvents} onContextMenu={event => {
         if (event.defaultPrevented) return;
@@ -384,7 +406,7 @@ export default function DriverBoardPage() {
                     className={"h-8 w-full min-w-0 text-ellipsis bg-transparent px-1.5 text-[11px] outline-none focus:text-clip focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + (loads?.destinationSource ? "text-blue-200" : "text-zinc-200")} />
                   {stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
                 </div>}</td>,
-              eta: <td key="eta" data-board-column="eta" className={cellClass}><ETACell name={d.fullName} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} /></td>,
+              eta: <td key="eta" data-board-column="eta" className={cellClass}><ETACell name={d.fullName} canRetry={canEdit} retryDisabled={disabled || saving || dirty} retrying={!!etaRetrying[d.id]} onRetry={() => void retryETA(d.id, d.fullName, loads?.automation?.context ?? "")} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} /></td>,
               loadPlan: <td key="loadPlan" data-board-column="loadPlan" className={cellClass}><div className="flex h-8 w-full items-center gap-2"><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, next.overdue ? `Overdue · Gross Board ${next.date}` : "", nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group h-full shrink-0 px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <span className={next.loadId === null ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}{next.overdue && <span className="ml-1.5 text-[10px] font-medium text-amber-300">Overdue</span>}</span> : "—"}</button>{next && nextStop && <button type="button" data-grid-action aria-label={`${d.fullName} · Next pickup time`} title={canEdit ? "Edit next pickup time" : nextPickup?.detail} disabled={!canEdit || disabled || next.loadId === null} aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id} className="mr-1 shrink-0 rounded px-1 py-1 text-left text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500" onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}</div></td>,
               notes: <td key="notes" data-board-column="notes" className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>,
               homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,

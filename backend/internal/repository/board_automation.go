@@ -118,6 +118,7 @@ type BoardAutomation struct {
 	ArrivalOverride      string          `json:"arrivalOverride"`
 	ObservedAt           time.Time       `json:"observedAt"`
 	Stale                bool            `json:"stale"`
+	TravelRetryPending   bool            `json:"travelRetryPending"`
 	TravelMode           string          `json:"travelMode"`
 	TravelValue          string          `json:"travelValue"`
 	TravelStale          bool            `json:"travelStale"`
@@ -294,6 +295,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 			key = hex.EncodeToString(sum[:])
 		}
 		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key, CustomDestination: address != "", routeAddress: address, travelEvidence: travel}
+		a.TravelRetryPending = travel.Context == key && travel.retryPending()
 		a.TelemetrySafe = telemetrySafe
 		if selectionInvalid && address == "" {
 			a.Reason = "Review the changed current load selection before automation resumes"

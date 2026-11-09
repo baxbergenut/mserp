@@ -92,3 +92,9 @@ func TestDriverBoardSheetStatuses(t *testing.T) {
 		}
 	}
 }
+
+func TestETARetryRequiresBoardWrite(t *testing.T) {
+	if routePermission("POST", "/driver-board/eta-retry/9ccb2c6e-9211-4c70-ae31-c79065da120f") != "driver_board.write" {
+		t.Fatal("manual automatic ETA retry must require board write permission")
+	}
+}

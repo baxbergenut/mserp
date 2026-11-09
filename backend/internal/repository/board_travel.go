@@ -14,6 +14,8 @@ import (
 )
 
 type BoardTravel struct {
+	RetryRequestedAt  time.Time           `json:"retryRequestedAt,omitempty"`
+	RetryCompletedAt  time.Time           `json:"retryCompletedAt,omitempty"`
 	Source            string              `json:"source,omitempty"`
 	Enabled           bool                `json:"enabled"`
 	Context           string              `json:"context"`
@@ -44,6 +46,25 @@ const (
 	boardRouteMovementMeters = 1609.344
 )
 
+func (t BoardTravel) retryPending() bool {
+	return t.RetryRequestedAt.After(t.RetryCompletedAt)
+}
+
+func (t *BoardTravel) preserveNewerRetry(current BoardTravel, key string) {
+	if current.Context == key && current.RetryRequestedAt.After(t.RetryRequestedAt) {
+		t.RetryRequestedAt = current.RetryRequestedAt
+	}
+}
+
+// Only a retry bound to this exact selection can survive route mode/source renewal.
+func (t BoardTravel) newRouteContext(key, source string) BoardTravel {
+	next := BoardTravel{Context: key, Source: source, Mode: boardroutes.TravelMode}
+	if t.Context == key {
+		next.RetryRequestedAt, next.RetryCompletedAt = t.RetryRequestedAt, t.RetryCompletedAt
+	}
+	return next
+}
+
 func (t BoardTravel) moved(lat, lng float64) bool {
 	return t.Position == nil || distanceMeters(t.Position.Latitude, t.Position.Longitude, lat, lng) >= boardRouteMovementMeters
 }
@@ -51,6 +72,9 @@ func (t BoardTravel) moved(lat, lng float64) bool {
 func (t BoardTravel) due(key string, location *DriverBoardLocation, now time.Time) bool {
 	if t.Context != key || !sameTelemetrySource(t.Source, location.Source) || t.Mode != boardroutes.TravelMode {
 		return true
+	}
+	if t.retryPending() {
+		return t.Error == "" || now.Sub(t.AttemptedAt) >= boardRouteRetryInterval
 	}
 	if t.Position != nil && !t.moved(location.Latitude, location.Longitude) {
 		return false
@@ -241,7 +265,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		if routeNotBefore != nil && now.Before(*routeNotBefore) {
 			continue
 		}
-		if t.Context == a.Context && t.AddressRejected && t.Enabled {
+		if t.Context == a.Context && t.AddressRejected && t.Enabled && !t.retryPending() {
 			continue
 		}
 		unavailable := ""
@@ -261,6 +285,9 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				t = BoardTravel{Context: a.Context}
 			}
 			t.Enabled, t.Error = true, unavailable
+			if t.retryPending() {
+				t.RetryCompletedAt = t.RetryRequestedAt
+			}
 			if !a.TelemetrySafe || missingStopCoordinates {
 				t.CalculatedAt = time.Time{}
 			}
@@ -287,6 +314,9 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		if targets[i].urgent != targets[j].urgent {
 			return targets[i].urgent
 		}
+		if targets[i].travel.retryPending() != targets[j].travel.retryPending() {
+			return targets[i].travel.retryPending()
+		}
 		return targets[i].travel.AttemptedAt.Before(targets[j].travel.AttemptedAt)
 	})
 	for _, job := range targets {
@@ -304,8 +334,9 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		a := job.view.Automation
 		t := job.travel
 		if job.urgent {
-			t = BoardTravel{Context: a.Context, Source: job.driver.Location.Source, Mode: boardroutes.TravelMode}
+			t = t.newRouteContext(a.Context, job.driver.Location.Source)
 		}
+		manualRetry := t.retryPending()
 		t.Enabled = true
 		t.AttemptedAt = now
 		var point *fiveeld.TrackingPoint
@@ -336,7 +367,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 		}
 		// Tracking may be older than the shared GPS cache. Check the actual route
 		// origin too, so an unchanged point never produces a paid refresh.
-		if point != nil && t.Position != nil && !t.moved(point.Coordinates.Lat, point.Coordinates.Lng) {
+		if !manualRetry && point != nil && t.Position != nil && !t.moved(point.Coordinates.Lat, point.Coordinates.Lng) {
 			point = nil
 		}
 		if point != nil {
@@ -355,6 +386,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				}
 			} else {
 				t.Error, t.Motion = "", motion
+				t.AddressRejected = false
 				t.ReportedAt, t.CalculatedAt = point.Date, r.now().UTC()
 				t.Position = &boardRoutePosition{Latitude: point.Coordinates.Lat, Longitude: point.Coordinates.Lng}
 				t.ArrivalAt = time.Time{}
@@ -364,6 +396,9 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 				t.Miles = float64(estimate.Meters) / 1609.344
 				t.Assumptions, t.LastKnownPosition = estimate.Assumptions, job.lastKnown
 			}
+		}
+		if manualRetry {
+			t.RetryCompletedAt = t.RetryRequestedAt
 		}
 		if err = r.storeBoardTravel(ctx, job.driver.ID, job.driver.TruckID, job.view.Revision, a.Context, t); err != nil {
 			return err
@@ -394,6 +429,13 @@ func (r *DriverBoardRepository) storeBoardTravel(ctx context.Context, id, truck,
 	if v.Revision != revision || v.Automation == nil || v.Automation.Context != key || v.Automation.RequiresConfirmation {
 		return nil
 	}
+	// Keep a retry accepted while this worker was in flight. The driver lock
+	// serializes this merge with RequestETARetry without discarding good results.
+	var current BoardTravel
+	if err = tx.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, id).Scan(&current); err != nil {
+		return err
+	}
+	travel.preserveNewerRetry(current, key)
 	body, _ := json.Marshal(travel)
 	if _, err = tx.Exec(ctx, `UPDATE driver_board_automation SET travel=$2,updated_at=now() WHERE driver_id=$1 AND travel IS DISTINCT FROM $2::jsonb`, id, body); err != nil {
 		return err

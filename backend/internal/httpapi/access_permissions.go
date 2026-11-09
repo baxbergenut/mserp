@@ -88,6 +88,7 @@ var routeAccessPolicies = []routeAccess{
 	{"POST", "/driver-board/history/{id}/undo", "driver_board.write"},
 	{"GET", "/driver-board/loads/{driverId}", "driver_board.read"},
 	{"POST", "/driver-board/loads/{driverId}", "driver_board.write"},
+	{"POST", "/driver-board/eta-retry/{driverId}", "driver_board.write"},
 	{"GET", "/driver-charges", "charges.read"},
 	{"POST", "/driver-charges/bulk", "charges.edit"},
 	{"POST", "/driver-charges/confirm", "charges.edit"},

@@ -149,6 +149,30 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		writeJSON(w, 200, result)
 	})
+	r.Post("/driver-board/eta-retry/{driverId}", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Context string `json:"context"`
+		}
+		id := chi.URLParam(r, "driverId")
+		if err := decodeJSON(r, &request); err != nil || !isUUID(id) || len(request.Context) != 64 {
+			writeAPIError(w, 400, "a valid driver and current ETA context are required")
+			return
+		}
+		err := repo.RequestETARetry(r.Context(), id, request.Context)
+		if errors.Is(err, repository.ErrETARetryCooldown) {
+			writeAPIError(w, 429, err.Error())
+			return
+		}
+		if errors.Is(err, repository.ErrETARetryUnavailable) {
+			writeAPIError(w, 409, err.Error())
+			return
+		}
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]bool{"queued": true})
+	})
 	r.Post("/driver-board/order", func(w http.ResponseWriter, r *http.Request) {
 		var action repository.DriverBoardOrderAction
 		if err := decodeJSON(r, &action); err != nil {

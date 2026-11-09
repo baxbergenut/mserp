@@ -3863,3 +3863,5 @@ Status Board database tests verify the production payroll coverage check.
   mixed-status ambiguity stays available for review and manual removal.
 - Regression coverage: testManualNextLoads in TestDriverBoardDatabase, including
   fresh/migrated schemas, source-matched and ambiguous aliases, and mixed statuses.
+
+Status Board missing automatic ETA offers an editor-only retry button. The context-fenced POST /driver-board/eta-retry/{driverId} queues durable worker work, preserves provider budgets/backoff and uses a five-minute manual cooldown. See docs/integrations/STATUS_BOARD_AUTOMATION.md and frontend/scripts/test-board-eta-retry.mjs.

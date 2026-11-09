@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -853,6 +854,72 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal("source stop routing did not resume", view.Automation)
 	}
 
+	// Manual retry exercises the real queued SQL and worker without provider traffic.
+	trackingAt, trackingLat = time.Now().UTC(), 41.0
+	if _, err = pool.Exec(ctx, `UPDATE five_eld_locations SET latitude=$2,reported_at=$3 WHERE vin=$1`, vin, trackingLat, trackingAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET evidence='{}',route_not_before=NULL WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryTravel := BoardTravel{Enabled: true, Context: view.Automation.Context, Source: "five_eld", Mode: boardroutes.TravelMode, CalculatedAt: trackingAt, ReportedAt: trackingAt, AttemptedAt: trackingAt, ArrivalAt: trackingAt.Add(time.Hour), Miles: 100, Position: &boardRoutePosition{Latitude: trackingLat, Longitude: -74.3909193}}
+	retryBody, _ := json.Marshal(retryTravel)
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=$2 WHERE driver_id=$1`, d.ID, retryBody); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.RequestETARetry(ctx, d.ID, strings.Repeat("0", 64)); !errors.Is(err, ErrETARetryUnavailable) {
+		t.Fatal("stale retry context accepted", err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE driver_board SET eta='15:00' WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryUnavailable) {
+		t.Fatal("manual ETA retried", err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE driver_board SET eta='' WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); err != nil {
+		t.Fatal("missing travel retry rejected", err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.retryPending() {
+		t.Fatal("retry not queued", err, cached)
+	}
+	requested := cached.RetryRequestedAt
+	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); err != nil {
+		t.Fatal("duplicate queue request failed", err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.RetryRequestedAt.Equal(requested) {
+		t.Fatal("duplicate changed queue timestamp", err)
+	}
+	// A result from before the accepted request may update good cache, not erase it.
+	if err = repo.storeBoardTravel(ctx, d.ID, truck.ID, view.Revision, view.Automation.Context, retryTravel); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || !cached.retryPending() {
+		t.Fatal("in-flight result erased retry", err)
+	}
+	calls = routeCalls.Load()
+	if err = repo.ReconcileAutomation(ctx, routes, eld, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if routeCalls.Load() != calls+1 {
+		t.Fatal("manual retry did not force exactly one fresh stationary-origin route", calls, routeCalls.Load())
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.retryPending() || !cached.RetryCompletedAt.Equal(requested) || cached.Motion != "moving" {
+		t.Fatal("worker did not consume retry", err, cached)
+	}
+	// Simulate missing classification again; cooldown must survive worker completion.
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{motion}','""') WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.RequestETARetry(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryCooldown) {
+		t.Fatal("retry cooldown bypassed", err)
+	}
 	_, _ = pool.Exec(ctx, `DELETE FROM five_eld_locations WHERE vin=$1`, vin)
 	board, err := repo.Get(ctx, now)
 	if err != nil {

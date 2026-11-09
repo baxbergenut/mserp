@@ -225,6 +225,8 @@ export const fetchDriverBoardHistory = (driverIds: string[], before = 0, field =
   apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before, field }));
 // The server clamps the optional upcoming cutoff to today in New York; older unfinished plans are returned separately.
 // Includes all weekly match candidates separately from the today-forward queue.
+export const retryBoardETA = (driverId: string, context: string) =>
+  apiRequest<{ queued: boolean }>(`/driver-board/eta-retry/${driverId}`, { method: "POST", body: JSON.stringify({ context }) });
 export const fetchBoardLoads = (driverId: string, from?: string, signal?: AbortSignal) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }), { signal });
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
   apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, revision: view.revision, fromDate: view.fromDate }) });

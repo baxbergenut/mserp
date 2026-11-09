@@ -300,3 +300,24 @@ writers for the routing usage classification and rejects rollback to binaries
 without `-board-routing-usage-capability` support. The SQL classification and Go
 payroll exclusion list must both include `board_route_usage`; fresh/migrated
 Status Board database tests verify the production payroll coverage check.
+
+## Manual ETA retry
+
+When automatic travel is missing, Status Board editors see a small refresh button
+at the right edge of the ETA cell. Existing mileage, manual ETA and arrival
+markers do not offer a retry. POST `/driver-board/eta-retry/{driverId}` requires
+`driver_board.write` and the exact current automation context. It queues work for
+the minute worker, never calls providers from the HTTP request, and leaves manual
+fields and dispatch progress unchanged. The button spins while the durable request
+is pending; failures to queue are shown above the board.
+
+Explicit retries bypass the normal 90-minute/movement gates but retain provider
+budgets, pacing and failure backoff. Requests for the same pending calculation
+are idempotent and completed requests have a five-minute cooldown. New requests
+survive in-flight worker results. Changed selections still discard old results.
+The queue is not a guarantee of an ETA: missing GPS, unknown motion and provider
+failures remain explained by the automatic travel diagnostic.
+
+Check `TestBoardTravelManualRetry`, `TestBoardTravelPreserveInFlightRetry`, the
+fresh/migration `TestDriverBoardDatabase` retry fixture, and
+`node scripts/test-board-eta-retry.mjs` after a `/api` frontend build.

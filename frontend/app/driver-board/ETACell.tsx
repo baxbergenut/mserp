@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { RefreshCw } from "lucide-react";
 import type { BoardAutomation, BoardStop } from "@/app/lib/types";
 import { parseETA } from "./board";
 import { facilityETATitle, roundETAClock } from "./eta";
@@ -15,7 +16,13 @@ export function appointmentCellText(value: string, automation?: BoardAutomation)
   return { schedule: prefix + schedule, travel, full: [prefix + schedule, travel].filter(Boolean).join(" ") };
 }
 
-export function ETACell({ name, value, automation, stop, disabled, expanded, onOpen }: {
+export function canRetryAutomaticETA(value: string, automation?: BoardAutomation) {
+  return !!automation?.context && automation.routingEnabled && automation.travelMode === "auto" &&
+    !automation.requiresConfirmation && !automation.arrived && !appointmentCellText(value, automation).travel;
+}
+
+export function ETACell({ name, value, automation, stop, disabled, expanded, onOpen, canRetry = false, retryDisabled = false, retrying = false, onRetry }: {
+  canRetry?: boolean; retryDisabled?: boolean; retrying?: boolean; onRetry?: () => void;
   name: string; value: string; automation?: BoardAutomation; stop?: BoardStop; disabled: boolean; expanded: boolean;
   onOpen: (anchor: HTMLButtonElement) => void;
 }) {
@@ -28,14 +35,23 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
   const outdated = automaticArrival ? automation.stale : automation?.travelStale;
   const freshnessColor = outdated ? "text-yellow-400" : "text-emerald-400";
   const freshness = automaticArrival || automaticTravel ? `${automaticArrival ? "Arrival observation" : "ETA"} ${outdated ? "outdated" : "up to date"}` : undefined;
-  return <>
+  const showRetry = canRetry && !!onRetry && canRetryAutomaticETA(value, automation);
+  const pending = retrying || !!automation?.travelRetryPending;
+  return <div className="flex h-8 w-full min-w-0 items-center">
     <button type="button" data-grid-action aria-label={`${name} · ETA`} aria-describedby={freshness ? freshnessId : undefined} title={title} disabled={disabled}
-      className="block h-8 w-full truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"
+      className="block h-8 min-w-0 flex-1 truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"
       aria-haspopup="dialog" aria-expanded={expanded} onClick={event => onOpen(event.currentTarget)}>
       {text.schedule && <><span className={automaticArrival ? freshnessColor : undefined}>{parts[0]}</span>{" "}{parts.slice(1).join(" ")}</>}
       {text.schedule && text.travel && " "}<span className={automaticTravel ? freshnessColor : undefined}>{text.travel}</span>
       {!text.full && "—"}
     </button>
     {freshness && <span id={freshnessId} className="sr-only">{freshness}</span>}
-  </>;
+    {showRetry && <button type="button" data-grid-action aria-label={`${name} · Retry automatic ETA`}
+      title={pending ? "Automatic ETA retry queued" : "Retry automatic ETA calculation"}
+      disabled={retryDisabled || pending} aria-busy={pending}
+      onClick={event => { event.stopPropagation(); onRetry?.(); }}
+      className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-zinc-400 enabled:hover:bg-zinc-700 enabled:hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 disabled:opacity-40">
+      <RefreshCw aria-hidden="true" className={`h-3 w-3${pending ? " animate-spin" : ""}`} />
+    </button>}
+  </div>;
 }
