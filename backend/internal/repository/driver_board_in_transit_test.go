@@ -54,7 +54,7 @@ func testBoardInTransitQueue(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		return &list[i]
 	}
 	v := view()
-	if len(v.Next) != 2 || find(v.Next, "TRANSIT-PENDING") == nil || find(v.Next, "TRANSIT-UNMATCHED") == nil || !find(v.Next, "TRANSIT-PENDING").Overdue {
+	if len(v.Next) != 2 || find(v.Next, "TRANSIT-PENDING") == nil || find(v.Next, "TRANSIT-UNMATCHED") == nil || find(v.Next, "TRANSIT-PENDING").Overdue {
 		t.Fatalf("driver status suppressed pending/unmatched plans: %+v", v)
 	}
 	for _, number := range []string{"TRANSIT-PAST", "TRANSIT-FUTURE", "TRANSIT-MANUAL"} {
@@ -79,7 +79,7 @@ func testBoardInTransitQueue(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	// Source changes update the projection and revision without changing any plan.
 	exec(`UPDATE loads SET status='Dispatched' WHERE id=88961`)
 	changed := view()
-	if p := find(changed.Next, "TRANSIT-PAST"); p == nil || !p.Overdue || changed.Revision == v.Revision {
+	if p := find(changed.Next, "TRANSIT-PAST"); p == nil || p.Overdue || changed.Revision == v.Revision {
 		t.Fatal("pending source did not return to the queue", changed)
 	}
 	exec(`UPDATE loads SET status='in_transit' WHERE id=88961`)

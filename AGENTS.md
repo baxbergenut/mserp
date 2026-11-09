@@ -1584,7 +1584,11 @@ assignment lookup lists.
   identical business numbers with distinct records remain separate. Unmatched
   plans stay visible. Next loads include this New York Monday-Sunday week, the
   preceding Saturday/Sunday and future plans. Earlier days in that window remain
-  in Next with an Overdue label. Loads whose own DataTruck status is In transit
+  in Next. Unmatched plans retain the planned-day Overdue rule (New York dates).
+  Linked system loads become Overdue strictly after the first pickup's explicit
+  timezone-bearing scheduled_end_at. Missing/invalid/unzoned end times, reversed
+  absolute windows, and free-text pickup overrides do not infer a deadline from
+  pickup start or Gross Board date. Manual-only queue entries remain excluded. Loads whose own DataTruck status is In transit
   stay out of Next, including manual/restored plans; they remain inspectable in
   Earlier, below current with an In Transit label. Explicit current selections
   stay visible. This does not complete loads, alter Gross Board, or suppress

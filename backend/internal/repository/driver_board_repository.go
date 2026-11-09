@@ -234,7 +234,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)
 	}
-	result.Loads, err = readBoardLoads(ctx, tx, ids, r.loadStartDate(""))
+	result.Loads, err = readBoardLoads(ctx, tx, ids, r.loadStartDate(""), r.now())
 	if err != nil {
 		return result, err
 	}
@@ -408,7 +408,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 				e.Destination = ""
 			}
 			if strings.TrimSpace(e.CurrentLoad) != "" {
-				views, err := readBoardLoads(ctx, tx, []string{e.DriverID}, today)
+				views, err := readBoardLoads(ctx, tx, []string{e.DriverID}, today, time.Now())
 				if err != nil {
 					return nil, err
 				}
@@ -508,7 +508,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 			}
 		}
 		if matchCurrentLoad && (old.ETA != e.ETA || old.CurrentLoad != e.CurrentLoad || stateChanged) {
-			views, readErr := readBoardLoads(ctx, tx, []string{e.DriverID}, today)
+			views, readErr := readBoardLoads(ctx, tx, []string{e.DriverID}, today, time.Now())
 			if readErr != nil {
 				return nil, readErr
 			}

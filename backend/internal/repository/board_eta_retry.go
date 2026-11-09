@@ -27,7 +27,7 @@ func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key str
 	if !active {
 		return ErrETARetryUnavailable
 	}
-	views, err := readBoardLoads(ctx, tx, []string{id}, r.loadStartDate(""))
+	views, err := readBoardLoads(ctx, tx, []string{id}, r.loadStartDate(""), r.now())
 	if err != nil {
 		return err
 	}

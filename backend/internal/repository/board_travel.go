@@ -452,7 +452,7 @@ func (r *DriverBoardRepository) storeBoardTravel(ctx context.Context, id, truck,
 	if currentTruck != truck {
 		return nil
 	}
-	views, err := readBoardLoads(ctx, tx, []string{id}, r.loadStartDate(""))
+	views, err := readBoardLoads(ctx, tx, []string{id}, r.loadStartDate(""), r.now())
 	if err != nil {
 		return err
 	}

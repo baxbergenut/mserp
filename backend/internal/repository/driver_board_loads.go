@@ -189,6 +189,39 @@ func boardPlanQueued(p BoardLoad, s boardLoadState, from string) bool {
 	return !p.PreviouslyActive && !boardLoadInTransit(p) && (p.Manual || p.Date >= boardLoadQueueStart(from) || s.RestoredPlans[p.PlanID])
 }
 
+// System loads need an actual pickup deadline, never a Gross Board date or
+// pickup-start guess. Local-only schedules cannot establish an instant without
+// a facility timezone. Free-text overrides are likewise deliberately unknown.
+func boardLoadOverdue(p BoardLoad, from string, now time.Time) bool {
+	if p.Manual {
+		return false
+	}
+	if p.LoadID == nil {
+		return p.Date < from
+	}
+	for _, stop := range p.Stops {
+		if stop.Type != "pickup" {
+			continue
+		}
+		schedule := stop.Schedule
+		if schedule == nil || (schedule.Kind != "window" && schedule.Kind != "appointment") {
+			return false
+		}
+		end, err := time.Parse(time.RFC3339, schedule.EndAt)
+		if err != nil {
+			return false
+		}
+		if schedule.BeginAt != "" {
+			begin, err := time.Parse(time.RFC3339, schedule.BeginAt)
+			if err != nil || end.Before(begin) {
+				return false
+			}
+		}
+		return now.After(end)
+	}
+	return false
+}
+
 func boardLoadInTransit(p BoardLoad) bool {
 	// DataTruck often retains In transit after delivery. Exclude these loads
 	// from Next without completing them or clearing an explicit current load.
@@ -413,7 +446,7 @@ func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) stri
 }
 
 // Read-only reconciliation: no calendar or upstream status can promote a load.
-func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (map[string]BoardLoads, error) {
+func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time) (map[string]BoardLoads, error) {
 	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return nil, err
 	}
@@ -644,7 +677,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string) (
 				p.CanRestoreToQueue = p.PreviouslyActive && !strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Earlier = append(view.Earlier, p)
 			} else {
-				p.Overdue = !p.Manual && p.Date < from
+				p.Overdue = boardLoadOverdue(boardStopTimes(p, s.ManualStopTimes), from, now)
 				view.Next = append(view.Next, p)
 			}
 		}
@@ -684,7 +717,7 @@ func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (Boa
 	if _, err = tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return BoardLoads{}, err
 	}
-	views, err := readBoardLoads(ctx, tx, []string{id}, from)
+	views, err := readBoardLoads(ctx, tx, []string{id}, from, r.now())
 	if err != nil {
 		return BoardLoads{}, err
 	}
@@ -721,7 +754,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, ErrDriverBoardConflict
 	}
 	a.FromDate = r.loadStartDate(a.FromDate)
-	views, err := readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate)
+	views, err := readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate, r.now())
 	if err != nil {
 		return result, err
 	}
@@ -1090,7 +1123,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	if err = tx.QueryRow(ctx, `SELECT status,version FROM driver_board WHERE driver_id=$1`, a.DriverID).Scan(&saved[0].Status, &saved[0].Version); err != nil {
 		return result, err
 	}
-	views, err = readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate)
+	views, err = readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate, r.now())
 	if err != nil {
 		return result, err
 	}

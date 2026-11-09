@@ -321,7 +321,7 @@ func syncFleetStatusProgress(ctx context.Context, tx pgx.Tx, ids []string) error
 	if !enabled {
 		return nil
 	}
-	views, err := readBoardLoads(ctx, tx, ids, boardLoadToday(time.Now()))
+	views, err := readBoardLoads(ctx, tx, ids, boardLoadToday(time.Now()), time.Now())
 	if err != nil {
 		return err
 	}

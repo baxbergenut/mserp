@@ -119,6 +119,7 @@ try {
   full = { ...full, next: [{ ...next, date: '2026-10-27', overdue: true }, later], revision: 'overdue' };
   await push();
   await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toContainText('Overdue');
+  await expect(page.getByRole('button', { name: 'Loads Driver · Next load', exact: true })).toHaveAttribute('title', /Pickup end time has passed/);
   await expect(panel.getByRole('button', { name: 'NEXT · Overdue load', exact: true })).toBeVisible();
   await panel.getByRole('button', { name: 'NEXT · Overdue load', exact: true }).click();
   await expect(panel.getByText('Remove this plan in Gross Board.', { exact: true })).toBeVisible();

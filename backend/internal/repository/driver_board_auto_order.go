@@ -135,7 +135,7 @@ func (r *DriverBoardRepository) readBoardOrderStatuses(ctx context.Context, tx p
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&statusSync); err != nil || statusSync {
 		return statuses, err
 	}
-	loads, err := readBoardLoads(ctx, tx, progressIDs, r.loadStartDate(""))
+	loads, err := readBoardLoads(ctx, tx, progressIDs, r.loadStartDate(""), r.now())
 	if err != nil {
 		return nil, err
 	}

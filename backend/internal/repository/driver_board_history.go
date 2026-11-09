@@ -205,7 +205,7 @@ func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver strin
 		}
 	}
 	if _, etaChanged := after["eta"]; etaChanged {
-		views, readErr := readBoardLoads(ctx, tx, []string{driver}, r.loadStartDate(""))
+		views, readErr := readBoardLoads(ctx, tx, []string{driver}, r.loadStartDate(""), r.now())
 		if readErr != nil {
 			return entry, readErr
 		}
