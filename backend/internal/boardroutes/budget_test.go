@@ -169,6 +169,46 @@ func TestRoutingUsageDatabase(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT sum(requests),sum(paid_requests) FROM board_route_usage`).Scan(&requests, &paid); err != nil || requests != 4 || paid != 1 {
 		t.Fatal("HTTP accounting", requests, paid, err)
 	}
+	// A no-route fallback has two separately committed attempts; exhausted Google
+	// allowance may not silently turn paid-TomTom permission into paid Google.
+	if _, err = pool.Exec(ctx, `TRUNCATE board_route_usage`); err != nil {
+		t.Fatal(err)
+	}
+	fallbackCalls := []string{}
+	fallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			fallbackCalls = append(fallbackCalls, "tomtom")
+			w.WriteHeader(400)
+			_, _ = w.Write([]byte(`{"detailedError":{"code":"NO_ROUTE_FOUND"}}`))
+			return
+		}
+		fallbackCalls = append(fallbackCalls, "google")
+		_, _ = w.Write([]byte(`{"routes":[{"duration":"60s","distanceMeters":1000}]}`))
+	}))
+	defer fallbackServer.Close()
+	o.TomTomMonthlyFree, o.GoogleMonthlyFree, o.PaidProvider, o.RequestsPerMinute = 1, 1, "tomtom", 120
+	for i := 0; i < 2; i++ {
+		client := NewClient(o)
+		client.URL, client.TomTomURL, client.Budget = fallbackServer.URL, fallbackServer.URL, NewPostgresBudget(pool)
+		_, routeErr := client.Route(ctx, 40, -74, 41, -73)
+		if i == 0 && routeErr != nil {
+			t.Fatal("counted fallback failed", routeErr)
+		}
+		if i == 1 && (!errors.Is(routeErr, ErrBudgetExhausted) || !errors.Is(routeErr, ErrTomTomNoRoute)) {
+			t.Fatal("Google exhausted fallback policy", routeErr)
+		}
+	}
+	if strings.Join(fallbackCalls, ",") != "tomtom,google,tomtom" {
+		t.Fatal("unmetered or disallowed fallback", fallbackCalls)
+	}
+	for _, want := range []struct {
+		provider       string
+		requests, paid int
+	}{{"tomtom", 2, 1}, {"google", 1, 0}} {
+		if err = pool.QueryRow(ctx, `SELECT requests,paid_requests FROM board_route_usage WHERE provider=$1`, want.provider).Scan(&requests, &paid); err != nil || requests != want.requests || paid != want.paid {
+			t.Fatal("fallback ledger", want, requests, paid, err)
+		}
+	}
 	if _, err = pool.Exec(ctx, `DROP TABLE board_route_usage`); err != nil {
 		t.Fatal(err)
 	}

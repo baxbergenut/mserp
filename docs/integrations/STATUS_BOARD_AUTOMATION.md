@@ -181,9 +181,20 @@ Migration 197 adds board_route_usage, keyed by provider and billing month, with
 requests, paid_requests and last_attempt_at. It is unrelated to payroll. A separate
 transaction advisory lock serializes provider selection and commits each attempt
 before HTTP. Restarts, multiple workers, changed destinations and failed/unknown
-responses cannot bypass counting. No refunds or immediate cross-provider retries
-occur. Database failure stops routing. Redirects are disabled; TomTom GETs use
+responses cannot bypass counting. No failed attempts are refunded. Only an explicit
+TomTom HTTP 400
+`NO_ROUTE_FOUND` response permits one Google coordinate fallback, with a separate
+budget reservation and the same pacing. Other errors do not switch providers.
+Database failure stops routing. Redirects are disabled; TomTom GETs use
 fresh connections to prevent automatic replay after a reused connection fails.
+
+A TomTom no-route fallback uses the existing Google allowance, or paid Google
+only when Google is already the configured paid provider. Paid TomTom never
+authorizes paid Google. If no Google key or allowance is available, the board
+reports that no route was found rather than making an unmetered request. Provider
+error bodies are not exposed: recognized codes map to fixed safe messages.
+The original GPS freshness, movement and selected-context checks still apply.
+
 
 Google months use America/Los_Angeles. TomTom defaults to UTC; configure its actual
 account billing timezone if different. New month rows start at zero, retaining

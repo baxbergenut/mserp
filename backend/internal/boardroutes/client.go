@@ -103,6 +103,7 @@ type Estimate struct {
 }
 
 var ErrRouteUnavailable = errors.New("route unavailable")
+var ErrTomTomNoRoute = fmt.Errorf("%w: TomTom could not find a drivable route (NO_ROUTE_FOUND)", ErrRouteUnavailable)
 var ErrAddressUnmatched = errors.New("Enter a complete destination address for automatic ETA")
 
 func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Estimate, error) {
@@ -122,6 +123,25 @@ func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, addr
 		}
 		options.TomTomAPIKey = ""
 	}
+	estimate, err := c.routeAttempt(ctx, lat, lng, toLat, toLng, address, options)
+	if !errors.Is(err, ErrTomTomNoRoute) || address != "" {
+		return estimate, err
+	}
+	if options.APIKey == "" {
+		return Estimate{}, fmt.Errorf("%w; Google fallback is not configured", err)
+	}
+	// One separately paced/accounted coordinate fallback. Excluding TomTom leaves
+	// only Google's remaining allowance or an explicitly selected paid Google plan.
+	// In particular, paid TomTom does not authorize paid Google.
+	options.TomTomAPIKey = ""
+	fallback, fallbackErr := c.routeAttempt(ctx, lat, lng, toLat, toLng, "", options)
+	if fallbackErr != nil {
+		return Estimate{}, fmt.Errorf("%w; Google fallback unavailable: %w", err, fallbackErr)
+	}
+	return fallback, nil
+}
+
+func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float64, address string, options Options) (Estimate, error) {
 	if c.Budget == nil {
 		return Estimate{}, errors.New("routing usage accounting unavailable")
 	}
@@ -193,6 +213,18 @@ func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, addr
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		// Only this exact documented code permits fallback. Never expose provider
+		// messages, URLs or unknown codes, which can contain credentials/user data.
+		if provider == "tomtom" && res.StatusCode == http.StatusBadRequest {
+			var failure struct {
+				DetailedError struct {
+					Code string `json:"code"`
+				} `json:"detailedError"`
+			}
+			if json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&failure) == nil && failure.DetailedError.Code == "NO_ROUTE_FOUND" {
+				return Estimate{}, ErrTomTomNoRoute
+			}
+		}
 		c.mu.Lock()
 		delay := time.Minute
 		if res.StatusCode == 429 {

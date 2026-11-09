@@ -3865,3 +3865,5 @@ Status Board database tests verify the production payroll coverage check.
   fresh/migrated schemas, source-matched and ambiguous aliases, and mixed statuses.
 
 Status Board missing automatic ETA offers an editor-only retry button. The context-fenced POST /driver-board/eta-retry/{driverId} runs a targeted calculation immediately, preserves provider budgets/backoff and uses a five-second manual double-click guard. Busy calculations return an error rather than queueing. See docs/integrations/STATUS_BOARD_AUTOMATION.md and frontend/scripts/test-board-eta-retry.mjs.
+
+TomTom HTTP400 NO_ROUTE_FOUND permits one separately budgeted Google coordinate fallback. Other errors do not switch providers, and paid TomTom never enables paid Google. Provider error bodies remain private; boardroutes tests cover fallback eligibility and counting.
