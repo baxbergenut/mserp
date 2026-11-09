@@ -877,6 +877,9 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	retryTravel := BoardTravel{Enabled: true, Context: view.Automation.Context, Source: "five_eld", Mode: boardroutes.TravelMode, CalculatedAt: trackingAt, ReportedAt: trackingAt, AttemptedAt: trackingAt, ArrivalAt: trackingAt.Add(time.Hour), Miles: 100, Position: &boardRoutePosition{Latitude: trackingLat, Longitude: -74.3909193}}
+	// A failed automatic attempt seconds ago must not block the first manual click.
+	retryTravel.Error = "route unavailable: HTTP 400"
+	retryTravel.CalculatedAt = time.Time{}
 	retryBody, _ := json.Marshal(retryTravel)
 	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=$2 WHERE driver_id=$1`, d.ID, retryBody); err != nil {
 		t.Fatal(err)
@@ -941,6 +944,20 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	}
 	if _, err = repo.RetryETANow(ctx, d.ID, view.Automation.Context); !errors.Is(err, ErrETARetryCooldown) {
 		t.Fatal("retry cooldown bypassed", err)
+	}
+	// Only a short manual-click throttle applies; no five-minute wait is inherited.
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{retryRequestedAt}',to_jsonb($2::text)) WHERE driver_id=$1`, d.ID, time.Now().Add(-6*time.Second).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	calls = routeCalls.Load()
+	if _, err = repo.RetryETANow(ctx, d.ID, view.Automation.Context); err != nil {
+		t.Fatal("manual retry still blocked after five seconds", err)
+	}
+	if routeCalls.Load() != calls+1 {
+		t.Fatal("manual retry after short throttle did not reach provider")
+	}
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{motion}','""') WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
 	}
 	// Cancellation while the routing provider is in flight leaves no minute-worker retry.
 	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=travel-'retryRequestedAt'-'retryCompletedAt' WHERE driver_id=$1`, d.ID); err != nil {

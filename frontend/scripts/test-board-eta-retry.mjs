@@ -36,7 +36,7 @@ await page.route('**/api/**', async route => {
     retryCount++;
     expect(req.postDataJSON()).toEqual({ context: loads.automation.context });
     if (holdRetry) await new Promise(resolve => { releaseRetry = resolve; });
-    if (retryFailure) return route.fulfill({ status: 429, json: { error: 'Please wait before retrying automatic ETA' } });
+    if (retryFailure) return route.fulfill({ status: 429, json: { error: 'ETA was just retried. Please wait a few seconds and try again.' } });
     loads.automation.travelValue = missingResult ? '' : 'ETA 14:00';
     loads.automation.reason = missingResult ? 'Truck movement is not yet established' : '';
     return route.fulfill({ status: 200, json: { loads } });
@@ -63,7 +63,7 @@ try {
   expect(retryBox.x).toBeGreaterThanOrEqual(cellBox.x + cellBox.width - 1);
   retryFailure = true;
   await retry.click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Please wait before retrying' })).toContainText('Please wait before retrying');
+  await expect(page.getByRole('alert').filter({ hasText: 'ETA was just retried' })).toContainText('ETA was just retried');
   await expect(retry).toBeEnabled();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   retryFailure = false; holdRetry = true;

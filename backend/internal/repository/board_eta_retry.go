@@ -11,7 +11,7 @@ import (
 )
 
 var ErrETARetryUnavailable = errors.New("automatic ETA cannot be retried for this selection")
-var ErrETARetryCooldown = errors.New("please wait five minutes before retrying automatic ETA again")
+var ErrETARetryCooldown = errors.New("ETA was just retried. Please wait a few seconds and try again.")
 
 // RequestETARetry claims a retry while the immediate runner holds the automation lock.
 func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key string) error {
@@ -54,10 +54,8 @@ func (r *DriverBoardRepository) RequestETARetry(ctx context.Context, id, key str
 	if notBefore != nil && now.Before(*notBefore) {
 		return ErrETARetryBusy
 	}
-	if travel.Context == key && travel.Error != "" && now.Sub(travel.AttemptedAt) < boardRouteRetryInterval {
-		return ErrETARetryCooldown
-	}
-	if !travel.RetryRequestedAt.IsZero() && now.Sub(travel.RetryRequestedAt) < 5*time.Minute {
+	// Manual clicks do not inherit the background worker's failed-route backoff.
+	if !travel.RetryRequestedAt.IsZero() && now.Sub(travel.RetryRequestedAt) < 5*time.Second {
 		return ErrETARetryCooldown
 	}
 	if travel.Context != key {

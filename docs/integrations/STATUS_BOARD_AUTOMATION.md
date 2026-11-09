@@ -314,7 +314,7 @@ Manual fields and dispatch progress remain unchanged.
 
 Explicit retries bypass the normal 90-minute/movement gates but retain provider
 budgets, pacing and failure backoff. A shared automation lock rejects a busy
-calculation rather than queueing. Requests have a five-minute cooldown. Changed
+calculation rather than queueing. Only repeated manual clicks within five seconds are blocked; an earlier automatic failure does not delay the first manual retry. Changed
 selections still discard obsolete results. Even interrupted attempts do not leave
 work queued for a later retry. Missing GPS,
 unknown motion and provider failures can still prevent a usable ETA.
