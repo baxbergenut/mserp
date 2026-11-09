@@ -113,6 +113,7 @@ export function Modal({
   onSubmit,
   wide = false,
   footerStart,
+  sidePanel,
 }: {
   title: string;
   description?: string;
@@ -126,6 +127,7 @@ export function Modal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   wide?: boolean;
   footerStart?: ReactNode;
+  sidePanel?: ReactNode;
 }) {
   return (
     <OverlayPortal>
@@ -141,7 +143,7 @@ export function Modal({
         >
           <form
             onSubmit={onSubmit}
-            className={`ui-modal-panel flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-card animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${wide ? "max-w-[96vw]" : "max-w-3xl"}`}
+            className={`ui-modal-panel flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-card animate-scale-in sm:max-h-[calc(100dvh-4rem)] ${sidePanel ? "max-w-[1440px] lg:h-[calc(100dvh-4rem)]" : wide ? "max-w-[96vw]" : "max-w-3xl"}`}
           >
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-800 px-4 py-4">
               <div>
@@ -160,7 +162,7 @@ export function Modal({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="min-h-0 overflow-y-auto p-4">{children}</div>
+            {sidePanel ? <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"><aside className="h-[50dvh] shrink-0 border-b border-zinc-800 lg:h-auto lg:w-1/2 lg:border-b-0 lg:border-r">{sidePanel}</aside><div className="min-h-0 flex-1 p-4 lg:overflow-y-auto">{children}</div></div> : <div className="min-h-0 overflow-y-auto p-4">{children}</div>}
             <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-zinc-800 px-4 py-3">
               {footerStart && <div className="mr-auto">{footerStart}</div>}
               <button

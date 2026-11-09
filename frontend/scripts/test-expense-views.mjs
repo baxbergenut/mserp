@@ -202,7 +202,7 @@ try {
   entries = Array.from({ length: 4 }, (_, i) => ({ ...blankDraft, company: 'MS Express', id: 'expense-' + i, expenseType: 'Repair ' + i, category: 'Maintenance', accountingVerified: i === 1 || i === 3, verifications: [...(i === 1 || i === 3 ? [{ id: 'accountant-' + i, role: 'accountant', userId: 'other-accountant', userName: 'Avery Accountant', verifiedAt: '2026-10-12T11:00:00Z' }] : [])], updatedAt: '2026-10-12T12:00:00Z', paidAmount: '5.00', remainingAmount: '7.50' }));
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.reload();
-  await expect(page.getByRole('columnheader')).toHaveCount(7);
+  await expect(page.getByRole('columnheader')).toHaveCount(8);
   await expect(page.getByLabel('Accountant verification', { exact: true })).toBeHidden();
   await openExpenseActions();
   await expect(expenseActions.getByRole('link', { name: 'Expenses settings', exact: true })).toBeVisible();

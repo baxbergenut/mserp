@@ -12,7 +12,7 @@ import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type S
 import { createPortal } from "react-dom";
 import Link from "@/app/components/AccessLink";
 
-import { Check, ChevronDown, Ellipsis, FileUp, LoaderCircle, Settings, Trash2, WalletCards, X } from "lucide-react";
+import { FileText, Check, ChevronDown, Ellipsis, FileUp, LoaderCircle, Settings, Trash2, WalletCards, X } from "lucide-react";
 import {
   createExpense,
   uploadExpenseDocument,
@@ -542,10 +542,11 @@ export default function ExpensesPage() {
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Responsibility</th>
                 <th className="px-4 py-3 text-right font-medium">Amount</th>
+                <th className="px-4 py-3 text-center font-medium">Invoice / receipt</th>
                 <th className="px-4 py-3 text-right font-medium">Verification</th>
               </tr>
             </thead>
-            <tbody>{isLoading ? <tr><td colSpan={7} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : expenses.length === 0 ? <tr><td colSpan={7}>{(
+            <tbody>{isLoading ? <tr><td colSpan={8} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : expenses.length === 0 ? <tr><td colSpan={8}>{(
           <EmptyState message={hasFilters ? "No entries match these filters." : createCategoryIds.length ? "No entries yet. Add the first entry." : "No entries are available in your categories."} />
         )}</td></tr> : <>
               {expenses.map((expense) => (
@@ -584,6 +585,7 @@ export default function ExpensesPage() {
                     {expense.ownerCollectionRemaining != null && <div className="mt-1 text-xs text-zinc-400">Owner remaining: {formatMoney(expense.ownerCollectionRemaining)}</div>}
                     {expense.remainingAmount != null && <div className="mt-1 text-xs text-zinc-400">{expense.driverPayoutRemaining != null ? "Driver remaining" : "Remaining"}: {formatMoney(expense.remainingAmount)}{!ownerReview && <ExpenseBalanceAction expense={expense} onSaved={() => loadData(false)} />}</div>}
                   </td>
+                  <td className="px-4 py-3 text-center"><button type="button" onClick={() => openEdit(expense)} aria-label={expense.hasDocuments ? "View invoice or receipt" : "No invoice or receipt attached"} title={expense.hasDocuments ? "Invoice / receipt attached" : "No invoice / receipt attached"} className={`inline-flex rounded p-2 ${expense.hasDocuments ? "text-blue-400 hover:bg-blue-500/10" : "text-zinc-500 hover:bg-zinc-800"}`}><FileText className="h-5 w-5" /><span className="sr-only">{expense.hasDocuments ? "Attached" : "Not attached"}</span></button></td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       {!ownerReview && <Verification expense={expense} onClick={() => { setError(""); setVerificationDetails(expense); }} />}
@@ -610,6 +612,7 @@ export default function ExpensesPage() {
       {editing !== undefined && (
         <Modal
           title={editing ? "Edit entry" : "Add entry"}
+          sidePanel={editing ? <ExpenseDocuments key={editing.id} id={editing.id} /> : undefined}
           submitDisabled={!choicesLoaded || !!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}
           footerStart={editing && !editing.managedInSheets && categoryAccess.some(item => item.categoryId === editing.categoryId && item.canDelete) ? <button type="button" disabled={isSaving || isDeleting} className="ui-button text-red-400" onClick={() => setPendingDelete(editing)}><Trash2 className="h-4 w-4" />Delete entry</button> : undefined}
           isSaving={isSaving || aiBusy}
@@ -638,7 +641,6 @@ export default function ExpensesPage() {
           <fieldset disabled={!choicesLoaded || isSaving || aiBusy || !!pendingUploadId || !!editing && (editing.managedInSheets || !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit)))}><ExpenseForm originalCategory={editing ? { id: editing.categoryId, name: editing.category } : undefined} allowedCategoryIds={editing ? Array.from(new Set([...createCategoryIds, editing.categoryId])) : createCategoryIds} owners={owners} value={form} options={options} drivers={drivers} trucks={trucks} onChange={changeForm} /></fieldset>
           <ReceiptUpload file={attachment} disabled={isSaving || aiBusy || !!editing && !(editing.canEdit ?? categoryAccess.some(item => item.categoryId === editing.categoryId && item.canEdit))} onChange={setAttachment} onError={setError} />
           {editing && <ExternalSettlements expense={editing} onSaved={async()=>{const updated=await fetchExpense(editing.id);setEditing(updated);setForm(expenseToInput(updated));await loadData(false)}}/>}
-          {editing && <ExpenseDocuments key={editing.id} id={editing.id} />}
         </Modal>
       )}
 

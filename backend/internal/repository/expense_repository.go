@@ -42,6 +42,7 @@ type ExpenseCostItem struct {
 }
 
 type Expense struct {
+	HasDocuments             bool                  `json:"hasDocuments"`
 	OwnerRecovery            bool                  `json:"ownerRecovery,omitempty"`
 	DriverPayoutPaid         *string               `json:"driverPayoutPaid,omitempty"`
 	DriverPayoutRemaining    *string               `json:"driverPayoutRemaining,omitempty"`
@@ -794,7 +795,7 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
  coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',p.week_start::text,'amount',p.amount::text,'escrowAmount',p.escrow_amount::text) ORDER BY p.week_start) FROM expense_payments p WHERE p.expense_id=e.id),'[]'::jsonb)
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.verifier_role='accountant' AND v.revoked_at IS NULL),'[]'::jsonb)
 , e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),''), NOT coalesce(accounting_live_source('expense',e.id,e.expense_date),false),e.balance_version
- , to_jsonb(e)->>'broker_load_number',coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)
+ , to_jsonb(e)->>'broker_load_number', EXISTS(SELECT 1 FROM expense_documents doc WHERE doc.expense_id=e.id),coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)
 FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))`
@@ -809,7 +810,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 		&value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,
 		&value.CreatedAt, &value.UpdatedAt, &value.PaidAmount, &value.RemainingAmount, &value.DriverSettled, &value.OwnerID, &value.OwnerName, &value.ChargeDriverID, &value.Payments, &value.Verifications,
-		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID, &value.ManagedInSheets, &value.BalanceVersion, &value.BrokerLoadNumber, &value.OwnerRecovery,
+		&value.BaseAmount, &value.PaymentFee, &value.CostBreakdown, &value.ApplicantID, &value.CreatorRoleID, &value.ManagedInSheets, &value.BalanceVersion, &value.BrokerLoadNumber, &value.HasDocuments, &value.OwnerRecovery,
 	)
 	return value, err
 }

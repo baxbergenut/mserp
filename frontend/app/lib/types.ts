@@ -953,6 +953,7 @@ export interface ExpenseApplicant { id: string; fullName: string; status: "appli
 export interface ExpenseMaintenance { recordId?: string; version?: number; odometer: number | null; vendorId: string | null; vendorName: string; vendorAddress: string; vendorPhone: string; vendorContact: string; oilType: string; }
 
 export interface Expense {
+  hasDocuments?: boolean;
   ownerRecovery?: boolean;
   driverPayoutPaid?: string;
   driverPayoutRemaining?: string;
