@@ -63,7 +63,7 @@ func TestExpenseFiltersAndRetiredCompanyDatabase(t *testing.T) {
 					exec(string(migration))
 				}
 				// Current expense deletion also manages the reimbursement payout ledger.
-				for _, path := range []string{"103_fleetscope_fleet_sync.sql", "134_fleetscope_applicants.sql", "153_expense_reimburse.sql", "157_expense_reimbursement_payments.sql"} {
+				for _, path := range []string{"103_fleetscope_fleet_sync.sql", "127_expense_documents.sql", "134_fleetscope_applicants.sql", "153_expense_reimburse.sql", "157_expense_reimbursement_payments.sql"} {
 					data, err := os.ReadFile("../../sql/" + path)
 					if err != nil {
 						t.Fatal(err)
