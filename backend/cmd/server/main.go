@@ -55,7 +55,12 @@ func main() {
 	scalePartialCapability := flag.Bool("payroll-scale-partial-capability", false, "print partial CAT Scale collection support and exit without opening a database")
 	escrowSettlementCapability := flag.Bool("driver-pay-escrow-capability", false, "print statement escrow schema support and exit")
 	escrowBalanceCapability := flag.Bool("escrow-balance-reductions-capability", false, "print escrow balance reduction support and exit")
+	escrowAdjustmentCapability := flag.Bool("escrow-balance-adjustments-capability", false, "print bidirectional escrow balance support and exit")
 	flag.Parse()
+	if *escrowAdjustmentCapability {
+		fmt.Println("escrow-balance-adjustments-v1")
+		return
+	}
 	if *escrowBalanceCapability {
 		fmt.Println("escrow-balance-reductions-v1")
 		return

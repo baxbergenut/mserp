@@ -133,7 +133,8 @@ func payrollExpenseBalanceBatchSQL(source string) string {
 
 // Keep the payment checkpoint before the release checkpoint within a week.
 // Removing the target collection when computing replacement capacity is also
-// period-specific; a later release must never fund an earlier payment.
+// period-specific; a later release must never fund an earlier payment. Balance
+// increases also constrain capacity after the week's movements.
 const payrollEscrowBalanceBatchSQL = `WITH scopes AS MATERIALIZED (
  SELECT * FROM jsonb_to_recordset($1::jsonb) s(week date,drivers uuid[])
  ), escrows AS MATERIALIZED (
@@ -144,11 +145,11 @@ const payrollEscrowBalanceBatchSQL = `WITH scopes AS MATERIALIZED (
  ), payments AS MATERIALIZED (
  SELECT p.* FROM driver_escrow_payments p JOIN escrows e ON e.id=p.escrow_id
  ), events AS MATERIALIZED (
- SELECT p.escrow_id id,p.week_start,0 phase,-sum(p.amount) delta FROM payments p GROUP BY p.escrow_id,p.week_start
- UNION ALL SELECT e.id,r.week_start,1,sum(r.amount) FROM escrows e JOIN driver_escrow_releases r ON r.escrow_id=e.id AND NOT r.cancelled GROUP BY e.id,r.week_start
+ SELECT p.escrow_id id,p.week_start,0 phase,-sum(p.amount) delta,true checkpoint FROM payments p GROUP BY p.escrow_id,p.week_start
+ UNION ALL SELECT e.id,r.week_start,1,sum(r.amount),bool_or(r.correction_reason IS NOT NULL AND r.amount<0) FROM escrows e JOIN driver_escrow_releases r ON r.escrow_id=e.id AND NOT r.cancelled GROUP BY e.id,r.week_start
  ), period_events AS MATERIALIZED (
  SELECT e.id,e.target,v.week_start,v.phase,CASE WHEN v.phase=0 AND v.week_start=e.target THEN 0 ELSE v.delta END delta,
- v.phase=0 AND v.week_start>=e.target checkpoint FROM relevant e JOIN events v ON v.id=e.id
+ v.checkpoint AND v.week_start>=e.target checkpoint FROM relevant e JOIN events v ON v.id=e.id
  UNION ALL SELECT id,target,target,0,0::numeric,true FROM relevant
  ), steps AS (
  SELECT id,target,week_start,phase,sum(delta) delta,bool_or(checkpoint) checkpoint FROM period_events GROUP BY id,target,week_start,phase

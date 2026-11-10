@@ -26,12 +26,12 @@ func registerEscrowRoutes(r chi.Router, logger *slog.Logger, repo *repository.Es
 	r.Post("/escrows/{id}/releases", h.saveRelease)
 	r.Put("/escrows/{id}/releases/{releaseID}", h.saveRelease)
 	r.Put("/escrows/{id}/opening", h.saveOpening)
-	r.Put("/escrows/{id}/balance", h.reduceBalance)
+	r.Put("/escrows/{id}/balance", h.saveBalance)
 	r.Get("/tasks/escrow/{id}", h.taskDetail)
 	r.Post("/tasks/escrow/{id}/complete", h.completeTask)
 }
 
-func (h escrowHandler) reduceBalance(w http.ResponseWriter, r *http.Request) {
+func (h escrowHandler) saveBalance(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if !isUUID(id) {
 		writeAPIError(w, 400, "Invalid escrow ID")
@@ -44,7 +44,7 @@ func (h escrowHandler) reduceBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, _ := authSessionFromContext(r.Context())
-	if err := h.repo.ReduceBalance(r.Context(), id, session.User.ID, input); err != nil {
+	if err := h.repo.SaveBalance(r.Context(), id, session.User.ID, input); err != nil {
 		h.writeError(w, err)
 		return
 	}

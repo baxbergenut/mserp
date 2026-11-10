@@ -37,15 +37,18 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  await expect(page.getByRole('row').filter({hasText:'Escrow home'})).toContainText('Partially collected');
  const vacationRow=page.getByRole('row').filter({hasText:'Escrow vacation'});
  await expect(vacationRow.getByRole('cell',{name:'$400.00',exact:true})).toBeVisible();
- await vacationRow.getByRole('button',{name:'Reduce balance',exact:true}).click();
+ await expect(vacationRow.getByRole('button',{name:'Reduce balance',exact:true})).toHaveCount(0);
+ await vacationRow.getByRole('button',{name:'Payment history'}).click();
+ await page.getByRole('button',{name:'Change balance',exact:true}).click();
+ await expect(page.getByLabel('New balance ($)',{exact:true})).toHaveValue('400.00');
  await page.getByLabel('New balance ($)',{exact:true}).fill('125.25');
  await page.getByLabel('Correction reason',{exact:true}).fill('Reconciled escrow ledger');
- await page.getByRole('button',{name:'Save correction',exact:true}).click();
+ await page.getByRole('button',{name:'Save balance',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(vacationRow.getByRole('cell',{name:'$125.25',exact:true})).toBeVisible();
  await expect(vacationRow.getByRole('cell',{name:'$2,374.75',exact:true})).toBeVisible();
  await vacationRow.getByRole('button',{name:'Payment history'}).click();
- await expect(page.getByRole('heading',{name:'Balance reductions'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Balance changes'})).toBeVisible();
  await expect(page.getByText('Reconciled escrow ledger',{exact:true})).toBeVisible();
  await expect(page.getByText('-$274.75',{exact:true})).toBeVisible();
  await expect(page.getByText('Total collected $400.00 · Total released $0.00',{exact:true})).toBeVisible();
@@ -55,12 +58,16 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  const fullRow=page.getByRole('row').filter({hasText:'Escrow full'});
  await expect(fullRow).toContainText('Partially released');
  await fullRow.getByRole('button',{name:'Payment history'}).click();
- await page.getByRole('button',{name:'Edit previously paid',exact:true}).click();
- await page.getByLabel('Previously paid ($)',{exact:true}).fill('2500');
+ await page.getByRole('button',{name:'Change balance',exact:true}).click();
+ await page.getByLabel('New balance ($)',{exact:true}).fill('2500');
  await page.getByLabel('Correction reason',{exact:true}).fill('Verified imported balance');
- await page.getByRole('button',{name:'Save correction',exact:true}).click();
+ await page.getByRole('button',{name:'Save balance',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(fullRow).toContainText('2,500.00');
+ await fullRow.getByRole('button',{name:'Payment history'}).click();
+ await expect(page.getByText('+$500.00',{exact:true})).toBeVisible();
+ await expect(page.getByText('Total collected $2,000.00 · Total released $0.00',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Close payment history'}).click();
  // Keep the Tasks page open while the real one-minute worker makes tasks due.
  await page.goto(`${base}/tasks`);
  const fullTask=page.getByRole('button',{name:'Release escrow: Escrow full',exact:true});
@@ -112,5 +119,5 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  await expect(page.getByRole('row').filter({hasText:'Escrow partial'})).toContainText('Partially released');
  await expect(page.getByRole('row').filter({hasText:'Escrow kept'})).toContainText('Not released');
  await page.screenshot({path:join(temp,'escrow-terminated.png'),fullPage:true});
- console.log('Escrow E2E passed: real timed worker/SSE, day-29 exclusion, two assignees and privacy, opening correction, full/partial/kept decisions, protected completion and both tabs.');
+ console.log('Escrow E2E passed: balance increases and decreases, timed worker/SSE, day-29 exclusion, assignee privacy, release decisions, and both tabs.');
 }

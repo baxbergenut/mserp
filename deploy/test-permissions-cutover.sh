@@ -31,6 +31,7 @@ mock_payroll_current=f
 mock_routing_usage=f
 mock_gross_planning=f
 mock_escrow_balance=f
+mock_escrow_adjustment=f
 mock_expense_drafts=f
 mock_accessorials=f
 mock_escrow_settlement=f
@@ -63,6 +64,7 @@ runuser() {
     if [[ $* == *"column_name='correction_reason'"* ]]; then result=$mock_escrow_balance; fi
     if [[ $* == *"JOIN public.weighmytruck_transactions"* ]]; then result=$mock_scale_carry; fi
     if [[ $* == *"scaleOriginalAmount"* ]]; then result=$mock_scale_partial; fi
+    if [[ $* == *"constraint_name='escrow_balance_movement_check'"* ]]; then result=$mock_escrow_adjustment; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -320,3 +322,12 @@ compatible_release "$test_root/new"
 mock_escrow_balance=error
 if compatible_release "$test_root/new"; then echo 'Escrow balance schema query failure allowed rollback' >&2; exit 1; fi
 echo 'Escrow balance reduction compatibility checks passed'
+
+mock_escrow_balance=t
+mock_escrow_adjustment=t
+if compatible_release "$test_root/new"; then echo 'Escrow balance increases allowed an incompatible payroll binary' >&2; exit 1; fi
+sed -i 's/case "$1" in /case "$1" in -escrow-balance-adjustments-capability) echo escrow-balance-adjustments-v1;; /' "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_escrow_adjustment=error
+if compatible_release "$test_root/new"; then echo 'Escrow adjustment schema query failure allowed rollback' >&2; exit 1; fi
+echo 'Escrow balance adjustment compatibility checks passed'
