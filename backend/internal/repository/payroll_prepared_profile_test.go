@@ -120,4 +120,8 @@ func profilePreparedPayrollCommands(t *testing.T, ctx context.Context, pool *pgx
 			}
 		}
 	}
+
+	if os.Getenv("MSERP_PAYROLL_PLACEMENT_PROFILE") == "1" {
+		profilePayrollPlacementCommands(t, ctx, pool, repo, actor)
+	}
 }

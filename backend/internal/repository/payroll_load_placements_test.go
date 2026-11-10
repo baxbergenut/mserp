@@ -95,6 +95,14 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
  (8104,'DUPLICATE','delivered',100,100,10,'2026-10-02','2026-10-03','{}'),
  (8105,'DUPLICATE','delivered',100,100,10,'2026-10-02','2026-10-03','{}');
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES($1,'2026-09-28','OLD-DELIVERED',NULL,2800),($1,'2026-10-20','NOT-READY',8102,900)`, driver)
+			const unrelatedDriver = "a1000000-0000-0000-0000-000000000009"
+			const unrelatedTruck = "a2000000-0000-0000-0000-000000000002"
+			const unrelatedOwner = "a3000000-0000-0000-0000-000000000002"
+			exec(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES($1,'Unrelated Driver','unrelated driver','gross_percentage',25);
+ INSERT INTO investors(id,full_name) VALUES($2,'Unrelated Investor'); INSERT INTO trucks(id,unit_number,owner_id) VALUES($3,'UNRELATED',$2);
+ UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_id=$3;
+ INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES($3,$1,'2026-01-01');
+ INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES($3,$2,'2026-01-05',90)`, unrelatedDriver, unrelatedOwner, unrelatedTruck)
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			// Every application connection uses the real restricted runtime role.
 			pool.Close()
@@ -109,6 +117,58 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			board := NewGrossBoardRepository(pool)
 			week, _ := time.Parse(time.DateOnly, "2026-10-19")
 			old := week.AddDate(0, 0, -21)
+			assertInvestorParity := func(w time.Time) {
+				t.Helper()
+				// A placement validates one connected investor component, but must
+				// retain the exact full-calculation statement and financial guards.
+				parityTx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer parityTx.Rollback(ctx)
+				full, err := readInvestorPay(ctx, parityTx, w)
+				if err != nil {
+					t.Fatal(err)
+				}
+				selectedCtx, err := selectPayrollContext(payrollWeekContext(ctx, w.Format(time.DateOnly)), parityTx, "truck", truck)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if payrollIncludesTruck(selectedCtx, unrelatedTruck) || !payrollIncludesTruck(selectedCtx, truck) {
+					t.Fatal("selection did not exclude unrelated component and retain target")
+				}
+				selected, err := readInvestorPay(selectedCtx, parityTx, w)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var want, got []byte
+				unrelatedFound := false
+				for _, d := range full.Drivers {
+					unrelatedFound = unrelatedFound || d.ID == unrelatedTruck
+					if d.ID == truck {
+						want, _ = json.Marshal(d)
+					}
+				}
+				for _, d := range selected.Drivers {
+					if d.ID == unrelatedTruck {
+						t.Fatal("scoped report contains unrelated statement")
+					}
+					if d.ID == truck {
+						got, _ = json.Marshal(d)
+					}
+				}
+				if !unrelatedFound {
+					t.Fatal("full calculation did not include unrelated statement")
+				}
+				if len(want) == 0 || string(want) != string(got) {
+					t.Fatal("scoped investor preflight differs from authoritative full statement")
+				}
+				if err = parityTx.Rollback(ctx); err != nil {
+					t.Fatal(err)
+				}
+
+			}
+			assertInvestorParity(week)
 			read := func(kind string, w time.Time) DriverPayWeek {
 				t.Helper()
 				var r DriverPayWeek
@@ -160,6 +220,8 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 					t.Fatal("recognized load paid twice", kind)
 				}
 			}
+			assertInvestorParity(week) // Historical source allocation moved into this week.
+			assertInvestorParity(old)  // Original frozen driver allocation stays omitted.
 			after, e := board.Get(ctx, old)
 			if e != nil {
 				t.Fatal(e)
@@ -240,6 +302,7 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 					t.Fatalf("missing native removal placeholder %s: %+v", kind, l)
 				}
 			}
+			assertInvestorParity(week) // RemovedLoads and captured placement versions.
 			placeholder := removed("driver", week, "NOT-READY")
 			restore := PayLoadPlacementInput{DriverID: driver, WeekStart: add.WeekStart, Action: "restore", LoadRecordID: 8102, CommentKey: placeholder.CommentKey, BoardVersion: placeholder.BoardVersion, PlacementVersion: placeholder.PayrollPlacementVersion}
 			stale := restore
@@ -287,6 +350,7 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			if placeholder == nil || !placeholder.PayrollSupplement {
 				t.Fatal("extra placeholder missing", placeholder)
 			}
+			assertInvestorParity(week) // Removed manually added non-final load.
 			extraRestore := PayLoadPlacementInput{DriverID: truck, WeekStart: add.WeekStart, Action: "restore", LoadRecordID: 8110, CommentKey: placeholder.CommentKey, PlacementVersion: placeholder.PayrollPlacementVersion}
 			if e = pay.PlacePayLoad(ctx, "investor", extraRestore, "test"); e != nil {
 				t.Fatal(e)
@@ -422,6 +486,7 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			if _, e = pay.SettleInvestor(ctx, week, truck, report.Revision, actor, "", false, true); e != nil {
 				t.Fatal(e)
 			}
+			assertInvestorParity(week) // Frozen investor snapshot and team-linked source graph.
 			l = find(read("driver", week), "OLD-DELIVERED")
 			remove = PayLoadPlacementInput{DriverID: driver, WeekStart: add.WeekStart, Action: "remove", LoadRecordID: 8101, CommentKey: l.CommentKey, PlacementVersion: l.PayrollPlacementVersion}
 			if e = pay.PlacePayLoad(ctx, "driver", remove, "test"); e == nil {

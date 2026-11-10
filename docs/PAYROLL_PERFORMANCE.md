@@ -403,3 +403,109 @@ its environment limits and the complete raw measurements.
 | Investor finalization | 611 | 345 |
 | Investor reopening | 895 | 328 |
 | Investor whole-week finalization | 3,125 | 759 |
+
+## November 10, 2026: duplicate refresh removal
+
+Current production diagnostics confirmed latency, but sparse samples do not establish
+population percentiles. In a one-hour window ending around 20:05 UTC, Driver Pay
+had 4 load actions at 1,163–6,320 ms (286–758 queries), 2 finalizations at
+1,966–2,187 ms, 2 reopenings at 838–5,548 ms, and 6 saves at 251–3,590 ms.
+These are server request durations, not browser interaction latency. Investor
+mutations were not observed in that window. No diagnostic writes were made to
+production. A short later CPU sample showed contention; it is not causal proof
+for each earlier request.
+
+The retained change consolidates mutation/SSE/focus invalidations into one reader.
+Previously a mutation scheduled a reload and also restarted its live subscription;
+subscription setup and its open event scheduled competing reads. Receipts remain
+server-confirmed and update the affected row immediately. One background read
+updates aggregates. A busy-transition epoch rejects a snapshot begun before an
+edit or financial command even if that command finishes before the snapshot returns.
+Hints arriving during reads or edits remain queued. Navigation aborts old scope reads.
+Outgoing-transfer reads follow accepted aggregate refreshes instead of every receipt
+object replacement. No financial validation, calculation, posting or locking was removed.
+
+Controlled browser regression (both pages, synthetic 80 ms GET / 120 ms mutation):
+- Initial full-page reads: 3 -> 2 (the remaining reconnect read covers missed events).
+- Finalize, reopen and comment save: 2 -> 1 full-page reads each.
+- Add/remove load: 2 -> 1 full-page reads each; one canonical detail read remains.
+- Live connections across initial + five mutations: 6 -> 1.
+- Finalize outgoing-transfer reads: 2 -> 1.
+
+These request counts are reproducible with
+`node scripts/test-payroll-refresh-coalescing.mjs`. They are not real-backend
+latency results. Small controlled confirmed-UI samples varied with concurrent local
+work; do not claim a production speedup or a sub-400 ms commit target from them.
+The historical 300 ms p95 goal remains unproven.
+
+A separate backend experiment shared historical cost evidence within one post-write
+transaction. All 16 actions in the production-sized resource-mode fixture retained
+identical query counts; timing varied. The experiment was discarded. Financial
+cross-period publication still needs further profiling before narrowing calculations.
+Reproduce the diagnostic fixture with MSERP_PAYROLL_PERF=1,
+MSERP_PAYROLL_PROJECTION_PARITY=1, MSERP_PAYROLL_PREPARED_COMMAND_PROFILE=1,
+MSERP_PAYROLL_RESOURCE_PROFILE=1, MSERP_PAYROLL_PERF_SKIP_PARITY=1 and a local
+disposable MSERP_DRIVER_PAY_TEST_DATABASE_URL. The projection fixture performs its
+own parity checks; this flag skips the separate legacy compact/full preflight.
+
+Relevant industry guidance:
+- https://web.dev/articles/inp (visual response target differs from commit latency).
+- https://tanstack.com/query/latest/docs/framework/react/guides/updates-from-mutation-responses
+  (reuse canonical mutation responses instead of redundant refetch).
+- https://sre.google/workbook/monitoring/ (latency distributions and sample limits).
+- https://www.postgresql.org/docs/current/using-explain.html (measure plans before tuning).
+- https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html
+  (durable postcommit work, not premature financial acknowledgments).
+
+### Source-placement profile and investor preflight
+
+The opt-in `MSERP_PAYROLL_PLACEMENT_PROFILE=1` adds real remove/restore repository
+commands to the production-sized disposable fixture, with statement revisions,
+command receipts and synchronous publication intact. Synthetic status changes are
+reconciled before timing; no financial checks are bypassed.
+
+Investor placement preflight now uses the same conservative connected-component
+selection as investor statement reads instead of calculating every fleet statement.
+Fresh/migrated placement tests compare the selected card byte-for-byte with the
+full authoritative calculation. Publication and cross-period safeguards are unchanged.
+In one paired three-period resource-mode run, investor remove/restore server times
+were 1,076/1,103 ms before and 867/833 ms after. Investor calculation phase totals
+fell from 283/295 ms to 93/92 ms. Query counts increased by four (284/285 to 288/289)
+for conservative selection, replacing heavier fleet-wide work. These sparse timings
+are diagnostic, not percentiles: driver controls varied 742/763 to 854/857 ms,
+primarily in commit latency (6/7 to 98/89 ms).
+
+The dominant remaining source-action family is certified-statement resource rebasing:
+three freshness UPDATEs consumed approximately 300-350 ms per action in this fixture.
+Do not prune historical publication weeks based only on the edited load's week:
+native duplicates, whole-load/trip matching, frozen history, legacy cost overrides,
+and carry reservations can cross periods.
+
+### Preserve already-current dependency certificates
+
+Freshness rebasing still checks the same source proofs, exact revision/delta arithmetic,
+financial epochs, held claims and transaction exclusions. It now retains the existing
+certificate bytes when every effective resource counter is already exactly current.
+Only explained-delta certificates are rebuilt. This avoids redundant snapshot queries,
+hashing and shared-set insert attempts inside the database; top-level query counts do
+not change. Shared dependencies and statement-local overrides are checked together.
+
+With both backend changes, the identical three-period diagnostic measured driver
+remove/restore at 628/630 ms and investor remove/restore at 625/663 ms, versus the
+original 742/763 and 1,076/1,103 ms. The three freshness UPDATEs dropped from roughly
+297-318 ms to 167-186 ms. Commit time varied materially between runs. This remains a
+small local synthetic sample, not a production percentile or a universal latency bound.
+The fixture also exercises statement saves/finalize/reopen with canonical publication.
+
+Validation includes 14 exact/changed/shared/overridden/missing/global certificate
+scenarios on fresh and migrated schemas, existing statement-impact financial-epoch
+regressions, the production-sized profiling fixture, standard backend tests and vet.
+
+The same paired run did not establish a general save/finalize speedup: repeat driver
+saves were 58-86 vs 60-90 ms, driver finalize 124-198 vs 134-198 ms, investor finalize
+81-118 vs 81-116 ms; driver first save remained 376-1,169 vs 383-1,143 ms. Reopen
+samples were mixed. Those commands still benefit from frontend duplicate-read removal,
+but their server calculations and production contention are not claimed solved.
+Strengthened placement parity additionally covers excluded unrelated components,
+historical moved loads, removed native/manual loads, and frozen team-linked investor
+snapshots on fresh and migrated databases.

@@ -93,10 +93,12 @@ try {
     await expand.click();await expand.click();expect(detailReads).toBe(1);
     await expect(page.getByLabel('Grid Test, Fuel, amount',{exact:true})).toHaveValue('-40.00');
     await expand.click();
+    await page.getByRole('button',{name:'More actions',exact:true}).click();
     await page.getByRole('button',{name:'Reload',exact:true}).click();
     await expect.poll(()=>summaryReads).toBe(2);expect(detailReads).toBe(1);
     await page.getByRole('button',{name:investor?'Grid Test T1':'Grid Test',exact:true}).click();
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toBeVisible();expect(detailReads).toBe(2);
+    await page.getByRole('button',{name:'More actions',exact:true}).click();
     await page.getByRole('button',{name:'Reload',exact:true}).click();
     await expect.poll(()=>summaryReads).toBe(3);
     await expect(page.getByRole('region',{name:'Grid Test weekly loads'})).toBeVisible();

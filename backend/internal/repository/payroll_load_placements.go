@@ -100,7 +100,13 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 	}
 	var report DriverPayWeek
 	if kind == "investor" {
-		report, err = readInvestorPay(ctx, tx, week)
+		// Validate the same conservative connected component used by investor
+		// statement reads, rather than calculating unrelated fleet statements.
+		selected, selectErr := selectPayrollContext(payrollWeekContext(ctx, in.WeekStart), tx, "truck", in.DriverID)
+		if selectErr != nil {
+			return selectErr
+		}
+		report, err = readInvestorPay(selected, tx, week)
 	} else {
 		report, err = readDriverPayWeek(ctx, tx, week, in.DriverID)
 	}

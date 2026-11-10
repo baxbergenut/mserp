@@ -3947,3 +3947,25 @@ command; native slots must still match and finalized counterparts remain guarded
 Restoration history cancels only that week’s exclusion. Explicit Add load accepts any
 status but retains incomplete-status warnings and finalization review. No schema change.
 Checks: TestPayLoadPlacementsDatabase and payroll-load-placements-e2e.mjs.
+
+## Payroll refresh coalescing
+
+Driver/Investor Pay keeps one live subscription and coalesces mutation/focus/SSE
+invalidations through usePayRefresh. Busy transitions invalidate older reads even
+if a command finishes before their response. Preserve queued hints, draft/version
+protection, committed mutation receipts and navigation cancellation. Canonical
+source-action detail reads remain necessary; aggregate/outgoing reads run once
+in the background. Check test-payroll-refresh-coalescing.mjs, including held-read
+finalization, and test-payroll-concurrent-finalization.mjs. See
+ docs/PAYROLL_PERFORMANCE.md for measured request reductions and latency limits.
+
+### Payroll publication exact-certificate fast path
+
+- Certified statement rebasing may retain a resource certificate only when every
+  effective (shared plus inline override) revision exactly matches current counters.
+  Explained source deltas still require rebuilding the snapshot; do not relax
+  sources_current/resources_current, financial epochs, resource claims or xmin guards.
+- Run TestPayrollExactCertificatesDatabase and TestPayrollStatementImpactDatabase
+  with the configured disposable projection DB for changes to this path.
+- Investor load-placement preflight uses conservative truck component selection;
+  do not propagate this read scope into the source mutation/publication context.

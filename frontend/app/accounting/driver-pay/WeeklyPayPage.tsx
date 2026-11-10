@@ -33,6 +33,7 @@ import { useDebouncedValue } from "@/app/lib/useDebouncedValue";
 import { payStatementReady, applyPayDetails, applyPayReceipt, applyPaySave, driverTotals, normalizedPayEdits, paySourceError, reconcilePaySave, validAdjustments } from "./pay";
 import { restorePayEdit } from "./payUndo";
 import { isPayReplacementInput } from "./payGrid";
+import { usePayRefresh } from "./usePayRefresh";
 
 type SettlementReview = { driverId?: string; reopen: boolean; blockedIssue?: string };
 
@@ -142,7 +143,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     return investor ? fetchInvestorPay(selectedWeek, filters.statementId || undefined, signal, query) : fetchDriverPay(selectedWeek, signal, query);
   }, [investor, page, pageSize, filters]);
   const [refreshRequest, setRefreshRequest] = useState(0);
-  const refreshedRequest = useRef(0);
+  const [outgoingRefresh, setOutgoingRefresh] = useState(0);
   const loadedQuery = useRef("");
   const queryKey = JSON.stringify([week, page, pageSize, filters]);
   const [loading, setLoading] = useState(true);
@@ -197,64 +198,35 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     timer = setTimeout(load, 0);
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [week, fetchPay, queryKey, editingDraft, dirty, saving, refreshing, finalizing]);
-  // Revalidate aggregates without replacing drafts or blanking the table.
+  // Mutations and live hints share one coalesced reader, rather than issuing
+  // independent page reads and restarting the SSE connection after every edit.
+  const refreshBlocked = finalizing || editingDraft || dirty || saving || refreshing || loading || !!settlement;
+  usePayRefresh({
+    scope: queryKey,
+    request: refreshRequest,
+    blocked: refreshBlocked,
+    load: signal => fetchPay(week, signal),
+    receive: value => {
+      // Recheck synchronous guards: a command or editor may start before React
+      // has committed the corresponding busy state.
+      if (settlementPending.current.size || draftEditors.current.size || savingRef.current || Object.keys(changesRef.current).length) {
+        setRefreshRequest(request => request + 1); return;
+      }
+      setPreparationError("");
+      setOutgoingRefresh(value => value + 1);
+      setReport(current => current && value.preparation && current.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state && JSON.stringify(current.pagination) === JSON.stringify(value.pagination) && current.drivers.length === value.drivers.length && current.drivers.every((row, i) => row.id === value.drivers[i].id && !!row.statementRevision && row.statementRevision === value.drivers[i].statementRevision && row.expenseRevision === value.drivers[i].expenseRevision && row.preparationState === value.drivers[i].preparationState && JSON.stringify(row.dayStatuses ?? []) === JSON.stringify(value.drivers[i].dayStatuses ?? [])) ? current : value);
+    },
+    failed: reason => setPreparationError(reason instanceof Error ? reason.message : "Unable to load payroll changes"),
+  });
   useEffect(() => {
-    if (finalizing || refreshRequest === refreshedRequest.current || editingDraft || dirty || saving || refreshing || loading) return;
-    const controller = new AbortController();
-    const request = refreshRequest;
-    fetchPay(week, controller.signal).then(value => {
-      if (controller.signal.aborted || settlementPending.current.size || draftEditors.current.size || savingRef.current || Object.keys(changesRef.current).length) return;
-      refreshedRequest.current = request; setReport(value);
-    }).catch(reason => {
-      if (!controller.signal.aborted) { refreshedRequest.current = request; setError(reason instanceof Error ? "Saved, but the updated totals could not be loaded: " + reason.message : "Saved, but totals could not be refreshed. Reload this week."); }
-    });
-    return () => controller.abort();
-  }, [refreshRequest, editingDraft, dirty, saving, refreshing, loading, fetchPay, week, finalizing]);
-  // Read on commits, stream reconnects and returning to the page, never on a
-  // periodic freshness timer. A failed read alone gets a bounded retry delay.
-  // Keep one read in flight and preserve drafts, commands and settlement reviews.
-  useEffect(() => {
-    if (finalizing || !hasPreparedReport || editingDraft || dirty || saving || refreshing || loading || settlement) return;
-    let cancelled = false;
-    let inFlight = false;
-    let pending = false;
-    let retryDelay = 1000;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = () => {
-      clearTimeout(timer);
-      if (cancelled) return;
-      if (inFlight) { pending = true; return; }
-      inFlight = true;
-      let failed = false;
-      fetchPay(week, controller.signal).then(value => {
-        retryDelay = 1000;
-        if (!cancelled && !settlementPending.current.size && !draftEditors.current.size && !savingRef.current && !Object.keys(changesRef.current).length) {
-          setPreparationError("");
-          setReport(current => current && current.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state && JSON.stringify(current.pagination) === JSON.stringify(value.pagination) && current.drivers.length === value.drivers.length && current.drivers.every((row, i) => row.id === value.drivers[i].id && row.statementRevision === value.drivers[i].statementRevision && row.expenseRevision === value.drivers[i].expenseRevision && row.preparationState === value.drivers[i].preparationState && JSON.stringify(row.dayStatuses ?? []) === JSON.stringify(value.drivers[i].dayStatuses ?? [])) ? current : value);
-        }
-      }).catch(reason => {
-        if (!cancelled) {
-          failed = true;
-          setPreparationError(reason instanceof Error ? reason.message : "Unable to load payroll changes");
-        }
-      })
-        .finally(() => {
-          inFlight = false;
-          if (!cancelled && (pending || failed)) {
-            timer = setTimeout(refresh, pending ? 0 : retryDelay);
-            if (failed) retryDelay = Math.min(retryDelay * 2, 30_000);
-            pending = false;
-          }
-        });
-    };
-    timer = setTimeout(refresh, 0);
+    if (!hasPreparedReport) return;
+    const refresh = () => setRefreshRequest(value => value + 1);
     const unsubscribe = subscribePayEvents(investor, refresh);
     const visible = () => { if (!document.hidden) refresh(); };
     document.addEventListener("visibilitychange", visible);
     window.addEventListener("focus", visible);
-    return () => { cancelled = true; unsubscribe(); document.removeEventListener("visibilitychange", visible); window.removeEventListener("focus", visible); controller.abort(); clearTimeout(timer); };
-  }, [hasPreparedReport, editingDraft, dirty, saving, refreshing, loading, settlement, fetchPay, week, investor, finalizing]);
+    return () => { unsubscribe(); document.removeEventListener("visibilitychange", visible); window.removeEventListener("focus", visible); };
+  }, [hasPreparedReport, investor]);
   const receiveSettlement = (receipt: DriverPayWeek) => {
     const ids = new Set(receipt.drivers.map(row => row.id));
     undoStack.current = undoStack.current.filter(item => !ids.has(item.kind === "edit" ? item.id : item.statementId));
@@ -414,7 +386,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     pendingSaves.current = {}; changesRef.current = {};
     setChanges({}); setError(""); setMessage(""); setPendingWeek(null); setPendingLink(null);
     if (refreshSources) setRefreshing(true); else setLoading(true);
-    try { loadedQuery.current = queryKey; setReport(await (refreshSources ? refreshDriverPayLoads(week).then(() => fetchPay(week)) : fetchPay(week))); setMessage(refreshSources ? "Load details refreshed" : "Reloaded"); }
+    try { loadedQuery.current = queryKey; setReport(await (refreshSources ? refreshDriverPayLoads(week).then(() => fetchPay(week)) : fetchPay(week))); setOutgoingRefresh(value => value + 1); setMessage(refreshSources ? "Load details refreshed" : "Reloaded"); }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to reload this week"); }
     finally { setLoading(false); setRefreshing(false); }
   }
@@ -497,7 +469,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     ...setupRequired.map(truck => ({ kind: "setup" as const, id: truck.truckId, name: truck.ownerName, unit: truck.truckUnit, truck })),
   ].sort((a, b) => Number(a.kind === "statement" && !!a.driver.settlement?.finalized) - Number(b.kind === "statement" && !!b.driver.settlement?.finalized) || (rowOrder.size ? (rowOrder.get(a.id) ?? 0) - (rowOrder.get(b.id) ?? 0) : a.name.localeCompare(b.name) || a.unit.localeCompare(b.unit, undefined, { numeric: true })));
   const switchWeek = (next: string) => { if (next >= firstWeek && next <= latestPayrollWeek() && next !== week) { if (!dirty) setError(""); setPendingWeek(next); } };
-  return <OutgoingTransfers key={`${investor}:${week}`} investor={investor} week={week} filters={filters} refreshKey={report} canEdit={canEdit} disabled={finalizing || busy || dirty || saving} onReturned={() => { undoStack.current = []; setRefreshRequest(value => value+1); setMessage("Load returned to original date"); }}><div className="space-y-5 animate-fade-in">
+  return <OutgoingTransfers key={`${investor}:${week}`} investor={investor} week={week} filters={filters} refreshKey={outgoingRefresh} canEdit={canEdit} disabled={finalizing || busy || dirty || saving} onReturned={() => { undoStack.current = []; setRefreshRequest(value => value+1); setMessage("Load returned to original date"); }}><div className="space-y-5 animate-fade-in">
     <PageHeader><div><div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-zinc-500" /><h1 className="text-lg font-semibold text-zinc-100">{investor ? "Investor pay" : "Driver pay"}</h1><span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : report?.pagination?.total ?? rows.length}</span></div></div></PageHeader>
     <PinnablePageHeader pinned={headerPinned}>
     <div className="grid gap-3 md:grid-cols-3"><MetricCard loading={loading} compact label={investor ? "Investor share" : "Gross pay"} value={loading ? "—" : decimalDisplay(summary.fee, true)} icon={Banknote} /><MetricCard loading={loading} compact label={summary.review ? "Provisional payable" : "Net payable"} value={loading ? "—" : decimalDisplay(summary.payable, true)} icon={Banknote} /><FinalizationCard loading={loading} finalized={report?.pagination?.finalized ?? drivers.filter(d => !d.truckInactive && d.settlement?.finalized).length} total={report?.pagination?.statements ?? drivers.filter(d => !d.truckInactive).length} /></div>

@@ -131,6 +131,9 @@ const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (
  d.dependencies ?| p.roots source_changed,
  ARRAY(SELECT e.key FROM jsonb_each_text(d.dependencies) e(key,value)
  LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
+ WHERE coalesce(r.revision,0)<>e.value::bigint) changed_keys,
+ ARRAY(SELECT e.key FROM jsonb_each_text(d.dependencies) e(key,value)
+ LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
  WHERE coalesce(r.revision,0)<>e.value::bigint
  AND coalesce(r.revision,0)<>e.value::bigint+coalesce((p.deltas->>e.key)::bigint,0)) stale_keys
  FROM payroll_resource_dependency_sets d JOIN (
@@ -138,7 +141,14 @@ const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (
  WHERE resource_dependencies ? '$shared') refs USING(fingerprint)
  LEFT JOIN proofs p USING(generation_id)
  ), freshness AS (
- SELECT v.*,coalesce(p.complete,false)
+ SELECT v.*,
+ (CASE WHEN v.resource_dependencies ? '$shared' THEN shared.fingerprint IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM unnest(shared.changed_keys) key WHERE NOT v.resource_dependencies ? key)
+ ELSE true END)
+ AND NOT EXISTS(SELECT 1 FROM jsonb_each_text(v.resource_dependencies-'$shared') d(key,value)
+ LEFT JOIN payroll_resource_revisions r ON r.resource_key=d.key
+ WHERE coalesce(r.revision,0)<>d.value::bigint) resources_exact,
+ coalesce(p.complete,false)
  AND (cardinality(p.roots)=0 OR (SELECT protocol_mode='resources' FROM payroll_projection_control WHERE singleton))
  AND NOT(v.resource_dependencies ?| coalesce(p.roots,ARRAY[]::text[]))
  AND NOT coalesce(shared.source_changed,false) sources_current,
@@ -156,6 +166,9 @@ const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (
  ) `
 
 // Rebase only certified unchanged statements, preserving their content/version.
+// Exact certificates already match every current resource counter. Preserve their
+// representation rather than rebuilding and re-interning the same snapshot. An
+// explained source delta still requires the original snapshot refresh below.
 // This is derived work under the source gate; all financial revision checks and
 // locks remain authoritative. Resource workers may touch only their held claims.
 func rebasePayrollStatementResources(ctx context.Context, tx pgx.Tx, week time.Time, generation, snapshot string, commands ...*payrollPublicationImpact) error {
@@ -164,9 +177,9 @@ func rebasePayrollStatementResources(ctx context.Context, tx pgx.Tx, week time.T
 		return err
 	}
 	_, err = tx.Exec(ctx, payrollStatementFreshnessSQL+`UPDATE payroll_statement_current c
-	 SET generation_id=$5::uuid,resource_dependencies=payroll_pack_resource_snapshot(
+	 SET generation_id=$5::uuid,resource_dependencies=CASE WHEN f.resources_exact THEN f.resource_dependencies ELSE payroll_pack_resource_snapshot(
 	 ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(f.resource_dependencies))),
-	 'statement:'||c.kind||':'||c.statement_id::text||':'||c.week_start::text)
+	 'statement:'||c.kind||':'||c.statement_id::text||':'||c.week_start::text) END
  FROM freshness f WHERE c.id=f.id AND f.sources_current AND f.resources_current AND f.generation_id<>$5::uuid
 	 AND (NOT $6::boolean OR c.xmin<>pg_current_xact_id()::text::xid)
  AND (coalesce(current_setting('mserp.payroll.resources',true),'')='' OR
