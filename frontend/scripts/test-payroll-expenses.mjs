@@ -36,7 +36,9 @@ try {
         generatedCharges: [{ scheduleId: 'schedule', kind: 'recurring', name: 'Insurance', amount: '-50.00', scheduledAmount: '-50.00', overridden: false, version: 1, scheduleVersion: 1, typeVersion: 1 }],
       },
     };
-    driver.autoCharges = [...(driver.autoCharges ?? []), scaleTicket];
+    driver.autoCharges = [...(driver.autoCharges ?? []), scaleTicket, { ...scaleTicket, source: 'weighmytruck:second', name: 'CAT Scale second ticket', amount: '-12.00', scaleDue: '-12.00', scaleOriginalAmount: '-12.00' }];
+    driver.deferredScaleCharges = [{ ...scaleTicket, source: 'weighmytruck:deferred', name: 'CAT Scale deferred ticket', amount: '0.00', scaleDue: '-8.00', scaleOriginalAmount: '-8.00' }];
+    driver.edits.scaleDeductions = { 'weighmytruck:deferred': '0.00' };
     if (!investor) driver.edits.expenseDeductions.push({source:'reimburse',expenseId:'reimbursement',name:'Parking refund',expenseDate:'2026-09-30',amount:'42.25',total:'42.25',available:'42.25',openingBalance:'42.25',remaining:'42.25',version:1,saved:false});
     let beforeSource;
     let writable = true;
@@ -117,6 +119,31 @@ try {
     await page.goto(`${base}/accounting/${investor ? 'investor' : 'driver'}-pay?weekStart=${week}&${investor ? 'truckId' : 'driverId'}=statement`);
     const region = page.getByRole('region', { name: 'Grid Test reimbursements and charges' });
     await expect(region).toBeVisible();
+    const group = region.getByRole('button', { name: 'Grid Test, CAT Scale, 3 expenses', exact: true });
+    await expect(group).toHaveAttribute('aria-expanded', 'false');
+    await expect(group.getByLabel('CAT Scale total')).toHaveText('-$27.25');
+    await expect(region.getByRole('textbox', { name: /CAT Scale.*deduction/ })).toHaveCount(0);
+    const writesBeforeToggle = payWrites;
+    await group.focus(); await page.keyboard.press('Enter');
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+    await expect(region.getByRole('textbox', { name: /CAT Scale.*deduction/ })).toHaveCount(3);
+    const second = region.getByRole('textbox', { name: 'Grid Test, CAT Scale second ticket, deduction', exact: true });
+    await second.fill('5'); await second.press('Tab');
+    await expect(group.getByLabel('CAT Scale total')).toHaveText('-$20.25');
+    await expect.poll(() => payWrites).toBe(writesBeforeToggle + 1);
+    await expect.poll(() => driver.edits.scaleDeductions['weighmytruck:second']).toBe('-5');
+    await group.click(); await expect(group).toHaveAttribute('aria-expanded','false');
+    await group.press('Space'); await expect(second).toHaveValue('-5.00');
+    await region.getByRole('button',{name:'Grid Test, CAT Scale second ticket, reset to amount due'}).click();
+    await expect(group.getByLabel('CAT Scale total')).toHaveText('-$27.25');
+    await expect.poll(() => payWrites).toBe(writesBeforeToggle + 2);
+    await expect.poll(() => driver.edits.scaleDeductions['weighmytruck:second']).toBe('-12.00');
+    await page.screenshot({ path: join(tmpdir(), investor ? 'cat-scale-investor-expanded.png' : 'cat-scale-driver-expanded.png') });
+    driver.autoCharges = driver.autoCharges.filter(row => row.source !== 'weighmytruck:second');
+    driver.deferredScaleCharges = [];
+    delete driver.edits.scaleDeductions['weighmytruck:second']; delete driver.edits.scaleDeductions['weighmytruck:deferred'];
+    await page.reload();
+    await expect(group).toHaveCount(0);
     const scale = region.getByRole('textbox', { name: `Grid Test, ${scaleTicket.name}, deduction`, exact: true });
     const scaleRow = region.getByRole('row').filter({ has: page.getByText(scaleTicket.name, { exact: true }) });
     await expect(scale).toHaveValue('-15.25');
@@ -333,6 +360,17 @@ try {
     costsDialog=page.getByRole('dialog',{name:'Fuel transactions',exact:true});
     await expect(costsDialog.getByText('Carried from 09/21',{exact:true})).toBeVisible();
     await costsDialog.getByRole('button',{name:'Close',exact:true}).last().click();
+    driver.autoCharges.push({ ...scaleTicket, source:'weighmytruck:frozen',name:'CAT Scale frozen ticket',amount:'-6.00',scaleDue:'-12.00' });
+    await page.reload();
+    const frozenGroup = region.getByRole('button',{name:'Grid Test, CAT Scale, 2 expenses'});
+    await expect(frozenGroup).toBeEnabled();
+    await expect(frozenGroup.getByLabel('CAT Scale total')).toHaveText('-$6.00');
+    await frozenGroup.click();
+    await expect(region.getByRole('textbox',{name:'Grid Test, CAT Scale frozen ticket, deduction',exact:true})).toBeDisabled();
+    await expect(region.getByRole('textbox',{name:'Grid Test, CAT Scale frozen ticket, deduction',exact:true})).toHaveValue('-6.00');
+    await expect(region.getByRole('button',{name:/CAT Scale.*reset to amount due/})).toHaveCount(0);
+    await frozenGroup.click();
+    await expect(region.getByRole('textbox',{name:/CAT Scale.*deduction/})).toHaveCount(0);
     expect(errors).toEqual([]); await page.close();
   }
   console.log('Driver and Investor Pay expense dates, editing, fee boundaries, refresh and view-only access passed.');
