@@ -9,14 +9,15 @@ import (
 	"mserp/internal/datatruck"
 )
 
-// Only confirmed missing board links with a possible current replacement need
+// Confirmed missing links and unlinked number-only slots with a current candidate need
 // provider work. Finalized driver weeks are filtered before spending requests;
 // all driver/investor/transfer/placement guards are checked again under lock.
 func (r *LoadRepository) MissingBoardReplacementIDs(ctx context.Context) ([]int, error) {
 	rows, err := r.pool.Query(ctx, `WITH numbers AS MATERIALIZED (
  SELECT DISTINCT lower(btrim(e.load_number)) number FROM `+grossBoardEntriesSQL+` e
- JOIN load_source_availability a ON a.load_id=e.load_record_id AND NOT a.present
+ LEFT JOIN load_source_availability a ON a.load_id=e.load_record_id
  WHERE NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
+ AND (e.load_record_id IS NULL OR NOT a.present)
  AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized
    AND s.driver_id=payroll_driver_at(e.driver_id,date_trunc('week',e.service_date)::date)
    AND s.week_start=date_trunc('week',e.service_date)::date)
@@ -65,6 +66,29 @@ func prepareMissingLoadReplacement(g *LoadReconciliationGroup) {
 		} else {
 			missing[s.ID] = true
 		}
+	}
+	// A single unlinked slot has no predecessor identity to replace. Link only
+	// after complete provider evidence proves one live source; never combine
+	// unresolved slots or reinterpret an existing explicit selection.
+	if current != nil && len(g.Before) == 1 && g.Before[0].LoadRecordID == nil {
+		keep := g.Before[0]
+		if keep.LoadTripID != nil {
+			g.Hold = "Trip allocation requires individual review"
+			return
+		}
+		g.CurrentID = current.ID
+		keep.LoadRecordID = &g.CurrentID
+		g.DriverGross = keep.DriverRate
+		if keep.EnteredOriginalRate == "" {
+			keep.EnteredOriginalRate = keep.OriginalRate
+		}
+		if keep.EnteredMiles == "" {
+			keep.EnteredMiles = keep.Miles
+		}
+		keep.OriginalRate, keep.Miles = keep.EnteredOriginalRate, keep.EnteredMiles
+		keep.AcceptSystemValues, keep.AcceptDriverGross = false, false
+		g.After = append(g.After, keep)
+		return
 	}
 	if current == nil || len(missing) == 0 {
 		g.Hold = "No unique current replacement with missing predecessors"

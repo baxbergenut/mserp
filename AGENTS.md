@@ -3932,3 +3932,8 @@ the existing budget/backoff; manual destination text stays untouched.
 ### Status Board recreated source numbers
 - Number-only Gross Board plans in Status Board ignore explicitly unavailable source records when resolving stop details, just like manual Next Loads. A single live source can hydrate a recreated number; multiple live matches remain unresolved. Explicit source IDs and active dispatch selections are never retargeted. Accounting Gross Board resolution remains unchanged.
 - Covered in testManualNextLoads / TestDriverBoardDatabase with deleted duplicates, genuine ambiguity and pinned missing records.
+
+### Automatic linking of unlinked Gross Board slots
+- The existing operational/daily missing-source reconciliation also considers number-only slots with no stored source ID. A single slot links only after complete ID-filtered provider evidence proves one live unsplit match; multiple slots, live matches, protected financial sources and finalized weeks remain held.
+- Linking uses the same native financial/version/duplicate guards and atomic payroll publication/audit as missing-ID replacement. Preserve entered driver gross, total gross, miles and notes, including legacy raw manual amounts. Successful slots stop being candidates; opening the dropdown remains read-only.
+- TestUnlinkedBoardReconciliationDatabase covers fresh/migrated schemas, finalized driver/investor holds, ambiguity, duplicate slots, preservation and replay; TestMissingBoardReplacementDatabase retains publication rollback coverage.

@@ -124,3 +124,14 @@ Validation: `TestPrepareLoadReconciliation`, `TestLoadReconciliationDatabase`
 frontend build. The database tests run as `mserp_app` on fresh and migrated schemas,
 including stale-preview rejection, publication rollback, receipt replay,
 historical source preservation and restored provider visibility.
+
+## Unlinked number-only slots
+
+The same 15-minute/daily pass can now link a single open number-only Gross Board
+slot with no stored DataTruck ID. Complete provider lookup must prove one live,
+unsplit same-number source. Deleted predecessors do not prevent this match, and
+no predecessor is required. Multiple slots or current sources, finalized weeks,
+transfers, placements, splits and protected comments remain held for review.
+The native save/publication path preserves all manually entered gross, miles,
+driver gross and notes and records the normal reconciliation audit. Merely
+focusing the dropdown never writes a source selection. No data migration runs.
