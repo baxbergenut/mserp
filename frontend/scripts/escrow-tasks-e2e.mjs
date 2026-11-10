@@ -12,13 +12,16 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  ('${outsider}','Outside Test','outside-test@example.com',crypt('${password}',gen_salt('bf')),'${role}');`);
  for (const [kind,id] of Object.entries(ids)) {
   const status = ['home','vacation'].includes(kind) ? kind : 'terminated';
-  const opening = ['full','home','vacation'].includes(kind) ? 2000 : 2500;
+  const opening = kind === 'vacation' ? 0 : ['full','home'].includes(kind) ? 2000 : 2500;
   run(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,status,termination_date)
    VALUES('${id}','Escrow ${kind}','escrow ${kind}','cpm',0.75,'${status}',(now() AT TIME ZONE 'America/New_York')::date-${kind==='early'?29:30});
    INSERT INTO driver_escrows(driver_id,driver_name,start_date,amount,opening_paid) VALUES('${id}','Escrow ${kind}',(now() AT TIME ZONE 'America/New_York')::date-40,2500,${opening});`);
  }
+ run(`INSERT INTO driver_escrow_payments(escrow_id,week_start,amount)
+ SELECT id,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date-7,400
+ FROM driver_escrows WHERE driver_id='${ids.vacation}';`);
  await page.goto(`${base}/settings`);
- await page.getByRole('button', { name: 'System tasks', exact: true }).click();
+ await page.getByRole('tab', { name: 'System tasks', exact: true }).click();
  const assignees=page.getByRole('group',{name:'Escrow release (30 days after termination) assignees'});
  await assignees.locator('select').first().selectOption({label:'Nate Test'});
  await assignees.locator('select').first().selectOption({label:'investor-e2e'});
@@ -32,7 +35,21 @@ export async function runEscrowTasksE2E({ page, base, sql, schema, temp }) {
  await page.goto(`${base}/accounting/escrow`);
  await expect(page.getByRole('tab',{name:'Active',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(page.getByRole('row').filter({hasText:'Escrow home'})).toContainText('Partially collected');
- await expect(page.getByRole('row').filter({hasText:'Escrow vacation'})).toBeVisible();
+ const vacationRow=page.getByRole('row').filter({hasText:'Escrow vacation'});
+ await expect(vacationRow.getByRole('cell',{name:'$400.00',exact:true})).toBeVisible();
+ await vacationRow.getByRole('button',{name:'Reduce balance',exact:true}).click();
+ await page.getByLabel('New balance ($)',{exact:true}).fill('125.25');
+ await page.getByLabel('Correction reason',{exact:true}).fill('Reconciled escrow ledger');
+ await page.getByRole('button',{name:'Save correction',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(vacationRow.getByRole('cell',{name:'$125.25',exact:true})).toBeVisible();
+ await expect(vacationRow.getByRole('cell',{name:'$2,374.75',exact:true})).toBeVisible();
+ await vacationRow.getByRole('button',{name:'Payment history'}).click();
+ await expect(page.getByRole('heading',{name:'Balance reductions'})).toBeVisible();
+ await expect(page.getByText('Reconciled escrow ledger',{exact:true})).toBeVisible();
+ await expect(page.getByText('-$274.75',{exact:true})).toBeVisible();
+ await expect(page.getByText('Total collected $400.00 · Total released $0.00',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Close payment history'}).click();
  await expect(page.getByRole('row').filter({hasText:'Escrow full'})).toHaveCount(0);
  await page.getByRole('tab',{name:'Terminated',exact:true}).click();
  const fullRow=page.getByRole('row').filter({hasText:'Escrow full'});

@@ -648,6 +648,7 @@ export const saveEscrowRelease = (escrowId: string, input: EscrowReleaseInput) =
 export const fetchEscrowTask = (id: string) => apiRequest<import("./types").EscrowTaskDetail>(`/tasks/escrow/${id}`);
 export const completeEscrowTask = (id: string, input: import("./types").EscrowTaskDecision) => apiRequest<void>(`/tasks/escrow/${id}/complete`, { method: "POST", body: JSON.stringify(input) });
 export const saveEscrowOpening = (id: string, input: { openingPaid: string; version: number; reason: string }) => apiRequest<void>(`/escrows/${id}/opening`, { method: "PUT", body: JSON.stringify(input) });
+export const reduceEscrowBalance = (id: string, input: { balance: string; version: number; reason: string }) => apiRequest<void>(`/escrows/${id}/balance`, { method: "PUT", body: JSON.stringify(input) });
 export const fetchWeighMyTruck = (signal?: AbortSignal) => apiRequest<import("./types").WeighMyTruckList>("/weighmytruck", { signal });
 export const changeWeighMyTruck = (entry: import("./types").WeighMyTruckEntry, add: boolean) => apiRequest<void>("/weighmytruck/change", {
   method: "POST", body: JSON.stringify({ driverId: entry.driverId, membershipId: entry.id, version: entry.version, add }),

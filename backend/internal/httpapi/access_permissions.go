@@ -144,6 +144,7 @@ var routeAccessPolicies = []routeAccess{
 	{"GET", "/drivers/team-trucks", "drivers.read"},
 	{"GET", "/escrows", "escrow.read"},
 	{"PUT", "/escrows/{id}/opening", "escrow.edit"},
+	{"PUT", "/escrows/{id}/balance", "escrow.edit"},
 	{"POST", "/escrows/{id}/releases", "escrow.create"},
 	{"PUT", "/escrows/{id}/releases/{releaseID}", "escrow.read"},
 	{"GET", "/escrows/settings", "escrow.read"},

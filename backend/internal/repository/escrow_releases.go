@@ -10,6 +10,7 @@ import (
 var ErrEscrowReleaseConflict = errors.New("Escrow changed; refresh and try again")
 
 type EscrowRelease struct {
+	CorrectionReason  *string `json:"correctionReason,omitempty"`
 	PayrollReturn     *string `json:"payrollReturn,omitempty"`
 	CollectionStopped *bool   `json:"collectionStopped,omitempty"`
 	ID                string  `json:"id"`

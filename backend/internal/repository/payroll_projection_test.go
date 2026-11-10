@@ -96,6 +96,10 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	escrowBalanceMigration, err := os.ReadFile("../../sql/209_escrow_balance_reductions.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mode := range []string{"fresh", "incremental"} {
 		t.Run(mode, func(t *testing.T) {
 			name := fmt.Sprintf("payroll_projection_%d", time.Now().UnixNano())
@@ -132,6 +136,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				prior = strings.Replace(prior, strings.ReplaceAll(string(escrowMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(planningMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(readyLocationMigration), "\r\n", "\n"), "", 1)
+				prior = strings.Replace(prior, strings.ReplaceAll(string(escrowBalanceMigration), "\r\n", "\n"), "", 1)
 				exec(strings.Replace(prior, upgrade, "", 1))
 				exec(string(migration))
 				exec(string(telemetryMigration))
@@ -149,6 +154,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(escrowMigration))
 				exec(string(planningMigration))
 				exec(string(readyLocationMigration))
+				exec(string(escrowBalanceMigration))
 			} else {
 				exec(body)
 			}

@@ -54,7 +54,12 @@ func main() {
 	scaleCarryCapability := flag.Bool("payroll-scale-carry-capability", false, "print cross-week CAT Scale collection support and exit without opening a database")
 	scalePartialCapability := flag.Bool("payroll-scale-partial-capability", false, "print partial CAT Scale collection support and exit without opening a database")
 	escrowSettlementCapability := flag.Bool("driver-pay-escrow-capability", false, "print statement escrow schema support and exit")
+	escrowBalanceCapability := flag.Bool("escrow-balance-reductions-capability", false, "print escrow balance reduction support and exit")
 	flag.Parse()
+	if *escrowBalanceCapability {
+		fmt.Println("escrow-balance-reductions-v1")
+		return
+	}
 	if *planningCapability {
 		fmt.Println("gross-board-planning-v1")
 		return

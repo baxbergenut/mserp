@@ -66,7 +66,7 @@ func (r *EscrowRepository) TaskDetail(ctx context.Context, id string) (EscrowTas
 	}
 	var held, released string
 	err = r.pool.QueryRow(ctx, `WITH b AS (`+escrowBalancesSQL+`) SELECT coalesce(sum(held_amount),0)::text,
- coalesce((SELECT sum(r.amount) FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE e.driver_id=nullif($1,'')::uuid AND NOT r.cancelled AND (r.created_at AT TIME ZONE 'America/New_York')::date >= $2::date),0)::text FROM b WHERE driver_id=nullif($1,'')::uuid`, result.DriverID, result.TerminationDate).Scan(&held, &released)
+ coalesce((SELECT sum(r.amount) FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE e.driver_id=nullif($1,'')::uuid AND NOT r.cancelled AND r.correction_reason IS NULL AND (r.created_at AT TIME ZONE 'America/New_York')::date >= $2::date),0)::text FROM b WHERE driver_id=nullif($1,'')::uuid`, result.DriverID, result.TerminationDate).Scan(&held, &released)
 	if err != nil {
 		return result, err
 	}
@@ -156,7 +156,7 @@ func (r *EscrowRepository) CompleteTask(ctx context.Context, id, actor string, i
 	err = tx.QueryRow(ctx, `WITH b AS (`+escrowBalancesSQL+`)
  SELECT coalesce(sum(held_amount),0)::text,
  coalesce((SELECT sum(r.amount) FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id
- WHERE e.driver_id=nullif($1,'')::uuid AND NOT r.cancelled AND (r.created_at AT TIME ZONE 'America/New_York')::date >= $2::date),0)::text,
+ WHERE e.driver_id=nullif($1,'')::uuid AND NOT r.cancelled AND r.correction_reason IS NULL AND (r.created_at AT TIME ZONE 'America/New_York')::date >= $2::date),0)::text,
  coalesce(jsonb_agg(jsonb_build_object('escrowId',id,'version',balance_version,'held',held_amount,'released',released_amount)),'[]'::jsonb)
  FROM b WHERE driver_id=nullif($1,'')::uuid`, driver, termination).Scan(&held, &released, &snapshot)
 	if err != nil {

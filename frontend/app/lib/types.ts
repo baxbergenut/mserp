@@ -1664,7 +1664,7 @@ export interface TruckChargeBulkResult { truckId: string; typeId: string; weekSt
 export interface TruckChargeOwner { truckId: string; ownerId: string; ownerName: string }
 export interface TruckChargeData { eligibleTruckIds: string[]; owners?: TruckChargeOwner[]; terms?: TruckTerm[]; phases: TruckChargePhase[]; lockedCharges?: { truckId: string; typeId: string }[] }
 
-export interface EscrowRelease { payrollReturn?: string; collectionStopped?: boolean; id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
+export interface EscrowRelease { correctionReason?: string; payrollReturn?: string; collectionStopped?: boolean; id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
 export interface EscrowReleaseInput { id: string; weekStart: string; amount: string; version: number; escrowVersion: number; cancelled: boolean }
 export interface Escrow {
   collectionStopped?: boolean;

@@ -30,6 +30,7 @@ payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
 mock_routing_usage=f
 mock_gross_planning=f
+mock_escrow_balance=f
 mock_expense_drafts=f
 mock_accessorials=f
 mock_escrow_settlement=f
@@ -59,6 +60,7 @@ runuser() {
     if [[ $* == *"public.gross_board_planning_entries"* ]]; then result=$mock_gross_planning; fi
     if [[ $* == *"column_name='expense_choices'"* ]]; then result=$mock_expense_drafts; fi
     if [[ $* == *"column_name='escrow_draft'"* ]]; then result=$mock_escrow_settlement; fi
+    if [[ $* == *"column_name='correction_reason'"* ]]; then result=$mock_escrow_balance; fi
     if [[ $* == *"JOIN public.weighmytruck_transactions"* ]]; then result=$mock_scale_carry; fi
     if [[ $* == *"scaleOriginalAmount"* ]]; then result=$mock_scale_partial; fi
     [[ $result != error ]] || return 1
@@ -309,3 +311,12 @@ if compatible_release "$test_root/new"; then echo 'Planning schema query failure
 mock_gross_planning=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown planning schema allowed rollback' >&2; exit 1; fi
 echo 'Gross Board planning compatibility checks passed'
+
+mock_gross_planning=t
+mock_escrow_balance=t
+if compatible_release "$test_root/new"; then echo 'Escrow balance reductions allowed an incompatible payroll binary' >&2; exit 1; fi
+sed -i 's/case "$1" in /case "$1" in -escrow-balance-reductions-capability) echo escrow-balance-reductions-v1;; /' "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_escrow_balance=error
+if compatible_release "$test_root/new"; then echo 'Escrow balance schema query failure allowed rollback' >&2; exit 1; fi
+echo 'Escrow balance reduction compatibility checks passed'

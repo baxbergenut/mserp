@@ -98,7 +98,7 @@ func escrowDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week
 }
 
 func escrowReleaseCreditsBulk(ctx context.Context, tx pgx.Tx, drivers []string, week string) (map[string][]PayAutoCharge, error) {
-	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,r.id::text,r.amount::text,'Escrow release' FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE accounting_live_source('escrow',e.id,e.start_date) AND e.driver_id=ANY($1::uuid[]) AND r.week_start=$2::date AND NOT r.cancelled AND r.payroll_return IS NULL
+	rows, err := tx.Query(ctx, `SELECT e.driver_id::text,r.id::text,r.amount::text,'Escrow release' FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id WHERE accounting_live_source('escrow',e.id,e.start_date) AND e.driver_id=ANY($1::uuid[]) AND r.week_start=$2::date AND NOT r.cancelled AND r.payroll_return IS NULL AND r.correction_reason IS NULL
  UNION ALL SELECT w.driver_id::text,w.escrow_draft->>'escrowId',w.escrow_draft->>'returnAmount','Escrow returned'
  FROM driver_pay_weeks w WHERE w.driver_id=ANY($1::uuid[]) AND w.week_start=$2::date
  AND (w.escrow_draft->>'returnAmount')::numeric>0 ORDER BY 2`, drivers, week)

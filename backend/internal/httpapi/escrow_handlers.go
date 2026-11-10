@@ -26,9 +26,31 @@ func registerEscrowRoutes(r chi.Router, logger *slog.Logger, repo *repository.Es
 	r.Post("/escrows/{id}/releases", h.saveRelease)
 	r.Put("/escrows/{id}/releases/{releaseID}", h.saveRelease)
 	r.Put("/escrows/{id}/opening", h.saveOpening)
+	r.Put("/escrows/{id}/balance", h.reduceBalance)
 	r.Get("/tasks/escrow/{id}", h.taskDetail)
 	r.Post("/tasks/escrow/{id}/complete", h.completeTask)
 }
+
+func (h escrowHandler) reduceBalance(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !isUUID(id) {
+		writeAPIError(w, 400, "Invalid escrow ID")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 32768)
+	var input repository.EscrowBalanceInput
+	if err := decodeJSON(r, &input); err != nil {
+		writeAPIError(w, 400, "Invalid escrow balance correction")
+		return
+	}
+	session, _ := authSessionFromContext(r.Context())
+	if err := h.repo.ReduceBalance(r.Context(), id, session.User.ID, input); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
 func (h escrowHandler) writeError(w http.ResponseWriter, err error) {
 	var invalid *repository.ChargeValidationError
 	var database *pgconn.PgError

@@ -3072,6 +3072,13 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
   escrow.edit, current version and correction reason. Existing funding/collection
   guards remain authoritative; each change has an audit event. Saved payroll
   payments and finalized snapshots are not replaced by opening corrections.
+- PUT /escrows/{id}/balance reduces held escrow with escrow.edit, the current
+  version, a lower target balance and a correction reason. Migration 209 records
+  an immutable dated reduction in escrow history, distinct from cash releases.
+  Existing funding checks protect scheduled releases. The reduction reopens
+  collection capacity the following week when collection is active. It does
+  not create a payroll credit or change recorded payments. Install the matching
+  deploy helper before applying 209 so writers quiesce and rollback is fenced.
 - TestEscrowTerminationWorkflowDatabase uses disposable local
   MSERP_DRIVER_PAY_TEST_DATABASE_URL, fresh and migrated schemas, as mserp_app.
   `node scripts/test-investors-e2e.mjs --escrow-only` exercises real worker/SSE,

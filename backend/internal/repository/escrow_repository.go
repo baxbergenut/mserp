@@ -59,17 +59,17 @@ type EscrowPage struct {
 }
 
 const escrowBalancesSQL = `SELECT NOT accounting_live_source('escrow',e.id,e.start_date) managed_in_sheets,e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
- coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0) held_amount,
+ coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0) held_amount,
  coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
- e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0) remaining_amount,
+ e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.outflow,0) remaining_amount,
  CASE WHEN NOT coalesce(d.active,false) THEN CASE WHEN
  (coalesce(r.released,0)>0 OR EXISTS(SELECT 1 FROM escrow_release_reviews review WHERE review.id=d.termination_id AND review.decision='released' AND review.completed_at IS NOT NULL))
- AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)=0 THEN 'released' WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)<e.amount THEN 'partially_released' ELSE 'not_released' END
- WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.released,0)<=0 THEN 'paid'
- WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.released,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version,escrow_collection_stopped(e.id,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date) collection_stopped
+ AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)=0 THEN 'released' WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)<e.amount THEN 'partially_released' ELSE 'not_released' END
+ WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.outflow,0)<=0 THEN 'paid'
+ WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version,escrow_collection_stopped(e.id,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date) collection_stopped
  FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
  LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true
- LEFT JOIN LATERAL (SELECT sum(amount) released FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled) r ON true`
+ LEFT JOIN LATERAL (SELECT sum(amount) outflow,sum(amount) FILTER (WHERE correction_reason IS NULL) released FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled) r ON true`
 
 func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -128,14 +128,14 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 			return EscrowPage{}, e
 		}
 		releases, releaseErr := tx.Query(ctx, `SELECT r.id::text,r.week_start::text,r.amount::text,r.cancelled,r.version,
- r.payroll_return IS NULL AND NOT r.cancelled AND $3::uuid IS NOT NULL AND r.week_start >= $2::date AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=$3 AND s.week_start=r.week_start AND s.finalized),r.payroll_return::text,r.collection_stopped
+ r.correction_reason IS NULL AND r.payroll_return IS NULL AND NOT r.cancelled AND $3::uuid IS NOT NULL AND r.week_start >= $2::date AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=$3 AND s.week_start=r.week_start AND s.finalized),r.payroll_return::text,r.collection_stopped,r.correction_reason
  FROM driver_escrow_releases r WHERE r.escrow_id=$1 ORDER BY r.week_start DESC,r.created_at DESC`, items[i].ID, ChargeCurrentWeek(), items[i].DriverID)
 		if releaseErr != nil {
 			return EscrowPage{}, releaseErr
 		}
 		for releases.Next() {
 			var release EscrowRelease
-			if releaseErr = releases.Scan(&release.ID, &release.WeekStart, &release.Amount, &release.Cancelled, &release.Version, &release.Editable, &release.PayrollReturn, &release.CollectionStopped); releaseErr != nil {
+			if releaseErr = releases.Scan(&release.ID, &release.WeekStart, &release.Amount, &release.Cancelled, &release.Version, &release.Editable, &release.PayrollReturn, &release.CollectionStopped, &release.CorrectionReason); releaseErr != nil {
 				releases.Close()
 				return EscrowPage{}, releaseErr
 			}
