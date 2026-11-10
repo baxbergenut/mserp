@@ -94,7 +94,7 @@ export default function DriverDetailPage() {
         <DriverServiceCards key={`services-${driver.id}`} driverId={driver.id} />
         {permissions.includes("charges.read") && <DriverChargeSummary driverId={driver.id} />}
         <ProfileNotes key={driver.id} kind="drivers" id={driver.id} legacy={driver.notes} />
-      </div><aside className="min-w-0"><TruckLocationPanel key={`${driver.id}:${driver.updatedAt}`} driverId={driver.id} /></aside></div>}
+      </div><aside className="min-w-0"><TruckLocationPanel key={driver.id} refreshKey={driver.updatedAt} driverId={driver.id} /></aside></div>}
       {canReadEscrow && tab === "Escrow" && <EscrowTable driverId={driver.id} />}
       {permissions.includes("driver_pay.read") && tab === "Pay history" && <PayHistory key={driver.updatedAt} driverId={driver.id} />}
       {expenseTabsVisible && tab === "Personal charges" && <div className="space-y-6"><RelatedExpenses driverId={driver.id} scope="personal" />{permissions.includes("charges.read") && <DriverChargeSummary driverId={driver.id} expanded />}</div>}

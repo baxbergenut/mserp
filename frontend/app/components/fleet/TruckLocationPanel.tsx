@@ -6,7 +6,7 @@ import type { FleetLocation } from "@/app/lib/types";
 import { LocationCell } from "@/app/driver-board/LocationCell";
 import { TruckLocationMap } from "./TruckLocationMap";
 
-export function TruckLocationPanel({ truckId, driverId }: { truckId: string; driverId?: never } | { driverId: string; truckId?: never }) {
+export function TruckLocationPanel({ truckId, driverId, refreshKey }: ({ truckId: string; driverId?: never } | { driverId: string; truckId?: never }) & { refreshKey?: string }) {
   const [data, setData] = useState<FleetLocation | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -27,7 +27,7 @@ export function TruckLocationPanel({ truckId, driverId }: { truckId: string; dri
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { cancelled = true; clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [truckId, driverId]);
+  }, [truckId, driverId, refreshKey]);
   return <section aria-label="Latest truck location" className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/20">
     <div className="p-4">
       <div className="flex items-center justify-between gap-2"><h2 className="flex items-center gap-2"><LocationCell name={data?.truckUnit ? `Truck ${data.truckUnit}` : "Truck"} location={data?.location ?? null} />Latest location</h2>{data?.truckId && <span className="text-xs text-zinc-400">Unit {data.truckUnit}</span>}</div>

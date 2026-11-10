@@ -90,7 +90,7 @@ export default function TruckDetailPage() {
           <section className="rounded-xl border border-zinc-800 p-5"><h2 className="mb-4 text-sm font-semibold text-zinc-100">Legacy service information</h2><Details values={[["Last service", showDate(truck.lastServiceDate)], ["Next service", truck.nextServiceMiles === null ? "Not recorded" : `${truck.nextServiceMiles.toLocaleString()} mi`], ["Last updated", showDate(truck.updatedAt)]]} /></section>
           <ProfileNotes key={truck.id} kind="trucks" id={truck.id} legacy={truck.notes} />
         </div>
-        <aside className="min-w-0"><TruckLocationPanel key={`${truck.id}:${truck.updatedAt}`} truckId={truck.id} /></aside>
+        <aside className="min-w-0"><TruckLocationPanel key={truck.id} refreshKey={truck.updatedAt} truckId={truck.id} /></aside>
       </div>}
       {tab === "Service programs" && maintenanceAccess?.canView && <ServiceProgramsWorkspace truckId={truck.id} />}
       {expenseCategoryAccess.length > 0 && tab === "Expenses" && <RelatedExpenses truckId={truck.id} />}
