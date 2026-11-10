@@ -10,7 +10,7 @@ var driverBoardCurrentEntries = `WITH matched_entries AS MATERIALIZED (
  FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
  WHERE e.source_date < $1::date+7
 ), resolved AS (
- SELECT e.*,CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END display_number,
+ SELECT e.*,coalesce(to_jsonb(l)->>'status','') source_status,CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END display_number,
  CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate,CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END END effective_original,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END effective_miles,
  trip_source.original system_original,trip_source.miles system_miles,trip_source.driver_gross system_driver,

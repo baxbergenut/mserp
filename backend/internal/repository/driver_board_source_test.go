@@ -142,6 +142,14 @@ func testBoardCurrentEntryParity(t *testing.T, ctx context.Context, pool *pgxpoo
 			return result
 		}
 		before, after := read(grossBoardEffective), read(driverBoardCurrentEntries)
+		for _, entry := range after {
+			if entry.LoadNumber == "PARITY-REPEAT" && entry.SourceStatus != "delivered" {
+				t.Fatalf("current entry lost delivered source status: %+v", entry)
+			}
+			if entry.LoadNumber == "PARITY-OTHER" && entry.SourceStatus != "dispatched" {
+				t.Fatalf("current entry lost dispatched source status: %+v", entry)
+			}
+		}
 		if !reflect.DeepEqual(before, after) {
 			a, _ := json.Marshal(before)
 			b, _ := json.Marshal(after)
