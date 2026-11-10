@@ -164,6 +164,18 @@ type BoardLoadResult struct {
 	Loads BoardLoads       `json:"loads"`
 }
 
+// Status Board number-only plans resolve against available source records. Historical
+// explicit IDs stay pinned, including deleted sources, so dispatch is never retargeted.
+const boardResolvedLoad = `
+ LEFT JOIN LATERAL (
+   SELECT min(l.id) AS id FROM loads l
+   WHERE NOT e.deleted AND e.day_status='' AND ((e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
+      OR (e.load_record_id IS NULL AND e.load_number<>'' AND lower(btrim(l.load_id))=lower(btrim(e.load_number))
+          AND ` + boardAvailableSourceSQL + `))
+   HAVING count(*)=1
+ ) matched ON true
+ LEFT JOIN loads l ON l.id=matched.id `
+
 const boardPlansSQL = `(SELECT driver_id,service_date,0 AS slot,false AS deleted,load_number,load_record_id,day_status,plan_id FROM gross_board_entries
  UNION ALL SELECT driver_id,service_date,slot,deleted,load_number,load_record_id,day_status,plan_id FROM gross_board_extra_entries)`
 
@@ -493,7 +505,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 	}
 	plans := map[string][]BoardLoad{}
 	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb),NOT (`+boardAvailableSourceSQL+`)
- FROM `+boardPlansSQL+` e `+grossBoardResolvedLoad+`
+ FROM `+boardPlansSQL+` e `+boardResolvedLoad+`
  LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
  AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.payload->'current'->>'loadId'

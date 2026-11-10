@@ -3928,3 +3928,7 @@ the existing budget/backoff; manual destination text stays untouched.
 - A committed receipt precedes each provider PUT. A short per-action fleet fence
   protects source/link races; read-back confirms success. Unknown results hold.
   See docs/integrations/RELAY_DRIVERS.md for activation and validation.
+
+### Status Board recreated source numbers
+- Number-only Gross Board plans in Status Board ignore explicitly unavailable source records when resolving stop details, just like manual Next Loads. A single live source can hydrate a recreated number; multiple live matches remain unresolved. Explicit source IDs and active dispatch selections are never retargeted. Accounting Gross Board resolution remains unchanged.
+- Covered in testManualNextLoads / TestDriverBoardDatabase with deleted duplicates, genuine ambiguity and pinned missing records.

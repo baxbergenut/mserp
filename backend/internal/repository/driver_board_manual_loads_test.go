@@ -205,6 +205,29 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	if p := view().Next[0]; p.LoadID != nil || len(p.Stops) != 0 || p.Warning == "" {
 		t.Fatal("ambiguous source guessed", p)
 	}
+	// Recreated source: a deleted number match must not block the sole live record.
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number) VALUES($1,$2,'AMBIGUOUS')`, d.ID, now.Format(time.DateOnly))
+	if p := view().Next[0]; p.LoadID != nil {
+		t.Fatal("ambiguous Gross source guessed", p)
+	}
+	exec(`INSERT INTO load_source_availability(load_id,present,checked_at) VALUES(989003,false,now())`)
+	v = view()
+	if len(v.Next) != 1 || v.Next[0].Manual || v.Next[0].LoadID == nil || *v.Next[0].LoadID != 989002 || len(v.Next[0].Stops) == 0 {
+		t.Fatal("deleted duplicate blocked live Gross source", v)
+	}
+	exec(`UPDATE gross_board_entries SET load_record_id=989003 WHERE driver_id=$1`, d.ID)
+	v = view()
+	foundMissing := false
+	for _, p := range v.Unavailable {
+		if p.LoadID != nil && *p.LoadID == 989003 && p.SourceMissing {
+			foundMissing = true
+		}
+	}
+	if !foundMissing {
+		t.Fatal("explicit missing source silently retargeted", v)
+	}
+	exec(`DELETE FROM load_source_availability WHERE load_id=989003`)
+	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1`, d.ID)
 	// An ambiguous manual number and a pinned Gross Board plan remain distinct.
 	// Removing the placeholder must leave the real planned source untouched.
 	manualAmbiguous := view().Next[0].PlanID
