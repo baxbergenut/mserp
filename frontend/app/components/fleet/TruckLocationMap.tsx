@@ -40,9 +40,12 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
     let cancelled = false;
     let map: Leaflet.Map | undefined;
     let resize: ResizeObserver | undefined;
+    let visibility: IntersectionObserver | undefined;
+    let introFinished = false;
+    let removeVisibilityListener: (() => void) | undefined;
     let intro: ReturnType<typeof setTimeout> | undefined;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const stopIntro = () => { clearTimeout(intro); map?.stop(); };
+    const stopIntro = () => { introFinished = true; clearTimeout(intro); map?.stop(); };
     const reduceMotion = () => {
       if (!motion.matches || !map) return;
       stopIntro();
@@ -54,7 +57,7 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
       const current = latest();
       const point: Leaflet.LatLngTuple = [current.latitude, current.longitude];
       map = L.map(element, { scrollWheelZoom: false, minZoom: 0, fadeAnimation: false }).setView(point, motion.matches ? 10 : 0);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      const tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         // Send only the origin to OSM, never private profile paths/IDs.
         referrerPolicy: "strict-origin",
         maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -63,11 +66,27 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
       if (tiles) tiles.style.filter = "invert(1) hue-rotate(180deg) brightness(.75) contrast(.85)";
       const marker = L.marker(point, { icon: locationIcon(L, current.heading, current.old), interactive: false, keyboard: false }).addTo(map);
       runtime.current = { L, map, marker };
-      // Let the world view paint before the flight. Pointer/keyboard input
-      // cancels it immediately so the entrance never fights the user.
-      if (!motion.matches) intro = setTimeout(() => {
-        if (!cancelled && !motion.matches) map?.flyTo(marker.getLatLng(), 10, { duration: 2.6, animate: true });
-      }, 180);
+      // Wait for painted world tiles and a visible card, not a mount timer.
+      // Otherwise the entire entrance can run offscreen or behind loading tiles.
+      let visible = false;
+      let ready = !tileLayer.isLoading();
+      const scheduleIntro = () => {
+        clearTimeout(intro);
+        if (cancelled || introFinished || motion.matches || !visible || !ready || document.hidden) return;
+        intro = setTimeout(() => {
+          if (cancelled || introFinished || document.hidden) return;
+          introFinished = true;
+          map?.flyTo(marker.getLatLng(), 10, { duration: 3.2, animate: true });
+        }, 500);
+      };
+      tileLayer.once("load", () => { ready = true; scheduleIntro(); });
+      visibility = new IntersectionObserver(entries => {
+        visible = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= 0.5);
+        scheduleIntro();
+      }, { threshold: [0, 0.5] });
+      visibility.observe(element);
+      document.addEventListener("visibilitychange", scheduleIntro);
+      removeVisibilityListener = () => document.removeEventListener("visibilitychange", scheduleIntro);
       element.addEventListener("pointerdown", stopIntro);
       element.addEventListener("keydown", stopIntro);
       motion.addEventListener("change", reduceMotion);
@@ -81,6 +100,8 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
       element.removeEventListener("keydown", stopIntro);
       motion.removeEventListener("change", reduceMotion);
       resize?.disconnect();
+      visibility?.disconnect();
+      removeVisibilityListener?.();
       runtime.current = null;
       map?.remove();
     };
@@ -92,7 +113,7 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
     const previous = active.marker.getLatLng();
     active.marker.setLatLng([latitude, longitude]).setIcon(locationIcon(active.L, heading, old));
     if (previous.lat !== latitude || previous.lng !== longitude) {
-      active.map.panTo([latitude, longitude], { animate: false });
+      active.map.setView([latitude, longitude], active.map.getZoom(), { animate: false });
     }
   }, [latitude, longitude, heading, old]);
 
