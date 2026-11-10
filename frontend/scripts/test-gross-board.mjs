@@ -296,3 +296,10 @@ for (const sourceGross of ['2300', '2000', '0', '']) {
 assert.equal(matchLoad(blank,{id:95,loadNumber:'MISSING',originalRate:'2800',miles:'541'}).driverRate,'');
 assert.equal(editAmount({...blank,originalRate:'2800',driverRate:'2800'},'originalRate','3000').driverRate,'2800');
 assert.deepEqual(grossDraftFields({...annotated,acceptDriverGross:true,driverRate:'2300'},annotated),['driverRate','acceptDriverGross']);
+
+const { grossLoadStatusColor } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+for (const status of ["delivered", "INVOICED", " Delivered "]) assert.match(grossLoadStatusColor(status), /emerald/);
+for (const status of ["in_transit", "IN TRANSIT", "in-transit"]) assert.match(grossLoadStatusColor(status), /sky/);
+for (const status of ["dispatched", "cancelled", "canceled", "pending", "assigned", "", undefined]) assert.match(grossLoadStatusColor(status), /yellow/);
+assert.equal(matchLoad(blank, {id: 5, loadNumber: "COLOR", sourceStatus: "in_transit", originalRate: "1", miles: "1"}).sourceStatus, "in_transit");
+console.log("Gross Board load status color checks passed");

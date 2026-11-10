@@ -1129,6 +1129,7 @@ export interface GrossBoardTrip {
 }
 
 export interface GrossBoardEntry {
+  sourceStatus?: string;
   previousLoadNumber?: string;
   sourceMissing?: boolean;
   splitReview?: LoadSplitReview;
@@ -1235,6 +1236,7 @@ export interface GrossBoardBalanceLine {
 }
 
 export interface GrossBoardLoad {
+  sourceStatus?: string;
   driverRate?: string;
   tripReviewReason?: string;
   trips?: GrossBoardTrip[];
@@ -1413,7 +1415,7 @@ export interface PayrollCommandMetadata {
 export interface PayLoadPlacementInput extends PayrollCommandMetadata {
   driverId: string;
   weekStart: string;
-  action: "add" | "remove" | "gross";
+  action: "add" | "remove" | "restore" | "gross";
   loadNumber?: string;
   loadRecordId?: number;
   loadTripId?: number;
@@ -1481,6 +1483,7 @@ export interface DriverPayDriver {
   fuelTotal: string;
   tollTotal: string;
   loads: DriverPayLoad[];
+  removedLoads?: DriverPayLoad[];
   edits: DriverPayEdits;
 }
 export interface PayrollSourceCommandReceipt {

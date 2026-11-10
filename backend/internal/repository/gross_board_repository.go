@@ -39,6 +39,7 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 }
 
 type GrossBoardEntry struct {
+	SourceStatus           string           `json:"sourceStatus,omitempty"` // Display-only current provider status.
 	SourceMissing          bool             `json:"sourceMissing,omitempty"`
 	Fields                 []string         `json:"fields,omitempty"`
 	PreviousLoadNumber     *string          `json:"previousLoadNumber,omitempty"`
@@ -116,6 +117,7 @@ type GrossBoardBalanceLine struct {
 }
 
 type GrossBoardLoad struct {
+	SourceStatus     string           `json:"sourceStatus,omitempty"`
 	DriverRate       string           `json:"driverRate"`
 	Trips            []GrossBoardTrip `json:"trips"`
 	Split            bool             `json:"split"`
@@ -155,7 +157,7 @@ var grossBoardEffective = `WITH ranked AS MATERIALIZED (
  FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
  WHERE e.source_date < $1::date+7
 ), resolved AS (
- SELECT e.*,
+ SELECT e.*, coalesce(to_jsonb(l)->>'status','') AS source_status,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
  CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END END AS effective_original,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
@@ -181,14 +183,14 @@ const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
  coalesce(entered_miles::text,''), duplicate, day_status, slot, deleted,
  coalesce(system_original::text,''), coalesce(system_miles::text,''), coalesce(system_driver::text,''), note,load_trip_id,split,trip_review,trip_review_reason,trips,source_date::text,source_slot,transfer_version,credited_dispatcher_id,credited_dispatcher_name,
- EXISTS(SELECT 1 FROM load_source_availability a WHERE a.load_id=matched_id AND NOT a.present)`
+ EXISTS(SELECT 1 FROM load_source_availability a WHERE a.load_id=matched_id AND NOT a.present),source_status`
 
 func scanGrossBoardEntry(row pgx.Row, e *GrossBoardEntry) error {
 	var trips []byte
 	err := row.Scan(&e.DriverID, &e.Date, &e.LoadNumber, &e.LoadRecordID,
 		&e.OriginalRate, &e.DriverRate, &e.Miles, &e.Version,
 		&e.EnteredOriginalRate, &e.EnteredMiles, &e.Duplicate, &e.DayStatus, &e.Slot, &e.Deleted,
-		&e.SystemOriginalRate, &e.SystemMiles, &e.SystemDriverRate, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &e.TripReviewReason, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName, &e.SourceMissing)
+		&e.SystemOriginalRate, &e.SystemMiles, &e.SystemDriverRate, &e.Note, &e.LoadTripID, &e.Split, &e.TripReview, &e.TripReviewReason, &trips, &e.SourceDate, &e.SourceSlot, &e.TransferVersion, &e.CreditedDispatcherID, &e.CreditedDispatcherName, &e.SourceMissing, &e.SourceStatus)
 	if err != nil {
 		return err
 	}
@@ -379,8 +381,8 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
- coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason,coalesce(trip_source.driver_gross::text,'')
- FROM (SELECT c.*,to_jsonb(source)->'split_allocation' split_allocation FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0 AND `+boardAvailableSourceSQL+`
+ coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason,coalesce(trip_source.driver_gross::text,''),coalesce(l.source_status,'')
+ FROM (SELECT c.*,to_jsonb(source)->'split_allocation' split_allocation,to_jsonb(source)->>'status' source_status FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0 AND `+boardAvailableSourceSQL+`
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
 		return nil, err
@@ -390,7 +392,7 @@ func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) (
 	for rows.Next() {
 		var l GrossBoardLoad
 		var trips []byte
-		if err = rows.Scan(&l.ID, &l.LoadNumber, &l.OriginalRate, &l.Miles, &l.DriverName, &l.PickupDate, &trips, &l.Split, &l.TripReviewReason, &l.DriverRate); err != nil {
+		if err = rows.Scan(&l.ID, &l.LoadNumber, &l.OriginalRate, &l.Miles, &l.DriverName, &l.PickupDate, &trips, &l.Split, &l.TripReviewReason, &l.DriverRate, &l.SourceStatus); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal(trips, &l.Trips); err != nil {

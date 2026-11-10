@@ -52,6 +52,8 @@ func TestGrossBoardDatabase(t *testing.T) {
 	}
 	_, err = pool.Exec(ctx, `CREATE TEMP TABLE gross_board_transfers(driver_id uuid,source_date date,source_slot integer,dispatch_date date,dispatch_slot integer,settlement_date date,dispatcher_id text,dispatcher_name text,truck_id uuid,version integer,active boolean);
  CREATE TEMP TABLE gross_board_planning_entries(driver_id uuid,service_date date,kind text,text text,version integer);
+ CREATE TEMP TABLE payroll_load_placement_history(id bigint,action text,after_value jsonb,before_value jsonb);
+ CREATE TEMP TABLE payroll_load_placements(load_record_id integer,load_trip_id integer,version integer,included boolean,week_start date);
  CREATE TEMP TABLE gross_board_rate_resets(id bigint GENERATED ALWAYS AS IDENTITY,driver_id uuid,week_start date,target numeric(12,2),week_change numeric,actor_id uuid);
  CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE drivers(id uuid PRIMARY KEY,full_name text,dispatcher_id uuid,active boolean);
@@ -729,6 +731,32 @@ func TestGrossBoardDatabase(t *testing.T) {
 		}
 		assertEnding(week, "-65.25")
 		assertEnding(week.AddDate(0, 0, 7), "84.75")
+	})
+
+	t.Run("display source status", func(t *testing.T) {
+		if _, err := pool.Exec(ctx, "ALTER TABLE pg_temp.loads ADD COLUMN status text; UPDATE pg_temp.loads SET status='in_transit'"); err != nil {
+			t.Fatal(err)
+		}
+		matches, err := repo.SearchLoads(ctx, "L100")
+		if err != nil || len(matches) != 1 || matches[0].SourceStatus != "in_transit" {
+			t.Fatalf("search status: %+v %v", matches, err)
+		}
+		board, err := repo.Get(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		linked := 0
+		for _, entry := range board.Entries {
+			if entry.LoadRecordID != nil {
+				linked++
+				if entry.SourceStatus != "in_transit" {
+					t.Fatalf("board status missing: %+v", entry)
+				}
+			}
+		}
+		if linked == 0 {
+			t.Fatal("fixture needs linked entry")
+		}
 	})
 
 }

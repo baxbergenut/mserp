@@ -3937,3 +3937,13 @@ the existing budget/backoff; manual destination text stays untouched.
 - The existing operational/daily missing-source reconciliation also considers number-only slots with no stored source ID. A single slot links only after complete ID-filtered provider evidence proves one live unsplit match; multiple slots, live matches, protected financial sources and finalized weeks remain held.
 - Linking uses the same native financial/version/duplicate guards and atomic payroll publication/audit as missing-ID replacement. Preserve entered driver gross, total gross, miles and notes, including legacy raw manual amounts. Successful slots stop being candidates; opening the dropdown remains read-only.
 - TestUnlinkedBoardReconciliationDatabase covers fresh/migrated schemas, finalized driver/investor holds, ambiguity, duplicate slots, preservation and replay; TestMissingBoardReplacementDatabase retains publication rollback coverage.
+
+## Payroll removed-load restoration
+
+Driver/Investor Pay expose display-only removedLoads separately from financial loads.
+Removal snapshots retain day/slot identity and original extra/native shape in existing
+placement history. Add back uses an exact ID/trip/version through the native financial
+command; native slots must still match and finalized counterparts remain guarded.
+Restoration history cancels only that week’s exclusion. Explicit Add load accepts any
+status but retains incomplete-status warnings and finalization review. No schema change.
+Checks: TestPayLoadPlacementsDatabase and payroll-load-placements-e2e.mjs.

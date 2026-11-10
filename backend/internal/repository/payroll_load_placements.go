@@ -14,17 +14,19 @@ import (
 // The dispatch projection is never changed. An explicit payroll decision replaces
 // all automatic occurrences of that exact imported load/trip allocation.
 func payrollPlacementSQL() string {
-	return `(SELECT e.*,false payroll_supplement,0 payroll_placement_version FROM ` + boardPlacementSQL(true) + ` e
+	return `(SELECT e.*,false payroll_supplement,coalesce((SELECT max(p.version) FROM payroll_load_placements p WHERE p.driver_id=e.driver_id AND p.source_date=e.source_date AND p.source_slot=e.source_slot AND p.load_trip_id=coalesce(e.load_trip_id,0) AND (p.load_record_id=e.load_record_id OR (e.load_record_id IS NULL AND EXISTS(SELECT 1 FROM loads l WHERE l.id=p.load_record_id AND lower(btrim(l.load_id))=lower(btrim(e.load_number)))))),0) payroll_placement_version FROM ` + boardPlacementSQL(true) + ` e
  WHERE NOT EXISTS(SELECT 1 FROM payroll_load_placements p WHERE (p.load_record_id=coalesce(e.load_record_id,
  (SELECT min(l.id) FROM loads l WHERE lower(btrim(l.load_id))=lower(btrim(e.load_number)) HAVING count(*)=1))
  OR (e.load_record_id IS NULL AND p.driver_id=e.driver_id AND p.source_date=e.source_date AND p.source_slot=e.source_slot
  AND EXISTS(SELECT 1 FROM loads recognized WHERE recognized.id=p.load_record_id AND lower(btrim(recognized.load_id))=lower(btrim(e.load_number)))))
  AND (p.load_trip_id=coalesce(e.load_trip_id,0) OR (p.included AND (p.load_trip_id=0 OR e.load_trip_id IS NULL)))
- AND (p.included OR p.week_start=date_trunc('week',e.service_date)::date
- OR EXISTS(SELECT 1 FROM payroll_load_placement_history h WHERE h.action='remove'
+ AND (p.included OR EXISTS(SELECT 1 FROM payroll_load_placement_history h WHERE h.action='remove'
  AND h.after_value->>'load_record_id'=p.load_record_id::text
  AND h.after_value->>'load_trip_id'=p.load_trip_id::text
- AND h.after_value->>'week_start'=date_trunc('week',e.service_date)::date::text)))
+ AND h.after_value->>'week_start'=date_trunc('week',e.service_date)::date::text
+ AND NOT EXISTS(SELECT 1 FROM payroll_load_placement_history restored WHERE restored.action='restore' AND restored.id>h.id
+ AND restored.after_value->>'load_record_id'=p.load_record_id::text AND restored.after_value->>'load_trip_id'=p.load_trip_id::text
+ AND restored.after_value->>'week_start'=h.after_value->>'week_start'))))
  UNION ALL SELECT p.driver_id,p.week_start+6,p.slot,false,l.load_id,l.id,p.original_rate,p.driver_gross,p.miles,0,
  p.original_rate,p.miles,''::text,''::text,nullif(p.load_trip_id,0),p.source_date,p.source_slot,0,
  ''::text,p.slot,''::text,''::text,p.truck_id,true,p.version
@@ -71,7 +73,7 @@ func (e *PayLoadChoiceRequired) Error() string { return "Select the load's nativ
 // Revenue and hired labor stay together in both payroll views.
 func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in PayLoadPlacementInput, actor string) error {
 	week, err := time.Parse(time.DateOnly, in.WeekStart)
-	if err != nil || week.Weekday() != time.Monday || week.Year() < 2000 || week.Year() > 2100 || (in.Action != "add" && in.Action != "remove" && in.Action != "gross") {
+	if err != nil || week.Weekday() != time.Monday || week.Year() < 2000 || week.Year() > 2100 || (in.Action != "add" && in.Action != "remove" && in.Action != "gross" && in.Action != "restore") {
 		return chargeInvalid("Select a valid statement week and load action")
 	}
 	in.LoadNumber = strings.TrimSpace(in.LoadNumber)
@@ -127,7 +129,11 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 	var oldIncluded bool
 	if in.Action != "add" {
 		found := false
-		for _, l := range card.Loads {
+		candidates := card.Loads
+		if in.Action == "restore" {
+			candidates = card.RemovedLoads
+		}
+		for _, l := range candidates {
 			if l.CommentKey == in.CommentKey && l.LoadRecordID != nil && *l.LoadRecordID == in.LoadRecordID {
 				load = l
 				found = true
@@ -180,9 +186,6 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 		var status string
 		if err = tx.QueryRow(ctx, `SELECT status,coalesce((coalesce(delivery_time,delivery_appointment_time,pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,'') FROM loads WHERE id=$1`, in.LoadRecordID).Scan(&status, &sourceDate); err != nil {
 			return err
-		}
-		if !payLoadReady(status) {
-			return chargeInvalid("Only delivered or invoiced loads can be added (current status: %s)", status)
 		}
 		// Native board allocations supply reviewed driver gross and split selection.
 		rows, e = tx.Query(ctx, `SELECT e.driver_id::text,e.source_date::text,e.source_slot,e.load_trip_id,coalesce(e.driver_rate::text,''),coalesce(e.entered_original_rate::text,''),coalesce(e.entered_miles::text,''),d.full_name,
@@ -314,6 +317,9 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
+	if in.Action == "restore" && (oldIncluded || oldDriver != driver) {
+		return chargeInvalid("This load is already included elsewhere or its assignment changed; reload and review its payroll placement")
+	}
 	if in.Action != "add" && oldVersion != in.PlacementVersion {
 		return ErrDriverPayConflict
 	}
@@ -356,6 +362,27 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 		return chargeInvalid("This load is already included in a finalized driver or investor statement; reopen it first")
 	}
 	slot := load.Slot
+	if in.Action == "restore" && !load.PayrollSupplement {
+		// Native restorations may only revive the exact reviewed source position.
+		var valid bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM `+boardPlacementSQL(true)+` e WHERE NOT e.deleted AND e.day_status='' AND e.driver_id=$1 AND e.service_date=$2::date AND e.source_date=$3::date AND e.source_slot=$4 AND coalesce(e.load_trip_id,0)=$5 AND (e.load_record_id=$6 OR (e.load_record_id IS NULL AND lower(btrim(e.load_number))=lower(btrim($7)))))`, driver, load.Date, sourceDate, sourceSlot, trip, in.LoadRecordID, load.LoadNumber).Scan(&valid); err != nil {
+			return err
+		}
+		if !valid {
+			return chargeInvalid("The original Gross Board position changed; review it before adding this load back")
+		}
+	}
+	if in.Action == "restore" && load.PayrollSupplement {
+		var occupied bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_load_placements WHERE driver_id=$1 AND week_start=$2::date AND slot=$3 AND included)`, driver, in.WeekStart, slot).Scan(&occupied); err != nil {
+			return err
+		}
+		if occupied {
+			if err = tx.QueryRow(ctx, `SELECT n FROM generate_series(0,99) n WHERE NOT EXISTS(SELECT 1 FROM payroll_load_placements WHERE driver_id=$1 AND week_start=$2::date AND slot=n AND included) ORDER BY n LIMIT 1`, driver, in.WeekStart).Scan(&slot); err != nil {
+				return chargeInvalid("This statement already has 100 extra loads")
+			}
+		}
+	}
 	if in.Action == "add" {
 		// Reject existing recognition, including another week; moving requires removal first.
 		var included bool
@@ -383,7 +410,7 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 		}
 		load.DriverGross = value
 	}
-	included := in.Action != "remove"
+	included := in.Action != "remove" && !(in.Action == "restore" && !load.PayrollSupplement)
 	var after json.RawMessage
 	err = tx.QueryRow(ctx, `INSERT INTO payroll_load_placements(load_record_id,load_trip_id,driver_id,truck_id,source_date,source_slot,week_start,slot,included,driver_gross,original_rate,miles)
  VALUES($1,$2,$3,$4,$5::date,$6,$7::date,$8,$9,nullif($10,'')::numeric,nullif($11,'')::numeric,nullif($12,'')::numeric)
@@ -393,6 +420,18 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
  RETURNING to_jsonb(payroll_load_placements)`, in.LoadRecordID, trip, driver, truckPtr, sourceDate, sourceSlot, in.WeekStart, slot, included, load.DriverGross, load.OriginalRate, load.TotalMiles, in.Action).Scan(&after)
 	if err != nil {
 		return err
+	}
+	if in.Action == "remove" {
+		// Display-only snapshot preserves the original row without entering payroll totals.
+		var snapshot map[string]any
+		if err = json.Unmarshal(after, &snapshot); err != nil {
+			return err
+		}
+		snapshot["removed_load"] = load
+		after, err = json.Marshal(snapshot)
+		if err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO payroll_load_placement_history(actor_id,action,before_value,after_value) VALUES($1,$2,$3,$4)`, actor, in.Action, before, after); err != nil {
 		return err

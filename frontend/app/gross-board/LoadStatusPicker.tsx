@@ -6,7 +6,7 @@ import { AlertCircle, Check, ChevronDown } from "lucide-react";
 import { CurrentUserIDContext } from "@/app/lib/access";
 import { searchGrossBoardLoads } from "@/app/lib/api";
 import type { GrossBoardDayStatus, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
-import { amountDisplay, dayStatuses, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
+import { amountDisplay, grossLoadStatusColor, dayStatuses, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
 import { BoardDialog } from "./BoardDialog";
 
 export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
@@ -133,7 +133,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       <input ref={input} data-unconfirmed-load={draftText !== null || undefined} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && highlightOption && options.length ? `${id}-${activeIndex}` : undefined}
-        title={draftText !== null ? (loadIdentifier ? "Load number. Saves on Enter or when you leave the field." : "Choose Add as status/destination to use this text.") : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? "Confirmed system load. Total gross and miles come from Loads." : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number. Use the status/destination alternative for other text."}
+        title={draftText !== null ? (loadIdentifier ? "Load number. Saves on Enter or when you leave the field." : "Choose Add as status/destination to use this text.") : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? `Confirmed system load · ${(entry.sourceStatus || "Status unknown").replace(/[_-]+/g, " ")}. Total gross and miles come from Loads.` : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number. Use the status/destination alternative for other text."}
         maxLength={200} value={draftText ?? status?.value ?? entry.loadNumber} disabled={disabled || savingCustom}
         onFocus={(event) => { setFocused(true); setBrowse(false); setNavigated(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => {
@@ -166,7 +166,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
             choose(exact.length === 1 ? { kind: "load", load: exact[0] } : { kind: "manual" });
           } else if (event.key === "Enter" && open && options.length) { event.preventDefault(); choose(options[activeIndex]); }
         }}
-        className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? "bg-emerald-500/15 text-emerald-300" : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
+        className={`w-full min-w-0 border-0 text-center text-xs outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 disabled:opacity-50 ${status ? `h-32 pl-2 pr-6 font-semibold tracking-wide ${status.color}` : `h-8 border-b border-zinc-800/70 px-6 ${confirmed ? grossLoadStatusColor(entry.sourceStatus) : unmatched ? "bg-red-500/15 font-semibold text-red-300" : "bg-zinc-800/30 text-zinc-200"}`}`}
         placeholder="Load number" />
       {customError && <span role="alert" className="block text-[10px] text-red-300">{customError}</span>}
       {savingCustom && <span role="status" className="block text-[10px] text-zinc-400">Saving custom status...</span>}

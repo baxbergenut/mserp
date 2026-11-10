@@ -54,8 +54,8 @@ browser saves; normal revision triggers invalidate cached reports.
 ## Adding and excluding statement loads
 
 Driver Pay and Investor Pay have an **Add load** row below Sunday. Enter an exact
-load ID and press Enter or **Add to statement**. Only delivered/invoiced imported
-loads qualify. A load number matching multiple records requires identity review
+load ID and press Enter or **Add to statement**. Imported loads in any status qualify; non-delivered/non-invoiced loads retain
+their review flag and existing finalization safeguards. A load number matching multiple records requires identity review
 in Gross Board. Existing native driver/truck attribution is enforced; split loads
 reuse their reviewed native trips, with an explicit trip choice when necessary.
 Invalid/missing allocations must be resolved in Gross Board first.
@@ -75,8 +75,14 @@ week was also explicitly excluded. Earlier week-specific removals remain effecti
 through later add/remove cycles; immutable history supplies those decisions.
 Extra rows can also be removed. Driver and Investor Pay use one shared
 recognition decision so investor revenue and hired labor stay together. An
-excluded load can be added in a later week after it becomes delivered/invoiced.
-Removing the final load keeps the draft statement visible.
+excluded load can be added in a later week in any status.
+Removing the final load keeps the draft statement visible. Removed rows remain
+as non-counting placeholders in their prior day or extra-load section. Add back
+uses the exact stored identity and optimistic placement version. Native restores
+require the original Gross Board position to remain valid and return to that
+position; extra rows return as extras. A later inclusion elsewhere must be removed
+first. Immutable remove/restore history keeps exclusions for other weeks intact.
+No Gross Board/provider records are changed.
 
 Migration 174 stores exact imported record/trip identities, original coordinates,
 dated truck, amounts, week and optimistic version in `payroll_load_placements`.

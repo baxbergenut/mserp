@@ -83,7 +83,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
     setPlacing(true); setPlacementError("");
     try {
       const choice = action === "add" && extraChoice !== "" ? extraChoices[Number(extraChoice)] : undefined;
-      const result = await onPlacement({ driverId: driver.id, weekStart: edits.weekStart, action, loadNumber: action === "add" ? extraNumber : load?.loadNumber, loadRecordId: load?.loadRecordId ?? undefined, loadTripId: choice?.loadTripId ?? load?.loadTripId, sourceDriverId: choice?.sourceDriverId, commentKey: load?.commentKey, boardVersion: load?.boardVersion ?? 0, placementVersion: load?.payrollPlacementVersion ?? 0, driverGross });
+      const result = await onPlacement({ driverId: driver.id, weekStart: edits.weekStart, action, loadNumber: action === "add" ? extraNumber : load?.loadNumber, loadRecordId: load?.loadRecordId ?? undefined, loadTripId: choice?.loadTripId ?? load?.loadTripId, sourceDriverId: choice?.sourceDriverId ?? load?.sourceDriverId, commentKey: load?.commentKey, boardVersion: load?.boardVersion ?? 0, placementVersion: load?.payrollPlacementVersion ?? 0, driverGross });
       if (result?.choices) { setExtraChoices(result.choices); setExtraChoice(""); return; }
       if (action === "add") { setExtraNumber(""); setExtraChoices([]); setExtraChoice(""); }
     } catch (error) { setPlacementError(error instanceof Error ? error.message : "Unable to change this statement load"); }
@@ -122,10 +122,15 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
       return { ...current, adjustments };
     });
   };
-  const extraLoads = driver.loads.filter(load => load.payrollSupplement);
+  // Removed entries are display-only: never feed them into payroll totals.
+  const displayLoads = [
+    ...driver.loads.map(load => ({ ...load, removed: false })),
+    ...(driver.removedLoads ?? []).map(load => ({ ...load, removed: true })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot || a.commentKey.localeCompare(b.commentKey));
+  const extraLoads = displayLoads.filter(load => load.payrollSupplement);
   const outgoing = useOutgoingTransfers().rows.filter(row => row.statementId === driver.id);
   const hasStatementActions = Boolean(onAddAccessorial || onManageEscrow);
-  const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, driver.loads.filter(load => !load.payrollSupplement && load.date === addDays(edits.weekStart, index)).length + outgoing.filter(row => row.sourceDate === addDays(edits.weekStart, index)).length), 0) + extraLoads.length + (onPlacement && !hasStatementActions ? 1 : 0);
+  const weekRowCount = weekdays.reduce((count, _, index) => count + Math.max(1, displayLoads.filter(load => !load.payrollSupplement && load.date === addDays(edits.weekStart, index)).length + outgoing.filter(row => row.sourceDate === addDays(edits.weekStart, index)).length), 0) + extraLoads.length + (onPlacement && !hasStatementActions ? 1 : 0);
   const visibleCostRows = costRows.filter(({ key }) => {
     const carry = hundredths(edits.costs?.[`${key}Carry`] ?? "0");
     if (driver.payType === "cpm" && carry === BigInt(0)) return false;
@@ -226,7 +231,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
             </th>)}</tr></thead>
             <tbody>{[...weekdays, ...(extraLoads.length ? ["Extra"] : [])].map((day, dayIndex) => {
               const date = addDays(edits.weekStart, dayIndex);
-              const loads = day === "Extra" ? extraLoads : driver.loads.filter(load => !load.payrollSupplement && load.date === date);
+              const loads = day === "Extra" ? extraLoads : displayLoads.filter(load => !load.payrollSupplement && load.date === date);
               const moved = day === "Extra" ? [] : outgoing.filter(row => row.sourceDate === date);
               const statuses = [...new Map((driver.dayStatuses ?? []).filter(item => item.date === date).map(item => {
                 const label = item.status === "CUSTOM" ? item.text?.trim() ?? "" : item.status;
@@ -235,7 +240,12 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
               })).values()].filter(item => item.label);
               const statusColor = statuses.length === 1 ? statuses[0].color : undefined;
               const dayLabel = <>{day}{day !== "Extra" && <span className="ml-2 text-[10px] text-zinc-600">{shortDate(date)}</span>}</>;
-              return <Fragment key={date}>{loads.length || moved.length ? <>{loads.map((load, index) => <tr key={load.commentKey} onContextMenu={event => {
+              return <Fragment key={date}>{loads.length || moved.length ? <>{loads.map((load, index) => load.removed ? <tr key={`removed:${load.commentKey}`} data-pay-removed-load={load.loadNumber}>
+                {index === 0 && <th rowSpan={loads.length + moved.length} scope="rowgroup" className={`${cell} sticky left-0 z-10 bg-zinc-950 font-medium text-zinc-400`}>{dayLabel}</th>}
+                <td className={`${cell} text-zinc-500`}><span title={load.loadNumber} className="block truncate line-through">{load.loadNumber}</span></td>
+                <td colSpan={9} className={`${cell} text-zinc-500`}><div className="flex items-center gap-3"><span>Load removed</span>{onPlacement && <button type="button" data-grid-ignore aria-label={`Add ${load.loadNumber} back to statement`} disabled={placementDisabled || placing} onClick={() => void changeLoad("restore", load)} className="rounded border border-zinc-700 px-2 py-0.5 text-blue-400 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40">Add back</button>}</div></td>
+                {dayIndex === 0 && index === 0 && adjustmentCells}<td className={cell} />
+              </tr> : <tr key={load.commentKey} onContextMenu={event => {
  const day=new Date(`${load.sourceDate || load.date}T12:00:00Z`).getUTCDay();
  if(onTransfer && !load.payrollSupplement && !transferDisabled && (day===0 || day===6) && load.loadRecordId!==null && !load.tripReview){event.preventDefault();setTransfer(load);}
  }} className={load.loadRecordId === null ? "bg-amber-500/10" : load.issues.length ? "bg-amber-500/[0.04]" : "hover:bg-zinc-800/15"}>
@@ -263,7 +273,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
             })}
             {(onPlacement || hasStatementActions) && <tr data-pay-extra-row data-grid-ignore>
               {onPlacement ? <>
-                <th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>Add load</th><td className={cell}><input aria-label={`${driver.fullName}, extra load number`} value={extraNumber} onChange={event => { setExtraNumber(event.target.value); setExtraChoices([]); setExtraChoice(""); }} disabled={placementDisabled || placing} maxLength={200} placeholder="Load ID" className="w-full bg-transparent text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (extraNumber.trim()) void changeLoad("add"); } }} /></td><td colSpan={9} className={`${cell} text-zinc-500`}>{extraChoices.length > 0 && <select aria-label="Load trip allocation" value={extraChoice} disabled={placementDisabled || placing} onChange={event => setExtraChoice(event.target.value)} className="mr-3 max-w-80 bg-zinc-900 text-zinc-200"><option value="">Choose trip…</option>{extraChoices.map((choice,index) => <option key={index} value={index}>{choice.tripNumber || (choice.loadTripId ? `Trip ${choice.loadTripId}` : "Full load")} · {choice.driverName} · {choice.sourceDate}</option>)}</select>}<button type="button" disabled={placementDisabled || placing || !extraNumber.trim() || (extraChoices.length > 0 && extraChoice === "")} onClick={() => void changeLoad("add")} className="mr-3 rounded border border-zinc-700 px-2 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40">{placing ? "Saving…" : "Add to statement"}</button>Delivered or invoiced · not in a finalized statement</td>
+                <th scope="row" className={`${cell} sticky left-0 bg-zinc-950 font-medium text-zinc-400`}>Add load</th><td className={cell}><input aria-label={`${driver.fullName}, extra load number`} value={extraNumber} onChange={event => { setExtraNumber(event.target.value); setExtraChoices([]); setExtraChoice(""); }} disabled={placementDisabled || placing} maxLength={200} placeholder="Load ID" className="w-full bg-transparent text-zinc-200 outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40" onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (extraNumber.trim()) void changeLoad("add"); } }} /></td><td colSpan={9} className={`${cell} text-zinc-500`}>{extraChoices.length > 0 && <select aria-label="Load trip allocation" value={extraChoice} disabled={placementDisabled || placing} onChange={event => setExtraChoice(event.target.value)} className="mr-3 max-w-80 bg-zinc-900 text-zinc-200"><option value="">Choose trip…</option>{extraChoices.map((choice,index) => <option key={index} value={index}>{choice.tripNumber || (choice.loadTripId ? `Trip ${choice.loadTripId}` : "Full load")} · {choice.driverName} · {choice.sourceDate}</option>)}</select>}<button type="button" disabled={placementDisabled || placing || !extraNumber.trim() || (extraChoices.length > 0 && extraChoice === "")} onClick={() => void changeLoad("add")} className="mr-3 rounded border border-zinc-700 px-2 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40">{placing ? "Saving…" : "Add to statement"}</button>Any status · not in a finalized statement</td>
               </> : <td colSpan={11} className={cell} />}
               {hasStatementActions && <>
                 <td className={cell + " relative !p-0"}>

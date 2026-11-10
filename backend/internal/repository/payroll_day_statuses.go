@@ -255,5 +255,5 @@ func decoratePayPlanningStatuses(ctx context.Context, tx pgx.Tx, kind string, re
 		})
 		d.DayStatuses = statuses
 	}
-	return nil
+	return decorateRemovedPayLoads(ctx, tx, kind, report)
 }

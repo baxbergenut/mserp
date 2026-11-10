@@ -60,6 +60,7 @@ func summarizePayStatement(d DriverPayDriver) DriverPayDriver {
 	d.Summary = summary
 	d.HomeWeek = payHomeWeek(d.Edits.WeekStart, d)
 	d.Loads = []DriverPayLoad{}
+	d.RemovedLoads = nil
 	d.Edits = DriverPayEdits{DriverID: d.Edits.DriverID, WeekStart: d.Edits.WeekStart, Version: d.Edits.Version, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
 	d.AutoCharges, d.DeferredScaleCharges, d.Layovers = nil, nil, nil
 	d.DayStatuses = nil

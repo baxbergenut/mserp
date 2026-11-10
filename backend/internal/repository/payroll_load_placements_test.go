@@ -196,7 +196,7 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			}
 			add.LoadNumber = "NOT-READY"
 			if e = pay.PlacePayLoad(ctx, "driver", add, "test"); e == nil {
-				t.Fatal("undelivered load accepted")
+				t.Fatal("already included native load accepted twice")
 			}
 			add.LoadNumber = "MISSING"
 			if e = pay.PlacePayLoad(ctx, "driver", add, "test"); e == nil {
@@ -221,6 +221,84 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			}
 			if e = pay.PlacePayLoad(ctx, "investor", remove, "test"); e == nil {
 				t.Fatal("stale removal accepted")
+			}
+			// Removed rows retain their original slot without affecting financial loads.
+			removed := func(kind string, w time.Time, number string) *DriverPayLoad {
+				t.Helper()
+				for _, d := range read(kind, w).Drivers {
+					for _, l := range d.RemovedLoads {
+						if l.LoadNumber == number {
+							return &l
+						}
+					}
+				}
+				return nil
+			}
+			for _, kind := range []string{"driver", "investor"} {
+				l := removed(kind, week, "NOT-READY")
+				if l == nil || l.Date != "2026-10-20" || l.Slot != flagged.Slot || l.PayrollSupplement {
+					t.Fatalf("missing native removal placeholder %s: %+v", kind, l)
+				}
+			}
+			placeholder := removed("driver", week, "NOT-READY")
+			restore := PayLoadPlacementInput{DriverID: driver, WeekStart: add.WeekStart, Action: "restore", LoadRecordID: 8102, CommentKey: placeholder.CommentKey, BoardVersion: placeholder.BoardVersion, PlacementVersion: placeholder.PayrollPlacementVersion}
+			stale := restore
+			stale.PlacementVersion--
+			if e = pay.PlacePayLoad(ctx, "driver", stale, "test"); e != ErrDriverPayConflict {
+				t.Fatal("stale restoration accepted", e)
+			}
+			if e = pay.PlacePayLoad(ctx, "driver", restore, "test"); e != nil {
+				t.Fatal(e)
+			}
+			for _, kind := range []string{"driver", "investor"} {
+				l := find(read(kind, week), "NOT-READY")
+				if l == nil || l.Date != "2026-10-20" || l.PayrollSupplement || !l.NotReady || removed(kind, week, "NOT-READY") != nil {
+					t.Fatal("native restoration changed position or flag", kind, l)
+				}
+			}
+			if e = pay.PlacePayLoad(ctx, "driver", restore, "test"); e != ErrDriverPayConflict {
+				t.Fatal("repeat restoration accepted", e)
+			}
+			flagged = find(read("investor", week), "NOT-READY")
+			remove.CommentKey = flagged.CommentKey
+			remove.BoardVersion = flagged.BoardVersion
+			remove.PlacementVersion = flagged.PayrollPlacementVersion
+			if e = pay.PlacePayLoad(ctx, "investor", remove, "test"); e != nil {
+				t.Fatal("second removal", e)
+			}
+			// Explicit adds accept non-final statuses; they retain review flags.
+			exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,pickup_time,raw_payload) VALUES(8110,'ANY-STATUS','cancelled',200,200,50,'2026-10-20','{}')`)
+			anyStatus := PayLoadPlacementInput{DriverID: driver, WeekStart: add.WeekStart, Action: "add", LoadNumber: "ANY-STATUS"}
+			if e = pay.PlacePayLoad(ctx, "driver", anyStatus, "test"); e != nil {
+				t.Fatal("status gate remains", e)
+			}
+			anyLoad := find(read("driver", week), "ANY-STATUS")
+			if anyLoad == nil || !anyLoad.NotReady || !anyLoad.PayrollSupplement {
+				t.Fatal("added status missing review", anyLoad)
+			}
+			anyStatus.Action = "remove"
+			anyStatus.LoadRecordID = 8110
+			anyStatus.CommentKey = anyLoad.CommentKey
+			anyStatus.PlacementVersion = anyLoad.PayrollPlacementVersion
+			if e = pay.PlacePayLoad(ctx, "driver", anyStatus, "test"); e != nil {
+				t.Fatal(e)
+			}
+			placeholder = removed("investor", week, "ANY-STATUS")
+			if placeholder == nil || !placeholder.PayrollSupplement {
+				t.Fatal("extra placeholder missing", placeholder)
+			}
+			extraRestore := PayLoadPlacementInput{DriverID: truck, WeekStart: add.WeekStart, Action: "restore", LoadRecordID: 8110, CommentKey: placeholder.CommentKey, PlacementVersion: placeholder.PayrollPlacementVersion}
+			if e = pay.PlacePayLoad(ctx, "investor", extraRestore, "test"); e != nil {
+				t.Fatal(e)
+			}
+			anyLoad = find(read("driver", week), "ANY-STATUS")
+			if anyLoad == nil || !anyLoad.PayrollSupplement {
+				t.Fatal("extra restore missing", anyLoad)
+			}
+			anyStatus.CommentKey = anyLoad.CommentKey
+			anyStatus.PlacementVersion = anyLoad.PayrollPlacementVersion
+			if e = pay.PlacePayLoad(ctx, "driver", anyStatus, "test"); e != nil {
+				t.Fatal(e)
 			}
 			// Removing an extra row in another week must not erase the native
 			// Monday allocation (the reported cross-week case).
@@ -351,6 +429,16 @@ func TestPayLoadPlacementsDatabase(t *testing.T) {
 			}
 			if _, e = pool.Exec(ctx, `UPDATE payroll_load_placements SET driver_gross=1 WHERE load_record_id=8101`); e == nil {
 				t.Fatal("database guard allowed a frozen load change")
+			}
+			placeholder = removed("driver", week, "ANY-STATUS")
+			if placeholder == nil {
+				t.Fatal("frozen counterpart lost excluded placeholder")
+			}
+			extraRestore.DriverID = driver
+			extraRestore.CommentKey = placeholder.CommentKey
+			extraRestore.PlacementVersion = placeholder.PayrollPlacementVersion
+			if e = pay.PlacePayLoad(ctx, "driver", extraRestore, "test"); e == nil {
+				t.Fatal("restored load despite frozen investor counterpart")
 			}
 			// Global finalization check also prevents a second payment in a different week.
 			add.DriverID = driver

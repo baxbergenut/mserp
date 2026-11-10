@@ -7,8 +7,8 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
  sql(`SET search_path TO ${schema},public;
  INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('${driver}','Placement Driver','placement driver','gross_percentage',25);
  INSERT INTO investors(id,full_name) VALUES('${owner}','Placement Investor');
- INSERT INTO trucks(id,unit_number) VALUES('${truck}','PLACEMENT');
- UPDATE trucks SET owner_id='${owner}' WHERE id='${truck}';UPDATE truck_ownership_history SET assigned_at='2026-01-01' WHERE truck_id='${truck}';
+ INSERT INTO trucks(id,unit_number,owner_id) VALUES('${truck}','PLACEMENT','${owner}');
+ UPDATE truck_ownership_history SET assigned_at='2026-01-01',start_known=true WHERE truck_id='${truck}';
  INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('${truck}','${driver}','2026-01-01');
  INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES('${truck}','${owner}','2026-01-05',90);
  INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,pickup_time,delivery_time,raw_payload) VALUES
@@ -28,6 +28,15 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
  await expect(page.getByLabel(/Load is not delivered or invoiced/)).toBeVisible();
  await page.getByRole('button',{name:'Remove FLAGGED-LOAD from statement',exact:true}).click();
  await expect(page.getByRole('link',{name:'FLAGGED-LOAD',exact:true})).toHaveCount(0);
+ await expect(page.locator('[data-pay-removed-load="FLAGGED-LOAD"]')).toContainText('Load removed');
+ await expect(page.locator('[data-pay-removed-load="FLAGGED-LOAD"]')).toContainText('Tue');
+ await page.reload();
+ await expect(page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true}).click();
+ await expect(page.getByRole('link',{name:'FLAGGED-LOAD',exact:true})).toBeVisible();
+ await expect(page.locator('[data-pay-removed-load="FLAGGED-LOAD"]')).toHaveCount(0);
+ await page.getByRole('button',{name:'Remove FLAGGED-LOAD from statement',exact:true}).click();
+ await expect(page.locator('[data-pay-removed-load="FLAGGED-LOAD"]')).toBeVisible();
  let source=await get(`/gross-board?weekStart=${week}`);expect(source.entries.find(e=>e.loadNumber==='FLAGGED-LOAD')).toBeTruthy();
  // The extra row is below Sunday, fills all source details, and persists on reload.
  const input=page.getByLabel('Placement Driver, extra load number');
@@ -43,6 +52,17 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
  await page.reload();await expect(page.getByLabel('MISSED-LOAD, driver gross')).toHaveValue('2800.00');
  expect(await get(`/gross-board?weekStart=${old}`)).toEqual(boardBefore);
  await go('investor');
+ await expect(page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true}).click();
+ await expect(page.getByRole('link',{name:'FLAGGED-LOAD',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Remove FLAGGED-LOAD from statement',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true})).toBeVisible();
+ await page.getByLabel('Placement Investor, extra load number').fill('FLAGGED-LOAD');
+ await page.getByRole('button',{name:'Add to statement',exact:true}).click();
+ await expect(page.getByLabel('FLAGGED-LOAD, driver gross')).toHaveValue('900.00');
+ await expect(page.getByLabel(/Load is not delivered or invoiced/)).toBeVisible();
+ await page.getByRole('button',{name:'Remove FLAGGED-LOAD from statement',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true})).toBeVisible();
  await expect(page.getByLabel('MISSED-LOAD, driver gross')).toHaveValue('2800.00');
  sql(`SET search_path TO ${schema},public;
  INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES(8803,'SPLIT-CATCHUP','delivered',1000,1000,200,
@@ -62,8 +82,7 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
  const splitBoard=await get('/gross-board?weekStart=2026-10-05');expect(splitBoard.entries.filter(e=>e.loadNumber==='SPLIT-CATCHUP')).toHaveLength(2);
  await page.getByRole('button',{name:'Remove MISSED-LOAD from statement',exact:true}).click();
  await expect(page.getByLabel('MISSED-LOAD, driver gross')).toHaveCount(0);
- await page.getByLabel('Placement Investor, extra load number').fill('MISSED-LOAD');
- await page.getByRole('button',{name:'Add to statement',exact:true}).click();
+ await page.getByRole('button',{name:'Add MISSED-LOAD back to statement',exact:true}).click();
  await expect(page.getByLabel('MISSED-LOAD, driver gross')).toHaveValue('2800.00');
  const gross=page.getByLabel('MISSED-LOAD, driver gross');
  await gross.fill('2600');await gross.press('Enter');
@@ -105,6 +124,7 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
  await expect(page.getByLabel('MISSED-LOAD, driver gross')).toHaveValue('2600.00');
  await go('driver');await expect(page.getByLabel('Placement Driver, extra load number')).toBeDisabled();
  await expect(page.getByRole('button',{name:'Remove MISSED-LOAD from statement',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'Add FLAGGED-LOAD back to statement',exact:true})).toBeDisabled();
  await page.screenshot({path:join(temp,'payroll-extra-load-finalized.png'),fullPage:true});
  // View-only access has no editor, and the server rejects a forged mutation.
  sql(`SET search_path TO ${schema},public;
@@ -119,6 +139,7 @@ export async function runPayrollLoadPlacementsE2E({page,base,sql,schema,temp}) {
    await viewer.goto(`${base}/accounting/${kind}-pay?weekStart=${week}&${kind==='driver'?'driverId':'truckId'}=${kind==='driver'?driver:truck}`);
    await expect(viewer.getByRole('region',{name:`Placement ${kind==='driver'?'Driver':'Investor'} weekly loads`})).toBeVisible();
    await expect(viewer.getByPlaceholder('Load ID',{exact:true})).toHaveCount(0);
+   await expect(viewer.getByRole('button',{name:/back to statement/})).toHaveCount(0);
    const denied=await viewer.request.post(`${base}/api/${kind}-pay/statement-load`,{headers:{'X-CSRF-Token':auth.csrfToken},data:{driverId:kind==='driver'?driver:truck,weekStart:week,action:'add',loadNumber:'MISSED-LOAD'}});expect(denied.status()).toBe(403);
   }
  }finally{await viewer.close();}

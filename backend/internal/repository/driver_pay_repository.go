@@ -167,6 +167,7 @@ type DriverPayDriver struct {
 	FuelTotal              string               `json:"fuelTotal"`
 	TollTotal              string               `json:"tollTotal"`
 	Loads                  []DriverPayLoad      `json:"loads"`
+	RemovedLoads           []DriverPayLoad      `json:"removedLoads,omitempty"`
 	Edits                  DriverPayEdits       `json:"edits"`
 }
 type DriverPayWeek struct {
