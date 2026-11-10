@@ -120,11 +120,6 @@ func TestClustieLoadAssignmentsDatabase(t *testing.T) {
 				t.Fatalf("load %d: truck %s, want %s", l.ID, *l.TruckUnit, want)
 			}
 		}
-		period, _ := ResolveDashboardPeriod("week", "2026-10-19", "", time.Now())
-		review, err := NewDashboardRepository(pool).DashboardCostReview(ctx, period, "ownership", Pagination{})
-		if err != nil || review.Total != 0 {
-			t.Fatalf("stale source truck raised dashboard warning: %+v %v", review, err)
-		}
 		// Source allocation review is separate from native assignment authority:
 		// an unresolved split stays on its real truck and keeps its financial hold.
 		exec(`UPDATE loads SET split_expected=true WHERE id=96602`)

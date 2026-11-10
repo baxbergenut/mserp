@@ -33,9 +33,6 @@ func (f *dashboardFake) call(key string) error {
 func (f *dashboardFake) Performance(context.Context, repository.DashboardPeriod) (repository.DashboardPerformance, error) {
 	return repository.DashboardPerformance{Current: repository.DashboardMetric{Gross: "123.45"}}, f.call("performance")
 }
-func (f *dashboardFake) Waterfall(context.Context, repository.DashboardPeriod) (repository.DashboardWaterfall, error) {
-	return repository.DashboardWaterfall{Gross: "123.45"}, f.call("waterfall")
-}
 func (f *dashboardFake) DashboardCounts(_ context.Context, key string) ([]repository.DashboardItem, error) {
 	return []repository.DashboardItem{{ID: key, Count: 3}}, f.call(key)
 }
@@ -47,46 +44,6 @@ func (f *dashboardFake) DashboardCost(_ context.Context, key string, _ repositor
 }
 func (f *dashboardFake) DashboardLoads(context.Context, repository.DashboardPeriod, string, string, repository.Pagination) (repository.Page[repository.DashboardLoad], error) {
 	return repository.Page[repository.DashboardLoad]{Items: []repository.DashboardLoad{}}, f.call("loads")
-}
-func (f *dashboardFake) DashboardCostReview(_ context.Context, _ repository.DashboardPeriod, kind string, _ repository.Pagination) (repository.Page[repository.DashboardCostReview], error) {
-	return repository.Page[repository.DashboardCostReview]{Items: []repository.DashboardCostReview{}}, f.call("costReview:" + kind)
-}
-
-func TestCompanyDashboardCostReviewAccess(t *testing.T) {
-	permissions := []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read"}
-	for _, tc := range []struct {
-		name, kind  string
-		admin       bool
-		permissions []string
-		status      int
-	}{
-		{"fuel", "fuel", true, permissions, 200}, {"tolls", "tolls", true, permissions, 200},
-		{"ownership", "ownership", true, permissions, 200},
-		{"ownership missing access", "ownership", true, []string{"board.read"}, 403},
-		{"invalid kind", "expenses", true, permissions, 400},
-		{"non administrator", "fuel", false, permissions, 403},
-		{"missing waterfall access", "fuel", true, []string{"fuel.read"}, 403},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			fake := &dashboardFake{}
-			r := chi.NewRouter()
-			r.Use(requirePermission)
-			registerCompanyDashboardRoutes(r, slog.New(slog.NewTextHandler(io.Discard, nil)), fake, fake, fake, fake, fake, fake)
-			req := httptest.NewRequest("GET", "/dashboard/cost-review?preset=week&dateFrom=2026-10-05&kind="+tc.kind, nil)
-			req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Administrator: tc.admin, Permissions: tc.permissions}}))
-			out := httptest.NewRecorder()
-			r.ServeHTTP(out, req)
-			if out.Code != tc.status {
-				t.Fatalf("status %d body %s", out.Code, out.Body.String())
-			}
-			if tc.status != 200 && len(fake.calls) != 0 {
-				t.Fatal("rejected review executed database read")
-			}
-			if tc.status == 200 && (len(fake.calls) != 1 || fake.calls[0] != "costReview:"+tc.kind || out.Header().Get("Cache-Control") != "no-store") {
-				t.Fatalf("unexpected review %v", fake.calls)
-			}
-		})
-	}
 }
 func (f *dashboardFake) CategoryID(context.Context) (string, error) {
 	return "maintenance", f.call("category")
@@ -167,16 +124,15 @@ func TestCompanyDashboardAccess(t *testing.T) {
 	}
 }
 
-func TestCompanyDashboardViewsAndProfitAccess(t *testing.T) {
+func TestCompanyDashboardViews(t *testing.T) {
 	all := []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read", "trucks.read"}
 	for _, tc := range []struct {
 		name, view, fail string
 		permissions      []string
-		waterfall        bool
 	}{
-		{"weekly", "weekly", "", all, true}, {"current", "current", "", all, false},
-		{"payroll hidden", "weekly", "", []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read"}, false},
-		{"failed", "weekly", "waterfall", all, true},
+		{"weekly", "weekly", "", all}, {"current", "current", "", all},
+		{"payroll hidden", "weekly", "", []string{"board.read", "fuel.read", "tolls.read", "driver_pay.read"}},
+		{"failed", "weekly", "performance", all},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &dashboardFake{fail: tc.fail}
@@ -191,20 +147,19 @@ func TestCompanyDashboardViewsAndProfitAccess(t *testing.T) {
 			if err := json.Unmarshal(out.Body.Bytes(), &got); err != nil || out.Code != 200 {
 				t.Fatalf("%d %s", out.Code, out.Body.String())
 			}
-			section, ok := got.Sections["waterfall"]
-			if ok != tc.waterfall {
-				t.Fatal("profit access projection")
+			if _, exists := got.Sections["waterfall"]; exists {
+				t.Fatal("retired waterfall still returned")
 			}
-			if tc.fail != "" && (section.Error == "" || section.Waterfall != nil) {
-				t.Fatal("failed profit presented as zero")
+			if tc.fail != "" && got.Sections[tc.fail].Error == "" {
+				t.Fatal("failed section did not report error")
 			}
 			for _, s := range got.Sections {
-				if tc.view == "weekly" && (s.Kind == "fleet" || s.Kind == "attention") || tc.view == "current" && (s.Kind == "cost" || s.Kind == "performance" || s.Kind == "waterfall") {
+				if tc.view == "weekly" && (s.Kind == "fleet" || s.Kind == "attention") || tc.view == "current" && (s.Kind == "cost" || s.Kind == "performance") {
 					t.Fatal("mixed dashboard views")
 				}
 			}
 			for _, call := range fake.calls {
-				if tc.view == "current" && (call == "waterfall" || call == "performance" || call == "diesel") {
+				if tc.view == "current" && (call == "performance" || call == "diesel") {
 					t.Fatal("hidden weekly query executed")
 				}
 			}
@@ -243,7 +198,7 @@ func TestDashboardSectionSelection(t *testing.T) {
 		status   int
 		expected string
 	}{
-		{"performance", 200, "performance"}, {"waterfall", 200, "waterfall"}, {"unknown", 400, ""}, {"", 400, ""}, {"performance,unknown", 400, ""},
+		{"performance", 200, "performance"}, {"waterfall", 400, ""}, {"unknown", 400, ""}, {"", 400, ""}, {"performance,unknown", 400, ""},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			fake := &dashboardFake{}
@@ -261,5 +216,18 @@ func TestDashboardSectionSelection(t *testing.T) {
 				t.Fatal("unselected work ran", fake.calls)
 			}
 		})
+	}
+}
+
+func TestDashboardCostReviewRetired(t *testing.T) {
+	fake := &dashboardFake{}
+	r := chi.NewRouter()
+	registerCompanyDashboardRoutes(r, slog.New(slog.NewTextHandler(io.Discard, nil)), fake, fake, fake, fake, fake, fake)
+	req := httptest.NewRequest("GET", "/dashboard/cost-review?kind=fuel", nil)
+	req = req.WithContext(context.WithValue(req.Context(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Administrator: true}}))
+	out := httptest.NewRecorder()
+	r.ServeHTTP(out, req)
+	if out.Code != 404 || len(fake.calls) != 0 {
+		t.Fatalf("retired endpoint remains active: %d %v", out.Code, fake.calls)
 	}
 }

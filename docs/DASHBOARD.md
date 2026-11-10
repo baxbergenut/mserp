@@ -56,52 +56,12 @@ No migration or additional environment variable is required.
 - Costs stay separate by source: diesel line items excluding DEF/other purchases,
   production/legacy tolls by posting date, scale tickets by transaction date, and
   visible expense categories by expense date. These all-truck source cards can
-  overlap and are separate from the company's waterfall deductions.
+  overlap and are not a company net-profit calculation.
   Fuel drill-down shows whole transactions, which may also contain DEF/other
   purchases. Unknown source coverage is not asserted to be complete.
 
-## Weekly waterfall
-
-Gross -> Company fuel -> Company tolls -> Driver / owner pay -> Investor pay ->
-Profit. The final value is an earned operating remainder **before other costs**,
-not cash received, paid payroll, or net income. All stages use one read-only
-repeatable-read transaction. No payroll edits, settlements or syncs are created.
-
-- Gross follows the existing counted-load reconciliation rules.
-- Fuel uses production Relay fuel line items, including DEF and refunds. Exactly
-  one reported truck unit must resolve through the stored aliases; no driver or
-  current-assignment guess supplies a missing truck. Ownership uses purchase date.
-- Tolls use production/legacy posting dates for the week and exit dates for
-  ownership. Only uniquely resolved company ownership is deducted. Imported
-  ownership baselines with an unknown start apply before their recorded end,
-  matching payroll classification; an unknown start is not an unknown owner.
-  Missing or conflicting ownership blocks profit instead of treating the
-  transaction as owner-paid. Fuel and tolls do not wait for payroll finalization.
-  Clicking unresolved fuel/tolls opens a paginated list of the exact transactions,
-  amounts, truck identities and reasons. Toll posting and ownership (exit) dates
-  are shown separately. Known trucks link to their profiles; review never edits
-  sources or infers a payer. The list shares the waterfall's attribution query.
-  Fuel review also shows its linked driver and exact-purchase-time truck
-  assignments as context; those assignments never replace an unmatched source
-  truck number automatically.
-- Driver/owner pay and investor pay reuse routed weekly payroll and its frozen
-  statements: load fees, recorded historical layovers and signed manual weekly adjustments.
-  Open statements no longer generate automatic Shop layover bonuses.
-  Investor shares deduct their hired-driver earnings so labor is counted once.
-  Fuel/toll recoveries, expense recoveries, recurring/installment collections,
-  escrow and carry are excluded. Owners/investors therefore cover their own
-  operating costs without those recoveries inflating this remainder.
-- Counted load ownership and investor terms use Clustie's truck assignment for
-  the original service date. Clicking that warning opens the exact counted loads,
-  native truck assignments and reasons, using the same query as its count.
-  DataTruck assignment labels never determine ownership or create these warnings.
-  Missing/conflicting native assignments stay in review. Known trucks link to their profiles.
-  Payroll loads must match counted load identities and original gross; missing
-  fees, missing payroll coverage, duplicates, stale gross and report issues block
-  the final profit. Known partial stages remain visible alongside review links.
-- Setup rows without work in the selected week do not block historical profit.
-  Other expenses, dispatcher pay, taxes and other income are outside this chart.
-  Source completeness is not guaranteed by the existence of recorded transactions.
+The revenue waterfall, its payroll calculation and exclusive cost-review dialogs
+and endpoint have been removed. Source accounting and payroll records are unchanged.
 
 ## API and access
 
@@ -109,9 +69,7 @@ repeatable-read transaction. No payroll edits, settlements or syncs are created.
 `thisMonth`, `lastMonth`, or `custom&dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`.
 It also accepts `week&dateFrom=YYYY-MM-DD` and `view=weekly|current`. Hidden view
 jobs are not executed; omitting view retains the combined legacy response.
-`GET /dashboard/cost-review?kind=fuel|tolls|ownership` accepts the same period parameters
-and standard page/pageSize pagination. It requires the waterfall's five read
-permissions. All dashboard endpoints require the server-confirmed Administrator flag;
+All dashboard endpoints require the server-confirmed Administrator flag;
 `access.manage` or other permissions alone do not grant access. Session responses
 expose `user.administrator` for navigation and login decisions. Within that
 boundary, the response also omits unauthorized sections entirely:
@@ -119,7 +77,6 @@ boundary, the response also omits unauthorized sections entirely:
 | Section | Required access |
 | --- | --- |
 | Gross, trend, dispatcher breakdown, reconciliation | `board.read` |
-| Weekly waterfall | all of `board.read`, `fuel.read`, `tolls.read`, `driver_pay.read`, `investor_pay.read` |
 | Trucks / GPS | `trucks.read` |
 | Trailers | `trailers.read` |
 | Drivers | `drivers.read` |
@@ -136,7 +93,7 @@ repeat), `page`, and `pageSize`. Count and page share a database snapshot.
 Money is returned as decimal strings. All dashboard responses are `no-store`.
 
 Summary jobs have at most three concurrent queries, 15 seconds per ordinary
-section, 45 seconds for payroll reconciliation, and a 60-second request deadline.
+section and a 60-second request deadline.
 A section failure returns an explicit error while
 other sections remain usable. The UI refreshes every visible minute and on focus,
 aborts obsolete requests, and retains failed sections only for the same resolved
@@ -161,12 +118,5 @@ and writes screenshots to the system temp directory under
 `MSERP_DASHBOARD_TEST_DATABASE_URL` for temporary-table calculation fixtures and
 `MSERP_DASHBOARD_SCHEMA_TEST_DATABASE_URL` for full-schema reads and fleet
 status/drill-down fixtures in a temporary schema, dropped after each run.
-It also checks whole-fleet waterfall totals, company-only costs, dated ownership,
-refunds, DEF, environment/date exclusions and unresolved-cost handling.
-`TestDashboardEarnings` covers pass-through exclusion and stale/missing fees.
-`TestDashboardLoadOwnershipReviewDatabase` uses the disposable local
-`MSERP_DRIVER_CHARGES_TEST_DATABASE_URL` to verify source identity, missing terms,
-owner-driven exemptions, pagination and count/drilldown agreement on fresh and
-migrated schemas.
-Both must name a disposable localhost database ending `_test`.
+Both database settings must name a disposable localhost database ending `_test`.
 Never point these at production. HTTP permission/error tests need no database.

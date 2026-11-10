@@ -22,10 +22,7 @@ const dispatcher = '00000000-0000-0000-0000-000000000010';
 const permissions = ['board.read', 'trucks.read', 'drivers.read', 'trailers.read', 'fuel.read', 'tolls.read', 'weighmytruck.read', 'expenses.read', 'tasks.read', 'driver_pay.read', 'investor_pay.read'];
 let administrator = true;
 let allowed = [...permissions], theme = 'default-light', revision = 1, fail = false, partial = false, empty = false, fleetMode = 'normal';
-let waterfallMode = 'normal', costReviewFails = false;
 const requested = [];
-let releaseProfit;
-let holdProfit = new Promise(resolve => { releaseProfit=resolve; });
 const section = (kind, title, items, extra = {}) => ({ kind, title, items, updatedAt: '2026-10-26T20:00:00Z', ...extra });
 function dashboard(query) {
   const dateFrom = query.get('dateFrom') || '2026-10-19', dateTo = new Date(Date.parse(dateFrom+'T12:00:00Z') + 6*86400000).toISOString().slice(0,10);
@@ -43,7 +40,6 @@ function dashboard(query) {
   for (const kind of ['trucks','drivers','trailers']) if (sections[kind] && fleetMode !== 'normal') {
     sections[kind].items = sections[kind].items.map(item => ({...item, count: fleetMode === 'single' && ['active','in_use'].includes(item.id) ? 5 : 0}));
   }
-  if (['board.read','fuel.read','tolls.read','driver_pay.read','investor_pay.read'].every(p => allowed.includes(p))) sections.waterfall = section('waterfall','Weekly profit',[],waterfallMode === 'error' ? {error:'This section could not be loaded'} : {waterfall:{gross:'143250.00',fuel:'15000.00',tolls:'2000.00',driverPay:'65000.00',investorPay:waterfallMode === 'negative' ? '80000.00':'30000.00',profit:waterfallMode === 'review' ? null : waterfallMode === 'negative' ? '-18750.00':'31250.00',review:waterfallMode === 'review' ? [{id:'fuel',label:'Unresolved fuel ownership',count:2,href:'/fuel?dashboard=1&tab=transactions'},{id:'tolls',label:'Unresolved tolls ownership',count:1,href:'/tolls?dashboard=1&tab=transactions'},{id:'ownership',label:'Load ownership or investor terms need review',count:1,href:'/accounting/investor-pay'}]:[]}});
   for (const [key,value] of Object.entries(sections)) if (query.get('view') === 'weekly' ? ['fleet','attention'].includes(value.kind) : query.get('view') === 'current' && !['fleet','attention'].includes(value.kind)) delete sections[key];
   if(query.has("sections")) for(const key of Object.keys(sections)) if(!query.get("sections").split(",").includes(key)) delete sections[key];
   return { period, sections };
@@ -57,16 +53,7 @@ try {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()); const path = url.pathname.slice(4); requested.push({ path, query: Object.fromEntries(url.searchParams) });
     if (path === '/auth/session' || path === '/auth/login') return route.fulfill({ json: { user: { administrator, id: 'dashboard-fixture', username: 'Dashboard review', theme, accessRevision: revision, permissions: allowed, expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true }] }, csrfToken: 'fixture' } });
-    if (path === '/dashboard/summary') {if(url.searchParams.get('sections')==='waterfall' && holdProfit) await holdProfit; return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });}
-    if (path === '/dashboard/cost-review') {
-      if (costReviewFails) return route.fulfill({status:500,json:{error:'Synthetic cost review failure'}});
-      const kind=url.searchParams.get('kind');
-      const items=kind==='fuel' ? [
-        {id:'fuel-1',reference:'RELAY-REVIEW-1',date:'2026-09-07',ownershipDate:'2026-09-07',truckId:'',truckUnit:'Unmatched unit',driverName:'Review Driver',assignedUnits:['701'],amount:'250.00',reason:'Reported truck number is missing or not uniquely linked'},
-        {id:'fuel-2',reference:'RELAY-REVIEW-2',date:'2026-09-08',ownershipDate:'2026-09-08',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'300.00',reason:'No ownership recorded for the transaction date'}
-      ] : kind==='ownership' ? [{id:'load-1',reference:'REVIEW-LOAD-1',date:'2026-09-07',ownershipDate:'2026-09-07',truckId:'',truckUnit:'UNLINKED-SOURCE',driverName:'Review Owner',assignedUnits:['053'],amount:'1800.00',reason:'Source truck number is missing or not uniquely linked'}] : [{id:'toll-1',reference:'TOLL-REVIEW-1',date:'2026-09-09',ownershipDate:'2026-09-07',truckId:'review-truck',truckUnit:'702',driverName:'',assignedUnits:[],amount:'15.00',reason:'No ownership recorded for the transaction date'}];
-      return route.fulfill({json:{items,total:items.length,page:1,pageSize:25,totalPages:1}});
-    }
+    if (path === '/dashboard/summary') {return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });}
     if (path === '/dashboard/loads') return route.fulfill({ json: { items: [{ driverId: driver, driverName: 'Example Driver', date: '2026-10-20', slot: 0, loadNumber: 'LOAD-101', loadRecordId: 101, gross: '2500.00', driverGross: '2200.00', miles: '800.00', dispatcherId: dispatcher, dispatcherName: 'Dispatch East', inclusion: url.searchParams.get('inclusion') || 'included' }], total: 1, page: 1, pageSize: 25, totalPages: 1 } });
     if (path === '/trucks') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, statusCounts: {ready:12,in_use:136,shop:8,out_of_service:2,terminated:14}, gpsAlertCounts: {overdue:3,missing:0} } });
     if (path === '/driver-directory') return route.fulfill({json:{items:[],total:0,page:1,pageSize:25,totalPages:1}});
@@ -78,12 +65,11 @@ try {
     return route.fulfill({ json: data[path] ?? [] });
   });
   await page.goto(`${base}/dashboard`);
+  await expect(page.getByRole('heading',{name:'Weekly profit',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
   await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();
-  await expect(page.getByText('Loading weekly profit…',{exact:true})).toBeVisible();
-  releaseProfit(); holdProfit=null;
   await expect(page.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0);
-  await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('$31,250.00');
   await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();
   await expect(page.getByRole('button', {name:/Driver Gross/})).toHaveCount(0);
   await expect(page.getByRole('heading', {name:'Trailers',exact:true})).toHaveCount(0);
@@ -154,7 +140,8 @@ try {
   fail = false; await page.getByRole('button',{name:'Retry unavailable sections'}).click();
   await expect(page.getByText('Synthetic connection failure', {exact:true})).toHaveCount(0);
   theme = 'default'; await page.reload(); await expect(page.locator('html')).toHaveAttribute('data-theme','default');
-  await expect(page.getByRole('heading',{name:'Weekly profit',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Weekly profit',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toBeVisible();
   await page.locator('main').dispatchEvent('pointerdown'); await page.locator('main').evaluate(el => el.scrollTo(0,0));
   await page.screenshot({ path: join(output, 'dashboard-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await expect(page.getByRole('button',{name:'Expand sidebar'})).toBeVisible(); await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true); await page.screenshot({ path: join(output,'dashboard-mobile.png'), fullPage: true });
@@ -163,49 +150,6 @@ try {
   await expect(page.getByLabel('Trucks status labels')).toBeVisible();
   await page.screenshot({ path: join(output,'dashboard-current-mobile.png'), fullPage: true });
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
-  waterfallMode='negative'; await page.reload();
-  await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('-$18,750.00');
-  waterfallMode='review'; await page.reload();
-  await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toContainText('Needs review');
-  await page.getByRole('button',{name:'2 unresolved fuel ownership'}).click();
-  await expect(page.getByRole('dialog')).toContainText('RELAY-REVIEW-1');
-  await expect(page.getByRole('dialog')).toContainText('Review Driver');
-  await expect(page.getByRole('dialog')).toContainText('Assigned at purchase: 701');
-  await expect(page.getByRole('dialog')).toContainText('Reported truck number is missing or not uniquely linked');
-  await expect(page.getByRole('dialog')).toContainText('No ownership recorded for the transaction date');
-  await expect(page.getByRole('dialog').getByRole('link',{name:'702',exact:true})).toHaveAttribute('href','/trucks/detail?id=review-truck');
-  await expect(page).toHaveURL(/\/dashboard$/);
-  expect(requested.some(r=>r.path==='/dashboard/cost-review' && r.query.kind==='fuel' && r.query.dateFrom==='2026-09-07' && r.query.dateTo==='2026-09-13')).toBe(true);
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
-  costReviewFails=true;
-  await page.getByRole('button',{name:'1 unresolved tolls ownership'}).click();
-  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Synthetic cost review failure');
-  costReviewFails=false;
-  await page.getByRole('dialog').getByRole('button',{name:'Retry',exact:true}).click();
-  await expect(page.getByRole('dialog')).toContainText('TOLL-REVIEW-1');
-  await expect(page.getByRole('dialog')).toContainText('Ownership date: 2026-09-07');
-  await page.screenshot({path:join(output,'dashboard-cost-review-mobile.png'),fullPage:true});
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
-  await page.getByRole('button',{name:'1 load ownership or investor terms need review',exact:true}).click();
-  await expect(page.getByRole('dialog')).toContainText('Load ownership and investor terms');
-  await expect(page.getByRole('dialog')).toContainText('REVIEW-LOAD-1');
-  await expect(page.getByRole('dialog')).toContainText('UNLINKED-SOURCE');
-  await expect(page.getByRole('dialog')).toContainText('Assigned on load date: 053');
-  await expect(page.getByRole('dialog')).toContainText('Source truck number is missing or not uniquely linked');
-  await expect(page.getByRole('dialog').getByRole('link',{name:'UNLINKED-SOURCE',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('dialog')).toContainText('1 loads');
-  if (!requested.some(r=>r.path==='/dashboard/cost-review'&&r.query.kind==='ownership'&&r.query.dateFrom==='2026-09-07')) throw new Error('Ownership review lost its selected week');
-  await page.setViewportSize({width:390,height:844});
-  await expect(page.getByRole('dialog').getByText('REVIEW-LOAD-1', {exact:true})).toBeVisible();
-  await expect(page.getByRole('dialog').locator('..')).toHaveCSS('opacity','1');
-  await expect(page.getByRole('dialog').locator('form')).toHaveCSS('opacity','1');
-  await page.screenshot({path:join(output,'dashboard-ownership-review-mobile.png'),fullPage:true,animations:'disabled'});
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).first().click();
-  await page.setViewportSize({width:1440,height:1000});
-  waterfallMode='error'; await page.reload();
-  await expect(page.getByText('This section could not be loaded',{exact:true})).toBeVisible();
-  await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
-  waterfallMode='normal';
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
   fleetMode = 'single'; await page.reload();
   await expect(page.getByRole('img',{name:'Trucks status distribution: 5 total'}).locator('.recharts-pie-sector')).toHaveCount(1);
@@ -239,6 +183,8 @@ try {
   administrator = true; revision++; await page.goto(`${base}/`);
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('link',{name:'Dashboard',exact:true})).toBeVisible();
+  expect(requested.filter(r => r.query.sections?.split(',').includes('waterfall') || r.path === '/dashboard/cost-review')).toEqual([]);
+  await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
   expect(errors).toEqual([]);
   console.log(`Dashboard browser checks passed. Screenshots: ${output}`);
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

@@ -61,9 +61,7 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 				case "weekly":
 					scenario = "weekly"
 				}
-				if r.URL.Query().Get("sections") == "waterfall" {
-					scenario = "weekly_profit"
-				} else if r.URL.Query().Get("sections") != "" {
+				if r.URL.Query().Get("sections") != "" {
 					scenario += "_primary"
 				}
 			}

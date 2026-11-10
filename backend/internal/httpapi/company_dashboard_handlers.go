@@ -14,12 +14,10 @@ import (
 )
 
 type companyDashboardSource interface {
-	Waterfall(context.Context, repository.DashboardPeriod) (repository.DashboardWaterfall, error)
 	Performance(context.Context, repository.DashboardPeriod) (repository.DashboardPerformance, error)
 	DashboardCounts(context.Context, string) ([]repository.DashboardItem, error)
 	DashboardCost(context.Context, string, repository.DashboardPeriod, []string) ([]repository.DashboardItem, error)
 	DashboardLoads(context.Context, repository.DashboardPeriod, string, string, repository.Pagination) (repository.Page[repository.DashboardLoad], error)
-	DashboardCostReview(context.Context, repository.DashboardPeriod, string, repository.Pagination) (repository.Page[repository.DashboardCostReview], error)
 }
 
 type dashboardTaskSource interface {
@@ -66,7 +64,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		}
 		selected := map[string]bool{}
 		if raw, present := r.URL.Query()["sections"]; present {
-			allowed := ",performance,waterfall,trucks,drivers,trailers,gps,diesel,tolls,scale,expenses,tasks,relayAccess,scaleAccess,unlinkedTolls,service,"
+			allowed := ",performance,trucks,drivers,trailers,gps,diesel,tolls,scale,expenses,tasks,relayAccess,scaleAccess,unlinkedTolls,service,"
 			for _, key := range strings.Split(strings.Join(raw, ","), ",") {
 				if key == "" || !strings.Contains(allowed, ","+key+",") {
 					writeAPIError(w, 400, "choose valid dashboard sections")
@@ -99,12 +97,6 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 			jobs = append(jobs, job{"performance", "performance", "Gross Board performance", func(ctx context.Context) (repository.DashboardSection, error) {
 				v, err := repo.Performance(ctx, p)
 				return repository.DashboardSection{Performance: &v}, err
-			}})
-		}
-		if view != "current" && p.Preset == "week" && has("board.read") && has("fuel.read") && has("tolls.read") && has("driver_pay.read") && has("investor_pay.read") {
-			jobs = append(jobs, job{"waterfall", "waterfall", "Weekly profit", func(ctx context.Context) (repository.DashboardSection, error) {
-				v, err := repo.Waterfall(ctx, p)
-				return repository.DashboardSection{Waterfall: &v}, err
 			}})
 		}
 		for _, v := range []struct{ key, permission, title string }{{"trucks", "trucks.read", "Trucks"}, {"drivers", "drivers.read", "Drivers"}, {"trailers", "trailers.read", "Trailers"}, {"gps", "trucks.read", "GPS attention"}} {
@@ -182,7 +174,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 			if len(selected) > 0 && !selected[j.key] {
 				continue
 			}
-			if view == "weekly" && (j.kind == "fleet" || j.kind == "attention") || view == "current" && (j.kind == "performance" || j.kind == "cost" || j.kind == "waterfall") {
+			if view == "weekly" && (j.kind == "fleet" || j.kind == "attention") || view == "current" && (j.kind == "performance" || j.kind == "cost") {
 				continue
 			}
 			wg.Add(1)
@@ -193,11 +185,7 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 				select {
 				case gate <- struct{}{}:
 					defer func() { <-gate }()
-					limit := 15 * time.Second
-					if j.kind == "waterfall" {
-						limit = 45 * time.Second
-					}
-					ctx, cancel := context.WithTimeout(r.Context(), limit)
+					ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 					defer cancel()
 					done := db.Phase(ctx, "dashboard_"+j.key)
 					section, err = j.run(ctx)
@@ -216,7 +204,6 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 					section.Error = "This section could not be loaded"
 					section.Items = []repository.DashboardItem{}
 					section.Performance = nil
-					section.Waterfall = nil
 				}
 				mu.Lock()
 				result.Sections[j.key] = section
@@ -226,35 +213,6 @@ func registerCompanyDashboardRoutes(r chi.Router, logger *slog.Logger, repo comp
 		wg.Wait()
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, 200, result)
-	})
-	r.Get("/dashboard/cost-review", func(w http.ResponseWriter, r *http.Request) {
-		if !administrator(w, r) || !requireCapabilities(w, r, "board.read", "fuel.read", "tolls.read", "driver_pay.read", "investor_pay.read") {
-			return
-		}
-		p, ok := period(w, r)
-		if !ok {
-			return
-		}
-		kind := r.URL.Query().Get("kind")
-		if kind != "fuel" && kind != "tolls" && kind != "ownership" {
-			writeAPIError(w, 400, "choose fuel, tolls or load ownership")
-			return
-		}
-		pagination, err := parsePagination(r)
-		if err != nil {
-			writeAPIError(w, 400, err.Error())
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		defer cancel()
-		value, err := repo.DashboardCostReview(ctx, p, kind, pagination)
-		if err != nil {
-			logger.Error("dashboard cost review failed", "error", err)
-			writeAPIError(w, 500, "Unresolved transactions could not be loaded")
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, 200, value)
 	})
 	r.Get("/dashboard/loads", func(w http.ResponseWriter, r *http.Request) {
 		if !administrator(w, r) {

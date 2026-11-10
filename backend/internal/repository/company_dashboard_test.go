@@ -296,5 +296,4 @@ func TestCompanyDashboardSchema(t *testing.T) {
 	if err != nil || directory.Total != 2 {
 		t.Fatalf("active/new drilldown: %+v %v", directory, err)
 	}
-	testDashboardWaterfall(t, ctx, pool)
 }

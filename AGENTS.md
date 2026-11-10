@@ -968,22 +968,8 @@ positive Reimburse-method expense credits already included in net payable.
   Resolved loads count once across dates; provisional/conflicting/repeated rows
   remain visible in reconciliation. No provider calls.
   Weekly and Right now tabs request separate section projections. Weekly uses
-  full Monday-Sunday periods and a read-only repeatable-read profit waterfall:
-  whole-fleet counted gross minus dated company-truck fuel (including DEF), tolls,
-  routed driver/owner earnings and investor shares after hired labor. Reuse payroll
-  calculations and frozen statements; never subtract owner cost recoveries twice.
-  Carry, escrow and recurring collections are excluded; profit is before other costs.
-  Unknown ownership/terms, excluded gross or unreconciled earnings leave profit null.
-  Ownership baselines with start_known=false have an open start, matching payroll;
-  their recorded ends still apply. Fuel/tolls never wait for payroll finalization.
-  Unresolved fuel/tolls and load ownership/terms open a paginated review at /dashboard/cost-review
-  (kind=fuel|tolls|ownership). Ownership review names the exact counted loads,
-  dated Clustie truck assignments and reasons; stale DataTruck assignment labels
-  never determine ownership or create these warnings. Counts and detail share the waterfall
-  attribution query and its Administrator plus five-read permission gate.
-  Show missing truck links, missing/conflicting dated ownership,
-  or missing amounts; never infer ownership or mutate sources on review.
-  All five board/fuel/tolls/driver_pay/investor_pay read permissions are required.
+  full Monday-Sunday periods. The revenue waterfall and its exclusive review
+  dialogs/API/calculation are retired; dashboard reads no longer calculate payroll.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
   See `docs/DASHBOARD.md` for metric contracts, access, failures and test commands.
 - `frontend/app/accounting/driver-pay/`: collapsed weekly driver accordions sourced
@@ -3676,9 +3662,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   paginated member list from one repeatable-read calculation. Editors load their
   choices and complete membership versions when opened.
 - Dashboard `sections` is an optional allowlisted selector; omission keeps the
-  legacy response. Weekly profit is requested separately after primary data and
-  uses the unchanged calculation. Performance logs distinguish current/weekly
-  primary requests and weekly profit without recording raw query parameters.
+  response for the remaining sections. Performance logs distinguish current/weekly
+  primary requests without recording raw query parameters.
 - Status Board `overview=1` omits historical/hidden load groups in GET/SSE;
   current/next loads, stops, automation and edit versions remain. Load dialogs
   retain full details across overview updates and re-fetch on source revision/date

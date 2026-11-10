@@ -135,7 +135,6 @@ type DashboardSection struct {
 	Error       string                `json:"error,omitempty"`
 	Items       []DashboardItem       `json:"items"`
 	Performance *DashboardPerformance `json:"performance,omitempty"`
-	Waterfall   *DashboardWaterfall   `json:"waterfall,omitempty"`
 }
 type CompanyDashboard struct {
 	Period   DashboardPeriod             `json:"period"`
