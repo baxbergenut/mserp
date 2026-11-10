@@ -31,6 +31,7 @@ let full = { current, week: [current, next, later], next: [next, later], earlier
 let entry = { driverId: driver.id, currentLoad: current.number, trailerNumber: '', trailerNote: '', status: 'DISPATCHED', destination: '', eta: '', notes: '', homeTime: '', version: 1 };
 const overview = () => ({ ...full, detailsOmitted: true, earlier: [], hidden: [], unavailable: [] });
 const board = () => ({ weekStart: '2026-10-26', drivers: [driver], entries: [entry], grossEntries: [], loads: { [driver.id]: overview() }, eld: { configured: false } });
+let editorRole = "Updater";
 let editable = true;
 let detailReads = 0, boardReads = 0, mutations = 0, holdDetails = false, failDetails = false;
 const pending = [], errors = [];
@@ -110,7 +111,7 @@ try {
     }
     if (path === '/driver-board') { boardReads++; return route.fulfill({ json: board() }); }
     const fixtures = {
-      '/auth/session': { user: { id: 'loads-test', username: 'Loads Test', permissions: editable ? ['driver_board.read', 'driver_board.write'] : ['driver_board.read'] }, csrfToken: 'fixture' },
+      '/auth/session': { user: { id: 'loads-test', username: 'Loads Test', administrator: false, roleName: editorRole, permissions: editable ? ['driver_board.read', 'driver_board.write'] : ['driver_board.read'] }, csrfToken: 'fixture' },
       '/tasks/count': { count: 0 }, '/sidebar-counts': {},
     };
     await route.fulfill({ json: fixtures[path] ?? [] });
@@ -377,8 +378,17 @@ try {
   await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
   await panel.getByRole('button', { name: '84V7859', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toHaveCount(0);
+  // Dispatcher uses the same edit capability, with no administrator flag.
+  editorRole = 'Dispatcher'; editable = true;
+  await page.reload();
+  await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
+  await panel.getByRole('button', { name: '84V7859', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toBeEnabled();
+  await panel.getByRole('button', { name: 'Mark completed', exact: true }).click();
+  await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: /84V7859.*Completed load/ })).toBeVisible();
   expect(errors).toEqual([]);
-  console.log('Status Board loads passed: animated drag, keyboard reorder, queued completion/read-only permissions, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
+  console.log(`Updater and Dispatcher non-admin: ` + 'Status Board loads passed: animated drag, keyboard reorder, queued completion/read-only permissions, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

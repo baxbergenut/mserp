@@ -71,6 +71,31 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "add", Number: "000-late"}, ""); !errors.Is(err, ErrBoardLoadSelection) {
 		t.Fatal("duplicate accepted", err)
 	}
+	// Gross Board precedence before a source arrives, without replacing active dispatch.
+	act(BoardLoadAction{Action: "select", PlanID: planID})
+	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES($1,$2,2,' 000-late ')`, d.ID, now.Format(time.DateOnly))
+	if v = view(); v.Current == nil || v.Current.PlanID != planID || len(v.Next) != 0 {
+		t.Fatal("Gross arrival replaced active dispatch or duplicated it", v)
+	}
+	act(BoardLoadAction{Action: "clear"})
+	if v = view(); len(v.Next) != 1 || v.Next[0].Manual || v.Next[0].CanRemoveFromQueue || v.Next[0].Slot != 2 || v.Next[0].Date != now.Format(time.DateOnly) || len(v.Week) != 1 {
+		t.Fatal("unimported Gross Board did not take precedence", v)
+	}
+	grossPlanID := v.Next[0].PlanID
+	act(BoardLoadAction{Action: "complete_queued", PlanID: grossPlanID})
+	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 || v.Unavailable[0].PlanID != grossPlanID {
+		t.Fatal("completion lost Gross identity", v)
+	}
+	act(BoardLoadAction{Action: "restore_completed", PlanID: grossPlanID})
+	if len(view().Next) != 1 {
+		t.Fatal("Gross completion alias did not restore", view())
+	}
+	act(BoardLoadAction{Action: "select", PlanID: grossPlanID})
+	if v = view(); v.Current == nil || v.Current.PlanID != grossPlanID || len(v.Next) != 0 {
+		t.Fatal("unresolved Gross current load duplicated in queue", v)
+	}
+	act(BoardLoadAction{Action: "clear"})
+	exec(`DELETE FROM gross_board_extra_entries WHERE driver_id=$1`, d.ID)
 	now = now.AddDate(0, 0, 10)
 	if v = view(); len(v.Next) != 1 || v.Next[0].PlanID != planID {
 		t.Fatal("placeholder aged out", v)
@@ -93,11 +118,21 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	if !found {
 		t.Fatal("manual queue omitted from operational refresh")
 	}
+	// Preserve the queued pickup override and custom position across replacement.
+	v = view()
+	act(BoardLoadAction{Action: "stop_time", PlanID: planID, StopKey: v.Next[0].Stops[0].Key, ManualStopTime: "09:30"})
+	exec(`INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number) VALUES($1,$2,3,'QUEUE-OTHER')`, d.ID, now.Format(time.DateOnly))
+	v = view()
+	otherPlan := v.Next[1].PlanID
+	act(BoardLoadAction{Action: "order", Order: []string{otherPlan, planID}})
 	// A later Gross Board entry does not create a second queue item.
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,$2,'000-LATE',989001)`, d.ID, now.Format(time.DateOnly))
-	if len(view().Next) != 1 || len(view().Week) != 1 {
-		t.Fatal("Gross Board duplicate")
+	v = view()
+	if len(v.Next) != 2 || len(v.Week) != 2 || v.Next[0].PlanID != otherPlan || v.Next[1].Manual || v.Next[1].Slot != 0 || v.Next[1].Stops[0].ManualStopTime != "09:30" {
+		t.Fatal("Gross replacement lost queue position, slot or stop override", v)
 	}
+	exec(`DELETE FROM gross_board_extra_entries WHERE driver_id=$1 AND slot=3`, d.ID)
+
 	// An old manual entry must not dispatch again after its source is invoiced.
 	exec(`UPDATE loads SET status=' Invoiced ' WHERE id=989001`)
 	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 {
@@ -114,18 +149,12 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 	exec(`UPDATE loads SET status='Dispatched' WHERE id=989001`)
 	v = view()
-	if !v.Next[0].CanRemoveFromQueue {
-		t.Fatal("manual alias is not removable")
+	if len(v.Next) != 1 || v.Next[0].Manual || v.Next[0].CanRemoveFromQueue || v.Next[0].Date != now.Format(time.DateOnly) {
+		t.Fatal("Gross counterpart did not take precedence", v)
 	}
-	r = act(BoardLoadAction{Action: "hide", PlanID: planID})
-	if len(r.Loads.Next) != 1 || r.Loads.Next[0].Manual || r.Loads.Next[0].CanRemoveFromQueue || len(r.Loads.Hidden) != 1 {
-		t.Fatal("manual removal hid the Gross Board load", r.Loads)
-	}
-	v = view()
 	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: e.Version, FromDate: v.FromDate, Revision: v.Revision, Action: "hide", PlanID: v.Next[0].PlanID}, ""); !errors.Is(err, ErrBoardGrossPlanRemoval) {
 		t.Fatal("Gross counterpart became removable", err)
 	}
-	act(BoardLoadAction{Action: "restore", PlanID: planID})
 	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1 AND load_record_id=989001`, d.ID)
 	if v = view(); len(v.Next) != 1 || !v.Next[0].CanRemoveFromQueue {
 		t.Fatal("manual-only plan did not regain removal", v)
@@ -134,6 +163,12 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	if len(r.Loads.Next) != 0 || len(r.Loads.Hidden) != 1 {
 		t.Fatal("hide")
 	}
+	// A hidden manual record never hides a newly added Gross Board plan.
+	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,$2,'000-LATE',989001)`, d.ID, now.Format(time.DateOnly))
+	if v = view(); len(v.Next) != 1 || v.Next[0].Manual || len(v.Hidden) != 1 {
+		t.Fatal("hidden manual suppressed Gross plan", v)
+	}
+	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1`, d.ID)
 	r = act(BoardLoadAction{Action: "restore", PlanID: planID})
 	if len(r.Loads.Next) != 1 {
 		t.Fatal("restore")

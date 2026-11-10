@@ -33,6 +33,7 @@ type BoardStop struct {
 	Appointment    string         `json:"appointment"`
 }
 type BoardLoad struct {
+	queueAlias          string
 	PreviouslyActive    bool `json:"previouslyActive,omitempty"`
 	previousActiveEvent int64
 	CanRemoveFromQueue  bool        `json:"canRemoveFromQueue,omitempty"`
@@ -616,6 +617,14 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 			}
 		}
 		seen := map[int]bool{}
+		aliases := manualBoardPlanAliases(plans[id])
+		seenPlans := map[string]bool{}
+		if view.Current != nil {
+			view.Current.queueAlias = aliases[view.Current.PlanID]
+			if key := view.Current.queueAlias; key != "" {
+				seenPlans[key] = true
+			}
+		}
 		if view.Current == nil && strings.TrimSpace(entries[id].CurrentLoad) != "" {
 			view.ResolutionWarning = "Current load is unmatched or ambiguous; review its exact number and load plans"
 		}
@@ -631,13 +640,18 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 			completed[key] = true
 		}
 		// An older duplicate must not hide the same source's eligible plan.
-		// Manual identities keep precedence; otherwise retain date/slot order.
+		// Prefer eligible Gross Board counterparts, preserving date/slot order.
 		queuePlans := slices.Clone(plans[id])
 		for i := range queuePlans {
 			annotatePreviouslyActive(&queuePlans[i], previouslyActive[id], s)
 		}
+		preferredGross := preferredGrossBoardQueuePlans(queuePlans, aliases, s, from)
 		sort.SliceStable(queuePlans, func(i, j int) bool {
 			a, b := queuePlans[i], queuePlans[j]
+			ap, bp := preferredGross[aliases[a.PlanID]] == a.PlanID, preferredGross[aliases[b.PlanID]] == b.PlanID
+			if ap != bp {
+				return ap
+			}
 			if a.Manual != b.Manual {
 				return a.Manual
 			}
@@ -656,6 +670,13 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 				view.Hidden = append(view.Hidden, p)
 				continue
 			}
+			p.queueAlias = aliases[p.PlanID]
+			if key := p.queueAlias; key != "" {
+				if seenPlans[key] {
+					continue
+				}
+				seenPlans[key] = true
+			}
 			if p.LoadID != nil {
 				if seen[*p.LoadID] {
 					continue
@@ -663,7 +684,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 				seen[*p.LoadID] = true
 			}
 			sourceUnavailable := p.SourceMissing || terminalLoad(p.SourceStatus)
-			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID]
+			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || completed["plan:"+aliases[p.PlanID]]
 			if sourceUnavailable || completedHere {
 				p.Completed = !p.SourceMissing && (providerCompletedLoad(p.SourceStatus) || completedHere && !sourceUnavailable)
 				p.PreviouslyActive = false
@@ -684,6 +705,11 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 		rank := map[string]int{}
 		for i, key := range s.Order {
 			rank[key] = i + 1
+		}
+		for _, p := range view.Next {
+			if rank[p.PlanID] == 0 && aliases[p.PlanID] != "" {
+				rank[p.PlanID] = rank[aliases[p.PlanID]]
+			}
 		}
 		sort.SliceStable(view.Next, func(i, j int) bool {
 			a, b := rank[view.Next[i].PlanID], rank[view.Next[j].PlanID]
@@ -892,11 +918,8 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 				break
 			}
 			if view.Current != nil {
-				s.Completed = append(s.Completed, boardCompletionKey(*view.Current))
+				markBoardLoadCompleted(&s, *view.Current)
 				delete(s.RestoredPlans, view.Current.PlanID)
-				if view.Current.Manual {
-					s.Completed = append(s.Completed, "plan:"+view.Current.PlanID)
-				}
 			}
 			s.Current = nil
 			e.CurrentLoad, e.Destination, e.Status, e.ETA = "", "", "", ""
@@ -984,10 +1007,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			return result, ErrBoardLoadSelection
 		}
 		p := view.Next[index]
-		s.Completed = append(s.Completed, boardCompletionKey(p))
-		if p.Manual {
-			s.Completed = append(s.Completed, "plan:"+p.PlanID)
-		}
+		markBoardLoadCompleted(&s, p)
 		delete(s.RestoredPlans, p.PlanID)
 		next := slices.Delete(slices.Clone(view.Next), index, index+1)
 		e.Status = boardProgressStatus(e.Status, next)
@@ -1007,7 +1027,9 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			s.RequeuedLoads[boardCompletionKey(p)] = p.previousActiveEvent
 		}
 		loadKey, planKey := boardCompletionKey(p), "plan:"+p.PlanID
-		matchesCompletion := func(key string) bool { return key == loadKey || key == planKey }
+		matchesCompletion := func(key string) bool {
+			return key == loadKey || key == planKey || p.queueAlias != "" && key == "plan:"+p.queueAlias
+		}
 		s.Completed = slices.DeleteFunc(s.Completed, matchesCompletion)
 		for stop := range s.CompletedStops {
 			key, _, _ := strings.Cut(stop, "/")

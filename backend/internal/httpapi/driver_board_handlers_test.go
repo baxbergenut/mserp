@@ -98,3 +98,51 @@ func TestETARetryRequiresBoardWrite(t *testing.T) {
 		t.Fatal("manual automatic ETA retry must require board write permission")
 	}
 }
+
+// Load completion is an ordinary Status Board edit, not an administrator action.
+func TestQueuedLoadCompletionAccess(t *testing.T) {
+	for _, tc := range []struct {
+		role                 string
+		write, csrf, session bool
+		want                 int
+	}{
+		{"Updater", true, true, true, 204},
+		{"Dispatcher", true, true, true, 204},
+		{"Accountant", true, true, true, 204},
+		{"Fleet", false, true, true, 403},
+		{"Recruiter", false, true, true, 403},
+		{"Updater", true, false, true, 403},
+		{"Updater", true, true, false, 401},
+	} {
+		t.Run(tc.role, func(t *testing.T) {
+			permissions := []string{"driver_board.read"}
+			if tc.write {
+				permissions = append(permissions, "driver_board.write")
+			}
+			store := &fakeAuthStore{sessions: map[string]repository.AuthSession{hashToken("session"): {User: repository.AuthUser{ID: "editor", RoleName: tc.role, Administrator: false, Permissions: permissions}, CSRFToken: "csrf"}}}
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			auth := newAuthHandler(logger, store, AuthOptions{})
+			router := chi.NewRouter()
+			router.Use(auth.requireSession, auth.requireCSRF, requirePermission)
+			router.Post("/driver-board/loads/{driverId}", func(w http.ResponseWriter, r *http.Request) {
+				var action repository.BoardLoadAction
+				if err := decodeJSON(r, &action); err != nil || action.Action != "complete_queued" {
+					t.Fatal("unexpected completion request", err)
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
+			req := httptest.NewRequest("POST", "/driver-board/loads/e4540000-0000-0000-0000-000000000001", strings.NewReader(`{"action":"complete_queued","planId":"queued-plan"}`))
+			if tc.session {
+				req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session"})
+			}
+			if tc.csrf {
+				req.Header.Set("X-CSRF-Token", "csrf")
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, req)
+			if response.Code != tc.want {
+				t.Fatalf("got %d, want %d: %s", response.Code, tc.want, response.Body.String())
+			}
+		})
+	}
+}

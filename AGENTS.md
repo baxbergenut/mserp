@@ -3880,9 +3880,21 @@ Status Board database tests verify the production payroll coverage check.
 
 ## Manual Status Board queue entries
 
-- Manual queue entries remain removable even when Gross Board has the same load
-  number or source ID. Hiding the manual entry must not consume source deduplication
-  or hide its Gross Board counterpart. Gross-origin entries stay protected.
+- Mark completed is available to every Status Board editor (driver_board.write),
+  not only administrators. Read-only users cannot complete loads; CSRF and the
+  ordinary load revision/version guards still apply.
+
+- A manual number and a matching Gross Board plan share one queue identity.
+  An eligible Gross Board counterpart takes display/action precedence, including
+  its real date and slot, while inheriting the prior manual queue position.
+  Source-based stop-time overrides and active dispatch selections are preserved.
+  Accounting and manual records are never deleted. Older ineligible plans do not
+  displace deliberately queued manual entries; conflicting IDs/missing sources
+  and ambiguous manual numbers with pinned Gross sources remain separate.
+
+- Manual-only queue entries remain removable. Hidden manual entries never hide
+  their Gross Board counterparts. A displayed Gross-origin entry stays protected
+  and is removed through Gross Board.
 - Ambiguous manual numbers keep no guessed source ID or stops. If every available
   exact-number source is completed, show the placeholder in completed history;
   mixed-status ambiguity stays available for review and manual removal.
