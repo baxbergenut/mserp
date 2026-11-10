@@ -10,6 +10,7 @@ import type { Expense, ExpenseInput } from "@/app/lib/types";
 import { ErrorBanner, Modal } from "@/app/components/management/ManagementUI";
 import { ExpenseForm, expenseToInput } from "./ExpenseForm";
 import { applyExpenseCategoryRules } from "./catalog";
+import { ExpenseCreationInfo } from "./ExpenseCreationInfo";
 import { ExpenseDocuments } from "./ExpenseDocuments";
 
 export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -43,6 +44,7 @@ export function ExpenseEditModal({ id, onClose, onSaved }: { id: string; onClose
     finally { setSaving(false); }
   }
   return <Modal sidePanel={<ExpenseDocuments key={id} id={id} />} title={canEdit ? "Edit entry" : "Expense details"} isSaving={saving} submitLabel="Save changes" hideSubmit={!canEdit} onClose={onClose} onSubmit={event => { event.preventDefault(); void save(); }}>
+    {data && <ExpenseCreationInfo expense={data.expense} />}
     {error && <ErrorBanner message={error} />}
     {!data && !error && <p role="status" className="text-zinc-500">Loading expense…</p>}
     {canEdit && data && form && data.expense.payments?.length > 0 && (form.coveredBy !== data.expense.coveredBy || form.ownerId !== data.expense.ownerId || form.driverId !== data.expense.driverId) && <p role="status" className="text-sm text-zinc-500">Saving transfers the saved deductions to the responsible person’s statements, keeping their weeks and amounts. Finalized statements must be reopened first.</p>}

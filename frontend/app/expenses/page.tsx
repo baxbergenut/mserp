@@ -1,4 +1,5 @@
 "use client";
+import { ExpenseCreationInfo } from "./ExpenseCreationInfo";
 import type { ExpenseDriverChoice, ExpenseTruckChoice, ExpenseOwnerChoice } from "@/app/lib/types";
 
 import { applyExpenseCategoryRules } from "./catalog";
@@ -620,6 +621,7 @@ export default function ExpensesPage() {
           onClose={closeEntry}
           onSubmit={(event) => { event.preventDefault(); void save(); }}
         >
+          <ExpenseCreationInfo expense={editing} pendingSaved={!!pendingUploadId} />
           {(uploadError || error) && <div className="mb-4"><ErrorBanner message={uploadError || error} /></div>}
           {!editing && !review && !pendingUploadId && (
             <div className="mb-5">
