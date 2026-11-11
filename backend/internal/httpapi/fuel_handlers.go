@@ -78,9 +78,14 @@ func registerFuelRoutes(
 				writeAPIError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			driverID := strings.TrimSpace(r.URL.Query().Get("driverId"))
+			if driverID != "" && driverID != "unassigned" && !isUUID(driverID) {
+				writeAPIError(w, http.StatusBadRequest, "Invalid driver ID.")
+				return
+			}
 			transactions, err := repo.ListTransactionsPage(r.Context(), repository.FuelPageQuery{
 				Pagination: pagination, Search: strings.TrimSpace(r.URL.Query().Get("search")),
-				Driver: r.URL.Query().Get("driver"), State: r.URL.Query().Get("state"),
+				Driver: r.URL.Query().Get("driver"), DriverID: driverID, State: r.URL.Query().Get("state"),
 				Category: r.URL.Query().Get("category"), DateFrom: dateFrom, DateTo: dateTo,
 			})
 			if err != nil {

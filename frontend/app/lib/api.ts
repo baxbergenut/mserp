@@ -288,6 +288,7 @@ export const fetchFuelTransactions = () =>
   apiRequest<FuelTransaction[]>("/fuel-transactions");
 export const fetchFuelTransactionsPage = (query: PageQuery & {
   driver?: string;
+  driverId?: string;
   state?: string;
   responsibility?: "non_personal";
   chargeDriverId?: string;

@@ -105,6 +105,9 @@ func TestRelayIdentityDatabase(t *testing.T) {
 	if transactions.Total != 1 || transactions.Items[0].DriverID != nil || transactions.Summary.Spend != 100 || transactions.Items[0].Flag.Status != "data_issue" {
 		t.Fatalf("unassigned purchase lost: %+v", transactions)
 	}
+	if len(transactions.Options.DriverOptions) != 1 || transactions.Options.DriverOptions[0].ID != "unassigned" {
+		t.Fatalf("unassigned driver option lost: %+v", transactions.Options)
+	}
 	completed, err := repo.CompletedDays(ctx, "production", when, when)
 	if _, ok := completed[when.Format(time.DateOnly)]; err != nil || !ok {
 		t.Fatalf("day not completed: %v", err)
@@ -153,6 +156,37 @@ func TestRelayIdentityDatabase(t *testing.T) {
 		if row.DriverID == nil || *row.DriverID != driverA {
 			t.Fatal("confirmed link lost")
 		}
+	}
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET full_name='James McWilliams' WHERE id=$1`, driverA); err != nil {
+		t.Fatal(err)
+	}
+	for _, filter := range []struct {
+		driverID, driver, search string
+		want                     int
+	}{
+		{driverID: driverA, want: 2},
+		{driverID: driverB},
+		{driverID: "unassigned"},
+		{driver: "James Mcwilliams", want: 2},
+		{search: driverA, want: 2},
+		{search: "new-account", want: 2},
+		{search: "JAMES@EXAMPLE.COM", want: 2},
+		{search: "+1 (470) 334-4443", want: 2},
+		{driverID: driverA, search: "shared@example.com"},
+	} {
+		page, err := repo.ListTransactionsPage(ctx, FuelPageQuery{
+			Pagination: Pagination{Page: 1, PageSize: 1},
+			DriverID:   filter.driverID, Driver: filter.driver, Search: filter.search,
+		})
+		if err != nil || page.Total != filter.want || len(page.Items) != min(filter.want, 1) || page.Summary.Spend != float64(filter.want*100) {
+			t.Fatalf("filter %+v: page=%+v err=%v", filter, page, err)
+		}
+		if len(page.Options.DriverOptions) != 1 || page.Options.DriverOptions[0] != (FuelDriverOption{ID: driverA, Name: "James McWilliams"}) {
+			t.Fatalf("driver option lost: %+v", page.Options)
+		}
+	}
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET full_name='James Lee Burligh' WHERE id=$1`, driverA); err != nil {
+		t.Fatal(err)
 	}
 	dashboard = FinancialDashboard{}
 	if err = dashboardRepo.loadFinancialTotals(ctx, FinancialDashboardQuery{DateFrom: &when, DateTo: &until}, &dashboard); err != nil {
