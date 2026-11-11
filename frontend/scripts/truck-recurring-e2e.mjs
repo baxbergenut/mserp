@@ -7,7 +7,9 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   const all=await (await page.request.get(base+'/api/drivers')).json();
   const driver=all.find(d=>d.fullName==='E2e Driver');
   const charges=await (await page.request.get(base+'/api/driver-charges')).json();
-  const week=charges.currentWeek;
+  const previous=new Date(charges.currentWeek+'T00:00:00Z');
+  previous.setUTCDate(previous.getUTCDate()-7);
+  const week=previous.toISOString().slice(0,10);
   await page.goto(base+'/trucks');
   await page.getByRole('button',{name:'Add truck',exact:true}).click();
   await page.getByLabel('Unit number',{exact:true}).fill('OWNER-AUTO');
@@ -51,6 +53,17 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   await page.getByRole('tab',{name:'Truck charges',exact:true}).click();
   const fee=page.getByLabel('OWNER-AUTO, Truck insurance',{exact:true});
   await expect(fee).toBeEnabled();
+  const reads=[];
+  const observe=req=>{
+    const url=new URL(req.url());
+    if(req.method()==='GET' && ['/api/truck-charges','/api/lookups/trucks','/api/lookups/investors'].includes(url.pathname)) reads.push(url.pathname+url.search);
+  };
+  page.on('request',observe);
+  await page.getByRole('button',{name:'Previous week',exact:true}).click();
+  await expect(page.locator('[data-week-start]')).toHaveAttribute('data-week-start',week);
+  await expect(fee).toBeEnabled();
+  page.off('request',observe);
+  expect(reads).toEqual(['/api/truck-charges?weekStart='+week]);
   await fee.check();
   await expect(page.getByRole('button',{name:'Reload',exact:true})).toBeEnabled();
   await page.getByLabel('OWNER-AUTO, Truck insurance amount',{exact:true}).selectOption('75.00');

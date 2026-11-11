@@ -9,11 +9,11 @@ import (
 )
 
 // These are complete, source-only weekly facts. Fetch the exact revision cohort
-// once for a cross-period publication; each consumer still decodes its own copy.
+// once for the affected periods; each consumer still decodes its own copy.
 // Missing rows remain ordinary misses and use the independent source query.
 func prefetchPayrollRoutingFacts(ctx context.Context, tx pgx.Tx, weeks []time.Time) error {
 	s, _ := ctx.Value(payrollRoutingFactsKey{}).(*payrollRoutingFactsState)
-	if s == nil || !payrollNormalizedInputs(ctx) || len(weeks) < 2 {
+	if s == nil || !payrollNormalizedInputs(ctx) || len(weeks) == 0 {
 		return nil
 	}
 	type cohort struct {

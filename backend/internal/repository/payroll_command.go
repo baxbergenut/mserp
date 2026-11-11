@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mserp/internal/db"
 	"sort"
 	"time"
 
@@ -308,6 +309,15 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 				}
 			}
 			eligiblePeriods[date] = eligibleSnapshots[previous]
+			if !eligiblePeriods[date] && !concurrent && impacts[0].chargeScoped && impacts[0].weeks[date] {
+				// An earlier charge command may have intentionally retained this
+				// header. Prove the entire earlier interval before using its scope.
+				prior, e := payrollChangedSourceImpact(ctx, tx, previous, impacts[0].snapshot, date)
+				if e != nil {
+					return nil, e
+				}
+				eligiblePeriods[date] = prior != nil && prior.chargeScoped && !prior.weeks[date]
+			}
 			if resource, ok := tx.(*payrollResourceTransaction); ok && resource.periodSources[date+":"+previous] {
 				eligiblePeriods[date] = true
 			}
@@ -329,6 +339,13 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 	scopes := []payrollBalanceScope{}
 	truckScopes := []payrollTruckInputScope{}
 	for _, w := range weeks {
+		if len(impacts) > 0 && impacts[0] != nil && impacts[0].chargeScoped && !impacts[0].weeks[w.Format(time.DateOnly)] {
+			// Reads and workers can certify unchanged membership and exact
+			// resource deltas from the captured events. Retain this generation
+			// instead of writing an identical header and statement pointers.
+			db.Event(ctx, "truck_charge_skipped_weeks")
+			continue
+		}
 		readCtx := ctx
 		rebaseOnly := false
 		if len(impacts) > 0 && impacts[0] != nil {
@@ -373,6 +390,9 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 		if err = preparePayrollDriverEligibility(ctx, tx, scopes); err != nil {
 			return nil, err
 		}
+	}
+	if err = preparePayrollTruckPhases(ctx, tx, truckScopes); err != nil {
+		return nil, err
 	}
 	if err = preparePayrollTruckInputs(ctx, tx, truckScopes); err != nil {
 		return nil, err
@@ -470,7 +490,14 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 				readCtx = context.WithValue(readCtx, payrollPublicationSelectionKey{}, &only)
 			}
 		} else {
-			reports, e = readPayrollProjectionReference(readCtx, tx, w, false)
+			if len(impacts) > 0 && impacts[0] != nil && impacts[0].chargeScoped {
+				db.Event(readCtx, "truck_charge_calculated_weeks")
+				finish := db.Phase(readCtx, "truck_charge_payroll_"+w.Format(time.DateOnly))
+				reports, e = readPayrollProjectionReference(readCtx, tx, w, false)
+				finish()
+			} else {
+				reports, e = readPayrollProjectionReference(readCtx, tx, w, false)
+			}
 		}
 		if e != nil {
 			return nil, e
@@ -606,17 +633,21 @@ func beginPayrollMutation(ctx context.Context, pool interface {
 
 func commitPayrollMutation(ctx context.Context, tx pgx.Tx) error {
 	if enabled, _ := ctx.Value(payrollPublicationKey{}).(bool); enabled {
-		var changed bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_projection_changes WHERE source_xid=pg_current_xact_id_if_assigned() AND dispatched_at IS NULL)`).Scan(&changed); err != nil {
+		var changed, maybeLiveExpense bool
+		if err := tx.QueryRow(ctx, `SELECT count(*)<>0,coalesce(bool_and(table_name IN
+ ('expenses','expense_balance_corrections','expense_external_settlements')),false)
+ FROM payroll_projection_changes WHERE source_xid=pg_current_xact_id_if_assigned() AND dispatched_at IS NULL`).Scan(&changed, &maybeLiveExpense); err != nil {
 			return err
 		}
 		if changed {
-			handled, err := publishLiveDriverExpenses(ctx, tx)
-			if err != nil {
-				return err
-			}
-			if handled {
-				return tx.Commit(ctx)
+			if maybeLiveExpense {
+				handled, err := publishLiveDriverExpenses(ctx, tx)
+				if err != nil {
+					return err
+				}
+				if handled {
+					return tx.Commit(ctx)
+				}
 			}
 			var impact *payrollPublicationImpact
 			if mutation, ok := tx.(*payrollMutationTransaction); ok {
@@ -625,6 +656,9 @@ func commitPayrollMutation(ctx context.Context, tx pgx.Tx) error {
 				if err != nil {
 					return err
 				}
+			}
+			if impact != nil && impact.chargeScoped {
+				db.Event(ctx, "truck_charge_scoped_publication")
 			}
 			if _, err := publishPayrollCommand(ctx, tx, "", impact); err != nil {
 				return err

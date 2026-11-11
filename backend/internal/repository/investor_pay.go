@@ -56,6 +56,10 @@ func truckRecurringCharges(data TruckChargeData, types []ChargeType, truck, week
 			}
 		}
 	}
+	return effectiveTruckRecurringCharges(latest, types, truck, week, hasLoads)
+}
+
+func effectiveTruckRecurringCharges(latest map[string]TruckChargePhase, types []ChargeType, truck, week string, hasLoads bool) []PayAutoCharge {
 	result := []PayAutoCharge{}
 	for _, t := range types {
 		p, ok := latest[t.ID]
@@ -139,7 +143,7 @@ func payCommentKey(date string, slot int, number string) string { // same stable
 func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) (DriverPayWeek, DriverPayWeek, error) {
 	defer db.Phase(ctx, "truck_routing")()
 	investor := DriverPayWeek{WeekStart: source.WeekStart, Drivers: []DriverPayDriver{}}
-	config, err := payrollTruckData(ctx, tx)
+	config, err := payrollTruckData(ctx, tx, source.WeekStart)
 	if err != nil {
 		return source, investor, err
 	}
@@ -148,7 +152,8 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 		return source, investor, err
 	}
 	terms := applicableTruckTerms(config, source.WeekStart)
-	if err = routeOwnerTruckFees(ctx, tx, &source, config, terms); err != nil {
+	phaseIndex := indexEffectiveTruckPhases(config.Phases, source.WeekStart)
+	if err = routeOwnerTruckFees(ctx, tx, &source, phaseIndex, terms); err != nil {
 		return source, investor, err
 	}
 	if len(terms) == 0 {
@@ -340,7 +345,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 			}
 		}
 		if inputs.metadata[id].feeOwnerMatches {
-			g.card.AutoCharges = truckRecurringCharges(config, charges.Types, id, source.WeekStart, len(g.card.Loads) > 0)
+			g.card.AutoCharges = effectiveTruckRecurringCharges(phaseIndex[id], charges.Types, id, source.WeekStart, len(g.card.Loads) > 0)
 		}
 		if !g.ownerOnly {
 			g.card.AutoCharges = append(g.card.AutoCharges, reimbursements[id]...)

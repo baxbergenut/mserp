@@ -19,6 +19,7 @@ type payrollPublicationImpact struct {
 	loadIDs       []int64 // Changed sources need new immutable facts before publication.
 	finalizedKind string  // Metadata-only freeze/reopen preserves the other page's values.
 	changeIDs     []int64 // Complete captured events for source/command revision proofs.
+	chargeScoped  bool    // Proven interval for a pure recurring phase edit.
 	liveOnly      bool    // Base membership is certified; only dynamic expense balances changed.
 }
 type payrollPublicationSelectionKey struct{}
@@ -67,7 +68,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		"truck_charge_phases":              {"truck_id"},
 		"driver_termination_truck_actions": {"driver_id", "truck_id"},
 	}
-	rows, err := tx.Query(ctx, `SELECT id,table_name,operation,old_routes||new_routes,revision_only,
+	rows, err := tx.Query(ctx, `SELECT id,table_name,operation,old_routes||new_routes,source_xid::text,revision_only,
  live_expense FROM payroll_projection_changes
  WHERE CASE WHEN $1::bigint[] IS NULL THEN source_xid=pg_current_xact_id() ELSE id=ANY($1::bigint[]) END`, changeIDs)
 	if err != nil {
@@ -96,18 +97,20 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	loadsOnly := true
 	capturedIDs := []int64{}
 	nonLiveEvents := 0
+	chargeProof := newTruckChargeImpactProof()
 	for rows.Next() {
 		var changeID int64
-		var table, operation string
+		var table, operation, sourceXID string
 		var body []byte
 		var revisionOnly bool
 		var liveExpense bool
-		if err = rows.Scan(&changeID, &table, &operation, &body, &revisionOnly, &liveExpense); err != nil {
+		if err = rows.Scan(&changeID, &table, &operation, &body, &sourceXID, &revisionOnly, &liveExpense); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		capturedIDs = append(capturedIDs, changeID)
 		if liveExpense {
+			chargeProof.valid = false
 			continue
 		}
 		nonLiveEvents++
@@ -131,6 +134,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 			rows.Close()
 			return nil, err
 		}
+		chargeProof.capture(table, operation, sourceXID, routes)
 		if len(routes) == 0 {
 			boardOnly = false
 		}
@@ -529,6 +533,13 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 				impact.finalizedKind = strings.TrimSuffix(strings.TrimSuffix(c.name, ".finalize"), ".reopen")
 			}
 		}
+	}
+	if chargeProof.valid && len(chargeProof.phases) > 0 {
+		impact.weeks, err = chargeProof.affectedWeeks(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		impact.chargeScoped = impact.weeks != nil
 	}
 	impact.changeIDs = capturedIDs
 	return impact, nil

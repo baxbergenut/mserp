@@ -97,9 +97,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
       saved = true;
       const failed = results.filter(r => r.error);
       const failedKeys = new Set(failed.map(key));
-      // Revert rejected cells immediately and retain confirmed versions even if
-      // the refresh fails. Every other truck in the selection still saves.
-      setData(apply(updates.filter(v => !failedKeys.has(key(v))).map(v => ({ ...v, version: v.version + 1 }))));
+      setData(apply(updates.filter(v => !failedKeys.has(key(v)))));
       setFailures(failed);
       if (failed.length) setError(`${updates.length - failed.length} truck charges updated; ${failed.length} could not be saved. Review the trucks below.`);
       setData(await fetchTruckCharges(week));
@@ -109,6 +107,8 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
         setError(e instanceof Error ? e.message : "Unable to save truck charges");
         try { setData(await fetchTruckCharges(week)); } catch { /* Keep the save error visible. */ }
       } else {
+        setData(previous);
+        setLoadedWeek("");
         setError(current => [current, "Changes saved, but the latest charges could not be loaded. Reload before making more changes."].filter(Boolean).join(" "));
       }
     } finally { setBusy(false); }

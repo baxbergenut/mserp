@@ -12,11 +12,19 @@ import (
 // Without investor terms, dated ownership supplies the recurring fee destination,
 // independently of load attribution. Conflicting loads/assignments require review
 // instead of hiding the fees. Explicit terms retain owner/mixed-week routing.
-func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, config TruckChargeData, terms map[string]TruckTerm) error {
+func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, phases map[string]map[string]TruckChargePhase, terms map[string]TruckTerm) error {
 	needed := false
-	for _, phase := range config.Phases {
-		if _, configured := terms[phase.TruckID]; !configured && phase.Included && phase.WeekStart <= source.WeekStart {
-			needed = true
+	for truck, charges := range phases {
+		if _, configured := terms[truck]; configured {
+			continue
+		}
+		for _, phase := range charges {
+			if phase.Included {
+				needed = true
+				break
+			}
+		}
+		if needed {
 			break
 		}
 	}
@@ -30,6 +38,23 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 	loadMap, err := truckPayLoadMap(ctx, tx, source.WeekStart)
 	if err != nil {
 		return err
+	}
+	type feeLoad struct {
+		number, date, driver, name string
+	}
+	loadsByTruck := map[string][]feeLoad{}
+	driverIndex := map[string]int{}
+	for idx, person := range source.Drivers {
+		// Keep the first match, as in the original scan.
+		if _, found := driverIndex[person.ID]; !found {
+			driverIndex[person.ID] = idx
+		}
+		for _, load := range person.Loads {
+			truck := loadMap[person.ID+":"+load.CommentKey].TruckID
+			if truck != "" && len(phases[truck]) > 0 {
+				loadsByTruck[truck] = append(loadsByTruck[truck], feeLoad{load.LoadNumber, load.Date, person.ID, person.FullName})
+			}
+		}
 	}
 	rows, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,d.id::text,d.full_name,d.pay_type,d.pay_rate::text,d.active,
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
@@ -53,23 +78,20 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 		if _, configured := terms[d.TruckID]; configured || !payrollIncludesTruck(ctx, d.TruckID) {
 			continue
 		}
-		hasLoads := false
-		recordedLoads := []string{}
-		conflicts := []string{}
-		for _, person := range source.Drivers {
-			for _, load := range person.Loads {
-				if loadMap[person.ID+":"+load.CommentKey].TruckID == d.TruckID {
-					hasLoads = true
-					recordedLoads = append(recordedLoads, fmt.Sprintf("%s (%s)", load.LoadNumber, load.Date))
-					if person.ID != d.ID {
-						conflicts = append(conflicts, fmt.Sprintf("%s (%s, %s)", person.FullName, load.LoadNumber, load.Date))
-					}
-				}
-			}
-		}
-		fees := truckRecurringCharges(config, charges.Types, d.TruckID, source.WeekStart, hasLoads)
+		loads := loadsByTruck[d.TruckID]
+		hasLoads := len(loads) > 0
+		fees := effectiveTruckRecurringCharges(phases[d.TruckID], charges.Types, d.TruckID, source.WeekStart, hasLoads)
+
 		if len(fees) == 0 {
 			continue
+		}
+		recordedLoads := []string{}
+		conflicts := []string{}
+		for _, load := range loads {
+			recordedLoads = append(recordedLoads, fmt.Sprintf("%s (%s)", load.number, load.date))
+			if load.driver != d.ID {
+				conflicts = append(conflicts, fmt.Sprintf("%s (%s, %s)", load.name, load.number, load.date))
+			}
 		}
 		// Ownership supplies the fee destination. Load attribution is reviewed
 		// separately and must never silently remove the owner's recurring fees.
@@ -83,14 +105,10 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 			sort.Strings(recordedLoads)
 			d.Issues = append(d.Issues, fmt.Sprintf("Truck %s has recorded loads without a full-week owner-driver assignment: %s. Recurring fees remain on the recorded owner's statement; review the source truck, dated assignments and settlement terms.", d.TruckUnit, strings.Join(recordedLoads, "; ")))
 		}
-		found := false
-		for index := range source.Drivers {
-			if source.Drivers[index].ID == d.ID {
-				source.Drivers[index].AutoCharges = append(source.Drivers[index].AutoCharges, fees...)
-				source.Drivers[index].Issues = append(source.Drivers[index].Issues, d.Issues...)
-				found = true
-				break
-			}
+		index, found := driverIndex[d.ID]
+		if found {
+			source.Drivers[index].AutoCharges = append(source.Drivers[index].AutoCharges, fees...)
+			source.Drivers[index].Issues = append(source.Drivers[index].Issues, d.Issues...)
 		}
 		if !found {
 			// An open historical assignment and truck fees cannot re-enroll a
@@ -104,6 +122,7 @@ func routeOwnerTruckFees(ctx context.Context, tx pgx.Tx, source *DriverPayWeek, 
 			d.Loads = []DriverPayLoad{}
 			d.AutoCharges = fees
 			d.Edits = DriverPayEdits{DriverID: d.ID, WeekStart: source.WeekStart, Comments: map[string]string{}, Adjustments: []DriverPayAdjustment{}}
+			driverIndex[d.ID] = len(source.Drivers)
 			source.Drivers = append(source.Drivers, d)
 		}
 	}

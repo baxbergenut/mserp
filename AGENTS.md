@@ -3336,6 +3336,14 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   investor driver_id prevents duplicate owner identities. Driver and investor
   statements remain separate. A failed truck save must not leave a new investor.
 - Recurring Charges contains Truck charges, Installment plans, Charge types.
+  The weekly matrix reads effective candidates only and keeps excluded phases and
+  expired terms. Grid and writes share the finalized lock predicate. Identical
+  charge saves preserve existing phase versions and produce no audit or payroll
+  publication. Captured charge-only edits use the same effective interval in
+  atomic publication and worker freshness. A successor bounds recalculation
+  only when saved statement and collection evidence rules out later impact.
+  Never prune historical phases, collections or finalized statements as a
+  performance fix.
   GET /truck-charges accepts weekStart (Monday, current week by default) and
   returns owners from fleet ownership history at the selected week's end.
   Owner links, search, sorting and eligibility use that history, independently

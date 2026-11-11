@@ -509,3 +509,29 @@ but their server calculations and production contention are not claimed solved.
 Strengthened placement parity additionally covers excluded unrelated components,
 historical moved loads, removed native/manual loads, and frozen team-linked investor
 snapshots on fresh and migrated databases.
+
+### Recurring truck charges
+
+The weekly matrix returns effective charge and agreement candidates, including
+excluded phases and expired agreements. Its lock query shares the write
+predicate: the driver-side finalized check is per truck and the Investor Pay
+check uses the next phase or term boundary. The browser reuses directory choices
+when changing weeks.
+
+Charge-only captures use old/new truck, type and Monday identities in both
+publication and freshness checks. A matching charge audit is validated against
+the same transaction. Existing completed generations outside the proven window
+stay in place; readers still verify the complete source interval and exact
+resource revisions. Saved collections or statements keep the conservative later
+window. A same-value save does not insert a phase or audit, bump a version, or
+publish payroll. Existing source and financial history is retained.
+
+For production comparison, use the existing HTTP performance records for
+`/truck-charges` and `/truck-charges/recurring[/bulk]`. Compare call counts and
+p50/p95 request time for successful requests. `payroll_accounting_lock` measures
+lock acquisition, `truck_charge_write` covers guarded persistence, and
+`truck_charge_payroll_<Monday>` reports per-period calculation calls and duration.
+`truck_charge_scoped_publication`, `truck_charge_skipped_weeks`, and
+`truck_charge_noop` distinguish scoped, skipped, and unchanged work from
+fallback. Compare like operations; a backdated change that affects carry can
+legitimately publish more periods than a current or future schedule change.

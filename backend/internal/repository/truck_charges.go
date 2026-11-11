@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
+	"mserp/internal/db"
 	"regexp"
 
 	"github.com/jackc/pgx/v5"
@@ -79,28 +80,34 @@ func truckTermCoversWeekSQL(week string) string {
 const latestTruckTermForWeekSQL = `SELECT s.* FROM truck_settlement_terms s
  WHERE s.truck_id=t.id AND s.week_start<=$1::date ORDER BY s.week_start DESC LIMIT 1`
 
-func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
-	d := TruckChargeData{Terms: []TruckTerm{}, Phases: []TruckChargePhase{}}
+func truckTermData(ctx context.Context, q chargeQuery) ([]TruckTerm, error) {
+	terms := []TruckTerm{}
 	rows, err := q.Query(ctx, `SELECT s.truck_id::text,s.week_start::text,s.owner_id::text,s.share_percent::text,s.version,
  coalesce((`+truckTermEndSQL+`)::text,'') FROM truck_settlement_terms s
  WHERE ($1::uuid[] IS NULL OR s.truck_id=ANY($1::uuid[])) ORDER BY s.week_start,s.truck_id`, payrollTruckIDs(ctx))
 	if err != nil {
-		return d, err
+		return nil, err
 	}
 	for rows.Next() {
 		var v TruckTerm
 		if err = rows.Scan(&v.TruckID, &v.WeekStart, &v.OwnerID, &v.SharePercent, &v.Version, &v.EndsBefore); err != nil {
 			rows.Close()
-			return d, err
+			return nil, err
 		}
-		d.Terms = append(d.Terms, v)
+		terms = append(terms, v)
 	}
 	err = rows.Err()
 	rows.Close()
+	return terms, err
+}
+
+func truckChargeData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
+	terms, err := truckTermData(ctx, q)
+	d := TruckChargeData{Terms: terms, Phases: []TruckChargePhase{}}
 	if err != nil {
 		return d, err
 	}
-	rows, err = q.Query(ctx, `SELECT p.truck_id::text,p.type_id::text,p.week_start::text,p.amount::text,p.included,p.version,t.version FROM truck_charge_phases p JOIN driver_charge_types t ON t.id=p.type_id WHERE ($1::uuid[] IS NULL OR p.truck_id=ANY($1::uuid[])) ORDER BY p.week_start,p.truck_id,p.type_id`, payrollTruckIDs(ctx))
+	rows, err := q.Query(ctx, `SELECT p.truck_id::text,p.type_id::text,p.week_start::text,p.amount::text,p.included,p.version,t.version FROM truck_charge_phases p JOIN driver_charge_types t ON t.id=p.type_id WHERE ($1::uuid[] IS NULL OR p.truck_id=ANY($1::uuid[])) ORDER BY p.week_start,p.truck_id,p.type_id`, payrollTruckIDs(ctx))
 	if err != nil {
 		return d, err
 	}
@@ -242,6 +249,9 @@ const terminatedOwnerTruckChargesSQL = `EXISTS (
 // reports keep their existing accounting and ownership rules. Build a new slice
 // because payroll inputs may be reused for a different historical week.
 func truckChargesForEmploymentWeek(ctx context.Context, q chargeQuery, data TruckChargeData, week string) (TruckChargeData, error) {
+	if len(data.Phases) == 0 {
+		return data, nil
+	}
 	vacation, err := readVacationWeek(ctx, q, week)
 	if err != nil {
 		return data, err
@@ -314,6 +324,7 @@ func lockTruckAccounting(ctx context.Context, tx pgx.Tx) error {
 	if payrollConcurrent(tx) {
 		return nil
 	}
+	defer db.Phase(ctx, "payroll_accounting_lock")()
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
 	return err
 }
@@ -416,13 +427,22 @@ func (r *DriverChargeRepository) SaveTruckTerm(ctx context.Context, v TruckTerm,
 	}
 	return commitPayrollMutation(ctx, tx)
 }
+func lockTruckChargeWrite(ctx context.Context, tx pgx.Tx) error {
+	if _, locked := tx.(*payrollMutationTransaction); locked {
+		// Prepared source mutations hold the exclusive accounting gate from
+		// before the pre-write snapshot.
+		return nil
+	}
+	return lockTruckAccounting(ctx, tx)
+}
+
 func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckChargePhase, actor string) error {
 	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err = lockTruckAccounting(ctx, tx); err != nil {
+	if err = lockTruckChargeWrite(ctx, tx); err != nil {
 		return err
 	}
 	if err = saveTruckCharge(ctx, tx, v, actor); err != nil {
@@ -452,7 +472,7 @@ func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates [
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	if err = lockTruckAccounting(ctx, tx); err != nil {
+	if err = lockTruckChargeWrite(ctx, tx); err != nil {
 		return nil, err
 	}
 	results := make([]TruckChargeBulkResult, 0, len(updates))
@@ -490,6 +510,7 @@ func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates [
 }
 
 func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor string) error {
+	defer db.Phase(ctx, "truck_charge_write")()
 	if _, err := chargeWeek(v.WeekStart); err != nil {
 		return err
 	}
@@ -500,24 +521,33 @@ func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor s
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "charge", v.TypeID); err != nil {
 		return err
 	}
-	if err = requireInvestorTruck(ctx, tx, v.TruckID, v.WeekStart); err != nil {
+	var eligible, stopped bool
+	if err = tx.QueryRow(ctx, `SELECT coalesce(e.eligible,false),coalesce(e.stopped,false)
+ FROM (SELECT 1) request LEFT JOIN LATERAL (
+ SELECT NOT i.is_company AS eligible,(`+terminatedOwnerTruckChargesSQL+`) AS stopped
+ FROM trucks t `+truckOwnershipForWeekSQL+` WHERE t.id=$2) e ON true`, v.WeekStart, v.TruckID).Scan(&eligible, &stopped); err != nil {
 		return err
 	}
-	var stopped bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks t `+truckOwnershipForWeekSQL+`
- WHERE t.id=$2 AND `+terminatedOwnerTruckChargesSQL+`)`, v.WeekStart, v.TruckID).Scan(&stopped); err != nil {
-		return err
+	if !eligible {
+		return chargeInvalid("Recurring charges apply only to non-company trucks")
 	}
 	if stopped {
 		return chargeInvalid("Recurring charges stop the week after the owner-driver's termination")
 	}
 	var options []string
-	var version int
-	var archived bool
-	if err = tx.QueryRow(ctx, `SELECT amounts::text[],version,archived FROM driver_charge_types WHERE id=$1 FOR SHARE`, v.TypeID).Scan(&options, &version, &archived); err != nil {
+	var version, exactVersion int
+	var archived, unchanged bool
+	if err = tx.QueryRow(ctx, `SELECT t.amounts::text[],t.version,t.archived,
+ coalesce(CASE WHEN p.week_start=$3::date THEN p.version END,0),
+ coalesce(p.amount=$4::numeric AND p.included=$5,false)
+ FROM driver_charge_types t LEFT JOIN LATERAL (
+ SELECT week_start,version,amount,included FROM truck_charge_phases
+ WHERE truck_id=$2 AND type_id=t.id AND week_start<=$3::date
+ ORDER BY week_start DESC LIMIT 1) p ON true WHERE t.id=$1 FOR SHARE OF t`,
+		v.TypeID, v.TruckID, v.WeekStart, v.Amount, v.Included).Scan(&options, &version, &archived, &exactVersion, &unchanged); err != nil {
 		return err
 	}
-	if version != v.TypeVersion {
+	if version != v.TypeVersion || exactVersion != v.Version {
 		return ErrChargeConflict
 	}
 	if v.Included && (archived || !allowedChargeAmount(options, v.Amount)) {
@@ -525,6 +555,10 @@ func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor s
 	}
 	if v.MoveScheduleID != "" {
 		return chargeInvalid("Driver recurring charges have been removed; select the truck fee directly")
+	}
+	if unchanged {
+		db.Event(ctx, "truck_charge_noop")
+		return nil
 	}
 	if v.Version == 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO truck_charge_phases(truck_id,type_id,week_start,amount,included,updated_by) VALUES($1,$2,$3::date,$4::numeric,$5,nullif($6,'')::uuid) ON CONFLICT DO NOTHING RETURNING version`, v.TruckID, v.TypeID, v.WeekStart, v.Amount, v.Included, actor).Scan(&version)

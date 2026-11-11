@@ -52,7 +52,7 @@ type payrollReadState struct {
 
 type payrollConfigurationState struct {
 	charges map[string][]byte
-	trucks  []byte
+	terms   []TruckTerm
 }
 
 type payrollPublicationReadKey struct{}
@@ -63,6 +63,7 @@ type payrollPublicationReadState struct {
 	dependencySnapshots map[string]json.RawMessage
 	scale               map[string]payrollScaleWeek
 	truckInputs         map[string]truckPayInputs
+	truckPhases         map[string][]TruckChargePhase
 	driverEligibility   map[string]map[string]payrollDriverEligibility
 }
 
@@ -70,7 +71,7 @@ type payrollPublicationReadState struct {
 // and occurrence for their exact component, independently of the report week.
 // Period-specific balances, routing and reports remain separate read memos.
 func payrollPublicationReadContext(ctx context.Context, tx pgx.Tx) context.Context {
-	return context.WithValue(ctx, payrollPublicationReadKey{}, &payrollPublicationReadState{tx: tx, configurations: map[string]*payrollConfigurationState{}, resourceLinks: map[string]map[string][]string{}, scale: map[string]payrollScaleWeek{}, truckInputs: map[string]truckPayInputs{}})
+	return context.WithValue(ctx, payrollPublicationReadKey{}, &payrollPublicationReadState{tx: tx, configurations: map[string]*payrollConfigurationState{}, resourceLinks: map[string]map[string][]string{}, scale: map[string]payrollScaleWeek{}, truckInputs: map[string]truckPayInputs{}, truckPhases: map[string][]TruckChargePhase{}})
 }
 
 func payrollReadContext(ctx context.Context, tx pgx.Tx) context.Context {
@@ -123,16 +124,25 @@ func payrollChargeData(ctx context.Context, q chargeQuery, driver string) (Charg
 	}
 	return d, l, e
 }
-func payrollTruckData(ctx context.Context, q chargeQuery) (TruckChargeData, error) {
+func payrollTruckData(ctx context.Context, q chargeQuery, week string) (TruckChargeData, error) {
+	if authoritative, _ := ctx.Value(payrollAuthoritativeKey{}).(bool); authoritative {
+		return truckChargeData(ctx, q)
+	}
 	s := payrollReadMemo(ctx, q)
-	if s != nil && s.configuration.trucks != nil {
-		var d TruckChargeData
-		e := json.Unmarshal(s.configuration.trucks, &d)
-		return d, e
+	var terms []TruckTerm
+	var err error
+	if s != nil {
+		terms = s.configuration.terms
 	}
-	d, e := truckChargeData(ctx, q)
-	if e == nil && s != nil {
-		s.configuration.trucks, _ = json.Marshal(d)
+	if terms == nil {
+		terms, err = truckTermData(ctx, q)
+		if err != nil {
+			return TruckChargeData{}, err
+		}
+		if s != nil {
+			s.configuration.terms = terms
+		}
 	}
-	return d, e
+	phases, err := payrollTruckPhases(ctx, q, week)
+	return TruckChargeData{Terms: terms, Phases: phases}, err
 }
