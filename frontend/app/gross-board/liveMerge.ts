@@ -2,10 +2,10 @@ import type { GrossBoard } from "@/app/lib/types";
 import { entryKey } from "./board";
 import { mergePlanningEntries } from "./planning";
 
-export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard, protectedKeys: Set<string>, protectedDays: Set<string>) {
+export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard, protectedKeys: Set<string>, protectedDays: Set<string>, canEditLockedWeek: boolean) {
   if (!current || current.weekStart !== incoming.weekStart) return incoming;
   const weekLock = (current.weekLock?.version ?? 0) > (incoming.weekLock?.version ?? 0) ? current.weekLock : incoming.weekLock;
-  if (weekLock?.locked) {
+  if (weekLock?.locked && !canEditLockedWeek) {
     protectedKeys = new Set();
     protectedDays = new Set();
   }

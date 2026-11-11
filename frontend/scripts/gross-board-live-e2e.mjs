@@ -19,6 +19,10 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     INSERT INTO app_users(username,email,password_hash,role_id)
     SELECT 'Test Dispatcher ' || n,'gross-dispatch-' || n || '@example.com',crypt('${password}',gen_salt('bf')),r.id
     FROM generate_series(1,2) n CROSS JOIN app_roles r WHERE r.name='Gross Board test dispatcher';
+    INSERT INTO app_roles(name,permissions) VALUES('Accountant',ARRAY['board.read','board.write']);
+    INSERT INTO app_users(username,email,password_hash,role_id)
+    SELECT 'Test Accountant','gross-accountant@example.com',crypt('${password}',gen_salt('bf')),id
+    FROM app_roles WHERE name='Accountant';
     INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('${driver}','${name}','partial save driver','cpm',0);
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
     (99101,'REFRESH-TEST','delivered',1000,1000,500,'{"trips":[{"id":99101,"trip_id":"REFRESH-TRIP","driver__full_name":"Partial Save Driver","total_load_pay":700,"mile":450,"empty_mile":50}]}');
@@ -26,7 +30,8 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     ('${driver}','${week}','REFRESH-TEST',99101,1000,600,500),
     ('${driver}','${sharedDay}','SHARED-TEST',NULL,900,500,400),
     ('${driver}','${independentDay}','INDEPENDENT-TEST',NULL,800,450,350);`);
-  const contexts = await Promise.all([1, 2].map(() => page.context().browser().newContext({viewport: {width: 1800, height: 1000}})));
+  const emails = ['gross-dispatch-1@example.com', 'gross-dispatch-2@example.com', 'gross-accountant@example.com'];
+  const contexts = await Promise.all(emails.map(() => page.context().browser().newContext({viewport: {width: 1800, height: 1000}})));
   const read = async date => {
     const response = await page.request.get(`${base}/api/gross-board?weekStart=${week}`);
     expect(response.ok()).toBeTruthy();
@@ -42,10 +47,10 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
   const review = editor => editor.getByRole('button', {name: `Review rate and miles for ${name}, ${week}`, exact: true});
   let release;
   try {
-    const [first, second] = await Promise.all(contexts.map(async (context, index) => {
+    const [first, second, accountant] = await Promise.all(contexts.map(async (context, index) => {
       const editor = await context.newPage();
       await editor.goto(base + '/login');
-      await editor.getByLabel('Email', {exact: true}).fill(`gross-dispatch-${index + 1}@example.com`);
+      await editor.getByLabel('Email', {exact: true}).fill(emails[index]);
       await editor.getByLabel('Password', {exact: true}).fill(password);
       await editor.getByRole('button', {name: 'Sign in', exact: true}).click();
       await expect(editor.getByRole('heading', {name: 'Gross Board', exact: true})).toBeVisible();
@@ -108,11 +113,40 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     expect(blocked.status()).toBe(409);
     expect((await blocked.json()).code).toBe('gross_board_week_locked');
     expect((await read(sharedDay)).driverRate).toBe('550.00');
+
+    await expect(rate(page, sharedDay)).toBeEditable();
+    await fillRate(page, sharedDay, '560');
+    await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('560.00');
+    await expect(accountant.getByRole('button', { name: 'Lock week', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(rate(accountant, sharedDay)).toBeEditable();
+    await fillRate(accountant, sharedDay, '570');
+    await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('570.00');
+    await expect(rate(second, sharedDay)).toHaveValue('$570.00');
+    await expect(rate(second, sharedDay)).toHaveAttribute('readonly', '');
+    await expect(lock).toHaveAttribute('aria-pressed', 'true');
+
+    const accountantSession = await (await accountant.request.get(base + '/api/auth/session')).json();
+    const accountantHeaders = { 'X-CSRF-Token': accountantSession.csrfToken };
+    const manualSave = await accountant.request.put(base + '/api/gross-board', {
+      headers: accountantHeaders,
+      data: { weekStart: week, entries: [{ driverId: driver, date: sharedDay, slot: 0, driverRate: '580', fields: ['driverRate'] }] },
+    });
+    expect(manualSave.status()).toBe(200);
+    const planning = await accountant.request.put(base + '/api/gross-board/planning-entries', {
+      headers: accountantHeaders,
+      data: { weekStart: week, entries: [{ driverId: driver, date: day(4), kind: 'note', text: 'Plan for Friday', version: 0 }] },
+    });
+    expect(planning.status()).toBe(200);
+    const reset = await accountant.request.post(base + '/api/gross-board/balance/reset', {
+      headers: accountantHeaders, data: { weekStart: week, driverId: driver, balance: '100.00' },
+    });
+    expect(reset.status()).toBe(200);
+
     await lock.click();
     await expect(rate(second, sharedDay)).toBeEditable();
-    await fillRate(second, sharedDay, '560');
-    await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('560.00');
-    console.log('Gross Board passed concurrent partial saves, DataTruck review and week lock with authenticated administrators and dispatchers.');
+    await fillRate(second, sharedDay, '590');
+    await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('590.00');
+    console.log('Gross Board passed locked-week editing for Administrators and Accountants, with dispatcher writes blocked until unlock.');
   } finally {
     release?.();
     await Promise.all(contexts.map(context => context.close()));

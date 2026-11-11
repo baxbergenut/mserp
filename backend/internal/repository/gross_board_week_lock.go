@@ -16,6 +16,14 @@ type GrossBoardWeekLock struct {
 	Version int  `json:"version"`
 }
 
+type grossBoardWeekLockOverrideKey struct{}
+
+// WithGrossBoardWeekLockOverride is set only for requests whose authenticated
+// role can manage the Gross Board. Ordinary write permissions still apply.
+func WithGrossBoardWeekLockOverride(ctx context.Context, allowed bool) context.Context {
+	return context.WithValue(ctx, grossBoardWeekLockOverrideKey{}, allowed)
+}
+
 func readGrossBoardWeekLock(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoardWeekLock, error) {
 	var state GrossBoardWeekLock
 	err := tx.QueryRow(ctx, `SELECT locked, version FROM gross_board_week_locks WHERE week_start=$1`, week).
@@ -56,6 +64,9 @@ func (r *GrossBoardRepository) SetWeekLock(ctx context.Context, week time.Time, 
 }
 
 func assertGrossBoardWeekEditable(ctx context.Context, tx pgx.Tx, week time.Time) error {
+	if allowed, _ := ctx.Value(grossBoardWeekLockOverrideKey{}).(bool); allowed {
+		return nil
+	}
 	// Keep the shared lock until the write commits. Read the state in a separate
 	// statement so a writer waiting for a toggle sees that toggle's commit.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(1163352402, $1::date - date '2000-01-03')`, week); err != nil {

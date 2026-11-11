@@ -266,7 +266,8 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		week, _ := grossBoardWeek(request.WeekStart)
-		balance, _, err := repo.ResetRateBalance(r.Context(), week, request.DriverID, request.Balance, session.User.ID)
+		ctx := repository.WithGrossBoardWeekLockOverride(r.Context(), true)
+		balance, _, err := repo.ResetRateBalance(ctx, week, request.DriverID, request.Balance, session.User.ID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeAPIError(w, http.StatusNotFound, "driver not found")
 			return
@@ -288,7 +289,8 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		entries, err := repo.SavePlanningChanges(r.Context(), request.Entries, session.User.ID)
+		ctx := repository.WithGrossBoardWeekLockOverride(r.Context(), canManageGrossBoard(session.User))
+		entries, err := repo.SavePlanningChanges(ctx, request.Entries, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return
@@ -306,8 +308,9 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
+		ctx := repository.WithGrossBoardWeekLockOverride(r.Context(), canManageGrossBoard(session.User))
 		if request.AllowPartial {
-			result, err := repo.SavePartialChanges(r.Context(), request.Entries, session.User.ID)
+			result, err := repo.SavePartialChanges(ctx, request.Entries, session.User.ID)
 			if err != nil {
 				fail(w, err)
 				return
@@ -315,7 +318,7 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			writeJSON(w, http.StatusOK, result)
 			return
 		}
-		entries, err := repo.SaveChanges(r.Context(), request.Entries, session.User.ID)
+		entries, err := repo.SaveChanges(ctx, request.Entries, session.User.ID)
 		if err != nil {
 			fail(w, err)
 			return

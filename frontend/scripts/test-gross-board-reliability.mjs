@@ -205,7 +205,7 @@ try {
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   const rate = field(page, 'driver rate');
   await expect(rate).toHaveAttribute('readonly', '');
-  await expect(field(manager)).toHaveAttribute('readonly', '');
+  await expect(field(manager)).toBeEditable();
   await push(staleUnlocked);
   await expect(rate).toHaveAttribute('readonly', '');
 

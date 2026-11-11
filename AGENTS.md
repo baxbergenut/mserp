@@ -1411,7 +1411,9 @@ browser bundle.
   Migration 211 persists a lock per Monday. The board snapshot and live stream
   carry the versioned lock state. Native load edits, split companion edits,
   planning text and rate-balance resets check it under a transaction-held week
-  lock. The grid remains selectable and copyable. Week locks are unrelated to
+  lock. Administrators and Accountants can edit locked weeks through their
+  existing write permissions. The grid remains selectable and copyable for
+  everyone. Week locks are unrelated to
   payroll source revisions. Install the matching deploy helper before migration
   211 so older binaries cannot bypass the lock after a rollback.
 - Driver board: `GET /driver-board?weekStart=YYYY-MM-DD`, `PUT /driver-board`
