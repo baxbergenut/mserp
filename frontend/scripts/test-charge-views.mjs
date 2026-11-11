@@ -89,14 +89,14 @@ try {
     { id: 'truck-a', unitNumber: '201', ownerId: 'owner', ownerName: 'Truck Owner', driverId: driver.id, driverName: driver.fullName, active: true },
     { id: 'truck-b', unitNumber: '202', ownerId: 'owner', ownerName: 'Truck Owner', active: true },
     { id: 'inactive-truck', unitNumber: 'INACTIVE', ownerId: 'owner', ownerName: 'Truck Owner', active: false },
-    { id: 'terminated-truck', unitNumber: 'TERMINATED', ownerId: 'departed-owner', ownerName: 'Departed Owner', active: false },
+    { id: 'terminated-truck', unitNumber: 'TERMINATED', ownerId: 'departed-owner', ownerName: 'Departed Owner', active: true },
     { id: 'company-truck', unitNumber: 'COMPANY', ownerId: 'company', ownerName: 'Company', active: true, isCompanyOwned: true },
   ];
   type.amounts = ['50.00', '75.00'];
   truckCharges.eligibleTruckIds = trucks.filter(t => !t.isCompanyOwned && t.id !== 'terminated-truck').map(t => t.id);
   truckCharges.terms = [];
   await page.goto(`${base}/accounting/driver-charges?tab=trucks`);
-  await expect(page.getByRole('link', { name: 'INACTIVE', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'INACTIVE', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'COMPANY', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'TERMINATED', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Previous week', exact: true }).click();
@@ -114,42 +114,67 @@ try {
   await page.getByLabel('201, Admin fee amount', { exact: true }).selectOption('75.00');
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   expect(truckWrites.at(-1).amount).toBe('75.00');
-  const trucksAll = page.getByRole('checkbox', { name: 'Admin fee: select all trucks', exact: true });
-  // A mixed selection selects the remaining trucks rather than clearing it.
-  await trucksAll.click();
+  const header = page.getByRole('columnheader', { name: 'Admin fee', exact: true });
+  const trucksAll = header.getByRole('checkbox', { name: 'Toggle Admin fee for visible trucks', exact: true });
+  const secondTruck = page.getByRole('checkbox', { name: '202, Admin fee', exact: true });
+  const confirmBulk = async (accept = true, message = /starting the week of/) => {
+    const dialogHandled = page.waitForEvent('dialog').then(async dialog => {
+      const actual = dialog.message();
+      await (accept ? dialog.accept() : dialog.dismiss());
+      expect(actual).toMatch(message);
+    });
+    await Promise.all([dialogHandled, trucksAll.click()]);
+  };
+  await expect(header).toHaveText('Admin fee');
+  await expect(trucksAll).toHaveJSProperty('indeterminate', true);
+  const beforeCancel = truckWrites.length;
+  let labelActivated = false;
+  const dismissUnexpected = dialog => { labelActivated = true; return dialog.dismiss(); };
+  page.on('dialog', dismissUnexpected);
+  await header.getByText('Admin fee', { exact: true }).click();
+  page.off('dialog', dismissUnexpected);
+  expect(labelActivated).toBe(false);
+  await confirmBulk(false, /Include "Admin fee" for 1 truck/);
+  await expect(trucksAll).toHaveJSProperty('indeterminate', true);
+  await expect(secondTruck).not.toBeChecked();
+  expect(truckWrites).toHaveLength(beforeCancel);
+  expect(bulkWrites).toHaveLength(0);
+  // A mixed selection adds the remaining truck rather than clearing the column.
+  await confirmBulk(true, /Include "Admin fee" for 1 truck/);
   await expect(truckCheck).toBeChecked();
-  await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
+  await expect(secondTruck).toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
-  await trucksAll.click();
+  await confirmBulk(false, /Exclude "Admin fee" for 2 trucks/);
+  await expect(trucksAll).toBeChecked();
+  expect(bulkWrites).toHaveLength(0);
+  await confirmBulk(true, /Exclude "Admin fee" for 2 trucks/);
   await expect(truckCheck).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
-  await trucksAll.click();
-  await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
+  await confirmBulk();
+  await expect(secondTruck).toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
-  expect(bulkWrites).toHaveLength(3);
-  expect(bulkWrites[0]).toHaveLength(2);
-  expect(bulkWrites[2]).toHaveLength(3);
-  // The entire selection paints before the server responds. A rejected
-  // middle truck is restored while later trucks still save.
+  expect(bulkWrites).toHaveLength(2);
+  for (const updates of bulkWrites) {
+    expect(updates.map(v => v.truckId).sort()).toEqual(['truck-a', 'truck-b']);
+  }
+  // Both selections paint before the server responds; the rejected one is restored.
   holdBulk = true;
   bulkFailure = 'truck-b';
-  await trucksAll.click();
+  await confirmBulk();
   await expect.poll(() => typeof releaseBulk).toBe('function');
-  for (const unit of ['201', '202', 'INACTIVE']) {
-    await expect(page.getByRole('checkbox', { name: `${unit}, Admin fee`, exact: true })).not.toBeChecked();
-  }
+  await expect(truckCheck).not.toBeChecked();
+  await expect(secondTruck).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeDisabled();
   holdBulk = false;
   releaseBulk();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
-  await expect(page.getByText('2 truck charges updated; 1 could not be saved. Review the trucks below.', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 truck charges updated; 1 could not be saved. Review the trucks below.', { exact: true })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Truck charges that could not be saved' })).toContainText('Truck 202: Reopen affected finalized settlements');
   await expect(truckCheck).not.toBeChecked();
-  await expect(page.getByRole('checkbox', { name: '202, Admin fee', exact: true })).toBeChecked();
-  await expect(page.getByRole('checkbox', { name: 'INACTIVE, Admin fee', exact: true })).not.toBeChecked();
-  expect(bulkWrites).toHaveLength(4);
+  await expect(secondTruck).toBeChecked();
+  expect(bulkWrites).toHaveLength(3);
   bulkFailure = '';
-  await trucksAll.click(); // Select remaining trucks after the partial failure.
+  await confirmBulk();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(page.getByRole('list', { name: 'Truck charges that could not be saved' })).toHaveCount(0);
 
@@ -161,19 +186,19 @@ try {
   const frozenCheck = page.getByRole('checkbox', { name: '202, Admin fee', exact: true });
   await expect(frozenCheck).toBeDisabled();
   await expect(page.getByLabel('202, Admin fee amount', { exact: true })).toBeDisabled();
-  await expect(page.getByText('(1 finalized skipped)', { exact: true })).toBeVisible();
+  await expect(page.getByText(/finalized skipped/)).toHaveCount(0);
   const beforeFrozen = truckWrites.length;
-  await trucksAll.click();
+  await confirmBulk();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(trucksAll).toBeChecked();
   await expect(frozenCheck).not.toBeChecked();
-  expect(truckWrites.slice(beforeFrozen).map(v => v.truckId).sort()).toEqual(['inactive-truck', 'truck-a']);
-  await trucksAll.click();
+  expect(truckWrites.slice(beforeFrozen).map(v => v.truckId).sort()).toEqual(['truck-a']);
+  await confirmBulk();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(frozenCheck).not.toBeChecked();
   truckCharges.phases = truckCharges.phases.map(p => p.truckId === 'truck-b' ? { ...p, included: true } : p);
   await page.reload();
-  await trucksAll.click();
+  await confirmBulk();
   await expect(page.getByRole('button', { name: 'Reload', exact: true })).toBeEnabled();
   await expect(truckCheck).toBeChecked();
   await expect(frozenCheck).toBeChecked();
@@ -184,7 +209,7 @@ try {
   // Other charge types on the same truck remain independently selectable.
   await expect(page.getByRole('checkbox', { name: '202, Other fee 0', exact: true })).toBeEnabled();
   await page.getByLabel('Search trucks').fill('202');
-  await expect(page.getByRole('checkbox', { name: 'Admin fee: select visible trucks', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Toggle Admin fee for visible trucks', exact: true })).toBeDisabled();
   await page.getByLabel('Search trucks').fill('');
   truckCharges.lockedCharges = [];
   await page.reload();
@@ -207,10 +232,11 @@ try {
   await page.locator('table').evaluate(table => { table.parentElement.scrollLeft = 0; });
   await page.screenshot({ path: join(tmpdir(), 'mserp-truck-charges-review.png'), fullPage: true, animations: 'disabled' });
   await expect(page.getByRole('tab', {name:'Driver charges',exact:true})).toHaveCount(0);
-  await page.getByRole('button', { name: 'Show trucks included in Admin fee', exact: true }).click();
+  await page.getByLabel('Filter truck charge type').selectOption('fee');
+  await page.getByLabel('Truck inclusion').selectOption('included');
   await expect(page.getByLabel('Filter truck charge type')).toHaveValue('fee');
   await expect(page.getByLabel('Truck inclusion')).toHaveValue('included');
-  await expect(page.locator('tbody tr')).toHaveCount(3);
+  await expect(page.locator('tbody tr')).toHaveCount(2);
   await truckCheck.click();
   await expect(page.getByRole('button', {name:'Reload',exact:true})).toBeEnabled();
   await expect(page.getByRole('link', {name:'201',exact:true})).toHaveCount(0);
@@ -258,6 +284,21 @@ try {
   await page.evaluate(()=>sessionStorage.setItem('mserp-navigation-v1:user:/accounting/driver-charges:view:page:tab',JSON.stringify('recurring')));
   await page.goto(base+'/accounting/driver-charges');
   await expect(page.getByRole('tab',{name:'Truck charges',exact:true})).toHaveAttribute('aria-selected','true');
+  // Scroll a full-sized grid and measure the pinned header, not just its CSS.
+  const extraTrucks = Array.from({ length: 40 }, (_, index) => ({ ...trucks[0], id: 'extra-' + index, unitNumber: 'FLEET-' + index }));
+  trucks.push(...extraTrucks);
+  truckCharges.eligibleTruckIds.push(...extraTrucks.map(t => t.id));
+  await page.reload();
+  const grid = page.getByRole('region', { name: 'Truck recurring charges' });
+  await expect(grid.locator('tbody tr')).toHaveCount(42);
+  const headerTop = await grid.locator('thead').evaluate(node => node.getBoundingClientRect().top);
+  const firstRowTop = await grid.locator('tbody tr').first().evaluate(node => node.getBoundingClientRect().top);
+  await grid.evaluate(node => { node.scrollTop = 320; });
+  await expect.poll(() => grid.evaluate(node => node.scrollTop)).toBe(320);
+  expect(await grid.locator('thead').evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(headerTop, 0);
+  expect(await grid.locator('tbody tr').first().evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(firstRowTop - 320, 0);
+  trucks = trucks.filter(t => !t.id.startsWith('extra-'));
+  truckCharges.eligibleTruckIds = truckCharges.eligibleTruckIds.filter(id => !id.startsWith('extra-'));
   const writesBefore = truckWrites.length;
   readOnly = true;
   await page.reload();
@@ -269,7 +310,7 @@ try {
   await expect(page.getByRole('tab',{name:'Installment plans',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(errors).toEqual([]);
-  console.log('Truck charge views passed: no driver recurring tab, all non-company trucks, amounts, selection, inclusion filters, saved views, deletion and narrow layout.');
+  console.log('Truck charge views passed: no driver recurring tab, active non-company trucks, pinned headers, amounts, confirmed selection, inclusion filters, saved views, deletion and narrow layout.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

@@ -129,7 +129,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   const effectiveType = availableTypes.some(t => t.id === typeFilter) ? typeFilter : "";
   const types = availableTypes.filter(t => !effectiveType || t.id === effectiveType);
   const includedInView = (truckId: string) => types.some(type => phaseIndex.current.get(`${truckId}:${type.id}`)?.included);
-  const visible = trucks.map(t => ({ ...t, ...(owners.get(t.id) ?? {}) })).filter(t => eligibleTruckIds.has(t.id)
+  const visible = trucks.map(t => ({ ...t, ...(owners.get(t.id) ?? {}) })).filter(t => t.active && eligibleTruckIds.has(t.id)
     && `${t.unitNumber} ${t.ownerName} ${t.driverName ?? ""}`.toLowerCase().includes(search.toLowerCase())
     && (inclusion === "all" || includedInView(t.id) === (inclusion === "included")))
     .sort((a,b) => a.ownerName.localeCompare(b.ownerName) || a.unitNumber.localeCompare(b.unitNumber));
@@ -143,22 +143,32 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
           <select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label>
         </TableFilters><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button><div className="ml-auto">{actions}</div></div></div>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a valid Monday.</p>}
-    {!data || loadedWeek !== week || !directoryReady ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", ...(canReadTerms ? ["Settlement"] : [])].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label}</th>)}{types.map(type => {
+    {!data || loadedWeek !== week || !directoryReady ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" role="region" aria-label="Truck recurring charges" tabIndex={0} className="max-h-[max(12rem,calc(100dvh-16rem))] overflow-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead className="sticky top-0 z-20 bg-zinc-900"><tr><th scope="col" className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", ...(canReadTerms ? ["Settlement"] : [])].map(label => <th key={label} scope="col" className="min-w-36 border-b border-zinc-800 p-3">{label}</th>)}{types.map(type => {
       const targets = visible.filter(t => !lockedCharges.has(`${t.id}:${type.id}`));
       const included = targets.filter(t => phaseIndex.current.get(`${t.id}:${type.id}`)?.included).length;
-      const lockedCount = visible.length - targets.length;
-      const scope = search || inclusion !== "all" ? "visible trucks" : "all trucks";
-      return <th key={type.id} scope="col" aria-label={`${type.name}${type.archived ? " (archived)" : ""}`} className="min-w-56 border-b border-zinc-800 p-3 font-medium">{type.name}{type.archived && " (archived)"}<button type="button" aria-label={`Show trucks included in ${type.name}`} className="ml-2 text-blue-400 font-normal" onClick={() => { setTypeFilter(type.id); setInclusion("included"); }}>{trucks.filter(t => eligibleTruckIds.has(t.id) && phaseIndex.current.get(`${t.id}:${type.id}`)?.included).length} trucks</button>{!type.archived && <label className="mt-1 flex w-fit items-center gap-1.5 text-[11px] font-normal text-zinc-400"><input type="checkbox" aria-label={`${type.name}: select ${scope}`} checked={targets.length > 0 && included === targets.length} ref={node => { if (node) node.indeterminate = included > 0 && included < targets.length; }} disabled={busy || !canWrite || !validWeek || !targets.length} className="h-3.5 w-3.5 accent-blue-500" onChange={() => {
-        const updates: TruckChargePhase[] = [];
-        for (const t of targets) {
-          const current = phaseIndex.current.get(`${t.id}:${type.id}`);
-          const include = included !== targets.length;
-          if (!!current?.included === include) continue;
-          const exact = phaseIndex.exact.get(`${t.id}:${type.id}`);
-          updates.push({ truckId: t.id, typeId: type.id, weekStart: week, amount: current?.amount ?? type.amount, included: include, version: exact?.version ?? 0, typeVersion: type.version });
-        }
-        void saveCells(updates);
-      }} />{scope}{lockedCount > 0 && <span className="text-amber-400" title="Charges affecting finalized statements stay unchanged">({lockedCount} finalized skipped)</span>}</label>}</th>;
+      const checked = targets.length > 0 && included === targets.length;
+      const mixed = included > 0 && !checked;
+      const name = type.name + (type.archived ? " (archived)" : "");
+      return <th key={type.id} scope="col" aria-label={name} className="min-w-56 border-b border-zinc-800 p-3 font-medium"><div className="flex items-center gap-2">
+        {!type.archived && <input type="checkbox" aria-label={`Toggle ${type.name} for visible trucks`} checked={checked} ref={node => { if (node) node.indeterminate = mixed; }} disabled={busy || !canWrite || !validWeek || !targets.length} className="h-4 w-4 shrink-0 accent-blue-500" onChange={event => {
+          const include = !checked;
+          const updates: TruckChargePhase[] = [];
+          for (const t of targets) {
+            const key = `${t.id}:${type.id}`;
+            const current = phaseIndex.current.get(key);
+            if (!!current?.included === include) continue;
+            const exact = phaseIndex.exact.get(key);
+            updates.push({ truckId: t.id, typeId: type.id, weekStart: week, amount: current?.amount ?? type.amount, included: include, version: exact?.version ?? 0, typeVersion: type.version });
+          }
+          const count = updates.length;
+          if (count && window.confirm(`${include ? "Include" : "Exclude"} "${type.name}" for ${count} ${count === 1 ? "truck" : "trucks"} starting the week of ${week}?`)) {
+            void saveCells(updates);
+          } else {
+            event.currentTarget.indeterminate = mixed;
+          }
+        }} />}
+        <span>{name}</span>
+      </div></th>;
     })}</tr></thead><tbody>{visible.map(t => {
       const latest = (data.terms ?? []).filter(v => v.truckId === t.id && v.weekStart <= week).at(-1);
       const applicable = latest?.endsBefore && latest.endsBefore <= week ? undefined : latest;
@@ -166,7 +176,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
       const ownerId = t.ownerId;
       const termsMismatch = !!applicable && applicable.ownerId !== ownerId;
       const ownTruck = !!t.driverId && investors.find(i => i.id === ownerId)?.driverId === t.driverId;
-      return <tr key={t.id} className="group h-8"><th scope="row" className="sticky left-0 z-10 h-8 whitespace-nowrap border-b border-r border-zinc-800 bg-zinc-950 px-3 py-0 font-medium"><Link className="text-blue-400" href={`/investors/detail?id=${ownerId}`}>{investors.find(i => i.id === ownerId)?.fullName ?? t.ownerName}</Link></th><td className="h-8 border-b border-zinc-800 px-3 py-0"><Link className="text-blue-400" href={`/trucks/detail?id=${t.id}`}>{t.unitNumber}</Link>{!t.active && <span className="ml-2 text-zinc-500">Inactive</span>}</td><td className="h-8 border-b border-zinc-800 px-3 py-0">{t.driverId ? <Link className="text-blue-400" href={`/drivers/detail?id=${t.driverId}`}>{t.driverName}</Link> : "Unassigned"}</td>{canReadTerms && <td className="h-8 border-b border-zinc-800 px-3 py-0">{ownTruck && !applicable ? <span className="text-zinc-400" title="Truck fees appear on the owner’s Driver Pay statement">Driver tariff</span> : <button className={termsMismatch ? "text-amber-400" : "text-blue-400"} title={termsMismatch ? `Agreement names ${investors.find(i => i.id === applicable.ownerId)?.fullName ?? "a previous owner"}; review terms for ${t.ownerName}` : undefined} hidden={!canReadTerms} disabled={busy || !canTerms || !validWeek} onClick={() => { setError(""); setTerm({ truckId: t.id, ownerId, weekStart: week, sharePercent: applicable?.sharePercent ?? "", version: exactTerm?.version ?? 0 }); }}>{termsMismatch ? "Review terms" : applicable ? `${applicable.sharePercent}%` : "Set terms"}</button>}</td>}{types.map(type => {
+      return <tr key={t.id} className="group h-8"><th scope="row" className="sticky left-0 z-10 h-8 whitespace-nowrap border-b border-r border-zinc-800 bg-zinc-950 px-3 py-0 font-medium"><Link className="text-blue-400" href={`/investors/detail?id=${ownerId}`}>{investors.find(i => i.id === ownerId)?.fullName ?? t.ownerName}</Link></th><td className="h-8 border-b border-zinc-800 px-3 py-0"><Link className="text-blue-400" href={`/trucks/detail?id=${t.id}`}>{t.unitNumber}</Link></td><td className="h-8 border-b border-zinc-800 px-3 py-0">{t.driverId ? <Link className="text-blue-400" href={`/drivers/detail?id=${t.driverId}`}>{t.driverName}</Link> : "Unassigned"}</td>{canReadTerms && <td className="h-8 border-b border-zinc-800 px-3 py-0">{ownTruck && !applicable ? <span className="text-zinc-400" title="Truck fees appear on the owner’s Driver Pay statement">Driver tariff</span> : <button className={termsMismatch ? "text-amber-400" : "text-blue-400"} title={termsMismatch ? `Agreement names ${investors.find(i => i.id === applicable.ownerId)?.fullName ?? "a previous owner"}; review terms for ${t.ownerName}` : undefined} hidden={!canReadTerms} disabled={busy || !canTerms || !validWeek} onClick={() => { setError(""); setTerm({ truckId: t.id, ownerId, weekStart: week, sharePercent: applicable?.sharePercent ?? "", version: exactTerm?.version ?? 0 }); }}>{termsMismatch ? "Review terms" : applicable ? `${applicable.sharePercent}%` : "Set terms"}</button>}</td>}{types.map(type => {
         const current = phaseIndex.current.get(`${t.id}:${type.id}`);
         const exact = phaseIndex.exact.get(`${t.id}:${type.id}`);
         const value = { truckId: t.id, typeId: type.id, weekStart: week, amount: current?.amount ?? type.amount, included: current?.included ?? false, version: exact?.version ?? 0, typeVersion: type.version };

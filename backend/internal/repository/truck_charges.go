@@ -136,7 +136,7 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 		EligibleTruckIDs: []string{}, Owners: []TruckChargeOwner{}, LockedCharges: []TruckChargeLock{}}
 	rows, err := r.pool.Query(ctx, `SELECT t.id::text,i.id::text,coalesce(driver.full_name,i.full_name)
  FROM trucks t `+truckOwnershipForWeekSQL+`
- LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE NOT i.is_company AND NOT (`+terminatedOwnerTruckChargesSQL+`) ORDER BY t.id`, week)
+ LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE t.active AND NOT i.is_company AND NOT (`+terminatedOwnerTruckChargesSQL+`) ORDER BY t.id`, week)
 	if err != nil {
 		return d, err
 	}
@@ -521,15 +521,18 @@ func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase) error {
 	if err = protectTruckPeriod(ctx, tx, v.TruckID, v.WeekStart, "charge", v.TypeID); err != nil {
 		return err
 	}
-	var eligible, stopped bool
-	if err = tx.QueryRow(ctx, `SELECT coalesce(e.eligible,false),coalesce(e.stopped,false)
+	var eligible, active, stopped bool
+	if err = tx.QueryRow(ctx, `SELECT coalesce(e.eligible,false),coalesce(e.active,false),coalesce(e.stopped,false)
  FROM (SELECT 1) request LEFT JOIN LATERAL (
- SELECT NOT i.is_company AS eligible,(`+terminatedOwnerTruckChargesSQL+`) AS stopped
- FROM trucks t `+truckOwnershipForWeekSQL+` WHERE t.id=$2) e ON true`, v.WeekStart, v.TruckID).Scan(&eligible, &stopped); err != nil {
+ SELECT NOT i.is_company AS eligible,t.active,(`+terminatedOwnerTruckChargesSQL+`) AS stopped
+ FROM trucks t `+truckOwnershipForWeekSQL+` WHERE t.id=$2) e ON true`, v.WeekStart, v.TruckID).Scan(&eligible, &active, &stopped); err != nil {
 		return err
 	}
 	if !eligible {
 		return chargeInvalid("Recurring charges apply only to non-company trucks")
+	}
+	if !active {
+		return chargeInvalid("Recurring charges apply only to active trucks")
 	}
 	if stopped {
 		return chargeInvalid("Recurring charges stop the week after the owner-driver's termination")

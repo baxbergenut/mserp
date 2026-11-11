@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,6 +62,34 @@ func TestTruckChargeHistoricalEligibilityDatabase(t *testing.T) {
 		phase.WeekStart, phase.Version = week, 0
 		if err = charges.SaveTruckCharge(ctx, phase); err == nil {
 			t.Fatal("current company truck accepted a new fee")
+		}
+		// A truck taken out of service after scheduling a fee is excluded even on the old
+		// week. A stale client cannot edit the existing phase or schedule another.
+		if _, err = pool.Exec(ctx, "UPDATE trucks SET status='out_of_service',status_reason='Test: truck inactive' WHERE id=$1", transferred.ID); err != nil {
+			t.Fatal(err)
+		}
+		management, err = charges.TruckChargesForWeek(ctx, oldWeek)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range management.EligibleTruckIDs {
+			if id == transferred.ID {
+				t.Fatal("inactive truck was eligible in a historical week")
+			}
+		}
+		for _, p := range management.Phases {
+			if p.TruckID == transferred.ID {
+				t.Fatal("inactive truck phase appeared in the matrix", p)
+			}
+		}
+		stale := phase
+		stale.WeekStart, stale.Version, stale.Included = oldWeek, 1, false
+		if err = charges.SaveTruckCharge(ctx, stale); err == nil || !strings.Contains(err.Error(), "only to active trucks") {
+			t.Fatalf("inactive truck single edit: %v", err)
+		}
+		results, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{stale})
+		if err != nil || len(results) != 1 || !strings.Contains(results[0].Error, "only to active trucks") {
+			t.Fatalf("inactive truck bulk edit: %+v %v", results, err)
 		}
 		var saved bool
 		if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM truck_charge_phases WHERE truck_id=$1 AND week_start=$3::date AND amount=50 AND included)

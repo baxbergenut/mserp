@@ -3353,9 +3353,11 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   their Driver Pay tariff without a truck agreement. A new investor agreement
   must name the owner for its effective week and specify an explicit share.
   Returning to the browser tab refreshes idle charge views.
-  Inclusion is attached to trucks, never to the current driver. Counts open an
-  Included trucks filter for the chosen charge; searching and selected week still
-  apply. Show all non-company trucks, including inactive/unassigned/owner-operated.
+  Inclusion is attached to trucks, never to the current driver. The matrix and
+  recurring charge writes require current active trucks, including unassigned
+  and owner-operated trucks when otherwise eligible. Existing phases and payroll
+  history remain intact. The pinned column header bulk checkbox affects only
+  visible, unlocked trucks and requires confirmation before submitting changes.
 - Truck forms expose ownershipEffectiveDate (a New York calendar date, no future
   transfers). It can correct the current owner's start without changing owner.
   Truck reads return ownerSince (null for an unknown migration baseline) and
