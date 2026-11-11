@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,8 +13,9 @@ import (
 var ErrGrossBoardWeekLocked = errors.New("This Gross Board week is locked")
 
 type GrossBoardWeekLock struct {
-	Locked  bool `json:"locked"`
-	Version int  `json:"version"`
+	Locked   bool   `json:"locked"`
+	Version  int    `json:"version"`
+	LockedBy string `json:"lockedBy,omitempty"`
 }
 
 type grossBoardWeekLockOverrideKey struct{}
@@ -26,15 +28,17 @@ func WithGrossBoardWeekLockOverride(ctx context.Context, allowed bool) context.C
 
 func readGrossBoardWeekLock(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoardWeekLock, error) {
 	var state GrossBoardWeekLock
-	err := tx.QueryRow(ctx, `SELECT locked, version FROM gross_board_week_locks WHERE week_start=$1`, week).
-		Scan(&state.Locked, &state.Version)
+	err := tx.QueryRow(ctx, `
+ SELECT locked, version, coalesce(CASE WHEN locked AND locked_by_version=version THEN locked_by_name END, '')
+ FROM gross_board_week_locks WHERE week_start=$1`, week).
+		Scan(&state.Locked, &state.Version, &state.LockedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
 	return state, err
 }
 
-func (r *GrossBoardRepository) SetWeekLock(ctx context.Context, week time.Time, locked bool) (GrossBoardWeekLock, error) {
+func (r *GrossBoardRepository) SetWeekLock(ctx context.Context, week time.Time, locked bool, actorName string) (GrossBoardWeekLock, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return GrossBoardWeekLock{}, err
@@ -48,17 +52,23 @@ func (r *GrossBoardRepository) SetWeekLock(ctx context.Context, week time.Time, 
 		return state, err
 	}
 	if state.Locked != locked {
-		err = tx.QueryRow(ctx, `
- INSERT INTO gross_board_week_locks AS current_lock (week_start, locked, version)
- VALUES ($1, $2, 1)
- ON CONFLICT (week_start) DO UPDATE SET locked=excluded.locked, version=current_lock.version+1
- RETURNING locked, version`, week, locked).Scan(&state.Locked, &state.Version)
+		next := GrossBoardWeekLock{Locked: locked, Version: state.Version + 1}
+		if locked {
+			next.LockedBy = strings.TrimSpace(actorName)
+		}
+		_, err = tx.Exec(ctx, `
+ INSERT INTO gross_board_week_locks (week_start, locked, version, locked_by_name, locked_by_version)
+ VALUES ($1, $2, $3::integer, nullif($4, ''), CASE WHEN $2 THEN $3::integer END)
+ ON CONFLICT (week_start) DO UPDATE SET locked=excluded.locked, version=excluded.version,
+   locked_by_name=excluded.locked_by_name, locked_by_version=excluded.locked_by_version`,
+			week, next.Locked, next.Version, next.LockedBy)
 		if err != nil {
 			return state, err
 		}
 		if _, err = tx.Exec(ctx, `SELECT pg_notify('mserp_gross_board','')`); err != nil {
 			return state, err
 		}
+		state = next
 	}
 	return state, tx.Commit(ctx)
 }

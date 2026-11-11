@@ -1193,6 +1193,7 @@ export interface GrossBoardDriver {
   assignments?: { date: string; dispatcherId: string; dispatcherName: string; truckId: string; truckUnit: string }[];
   id: string;
   fullName: string;
+  driverType?: DriverBoardDriver["driverType"];
   truckId: string;
   truckUnit: string;
   dispatcherId: string;
@@ -1210,6 +1211,7 @@ export interface GrossBoardPlanningEntry {
 }
 
 export interface GrossBoardWeekLock {
+  lockedBy?: string;
   locked: boolean;
   version: number;
 }

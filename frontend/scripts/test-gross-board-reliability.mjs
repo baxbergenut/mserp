@@ -43,7 +43,7 @@ await context.route('**/api/**', async route => {
     const { weekStart, locked } = req.postDataJSON();
     expect(weekStart).toBe(week);
     expect(managers.has(req.frame().page())).toBe(true);
-    weekLock = { locked, version: weekLock.version + 1 };
+    weekLock = { locked, version: weekLock.version + 1, lockedBy: locked ? 'Reliable' : undefined };
     await route.fulfill({ json: weekLock });
     await push(board());
     return;
@@ -204,6 +204,7 @@ try {
   const staleUnlocked = board();
   await lock.click();
   await expect(unlock.locator('svg.lucide-lock-open')).toBeVisible();
+  await expect(unlock).toHaveAttribute('title', 'Locked by Reliable');
   const rate = field(page, 'driver rate');
   await expect(rate).toHaveAttribute('readonly', '');
   await expect(field(manager)).toBeEditable();
@@ -237,10 +238,13 @@ try {
   expect(writes.length).toBe(writesBeforeLock);
   await unlock.click();
   await expect(lock.locator('svg.lucide-lock')).toBeVisible();
+  await expect(lock).not.toHaveAttribute('title');
   await expect(rate).toBeEditable();
   await fill(rate, '1500');
   await saved(page);
   expect(stored().driverRate).toBe('1500');
+  await push({ ...board(), weekLock: { locked: true, version: weekLock.version + 1 } });
+  await expect(unlock).toHaveAttribute('title', 'Locked by unknown');
   expect(errors).toEqual([]);
   console.log('Gross Board reliability passed, including live week lock, selection, copy, navigation and restored editing.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

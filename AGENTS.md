@@ -1409,7 +1409,10 @@ browser bundle.
   `GET /gross-board/loads?search=...`, and
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
   Migration 211 persists a lock per Monday. The board snapshot and live stream
-  carry the versioned lock state. Native load edits, split companion edits,
+  carry the versioned lock state. Migration 212 saves the authenticated user's
+  name with each new lock version. Existing locks show “Locked by unknown.”
+  Gross Board displays the current Status Board driver type next to each name.
+  Native load edits, split companion edits,
   planning text and rate-balance resets check it under a transaction-held week
   lock. Administrators and Accountants can edit locked weeks through their
   existing write permissions. The grid remains selectable and copyable for

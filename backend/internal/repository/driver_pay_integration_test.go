@@ -112,6 +112,11 @@ func TestDriverPayDatabase(t *testing.T) {
 					t.Fatal(readErr)
 				}
 				sql = strings.Replace(sql, strings.ReplaceAll(string(weekLockMigration), "\r\n", "\n"), "", 1)
+				weekLockActorMigration, readErr := os.ReadFile("../../sql/212_gross_board_week_lock_actor.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				sql = strings.Replace(sql, strings.ReplaceAll(string(weekLockActorMigration), "\r\n", "\n"), "", 1)
 				shopMigration, readErr := os.ReadFile("../../sql/199_shop_truck_assignments.sql")
 				if readErr != nil {
 					t.Fatal(readErr)
@@ -314,7 +319,7 @@ func TestDriverPayDatabase(t *testing.T) {
 			if mode == "migration" {
 				applyAccountingCutoverMigration(t, ctx, admin)
 				applyClustieLoadAssignments(t, ctx, admin)
-				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql", "../../sql/187_load_source_availability.sql", "../../sql/188_status_board_operational.sql", "../../sql/189_payroll_current_storage.sql", "../../sql/191_payroll_pti_classification.sql", "../../sql/192_payroll_unrelated_sources.sql", "../../sql/193_payroll_unassigned_company_expenses.sql", "../../sql/195_datatruck_driver_gross.sql", "../../sql/196_datatruck_modified_sync.sql", "../../sql/197_board_route_usage.sql", "../../sql/198_payroll_expense_drafts.sql", "../../sql/199_shop_truck_assignments.sql", "../../sql/202_driver_scale_deductions.sql", "../../sql/203_accessorial_expenses.sql", "../../sql/204_driver_pay_escrow_settlement.sql", "../../sql/206_gross_board_planning_entries.sql", "../../sql/207_ready_location.sql", "../../sql/209_escrow_balance_reductions.sql", "../../sql/210_escrow_balance_adjustments.sql", "../../sql/211_gross_board_week_lock.sql"} {
+				for _, path := range []string{"../../sql/180_payroll_revision_triggers.sql", "../../sql/181_payroll_load_revision.sql", "../../sql/182_payroll_projections.sql", "../../sql/183_payroll_telemetry_classification.sql", "../../sql/184_payroll_operational_sources.sql", "../../sql/185_payroll_shared_dependencies.sql", "../../sql/186_expense_verification_metadata.sql", "../../sql/187_load_source_availability.sql", "../../sql/188_status_board_operational.sql", "../../sql/189_payroll_current_storage.sql", "../../sql/191_payroll_pti_classification.sql", "../../sql/192_payroll_unrelated_sources.sql", "../../sql/193_payroll_unassigned_company_expenses.sql", "../../sql/195_datatruck_driver_gross.sql", "../../sql/196_datatruck_modified_sync.sql", "../../sql/197_board_route_usage.sql", "../../sql/198_payroll_expense_drafts.sql", "../../sql/199_shop_truck_assignments.sql", "../../sql/202_driver_scale_deductions.sql", "../../sql/203_accessorial_expenses.sql", "../../sql/204_driver_pay_escrow_settlement.sql", "../../sql/206_gross_board_planning_entries.sql", "../../sql/207_ready_location.sql", "../../sql/209_escrow_balance_reductions.sql", "../../sql/210_escrow_balance_adjustments.sql", "../../sql/211_gross_board_week_lock.sql", "../../sql/212_gross_board_week_lock_actor.sql"} {
 					migration, err := os.ReadFile(path)
 					if err != nil {
 						t.Fatal(err)

@@ -52,13 +52,14 @@ func TestGrossBoardDatabase(t *testing.T) {
 	}
 	_, err = pool.Exec(ctx, `CREATE TEMP TABLE gross_board_transfers(driver_id uuid,source_date date,source_slot integer,dispatch_date date,dispatch_slot integer,settlement_date date,dispatcher_id text,dispatcher_name text,truck_id uuid,version integer,active boolean);
  CREATE TEMP TABLE gross_board_planning_entries(driver_id uuid,service_date date,kind text,text text,version integer);
- CREATE TEMP TABLE gross_board_week_locks(week_start date PRIMARY KEY,locked boolean,version integer);
+ CREATE TEMP TABLE gross_board_week_locks(week_start date PRIMARY KEY,locked boolean,version integer,locked_by_name text,locked_by_version integer);
  CREATE TEMP TABLE payroll_load_placement_history(id bigint,action text,after_value jsonb,before_value jsonb);
  CREATE TEMP TABLE payroll_load_placements(load_record_id integer,load_trip_id integer,version integer,included boolean,week_start date);
  CREATE TEMP TABLE gross_board_rate_resets(id bigint GENERATED ALWAYS AS IDENTITY,driver_id uuid,week_start date,target numeric(12,2),week_change numeric,actor_id uuid);
  CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE drivers(id uuid PRIMARY KEY,full_name text,dispatcher_id uuid,active boolean);
  CREATE TEMP TABLE trucks(id uuid PRIMARY KEY,unit_number text);
+ CREATE TEMP TABLE investors(id uuid PRIMARY KEY,driver_id uuid,is_company boolean);
  CREATE TEMP TABLE truck_driver_assignments(driver_id uuid,truck_id uuid,assigned_at timestamptz,unassigned_at timestamptz);
  CREATE TEMP TABLE driver_dispatcher_assignments(driver_id uuid,dispatcher_id uuid,dispatcher_name text,assigned_at timestamptz,unassigned_at timestamptz,start_known boolean);
  CREATE TEMP TABLE load_source_availability(load_id integer PRIMARY KEY,present boolean NOT NULL,checked_at timestamptz DEFAULT now());
@@ -67,7 +68,8 @@ func TestGrossBoardDatabase(t *testing.T) {
  INSERT INTO dispatchers VALUES('00000000-0000-0000-0000-000000000010','Dispatch A');
  INSERT INTO drivers VALUES('00000000-0000-0000-0000-000000000001','Test Driver','00000000-0000-0000-0000-000000000010',true),('00000000-0000-0000-0000-000000000002','Inactive',null,false);
  INSERT INTO loads VALUES(1,'L100',1234.56,500.25,'Test Driver','2026-09-28 00:01Z',null),(2,'DUP',200,100,'Test Driver',null,null),(3,'DUP',300,150,'Other',null,null);
- ALTER TABLE pg_temp.drivers ADD COLUMN roster_start_week date, ADD COLUMN termination_date date;`)
+ ALTER TABLE pg_temp.drivers ADD COLUMN roster_start_week date, ADD COLUMN termination_date date, ADD COLUMN pay_type text NOT NULL DEFAULT 'cpm';
+ ALTER TABLE pg_temp.trucks ADD COLUMN owner_id uuid;`)
 	if err != nil {
 		t.Fatal(err)
 	}

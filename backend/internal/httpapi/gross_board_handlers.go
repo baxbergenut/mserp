@@ -191,7 +191,7 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		state, err := repo.SetWeekLock(r.Context(), week, *request.Locked)
+		state, err := repo.SetWeekLock(r.Context(), week, *request.Locked, session.User.Username)
 		if err != nil {
 			fail(w, err)
 			return

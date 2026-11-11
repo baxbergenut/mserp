@@ -54,6 +54,7 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
       await editor.getByLabel('Password', {exact: true}).fill(password);
       await editor.getByRole('button', {name: 'Sign in', exact: true}).click();
       await expect(editor.getByRole('heading', {name: 'Gross Board', exact: true})).toBeVisible();
+      await expect(editor.getByRole('rowheader', {name: /Partial Save Driver/}).getByText('(M)', {exact: true})).toBeVisible();
       await expect(editor.getByText('Live', {exact: true})).toBeVisible();
       return editor;
     }));
@@ -101,7 +102,7 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     const unlock = page.getByRole('button', { name: 'Unlock', exact: true });
     await expect(first.getByRole('button', { name: /^(Lock|Unlock)$/ })).toHaveCount(0);
     await lock.click();
-    await expect(unlock).toBeVisible();
+    await expect(unlock).toHaveAttribute('title', 'Locked by investor-e2e');
     await expect(rate(first, sharedDay)).toHaveAttribute('readonly', '');
     await expect(rate(second, sharedDay)).toHaveAttribute('readonly', '');
     const { csrfToken } = await (await second.request.get(base + '/api/auth/session')).json();
@@ -118,7 +119,7 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     await expect(rate(page, sharedDay)).toBeEditable();
     await fillRate(page, sharedDay, '560');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('560.00');
-    await expect(accountant.getByRole('button', { name: 'Unlock', exact: true })).toBeVisible();
+    await expect(accountant.getByRole('button', { name: 'Unlock', exact: true })).toHaveAttribute('title', 'Locked by investor-e2e');
     await expect(rate(accountant, sharedDay)).toBeEditable();
     await fillRate(accountant, sharedDay, '570');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('570.00');

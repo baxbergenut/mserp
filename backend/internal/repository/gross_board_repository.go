@@ -81,6 +81,7 @@ type GrossBoardDriver struct {
 	Assignments    []DailyAssignment `json:"assignments"`
 	ID             string            `json:"id"`
 	FullName       string            `json:"fullName"`
+	DriverType     string            `json:"driverType,omitempty"`
 	TruckID        string            `json:"truckId"`
 	TruckUnit      string            `json:"truckUnit"`
 	DispatcherID   string            `json:"dispatcherId"`
@@ -231,22 +232,29 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 	return readGrossBoardSnapshot(ctx, tx, week, false)
 }
 
-// Only the dispatch endpoint includes planning text and planning-only drivers.
+// Only the dispatch endpoint includes planning text, planning-only drivers and type labels.
 // Financial projections keep their existing roster, inputs and serialized data.
-func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, includePlanning bool) (GrossBoard, error) {
+func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, includeDispatchDetails bool) (GrossBoard, error) {
 	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}, PlanningEntries: []GrossBoardPlanningEntry{}}
 	planningRoster := ""
-	if includePlanning {
+	driverTypeColumns, driverTypeJoins := "", ""
+	if includeDispatchDetails {
 		var err error
 		board.PlanningEntries, err = readGrossBoardPlanning(ctx, tx, week)
 		if err != nil {
 			return board, err
 		}
 		planningRoster = ` OR EXISTS(SELECT 1 FROM gross_board_planning_entries p WHERE p.driver_id=d.id AND p.text<>'' AND p.service_date >= $1::date AND p.service_date < $1::date+7)`
+		// Use the current direct truck assignment for the same type shown on Status Board.
+		driverTypeColumns = `, d.pay_type, coalesce(type_owner.driver_id=d.id,false), coalesce(NOT type_owner.is_company,false)`
+		driverTypeJoins = `
+ LEFT JOIN truck_driver_assignments type_assignment ON type_assignment.driver_id=d.id AND type_assignment.unassigned_at IS NULL
+ LEFT JOIN trucks type_truck ON type_truck.id=type_assignment.truck_id
+ LEFT JOIN investors type_owner ON type_owner.id=type_truck.owner_id`
 	}
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
- coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active
- FROM drivers d `+weeklyAssignmentJoins+`
+ coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active`+driverTypeColumns+`
+ FROM drivers d `+weeklyAssignmentJoins+driverTypeJoins+`
  WHERE payroll_driver_at(d.id,$1::date)=d.id AND (((d.active OR (d.termination_date >= $1::date AND d.termination_date < $1::date+7)) AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
  AND e.service_date >= $1::date AND e.service_date < $1::date+7) OR EXISTS(SELECT 1 FROM gross_board_transfers moved WHERE moved.driver_id=d.id AND moved.active AND moved.source_date >= $1::date AND moved.source_date < $1::date+7)`+planningRoster+`)
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
@@ -255,9 +263,18 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 	}
 	for rows.Next() {
 		var d GrossBoardDriver
-		if err = rows.Scan(&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.Active); err != nil {
+		var payType string
+		var ownTruck, investorTruck bool
+		fields := []any{&d.ID, &d.FullName, &d.TruckID, &d.TruckUnit, &d.DispatcherID, &d.DispatcherName, &d.Active}
+		if includeDispatchDetails {
+			fields = append(fields, &payType, &ownTruck, &investorTruck)
+		}
+		if err = rows.Scan(fields...); err != nil {
 			rows.Close()
 			return board, err
+		}
+		if includeDispatchDetails {
+			d.DriverType = driverBoardType(payType, ownTruck, investorTruck, ownTruck)
 		}
 		board.Drivers = append(board.Drivers, d)
 	}
@@ -343,7 +360,7 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 	if err := decorateGrossBoardTerminations(ctx, tx, &board); err != nil {
 		return board, err
 	}
-	if includePlanning {
+	if includeDispatchDetails {
 		board.NextDayDestinations, err = readGrossBoardNextDayDestinations(ctx, tx, week, board)
 		if err != nil {
 			return board, err
