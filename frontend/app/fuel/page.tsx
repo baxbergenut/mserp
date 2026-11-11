@@ -24,7 +24,7 @@ import {
   fetchFuelTransactionsPage,
   syncFuelTransactions,
 } from "../lib/api";
-import type { FuelTransaction } from "../lib/types";
+import type { FuelDriverOption, FuelTransaction } from "../lib/types";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   EmptyState,
@@ -105,7 +105,7 @@ export default function FuelPage() {
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [transactions, setTransactions] = useState<FuelTransaction[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
-  const [driver, setDriver] = useViewState("page:driver", "");
+  const [driverId, setDriverId] = useViewState("page:driverId", "");
   const [state, setState] = useViewState("page:state", "");
   const [category, setCategory] = useViewState("page:category", "");
   const [dateFrom, setDateFrom] = useViewState("page:dateFrom", "");
@@ -114,7 +114,7 @@ export default function FuelPage() {
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [drivers, setDrivers] = useState<string[]>([]);
+  const [drivers, setDrivers] = useState<FuelDriverOption[]>([]);
   const [states, setStates] = useState<string[]>([]);
   const [totals, setTotals] = useState({ spend: 0, saved: 0, gallons: 0 });
   const [isLoading, setIsLoading] = useState(true);
@@ -130,14 +130,14 @@ export default function FuelPage() {
     setIsLoading(true);
     try {
       const response = await fetchFuelTransactionsPage({
-        page, pageSize, search: debouncedSearch, driver, state, category, dateFrom, dateTo,
+        page, pageSize, search: debouncedSearch, driverId, state, category, dateFrom, dateTo,
       },signal);
       if (signal?.aborted) return;
       setTransactions(response.items);
       setPage(response.page);
       setTotal(response.total);
       setTotalPages(response.totalPages);
-      setDrivers(response.options.drivers);
+      setDrivers(response.options.driverOptions ?? []);
       setStates(response.options.states);
       setTotals(response.summary);
     } catch (reason) {
@@ -149,7 +149,7 @@ export default function FuelPage() {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [activeTab, setPage, category, dateFrom, dateTo, debouncedSearch, driver, page, pageSize, state]);
+  }, [activeTab, setPage, category, dateFrom, dateTo, debouncedSearch, driverId, page, pageSize, state]);
 
   useEffect(() => {
     const controller=new AbortController();
@@ -158,7 +158,7 @@ export default function FuelPage() {
   }, [loadData]);
 
   const hasFilters = Boolean(
-    search || driver || state || category || dateFrom || dateTo,
+    search || driverId || state || category || dateFrom || dateTo,
   );
 
   const handleSync = async () => {
@@ -185,7 +185,7 @@ export default function FuelPage() {
 
   const clearFilters = () => {
     setSearch("");
-    setDriver("");
+    setDriverId("");
     setState("");
     setCategory("");
     setDateFrom("");
@@ -311,7 +311,7 @@ export default function FuelPage() {
         <ManagementSearch
           value={search}
           onChange={(value) => { setSearch(value); setPage(1); }}
-          placeholder="Search driver, card, merchant, location…"
+          placeholder="Search driver, ID, email, phone, merchant…"
         />
         <TableFilters>
           <label className="block space-y-1"><input
@@ -328,14 +328,14 @@ export default function FuelPage() {
             className={filterClass}
           /></label>
           <select
-          value={driver}
-          onChange={(event) => { setDriver(event.target.value); setPage(1); }}
+          value={driverId}
+          onChange={(event) => { setDriverId(event.target.value); setPage(1); }}
           className={filterClass}
           aria-label="Filter by driver"
         >
           <option value="">All drivers</option>
-          {drivers.map((value) => (
-            <option key={value} value={value}>{value}</option>
+          {drivers.map(({ id, name }) => (
+            <option key={id} value={id}>{name}</option>
           ))}
         </select>
           <select

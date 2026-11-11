@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -553,6 +554,7 @@ type FuelPageQuery struct {
 	Pagination Pagination
 	Search     string
 	Driver     string
+	DriverID   string
 	State      string
 	Category   string
 	DateFrom   *time.Time
@@ -560,8 +562,14 @@ type FuelPageQuery struct {
 }
 
 type FuelFilterOptions struct {
-	Drivers []string `json:"drivers"`
-	States  []string `json:"states"`
+	Drivers       []string           `json:"drivers"`
+	DriverOptions []FuelDriverOption `json:"driverOptions"`
+	States        []string           `json:"states"`
+}
+
+type FuelDriverOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type FuelSummary struct {
@@ -967,14 +975,20 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 	where := `
 	WHERE ($1 = '' OR concat_ws(' ', driver_name, relay_integration_id,
 		merchant_name, location_name, city, state, relay_transaction_id)
-		ILIKE '%' || $1 || '%')
-	AND ($2 = '' OR driver_name = $2)
+		ILIKE '%' || $1 || '%'
+		OR driver_id::text = lower($1) OR relay_driver_id = $1
+		OR EXISTS (SELECT 1 FROM drivers d WHERE d.id = transactions.driver_id
+			AND (lower(d.email) = lower($1) OR d.phone = $8)))
+	AND ($2 = '' OR lower(driver_name) = lower($2))
 	AND ($3 = '' OR state = $3)
 	AND ($4 = '' OR ($4 = 'fuel' AND fuel_amount > 0)
 		OR ($4 = 'def' AND def_amount > 0) OR ($4 = 'other' AND other_amount > 0))
 	AND ($5::date IS NULL OR purchased_on >= $5)
-	AND ($6::date IS NULL OR purchased_on <= $6)`
-	args := []any{query.Search, query.Driver, query.State, query.Category, query.DateFrom, query.DateTo}
+	AND ($6::date IS NULL OR purchased_on <= $6)
+	AND ($7 = '' OR ($7 = 'unassigned' AND driver_id IS NULL)
+		OR driver_id = NULLIF(NULLIF($7, 'unassigned'), '')::uuid)`
+	args := []any{query.Search, query.Driver, query.State, query.Category, query.DateFrom, query.DateTo,
+		query.DriverID, phone.Imported(query.Search)}
 	cte := "WITH transactions AS (" + fuelTransactionsSQL + ")"
 	var total int
 	summary := FuelSummary{}
@@ -991,7 +1005,7 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, cte+`
 		SELECT * FROM transactions `+where+`
-		ORDER BY purchased_at DESC, relay_transaction_id DESC LIMIT $7 OFFSET $8`, pageArgs...)
+		ORDER BY purchased_at DESC, relay_transaction_id DESC LIMIT $9 OFFSET $10`, pageArgs...)
 	if err != nil {
 		return FuelPage{}, err
 	}
@@ -1021,16 +1035,26 @@ func (r *FuelRepository) ListTransactionsPage(ctx context.Context, query FuelPag
 	}
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
-			COALESCE(array_agg(DISTINCT COALESCE(d.full_name, 'Unassigned')) , '{}'),
+			COALESCE(array_agg(DISTINCT COALESCE(d.full_name, 'Unassigned')), '{}'),
+			COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
+				'id', COALESCE(t.driver_id::text, 'unassigned'),
+				'name', COALESCE(d.full_name, 'Unassigned'))), '[]'),
 			COALESCE(array_agg(DISTINCT t.state ORDER BY t.state) FILTER (WHERE t.state <> ''), '{}')
 		FROM fuel_transactions t LEFT JOIN drivers d ON d.id = t.driver_id`).Scan(
-		&options.Drivers, &options.States,
+		&options.Drivers, &options.DriverOptions, &options.States,
 	); err != nil {
 		return FuelPage{}, err
 	}
 	for index := range options.Drivers {
 		options.Drivers[index] = formatPersonName(options.Drivers[index])
 	}
+	sort.Slice(options.DriverOptions, func(i, j int) bool {
+		a, b := options.DriverOptions[i], options.DriverOptions[j]
+		if a.Name == b.Name {
+			return a.ID < b.ID
+		}
+		return a.Name < b.Name
+	})
 	return FuelPage{Page: NewPage(transactions, total, query.Pagination), Options: options, Summary: summary}, nil
 }
 

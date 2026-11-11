@@ -200,8 +200,13 @@ export interface FuelTransaction {
 }
 
 export interface FuelTransactionPage extends PaginatedResponse<FuelTransaction> {
-  options: { drivers: string[]; states: string[] };
+  options: { drivers: string[]; driverOptions?: FuelDriverOption[]; states: string[] };
   summary: { spend: number; saved: number; gallons: number };
+}
+
+export interface FuelDriverOption {
+  id: string;
+  name: string;
 }
 
 export interface FuelDashboard {
