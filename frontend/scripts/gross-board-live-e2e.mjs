@@ -90,7 +90,29 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     await saved(first);
     await expect(issue).toHaveCount(0);
     expect((await read(week)).driverRate).toBe('820.00');
-    console.log('Gross Board partial saves passed with two authenticated dispatchers, overlapping edits, a DataTruck source refresh, and review of the rejected field.');
+
+    await page.goto(base + '/gross-board');
+    const lock = page.getByRole('button', { name: 'Lock week', exact: true });
+    await expect(first.getByRole('button', { name: 'Lock week', exact: true })).toHaveCount(0);
+    await lock.click();
+    await expect(lock).toHaveAttribute('aria-pressed', 'true');
+    await expect(rate(first, sharedDay)).toHaveAttribute('readonly', '');
+    await expect(rate(second, sharedDay)).toHaveAttribute('readonly', '');
+    const { csrfToken } = await (await second.request.get(base + '/api/auth/session')).json();
+    const headers = { 'X-CSRF-Token': csrfToken };
+    const denied = await second.request.put(base + '/api/gross-board/week-lock', { headers, data: { weekStart: week, locked: false } });
+    expect(denied.status()).toBe(403);
+    const blocked = await second.request.put(base + '/api/gross-board', {
+      headers, data: { weekStart: week, allowPartial: true, entries: [{ driverId: driver, date: sharedDay, slot: 0, driverRate: '999', fields: ['driverRate'] }] },
+    });
+    expect(blocked.status()).toBe(409);
+    expect((await blocked.json()).code).toBe('gross_board_week_locked');
+    expect((await read(sharedDay)).driverRate).toBe('550.00');
+    await lock.click();
+    await expect(rate(second, sharedDay)).toBeEditable();
+    await fillRate(second, sharedDay, '560');
+    await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('560.00');
+    console.log('Gross Board passed concurrent partial saves, DataTruck review and week lock with authenticated administrators and dispatchers.');
   } finally {
     release?.();
     await Promise.all(contexts.map(context => context.close()));

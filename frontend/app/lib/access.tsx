@@ -6,7 +6,7 @@ import type { ExpenseCategoryAccess, PermissionDefinition } from "./types";
 export const CurrentUserIDContext = createContext("");
 export const AdministratorContext = createContext(false);
 export const useAdministrator = () => useContext(AdministratorContext);
-export const GrossBoardBalanceResetContext = createContext(false);
+export const GrossBoardManagementContext = createContext(false);
 export const PermissionsContext = createContext<string[]>([]);
 export const PermissionCatalogContext = createContext<PermissionDefinition[]>([]);
 export const usePermissions = () => {

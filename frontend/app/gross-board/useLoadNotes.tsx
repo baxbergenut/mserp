@@ -63,7 +63,7 @@ export function useLoadNotes(entries: GrossBoardEntry[], disabled: boolean, onCh
     if (open?.focus) popup.current?.querySelector<HTMLElement>(open.kind === "menu" ? "button" : "textarea")?.focus();
   }, [open?.kind, open?.slot, open?.focus]);
 
-  const write = (entry: GrossBoardEntry, note: string) => onChange(entry.driverId, entry.date, entry.slot, current =>
+  const write = (entry: GrossBoardEntry, note: string) => canEdit && onChange(entry.driverId, entry.date, entry.slot, current =>
     current.loadNumber === entry.loadNumber && current.loadRecordId === entry.loadRecordId ? { ...current, note } : current);
   const contextMenu = (event: MouseEvent<HTMLElement>) => {
     if (!eligible.length || !canEdit) return;
@@ -81,7 +81,7 @@ export function useLoadNotes(entries: GrossBoardEntry[], disabled: boolean, onCh
       onMouseLeave: leave,
     },
     marker: noted.length > 0 ? <span role="img" aria-label="Has load note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" /> : null,
-    popup: open && (open.kind === "menu" || shown.length > 0) ? createPortal(
+    popup: open && (open.kind === "menu" ? canEdit : shown.length > 0) ? createPortal(
       <div ref={popup} data-grid-ignore role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Load notes" : "Load note"}
         style={{ top: open.top, left: open.left, width: "min(300px, calc(100vw - 16px))", maxHeight: `calc(100vh - ${open.top + 8}px)` }}
         className={`mserp-ui fixed z-[100] overflow-y-auto text-left text-sm text-zinc-200 ${open.kind === "menu" ? "rounded-lg border border-zinc-700 bg-zinc-900 p-2 ui-popover" : "space-y-1"}`}

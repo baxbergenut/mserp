@@ -48,6 +48,7 @@ func main() {
 	payrollRetire := flag.String("retire-payroll-before", "", "retire explicitly reviewed old draft payroll weeks with writers stopped; retain allocations and verify remaining reports")
 	resetGrossBoardBalances := flag.Bool("initialize-gross-board-rate-balances", false, "reset all driver rate balances to zero once and exit")
 	routingCapability := flag.Bool("board-routing-usage-capability", false, "print routing usage schema support and exit without opening a database")
+	weekLockCapability := flag.Bool("gross-board-week-lock-capability", false, "print Gross Board week lock support and exit")
 	planningCapability := flag.Bool("gross-board-planning-capability", false, "print dispatch-only planning schema support and exit without opening a database")
 	accessorialCapability := flag.Bool("accessorial-expenses-capability", false, "print accessorial payroll support and exit")
 	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
@@ -63,6 +64,10 @@ func main() {
 	}
 	if *escrowBalanceCapability {
 		fmt.Println("escrow-balance-reductions-v1")
+		return
+	}
+	if *weekLockCapability {
+		fmt.Println("gross-board-week-lock-v1")
 		return
 	}
 	if *planningCapability {

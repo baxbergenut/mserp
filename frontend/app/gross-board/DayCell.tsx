@@ -21,12 +21,13 @@ type DayCellProps = {
   highlighted?: boolean;
   driverName: string;
   disabled: boolean;
+  weekLocked?: boolean;
   // Permission to add to the day is independent of this entry being read-only.
   onAdd?: (driverId: string, date: string) => void;
   onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 };
 
-export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted, planning, onCustomStatus, customStatusUnavailable, allowDayStatus }: DayCellProps) {
+export const DayCell = memo(function DayCell({ entry, driverName, disabled, weekLocked = false, onChange, onAdd, id, highlighted, planning, onCustomStatus, customStatusUnavailable, allowDayStatus }: DayCellProps) {
   const notes = useLoadNotes([entry], disabled, onChange);
   const cellRef = useRef<HTMLTableCellElement>(null);
   const resetLoadIntent = useRef<(() => void) | null>(null);
@@ -54,7 +55,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           <button type="button" hidden={disabled} disabled={disabled} aria-label={`${label}, remove load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-red-300" onClick={() => { resetLoadIntent.current?.(); onChange(entry.driverId, entry.date, entry.slot, current => ({ ...emptyEntry(current.driverId, current.date, current.slot), version: current.version, deleted: current.slot > 0 })); }}><X className="h-3 w-3" /></button>
         </div>
       </div>
-      <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker resetRef={resetLoadIntent} entry={entry} label={label} disabled={disabled} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} onCustomStatus={onCustomStatus} customStatusUnavailable={customStatusUnavailable} allowDayStatus={allowDayStatus} /></div>{notes.popup}
+      <div data-gross-field="loadNumber" className="relative">{notes.marker}<LoadStatusPicker resetRef={resetLoadIntent} entry={entry} label={label} disabled={disabled} weekLocked={weekLocked} needsReview={needsReview} onReview={() => setReviewing(true)} onChange={pickerChange} onCustomStatus={onCustomStatus} customStatusUnavailable={customStatusUnavailable} allowDayStatus={allowDayStatus} /></div>{notes.popup}
       {!entry.dayStatus && (["originalRate", "driverRate", "miles"] as const).map((field) => {
         const valid = validDecimal(entry[field], field === "miles");
         const different = field === "originalRate" ? rateMismatch : field === "miles" ? milesMismatch : driverMismatch;
@@ -62,7 +63,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
         const system = field === "originalRate" ? entry.systemOriginalRate : field === "driverRate" ? entry.systemDriverRate : entry.systemMiles;
         return <div key={field} data-grid-cell data-gross-field={field}><DecimalInput aria-label={`${label}, ${field === "originalRate" ? "total gross" : field === "driverRate" ? "driver rate" : "miles"}`}
           aria-invalid={!valid} inputMode="decimal"
-          value={entry[field]} displayValue={amountDisplay(entry[field], field !== "miles")} disabled={disabled || (entry.split && field === "originalRate")}
+          value={entry[field]} displayValue={amountDisplay(entry[field], field !== "miles")} readOnly={weekLocked} disabled={!weekLocked && (disabled || (entry.split && field === "originalRate"))}
           nonnegative={field === "miles"}
           title={different ? `Entered: ${amountDisplay(entered, field !== "miles")}; system: ${amountDisplay(system ?? "", field !== "miles") || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder="0"
@@ -94,7 +95,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
       </BoardDialog>}
     </td>
   );
-}, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.onChange === next.onChange
+}, (previous, next) => previous.driverName === next.driverName && previous.disabled === next.disabled && previous.weekLocked === next.weekLocked && previous.onChange === next.onChange
   && previous.onAdd === next.onAdd && previous.id === next.id && previous.highlighted === next.highlighted
   && previous.planning === next.planning && previous.onCustomStatus === next.onCustomStatus && previous.customStatusUnavailable === next.customStatusUnavailable && previous.allowDayStatus === next.allowDayStatus
   && previous.entry.sourceMissing === next.entry.sourceMissing && previous.entry.loadTripId === next.entry.loadTripId && previous.entry.split === next.entry.split && previous.entry.tripReview === next.entry.tripReview && previous.entry.tripReviewReason === next.entry.tripReviewReason && JSON.stringify(previous.entry.trips) === JSON.stringify(next.entry.trips)

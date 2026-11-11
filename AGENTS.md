@@ -1397,8 +1397,15 @@ browser bundle.
   `POST /settings/roles`, `PUT /settings/roles/{id}`. All require `access.manage`.
 - Loads: `GET /loads`, `POST /jobs/sync-loads`
 - Gross board: `GET/PUT /gross-board` (`weekStart=YYYY-MM-DD` for reads),
+  `PUT /gross-board/week-lock` (Administrator or Accountant with board access),
   `GET /gross-board/loads?search=...`, and
   `GET /gross-board/balance?driverId=...&weekStart=...` for load-by-load history.
+  Migration 211 persists a lock per Monday. The board snapshot and live stream
+  carry the versioned lock state. Native load edits, split companion edits,
+  planning text and rate-balance resets check it under a transaction-held week
+  lock. The grid remains selectable and copyable. Week locks are unrelated to
+  payroll source revisions. Install the matching deploy helper before migration
+  211 so older binaries cannot bypass the lock after a rollback.
 - Driver board: `GET /driver-board?weekStart=YYYY-MM-DD`, `PUT /driver-board`
   plus `GET /driver-board/history?driverIds=...&before=...` (50-event cursor pages)
   and `POST /driver-board/history/{id}/undo` (driverId, version).

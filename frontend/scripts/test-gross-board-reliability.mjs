@@ -23,7 +23,11 @@ let entries = [], writes = [], reads = 0, fail = false, gate = null, committedSi
 let duplicateError = '';
 let loadChoices = [];
 const errors = [];
-const board = () => ({ weekStart: week, drivers: [{ id: driverId, fullName: 'Reliable Driver', dispatcherId: '', dispatcherName: 'Unassigned', active: true }], entries: structuredClone(entries), balances: [] });
+const managers = new Set();
+let weekLock = { locked: false, version: 0 };
+const board = (requestedWeek = week) => ({ weekStart: requestedWeek, weekLock: requestedWeek === week ? weekLock : undefined,
+  drivers: [{ id: driverId, fullName: 'Reliable Driver', dispatcherId: '', dispatcherName: 'Unassigned', active: true }],
+  entries: requestedWeek === week ? structuredClone(entries) : [], balances: [] });
 const push = async value => Promise.all(context.pages().map(page => page.evaluate(value => window.emitGross?.(value), value).catch(() => {})));
 await context.addInitScript(() => {
   const streams = new Set();
@@ -35,6 +39,15 @@ await context.addInitScript(() => {
 });
 await context.route('**/api/**', async route => {
   const req = route.request(), url = new URL(req.url()), path = url.pathname.slice(4);
+  if (path === '/gross-board/week-lock' && req.method() === 'PUT') {
+    const { weekStart, locked } = req.postDataJSON();
+    expect(weekStart).toBe(week);
+    expect(managers.has(req.frame().page())).toBe(true);
+    weekLock = { locked, version: weekLock.version + 1 };
+    await route.fulfill({ json: weekLock });
+    await push(board());
+    return;
+  }
   if (path === '/gross-board' && req.method() === 'PUT') {
     const edits = req.postDataJSON().entries;
     writes.push(structuredClone(edits));
@@ -54,10 +67,11 @@ await context.route('**/api/**', async route => {
     if (!hold) await push(board());
     return;
   }
-  if (path === '/gross-board') { reads++; return route.fulfill({ json: board() }); }
+  if (path === '/gross-board') { reads++; return route.fulfill({ json: board(url.searchParams.get('weekStart') ?? week) }); }
   if (path === '/gross-board/loads') return route.fulfill({ json: loadChoices });
   const fixtures = {
-    '/auth/session': { user: { id: 'reliability-user', username: 'Reliable', permissions: ['board.read', 'board.write'] }, csrfToken: 'fixture' },
+    '/auth/session': { user: { id: 'reliability-user', username: 'Reliable', permissions: ['board.read', 'board.write'],
+      canResetGrossBoardBalance: managers.has(req.frame().page()) }, csrfToken: 'fixture' },
     '/tasks/count': { count: 0 }, '/sidebar-counts': {},
   };
   return route.fulfill({ json: fixtures[path] ?? [] });
@@ -66,8 +80,9 @@ const field = (page, name = 'load number or status', date = week) => page.getByL
 const fill = async (input, value) => { await input.focus(); await input.fill(value); };
 const saved = page => expect(page.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
 const stored = (date = week) => entries.find(e => e.date === date && e.slot === 0);
-const open = async () => {
+const open = async (manage = false) => {
   const page = await context.newPage();
+  if (manage) managers.add(page);
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date('2026-11-03T14:00:00Z'));
   await page.goto(`http://127.0.0.1:${server.address().port}/gross-board`);
@@ -180,6 +195,50 @@ try {
   expect(writes.length).toBe(writesBeforeMissingFocus);
   expect(stored().loadRecordId).toBe(101);
   expect(stored().driverRate).toBe('1400');
+
+  const manager = await open(true);
+  const toggle = manager.getByRole('button', { name: 'Lock week', exact: true });
+  await expect(page.getByRole('button', { name: 'Lock week', exact: true })).toHaveCount(0);
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  const staleUnlocked = board();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  const rate = field(page, 'driver rate');
+  await expect(rate).toHaveAttribute('readonly', '');
+  await expect(field(manager)).toHaveAttribute('readonly', '');
+  await push(staleUnlocked);
+  await expect(rate).toHaveAttribute('readonly', '');
+
+  const writesBeforeLock = writes.length;
+  const cell = rate.locator('..');
+  await rate.click();
+  await expect(cell).toBeFocused();
+  const copied = await cell.evaluate(element => {
+    const clipboardData = new DataTransfer();
+    element.dispatchEvent(new ClipboardEvent('copy', { clipboardData, bubbles: true, cancelable: true }));
+    return clipboardData.getData('text/plain');
+  });
+  expect(copied).toBe('$1,400.00');
+  await page.keyboard.type('999');
+  await page.keyboard.press('Delete');
+  await cell.evaluate(element => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', '777');
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  });
+  await expect(rate).toHaveValue('$1,400.00');
+  await page.keyboard.press('ArrowRight');
+  await expect(field(page, 'driver rate', secondDay).locator('..')).toBeFocused();
+  await page.getByRole('button', { name: 'Next week' }).click();
+  await expect(field(page, 'driver rate', '2026-11-09')).toBeEditable();
+  await page.getByRole('button', { name: 'Previous week' }).click();
+  await expect(rate).toHaveAttribute('readonly', '');
+  expect(writes.length).toBe(writesBeforeLock);
+  await toggle.click();
+  await expect(rate).toBeEditable();
+  await fill(rate, '1500');
+  await saved(page);
+  expect(stored().driverRate).toBe('1500');
   expect(errors).toEqual([]);
-  console.log('Gross Board reliability passed: batched typing, stale snapshots, version continuity, same-user live tabs, queued typing, reload recovery, last-write field saves, independent-field merges and duplicate rejection/recovery.');
+  console.log('Gross Board reliability passed, including live week lock, selection, copy, navigation and restored editing.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

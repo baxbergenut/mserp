@@ -162,7 +162,7 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
           </div>}
         </div>;
         return <button type="button" key={kind} data-grid-action={fullDay || undefined} data-grid-select={fullDay || undefined} aria-label={label} title={fullDay && !readOnly ? `${current.text} - Double-click or press Enter/F2 to edit` : current.text} disabled={readOnly}
-          className={`w-full min-w-0 rounded text-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 ${fullDay ? "flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-center" : "block px-1 py-1 text-left"}`}
+          className={`w-full min-w-0 rounded text-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 disabled:pointer-events-none ${fullDay ? "flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-center" : "block px-1 py-1 text-left"}`}
           onClick={event => { if (!fullDay || event.detail === 0) { setEditing(kind); patch({ error: "" }); } }}
           onDoubleClick={event => { if (fullDay) { event.preventDefault(); event.stopPropagation(); setEditing(kind); patch({ error: "" }); } }}>
           <span className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${fullDay ? "line-clamp-4 w-full font-medium" : "line-clamp-2"}`}>{current.text || "Clear custom status"}</span>

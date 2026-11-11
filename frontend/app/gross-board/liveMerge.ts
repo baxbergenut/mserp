@@ -4,6 +4,11 @@ import { mergePlanningEntries } from "./planning";
 
 export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard, protectedKeys: Set<string>, protectedDays: Set<string>) {
   if (!current || current.weekStart !== incoming.weekStart) return incoming;
+  const weekLock = (current.weekLock?.version ?? 0) > (incoming.weekLock?.version ?? 0) ? current.weekLock : incoming.weekLock;
+  if (weekLock?.locked) {
+    protectedKeys = new Set();
+    protectedDays = new Set();
+  }
   const previous = new Map(current.entries.map(e => [entryKey(e.driverId,e.date,e.slot), e]));
   const next = new Map(incoming.entries.map(e => [entryKey(e.driverId,e.date,e.slot), e]));
   for (const [key, e] of next) if (protectedDays.has(`${e.driverId}:${e.date}`)) protectedKeys.add(key);
@@ -29,5 +34,5 @@ export function mergeGrossLive(current: GrossBoard | null, incoming: GrossBoard,
     if (protectedDays.has(`${e.driverId}:${e.date}`) || stale) protectedKeys.add(key);
   }
   for (const key of protectedKeys) { const e = previous.get(key); if (e) next.set(key,e); else next.delete(key); }
-  return { ...incoming, entries: Array.from(next.values()), planningEntries: mergePlanningEntries(current.planningEntries, incoming.planningEntries) };
+  return { ...incoming, weekLock, entries: Array.from(next.values()), planningEntries: mergePlanningEntries(current.planningEntries, incoming.planningEntries) };
 }

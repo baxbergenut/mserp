@@ -1,7 +1,7 @@
 "use client";
 
 
-import { CurrentUserIDContext, GrossBoardBalanceResetContext, usePermissions } from "@/app/lib/access";
+import { CurrentUserIDContext, GrossBoardManagementContext, usePermissions } from "@/app/lib/access";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 
@@ -10,8 +10,8 @@ import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck } from "lucide-react";
-import { fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard } from "@/app/lib/api";
+import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck, Lock, LockOpen } from "lucide-react";
+import { APIError, fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard, setGrossBoardWeekLock } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
 import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, grossLocationKey, reconcileGrossPatches, refreshRejectedSources, type GrossDrafts } from "./drafts";
 import { mergePlanningEntries } from "./planning";
@@ -41,7 +41,7 @@ const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg bo
 
 export default function GrossBoardPage() {
   const hasEditPermission = usePermissions().includes("board.write");
-  const canResetBalance = useContext(GrossBoardBalanceResetContext);
+  const canManageWeek = useContext(GrossBoardManagementContext);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
@@ -61,7 +61,10 @@ export default function GrossBoardPage() {
     return () => clearTimeout(timer);
   }, [setDispatcher, setSearch, setWeek, searchParams]);
   const [board, setBoard] = useState<GrossBoard | null>(null);
-  const canEdit=hasEditPermission&&!board?.managedInSheets;
+  const weekLocked = board?.weekStart === week && board.weekLock?.locked === true;
+  const canEdit = hasEditPermission && board?.weekStart === week && !board.managedInSheets && !weekLocked;
+  const [lockPending, setLockPending] = useState(false);
+  const [lockError, setLockError] = useState<{ week: string; message: string } | null>(null);
   const planningSaved = useCallback((entries: GrossBoardPlanningEntry[]) => {
     setBoard(current => current && current.weekStart === week ? { ...current, planningEntries: mergePlanningEntries(current.planningEntries, entries) } : current);
   }, [week]);
@@ -76,7 +79,7 @@ export default function GrossBoardPage() {
   const draftKey = `gross-board-drafts:v1:${userId}:${week}`;
   const baselinesRef = useRef<GrossDrafts>({});
   const [changes, setChanges] = useState<Record<string, GrossBoardEntry>>({});
-  const pendingLoadDays = useMemo(() => new Set(Object.values(changes).map(entry => `${entry.driverId}:${entry.date}`)), [changes]);
+  const pendingLoadDays = useMemo(() => new Set(weekLocked ? [] : Object.values(changes).map(entry => `${entry.driverId}:${entry.date}`)), [changes, weekLocked]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -116,7 +119,10 @@ export default function GrossBoardPage() {
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
-    try { setBoard(await fetchGrossBoard(week)); }
+    try {
+      const value = await fetchGrossBoard(week);
+      setBoard(current => mergeGrossLive(current, value, new Set(), new Set()));
+    }
     catch (err) { setBoard(null); setError(err instanceof Error ? err.message : "Unable to load board"); }
     finally { setLoading(false); }
   }, [week]);
@@ -126,12 +132,11 @@ export default function GrossBoardPage() {
     fetchGrossBoard(week).then((value) => {
       if (cancelled) return;
       const recovery = hasEditPermission ? readGrossDrafts(draftKey) : null;
-      if (recovery) {
-        const restored = restoreGrossDrafts(recovery.changes, recovery.baselines, value.entries);
-        baselinesRef.current = restored.baselines;
-        setDrafts(restored.changes);
-        if (Object.keys(restored.changes).length) setMessage("Recovered unsaved edits");
-      }
+      const restored = recovery ? restoreGrossDrafts(recovery.changes, recovery.baselines, value.entries) : null;
+      baselinesRef.current = restored?.baselines ?? {};
+      if (restored) setDrafts(restored.changes);
+      else { changesRef.current = {}; setChanges({}); }
+      if (restored && Object.keys(restored.changes).length) setMessage("Recovered unsaved edits");
       setBoard(current => mergeGrossLive(current, value, new Set(Object.keys(changesRef.current)), new Set()));
     })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load board"); })
@@ -199,7 +204,7 @@ export default function GrossBoardPage() {
 
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
-  const allEntries = useMemo(() => ({ ...saved, ...changes }), [saved, changes]);
+  const allEntries = useMemo(() => weekLocked ? saved : { ...saved, ...changes }, [saved, changes, weekLocked]);
   const entryIndex = useMemo(() => indexBoardEntries(Object.values(allEntries)), [allEntries]);
   const rows = useMemo(() => dispatcherRows(board?.drivers ?? [], dates, board?.entries ?? []), [board, dates]);
   const drivers = useMemo(() => {
@@ -248,7 +253,7 @@ export default function GrossBoardPage() {
   }
 
   useEffect(() => {
-    if (dirty || saving || loading || error || (!pendingWeek && !pendingLink)) return;
+    if (dirty || saving || loading || (error && !weekLocked) || (!pendingWeek && !pendingLink)) return;
     if (pendingLink) {
       if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
       else window.location.assign(pendingLink);
@@ -256,11 +261,11 @@ export default function GrossBoardPage() {
     }
     if (pendingWeek) {
       const timer = setTimeout(() => {
-        setBoard(null); setMessage(""); setLoading(true); setWeek(pendingWeek); setPendingWeek(null);
+        setBoard(null); setMessage(""); setError(""); setIssues([]); setLockError(null); setLoading(true); setWeek(pendingWeek); setPendingWeek(null);
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [pendingWeek, pendingLink, dirty, saving, loading, error, setWeek, router]);
+  }, [pendingWeek, pendingLink, dirty, saving, loading, error, weekLocked, setWeek, router]);
 
   const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     if (!canEdit) return;
@@ -321,7 +326,16 @@ export default function GrossBoardPage() {
           if (activityRef.current === saveRevision) receiveLive.current(fresh);
         } catch { setRefreshError("Saved. Automatic load refresh is unavailable; retry to reconnect."); }
       }
-    } catch (err) { setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
+    } catch (err) {
+      if (err instanceof APIError && err.code === "gross_board_week_locked") {
+        try {
+          const current = await fetchGrossBoard(week);
+          receiveLive.current(current);
+          if (!current.weekLock?.locked) setError(err.message);
+        }
+        catch { setError("Unable to refresh the week lock. Your edits are still here."); }
+      } else setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here.");
+    }
     finally { activityRef.current += 1; busyKeys.current = []; savingRef.current = false; setSaving(false); }
   }, [canEdit, live.connected, invalid, loading, week, setDrafts]);
 
@@ -332,10 +346,26 @@ export default function GrossBoardPage() {
   }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 
   async function reload() {
+    if (weekLocked) { receiveLive.current(); return; }
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
     activityRef.current += 1;
     setIssues([]);
     baselinesRef.current = {}; setDrafts({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
+  }
+
+  async function toggleWeekLock() {
+    if (!canManageWeek || lockPending || loading || board?.weekStart !== week) return;
+    setLockPending(true);
+    setLockError(null);
+    try {
+      const state = await setGrossBoardWeekLock(week, !weekLocked);
+      setBoard(current => current?.weekStart === week && state.version >= (current.weekLock?.version ?? 0)
+        ? { ...current, weekLock: state } : current);
+    } catch (err) {
+      setLockError({ week, message: err instanceof Error ? err.message : "Unable to update the week lock" });
+    } finally {
+      setLockPending(false);
+    }
   }
 
   function discardIssue(issue: GrossBoardSaveIssue) {
@@ -384,22 +414,27 @@ export default function GrossBoardPage() {
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
         <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers or load numbers…" /></div>
+        {canManageWeek && <button type="button" aria-pressed={weekLocked} className={`${buttonClass} aria-pressed:border-blue-500/50 aria-pressed:text-blue-300`}
+          disabled={lockPending || loading || board?.weekStart !== week} onClick={toggleWeekLock}>
+          {weekLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />} Lock week
+        </button>}
         {driverTarget && <button className={buttonClass} onClick={() => { setDriverTarget(null); router.replace("/gross-board", { scroll: false }); }}>All drivers</button>}
         <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setDispatcher} />
 
       <div className="ml-auto flex flex-wrap items-center gap-2"><div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs text-zinc-400" title={live.connected ? "Updates are live" : "Reconnecting to live updates"}><span className={`h-1.5 w-1.5 rounded-full ${live.connected ? "bg-emerald-400" : "bg-amber-400"}`} />{live.connected ? "Live" : "Connecting…"}</span>
-          <span role="status" className={`flex items-center gap-1.5 text-xs ${(error || issues.length > 0) && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{board?.managedInSheets ? "Managed in Sheets · read only" : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : issues.length > 0 ? "Edits need review" : dirty ? "Waiting to save…" : loading ? "Loading…" : message || "Saved"}</span>
+          <span role="status" className={`flex items-center gap-1.5 text-xs ${(error || issues.length > 0) && dirty ? "text-red-300" : "text-zinc-400"}`}><CloudCheck className="h-4 w-4" />{weekLocked ? "Week locked" : board?.managedInSheets ? "Managed in Sheets · read only" : loading ? "Loading…" : !canEdit ? "Read only" : error && dirty ? "Not saved" : saving ? "Saving…" : issues.length > 0 ? "Edits need review" : dirty ? "Waiting to save…" : message || "Saved"}</span>
         </div></div></div>
 
     </PinnablePageHeader>
 
-      {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <><button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button><button className={`${buttonClass} ml-3`} onClick={reload} disabled={saving}>Discard unsaved changes</button></>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
-      {!error && issues.length > 0 && <SaveIssues issues={issues} changes={changes} drivers={board?.drivers ?? []}
+      {lockError?.week === week && <p role="alert" className="text-xs text-red-300">{lockError.message}</p>}
+      {!weekLocked && error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <><button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button><button className={`${buttonClass} ml-3`} onClick={reload} disabled={saving}>Discard unsaved changes</button></>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
+      {!weekLocked && !error && issues.length > 0 && <SaveIssues issues={issues} changes={changes} drivers={board?.drivers ?? []}
         saving={saving} onDiscard={discardIssue}
         actions={<><button className={buttonClass} onClick={save} disabled={saving || invalid}>Retry save</button><button className={buttonClass} onClick={reload} disabled={saving}>Discard unsaved changes</button></>} />}
       {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid || error || issues.length ? "Resolve the unsaved edits before leaving this week." : "Saving edits before leaving this week…"}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
-      {invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
+      {dirty && invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}
       {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}<button className={`${buttonClass} ml-2`} onClick={reload} disabled={loading || saving}>Retry</button></p>}
@@ -440,7 +475,7 @@ export default function GrossBoardPage() {
                   <th data-gross-driver={driver.id} data-gross-field="driver" scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td data-gross-driver={driver.id} data-gross-field="truck" className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Total gross", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
-                  {dayEntries.map((entries, i) => !driver.dates.includes(dates[i]) ? <td key={dates[i]} className="border-b border-r border-zinc-800 bg-zinc-900/40 px-2 text-center text-xs text-zinc-500"><span>{driver.assignments?.some(a => a.date === dates[i]) ? "Changed dispatcher" : "Not started"}</span><span className="mt-1 block text-[10px]">{driver.assignments?.find(a => a.date === dates[i])?.dispatcherName}</span></td> : <DaySummaryCell pendingLoadSave={pendingLoadDays.has(`${driver.id}:${dates[i]}`)} week={week} suggestedDestination={nextDayDestinations.get(`${driver.id}:${dates[i]}`)} planningEntries={planningByDay.get(`${driver.id}:${dates[i]}`) ?? []} onPlanningSaved={planningSaved} readOnly={!canEdit} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
+                  {dayEntries.map((entries, i) => !driver.dates.includes(dates[i]) ? <td key={dates[i]} className="border-b border-r border-zinc-800 bg-zinc-900/40 px-2 text-center text-xs text-zinc-500"><span>{driver.assignments?.some(a => a.date === dates[i]) ? "Changed dispatcher" : "Not started"}</span><span className="mt-1 block text-[10px]">{driver.assignments?.find(a => a.date === dates[i])?.dispatcherName}</span></td> : <DaySummaryCell pendingLoadSave={pendingLoadDays.has(`${driver.id}:${dates[i]}`)} week={week} suggestedDestination={nextDayDestinations.get(`${driver.id}:${dates[i]}`)} planningEntries={planningByDay.get(`${driver.id}:${dates[i]}`) ?? []} onPlanningSaved={planningSaved} readOnly={!canEdit} weekLocked={weekLocked} onReturn={payReturn ? returnToPay : undefined} key={dates[i]} focusSlot={targetReady && targetMatches && loadTarget.driverId === driver.id && loadTarget.date === dates[i] ? loadTarget.slot : undefined} entries={entries} driverId={driver.id} driverName={driver.fullName} date={dates[i]} onChange={edit} />)}
                   <td data-gross-driver={driver.id} data-gross-field="originalTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-blue-200">{decimalDisplay(sum.original, true)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="driverTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.driver, true)}</td>
                   <td data-gross-driver={driver.id} data-gross-field="milesTotal" className="border-b border-r border-zinc-800 bg-blue-500/[0.03] px-2 font-mono text-zinc-300">{decimalDisplay(sum.miles)}</td>
@@ -470,7 +505,7 @@ export default function GrossBoardPage() {
       <GrossPresence peers={live.peers} />
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverName={selectedDriver.fullName}
         resetThisWeek={openings.get(selectedDriver.id)?.resetThisWeek}
-        onReset={canResetBalance && !board?.managedInSheets && week === currentChargeWeek() ? async (amount) => {
+        onReset={canManageWeek && !weekLocked && !board?.managedInSheets && week === currentChargeWeek() ? async (amount) => {
           const opening = await resetGrossBoardBalance(selectedDriver.id, week, amount);
           setBoard(current => current?.weekStart === week ? {
             ...current, balances: [...current.balances.filter(balance => balance.driverId !== opening.driverId), opening],

@@ -12,7 +12,7 @@ import { ThemeProvider } from "./ThemeProvider";
 import { PageHeaderProvider } from "./PageHeader";
 import { BirthdayGreeting } from "./BirthdayGreeting";
 import Link from "@/app/components/AccessLink";
-import { AdministratorContext, GrossBoardBalanceResetContext, PermissionCatalogContext, CurrentUserIDContext, ExpenseCategoryAccessContext, PermissionsContext, canVisitPage, firstAllowedPage } from "@/app/lib/access";
+import { AdministratorContext, GrossBoardManagementContext, PermissionCatalogContext, CurrentUserIDContext, ExpenseCategoryAccessContext, PermissionsContext, canVisitPage, firstAllowedPage } from "@/app/lib/access";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -64,7 +64,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider key={session.user.id} initialTheme={session.user.theme}>
     <AdministratorContext.Provider value={session.user.administrator === true}>
-    <GrossBoardBalanceResetContext.Provider value={session.user.canResetGrossBoardBalance === true}>
+    <GrossBoardManagementContext.Provider value={session.user.canResetGrossBoardBalance === true}>
     <CurrentUserIDContext.Provider value={session.user.id}>
     <PermissionCatalogContext.Provider value={session.permissionCatalog ?? []}>
     <PermissionsContext.Provider value={session.user.permissions}>
@@ -86,7 +86,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
     </PermissionsContext.Provider>
     </PermissionCatalogContext.Provider>
     </CurrentUserIDContext.Provider>
-    </GrossBoardBalanceResetContext.Provider>
+    </GrossBoardManagementContext.Provider>
     </AdministratorContext.Provider>
     </ThemeProvider>
   );

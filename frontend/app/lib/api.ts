@@ -57,6 +57,7 @@ import type {
   CustomTaskInput,
   RelayIdentityTask,
   GrossBoard,
+  GrossBoardWeekLock,
   GrossBoardEntry,
   GrossBoardPlanningEntry,
   GrossBoardBalance,
@@ -183,6 +184,8 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
 
 export const fetchGrossBoard = (weekStart: string) =>
   apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
+export const setGrossBoardWeekLock = (weekStart: string, locked: boolean) =>
+  apiRequest<GrossBoardWeekLock>("/gross-board/week-lock", { method: "PUT", body: JSON.stringify({ weekStart, locked }) });
 export const fetchGrossPresence = (weekStart: string) => apiRequest<import("./types").GrossBoardPresence[]>(withQuery("/gross-board/presence", { weekStart }));
 export const updateGrossPresence = (clientId: string, cell: import("./types").GrossBoardCell) => performRequest<void>("/gross-board/presence", { method: "PUT", body: JSON.stringify({ clientId, ...cell }) });
 export const clearGrossPresence = (clientId: string) => performRequest<void>(`/gross-board/presence/${clientId}`, { method: "DELETE", keepalive: true });

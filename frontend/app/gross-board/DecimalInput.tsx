@@ -11,10 +11,11 @@ export function DecimalInput({ value, displayValue, onValueChange, nonnegative =
   // under the caret while editing, even when an autosave or refresh finishes.
   const [typing, setTyping] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
-  return <input {...props} value={typing ?? (focused ? compactDecimal(value) : displayValue)}
+  return <input {...props} value={props.readOnly ? displayValue : typing ?? (focused ? compactDecimal(value) : displayValue)}
     onFocus={event => { setFocused(true); props.onFocus?.(event); }}
     onBlur={event => { setFocused(false); setTyping(null); props.onBlur?.(event); }}
     onChange={event => {
+      if (props.readOnly) return;
       const text = event.currentTarget.value;
       const next = decimalInputValue(text, nonnegative);
       if (next === null) return;

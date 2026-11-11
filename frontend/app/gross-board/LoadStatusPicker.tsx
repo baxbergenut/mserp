@@ -12,8 +12,8 @@ import { BoardDialog } from "./BoardDialog";
 export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" } | { kind: "manual" } | { kind: "cancel" } | { kind: "custom" };
 
-export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview, onChange, onCustomStatus, resetRef, customStatusUnavailable, allowDayStatus = true }: {
-  entry: GrossBoardEntry; label: string; disabled: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit; onCustomStatus?: (text: string) => Promise<void>; resetRef?: Ref<() => void>; customStatusUnavailable?: string; allowDayStatus?: boolean;
+export function LoadStatusPicker({ entry, label, disabled, weekLocked = false, needsReview, onReview, onChange, onCustomStatus, resetRef, customStatusUnavailable, allowDayStatus = true }: {
+  entry: GrossBoardEntry; label: string; disabled: boolean; weekLocked?: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit; onCustomStatus?: (text: string) => Promise<void>; resetRef?: Ref<() => void>; customStatusUnavailable?: string; allowDayStatus?: boolean;
 }) {
   const id = useId();
   const userId = useContext(CurrentUserIDContext);
@@ -41,9 +41,10 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   const [searchError, setSearchError] = useState("");
   const [pendingStatus, setPendingStatus] = useState<GrossBoardDayStatus>("");
   const [position, setPosition] = useState({ left: 0, top: 0, height: 320, width: 288 });
-  const query = (draftText ?? entry.loadNumber).trim();
-  const status = draftText === null ? dayStatuses.find((item) => item.value === entry.dayStatus) : undefined;
-  const confirmed = draftText === null && entry.loadRecordId !== null && !entry.sourceMissing;
+  const visibleDraft = weekLocked ? null : draftText;
+  const query = (visibleDraft ?? entry.loadNumber).trim();
+  const status = visibleDraft === null ? dayStatuses.find((item) => item.value === entry.dayStatus) : undefined;
+  const confirmed = visibleDraft === null && entry.loadRecordId !== null && !entry.sourceMissing;
   const unmatched = !status && !confirmed && query !== "";
   const statusOptions = allowDayStatus ? suggestedDayStatuses(browse || status ? "" : query) : [];
   const loads = results.query === query && !status ? results.loads : [];
@@ -130,19 +131,20 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
   };
   return <>
     <div data-grid-cell className="relative">
-      <input ref={input} data-unconfirmed-load={draftText !== null || undefined} aria-label={`${label}, load number or status`}
+      <input ref={input} data-unconfirmed-load={visibleDraft !== null || undefined} aria-label={`${label}, load number or status`}
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && highlightOption && options.length ? `${id}-${activeIndex}` : undefined}
         title={draftText !== null ? (loadIdentifier ? "Load number. Saves on Enter or when you leave the field." : "Choose Add as status/destination to use this text.") : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? `Confirmed system load · ${(entry.sourceStatus || "Status unknown").replace(/[_-]+/g, " ")}. Total gross and miles come from Loads.` : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number. Use the status/destination alternative for other text."}
-        maxLength={200} value={draftText ?? status?.value ?? entry.loadNumber} disabled={disabled || savingCustom}
+        maxLength={200} value={visibleDraft ?? status?.value ?? entry.loadNumber} readOnly={weekLocked} disabled={!weekLocked && (disabled || savingCustom)}
         onFocus={(event) => { setFocused(true); setBrowse(false); setNavigated(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => {
-          if (draftText !== null && loadIdentifier && !savingCustom) {
+          if (!disabled && draftText !== null && loadIdentifier && !savingCustom) {
             const exact = loads.filter(load => load.loadNumber.trim().toLowerCase() === query.toLowerCase());
             choose(exact.length === 1 ? { kind: "load", load: exact[0] } : { kind: "manual" });
           } else { setFocused(false); setBrowse(false); }
         }}
         onChange={(event) => {
+          if (disabled) return;
           setCustomError("");
           if (!event.target.value.trim()) {
             setDraft(null);
@@ -153,6 +155,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
           setActive(0); setNavigated(false); setBrowse(false); setFocused(true); setSearchError("");
         }}
         onKeyDown={(event) => {
+          if (disabled) return;
           if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setDraft(null); setFocused(false); return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault(); setFocused(true);
@@ -199,7 +202,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       {draftText !== null && <p className="border-t border-zinc-800 px-2 py-2 text-[11px] text-zinc-400">Load numbers save as loads. Choose the custom status alternative for status or destination text.</p>}
       {statusOptions.length > 0 && <p className="border-t border-zinc-800 px-2 py-2 text-[10px] text-zinc-500">Status days have no rates or miles.</p>}
     </div>, document.body)}
-    {pendingStatus && <BoardDialog title={`Replace this day with ${pendingStatus}?`} onClose={() => setPendingStatus("")}>
+    {!disabled && pendingStatus && <BoardDialog title={`Replace this day with ${pendingStatus}?`} onClose={() => setPendingStatus("")}>
       <p className="text-sm text-zinc-300">{label}. This removes the day’s load, rates, and miles from the board and its totals. The system load itself stays unchanged.</p>
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={() => setPendingStatus("")}>Keep load</button>

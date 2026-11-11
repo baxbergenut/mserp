@@ -43,6 +43,9 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 	}
 	changed, dismissed := false, false
 	days := grossBoardDays(nil, entries)
+	if err = assertGrossBoardDaysEditable(ctx, tx, days); err != nil {
+		return nil, err
+	}
 	if err = lockGrossBoardDays(ctx, tx, days); err != nil {
 		return nil, err
 	}

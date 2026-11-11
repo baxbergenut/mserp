@@ -35,6 +35,9 @@ func (r *GrossBoardRepository) ResetRateBalance(ctx context.Context, week time.T
 		return GrossBoardBalance{}, 0, err
 	}
 	defer tx.Rollback(ctx)
+	if err = assertGrossBoardWeekEditable(ctx, tx, week); err != nil {
+		return GrossBoardBalance{}, 0, err
+	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('gross_board_rate_reset'))`); err != nil {
 		return GrossBoardBalance{}, 0, err
 	}

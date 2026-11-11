@@ -323,7 +323,7 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
 		PermissionCatalog: repository.Permissions,
-		User:              authUserResponse{CanResetGrossBoardBalance: canResetGrossBoardBalance(user), Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
+		User:              authUserResponse{CanResetGrossBoardBalance: canManageGrossBoard(user), Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
 		CSRFToken:         csrfToken,
 		ExpiresAt:         expiresAt,
 	}

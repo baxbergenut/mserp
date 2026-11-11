@@ -30,6 +30,7 @@ payroll_storage_migration=189_payroll_current_storage.sql
 mock_payroll_current=f
 mock_routing_usage=f
 mock_gross_planning=f
+mock_gross_week_lock=f
 mock_escrow_balance=f
 mock_escrow_adjustment=f
 mock_expense_drafts=f
@@ -59,6 +60,7 @@ runuser() {
     if [[ $* == *"public.payroll_statement_current"* ]]; then result=$mock_payroll_current; fi
     if [[ $* == *"public.board_route_usage"* ]]; then result=$mock_routing_usage; fi
     if [[ $* == *"public.gross_board_planning_entries"* ]]; then result=$mock_gross_planning; fi
+    if [[ $* == *"public.gross_board_week_locks"* ]]; then result=$mock_gross_week_lock; fi
     if [[ $* == *"column_name='expense_choices'"* ]]; then result=$mock_expense_drafts; fi
     if [[ $* == *"column_name='escrow_draft'"* ]]; then result=$mock_escrow_settlement; fi
     if [[ $* == *"column_name='correction_reason'"* ]]; then result=$mock_escrow_balance; fi
@@ -331,3 +333,12 @@ compatible_release "$test_root/new"
 mock_escrow_adjustment=error
 if compatible_release "$test_root/new"; then echo 'Escrow adjustment schema query failure allowed rollback' >&2; exit 1; fi
 echo 'Escrow balance adjustment compatibility checks passed'
+
+mock_escrow_adjustment=t
+mock_gross_week_lock=t
+if compatible_release "$test_root/new"; then echo 'Week locking allowed a binary without lock enforcement' >&2; exit 1; fi
+sed -i 's/case "$1" in /case "$1" in -gross-board-week-lock-capability) echo gross-board-week-lock-v1;; /' "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_gross_week_lock=error
+if compatible_release "$test_root/new"; then echo 'Week lock schema query failure allowed rollback' >&2; exit 1; fi
+echo 'Gross Board week lock compatibility checks passed'

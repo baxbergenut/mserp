@@ -124,12 +124,16 @@ func (request *grossBoardRequest) validate() error {
 	return nil
 }
 
-func canResetGrossBoardBalance(user repository.AuthUser) bool {
+func canManageGrossBoard(user repository.AuthUser) bool {
 	return user.Administrator || strings.EqualFold(strings.TrimSpace(user.RoleName), "Accountant")
 }
 
 func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.GrossBoardRepository) {
 	fail := func(w http.ResponseWriter, err error) {
+		if errors.Is(err, repository.ErrGrossBoardWeekLocked) {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "gross_board_week_locked", "error": err.Error()})
+			return
+		}
 		if errors.Is(err, repository.ErrTruckUnavailable) {
 			writeAPIError(w, 409, err.Error())
 			return
@@ -167,6 +171,32 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			return
 		}
 		writeJSON(w, http.StatusOK, board)
+	})
+	r.Put("/gross-board/week-lock", func(w http.ResponseWriter, r *http.Request) {
+		session, _ := authSessionFromContext(r.Context())
+		if !canManageGrossBoard(session.User) {
+			permissionDenied(w)
+			return
+		}
+		var request struct {
+			WeekStart string `json:"weekStart"`
+			Locked    *bool  `json:"locked"`
+		}
+		if err := decodeJSON(r, &request); err != nil || request.Locked == nil {
+			writeAPIError(w, http.StatusBadRequest, "A week and lock state are required")
+			return
+		}
+		week, err := grossBoardWeek(request.WeekStart)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		state, err := repo.SetWeekLock(r.Context(), week, *request.Locked)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, state)
 	})
 	r.Get("/gross-board/loads/{id}/split", func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -218,7 +248,7 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 	})
 	r.Post("/gross-board/balance/reset", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := authSessionFromContext(r.Context())
-		if !canResetGrossBoardBalance(session.User) {
+		if !canManageGrossBoard(session.User) {
 			permissionDenied(w)
 			return
 		}

@@ -182,6 +182,7 @@ var routeAccessPolicies = []routeAccess{
 	{"GET", "/fuel-transactions", "fuel.read"},
 	{"GET", "/gross-board", "board.read"},
 	{"PUT", "/gross-board", "board.write"},
+	{"PUT", "/gross-board/week-lock", "board.read"},
 	{"PUT", "/gross-board/planning-entries", "board.write"},
 	{"GET", "/gross-board/balance", "board.read"},
 	{"POST", "/gross-board/balance/reset", "board.read"},

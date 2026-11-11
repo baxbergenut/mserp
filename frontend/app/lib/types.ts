@@ -1208,7 +1208,13 @@ export interface GrossBoardPlanningEntry {
   version: number;
 }
 
+export interface GrossBoardWeekLock {
+  locked: boolean;
+  version: number;
+}
+
 export interface GrossBoard {
+  weekLock?: GrossBoardWeekLock;
  managedInSheets?: boolean; cutoverWeek?: string;
   weekStart: string;
   drivers: GrossBoardDriver[];

@@ -40,3 +40,29 @@ func TestGrossBoardBalanceResetAuthorization(t *testing.T) {
 		})
 	}
 }
+
+func TestGrossBoardWeekLockAuthorization(t *testing.T) {
+	router := chi.NewRouter()
+	router.Use(requirePermission)
+	registerGrossBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	for _, tc := range []struct {
+		name string
+		user repository.AuthUser
+		want int
+	}{
+		{"administrator", repository.AuthUser{Administrator: true, Permissions: repository.PermissionKeys()}, http.StatusBadRequest},
+		{"accountant", repository.AuthUser{RoleName: "Accountant", Permissions: []string{"board.read"}}, http.StatusBadRequest},
+		{"accountant without board access", repository.AuthUser{RoleName: "Accountant"}, http.StatusForbidden},
+		{"dispatcher with edit access", repository.AuthUser{RoleName: "Dispatcher", Permissions: []string{"board.read", "board.write"}}, http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPut, "/gross-board/week-lock", strings.NewReader(`{"weekStart":"2026-11-02"}`))
+			request = request.WithContext(context.WithValue(request.Context(), authContextKey{}, repository.AuthSession{User: tc.user}))
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != tc.want {
+				t.Fatalf("got %d, want %d: %s", response.Code, tc.want, response.Body)
+			}
+		})
+	}
+}

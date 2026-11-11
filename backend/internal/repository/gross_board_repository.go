@@ -92,6 +92,7 @@ type GrossBoard struct {
 	ManagedInSheets     bool                           `json:"managedInSheets,omitempty"`
 	CutoverWeek         string                         `json:"cutoverWeek,omitempty"`
 	WeekStart           string                         `json:"weekStart"`
+	WeekLock            *GrossBoardWeekLock            `json:"weekLock,omitempty"`
 	Drivers             []GrossBoardDriver             `json:"drivers"`
 	Entries             []GrossBoardEntry              `json:"entries"`
 	PlanningEntries     []GrossBoardPlanningEntry      `json:"planningEntries"`
@@ -217,6 +218,11 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	if err = readGrossBoardOpenings(ctx, tx, week, &board); err != nil {
 		return board, err
 	}
+	state, err := readGrossBoardWeekLock(ctx, tx, week)
+	if err != nil {
+		return board, err
+	}
+	board.WeekLock = &state
 	return board, commitPayrollMutation(ctx, tx)
 }
 
@@ -425,6 +431,9 @@ func (r *GrossBoardRepository) SaveEntries(ctx context.Context, entries []GrossB
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	if err = assertGrossBoardDaysEditable(ctx, tx, grossBoardDays(entries, nil)); err != nil {
+		return nil, err
+	}
 	entries, err = r.saveEntriesTx(ctx, tx, entries, actors...)
 	if err != nil {
 		return nil, err
