@@ -127,6 +127,12 @@ func TestTruckChargeOwnershipDatabase(t *testing.T) {
 			if len(data.Owners) != 1 || data.Owners[0] != (TruckChargeOwner{TruckID: truck.ID, OwnerID: ownerID, OwnerName: ownerName}) || len(data.EligibleTruckIDs) != 1 || data.EligibleTruckIDs[0] != truck.ID {
 				t.Fatalf("wrong dated owner for %s: %+v", week, data)
 			}
+			if week < "2026-09-21" {
+				if len(data.Terms) != 0 {
+					t.Fatalf("returned a future agreement for %s: %+v", week, data.Terms)
+				}
+				return
+			}
 			if len(data.Terms) != 1 || data.Terms[0].OwnerID != first.ID || data.Terms[0].SharePercent != "88.0000" || data.Terms[0].Version != 1 {
 				t.Fatalf("ownership read changed the separate agreement: %+v", data.Terms)
 			}

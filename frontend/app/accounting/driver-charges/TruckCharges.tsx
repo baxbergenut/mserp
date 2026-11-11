@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import Link from "@/app/components/AccessLink";
 import { History } from "lucide-react";
 import { usePermissions } from "@/app/lib/access";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchTruckCharges, fetchTruckOptions, fetchInvestorOptions, saveTruckCharge, saveTruckCharges, saveTruckTerm } from "@/app/lib/api";
 import type { ChargeData, TruckChargeBulkResult, TruckChargeData, TruckChargePhase, TruckTerm } from "@/app/lib/types";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -24,6 +24,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   const [typeFilter, setTypeFilter] = useViewState("truckCharges:typeFilter", "");
   const [data, setData] = useState<TruckChargeData | null>(null);
   const [loadedWeek, setLoadedWeek] = useState("");
+  const [directoryReady, setDirectoryReady] = useState(false);
   const [trucks, setTrucks] = useState<TruckOption[]>([]);
   const [investors, setInvestors] = useState<InvestorOption[]>([]);
   const [rememberedWeek, setWeek] = useViewState("truckCharges:week", charges.currentWeek);
@@ -35,27 +36,48 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   const [busy, setBusy] = useState(false);
   const [term, setTerm] = useState<TruckTerm | null>(null);
   const [phase, setPhase] = useState<TruckChargePhase | null>(null);
+  const directoryRequest = useRef<Promise<[TruckOption[], InvestorOption[]]> | null>(null);
+  const lastDirectoryRefresh = useRef(0);
+  const requestDirectory = useCallback(() => {
+    if (directoryRequest.current) return directoryRequest.current;
+    const request = Promise.all([fetchTruckOptions(), fetchInvestorOptions()]);
+    directoryRequest.current = request;
+    lastDirectoryRefresh.current = Date.now();
+    const clear = () => { if (directoryRequest.current === request) directoryRequest.current = null; };
+    void request.then(clear, clear);
+    return request;
+  }, []);
+  const applyDirectory = useCallback(([t, i]: [TruckOption[], InvestorOption[]]) => {
+    setTrucks(t); setInvestors(i); setDirectoryReady(true);
+  }, []);
   async function reload() {
-    const [d, t, i] = await Promise.all([fetchTruckCharges(week), fetchTruckOptions(), fetchInvestorOptions()]);
-    setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week);
+    const [d, directory] = await Promise.all([fetchTruckCharges(week), requestDirectory()]);
+    setData(d); setLoadedWeek(week); applyDirectory(directory);
   }
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchTruckCharges(week), fetchTruckOptions(), fetchInvestorOptions()]).then(([d, t, i]) => { if (!cancelled) { setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week); } }).catch(e => { if (!cancelled) setError(e.message); });
+    requestDirectory().then(directory => { if (!cancelled) applyDirectory(directory); })
+      .catch(e => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [applyDirectory, requestDirectory]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTruckCharges(week).then(d => { if (!cancelled) { setData(d); setLoadedWeek(week); } })
+      .catch(e => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [week]);
   useEffect(() => {
     let cancelled = false;
     const refresh = () => {
-      if (busy || term || phase || document.visibilityState === "hidden") return;
-      Promise.all([fetchTruckCharges(week), fetchTruckOptions(), fetchInvestorOptions()]).then(([d, t, i]) => {
-        if (!cancelled) { setData(d); setTrucks(t); setInvestors(i); setLoadedWeek(week); }
+      if (busy || term || phase || document.visibilityState === "hidden" || Date.now() - lastDirectoryRefresh.current < 1000) return;
+      Promise.all([fetchTruckCharges(week), requestDirectory()]).then(([d, directory]) => {
+        if (!cancelled) { setData(d); setLoadedWeek(week); applyDirectory(directory); }
       }).catch(e => { if (!cancelled) setError(e.message); });
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { cancelled = true; window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [week, busy, term, phase]);
+  }, [week, busy, term, phase, applyDirectory, requestDirectory]);
   async function run(action: () => Promise<void>) { setBusy(true); setError(""); setFailures([]); try { await action(); await reload(); await onChanged(); setTerm(null); setPhase(null); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save truck charges"); try { await reload(); await onChanged(); } catch { /* Keep the original save error visible. */ } } finally { setBusy(false); } }
   async function saveCells(updates: TruckChargePhase[]) {
     if (!canWrite || !data || busy || !updates.length) return;
@@ -125,7 +147,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
           <select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label>
         </TableFilters><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button><div className="ml-auto">{actions}</div></div></div>
     {!validWeek && <p role="alert" className="text-xs text-amber-300">Choose a valid Monday.</p>}
-    {!data || loadedWeek !== week ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", ...(canReadTerms ? ["Settlement"] : [])].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label}</th>)}{types.map(type => {
+    {!data || loadedWeek !== week || !directoryReady ? <p role="status" className="p-8 text-sm text-zinc-500">Loading truck charges…</p> : <div data-scroll-key="truck-recurring-charges" className="overflow-x-auto rounded-lg border border-zinc-800"><table className="w-full text-left text-xs text-zinc-300"><thead><tr className="bg-zinc-900"><th className="sticky left-0 z-10 min-w-52 border-b border-r border-zinc-800 bg-zinc-900 p-3">Owner</th>{["Truck", "Current driver", ...(canReadTerms ? ["Settlement"] : [])].map(label => <th key={label} className="min-w-36 border-b border-zinc-800 p-3">{label}</th>)}{types.map(type => {
       const targets = visible.filter(t => !lockedCharges.has(`${t.id}:${type.id}`));
       const included = targets.filter(t => phaseIndex.current.get(`${t.id}:${type.id}`)?.included).length;
       const lockedCount = visible.length - targets.length;

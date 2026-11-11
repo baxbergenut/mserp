@@ -125,12 +125,8 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 	if _, err := chargeWeek(week); err != nil {
 		return TruckChargeData{}, err
 	}
-	d, err := truckChargeData(ctx, r.pool)
-	if err != nil {
-		return d, err
-	}
-	d.EligibleTruckIDs = []string{}
-	d.Owners = []TruckChargeOwner{}
+	d := TruckChargeData{Terms: []TruckTerm{}, Phases: []TruckChargePhase{},
+		EligibleTruckIDs: []string{}, Owners: []TruckChargeOwner{}, LockedCharges: []TruckChargeLock{}}
 	rows, err := r.pool.Query(ctx, `SELECT t.id::text,i.id::text,coalesce(driver.full_name,i.full_name)
  FROM trucks t `+truckOwnershipForWeekSQL+`
  LEFT JOIN drivers driver ON driver.id=i.driver_id WHERE NOT i.is_company AND NOT (`+terminatedOwnerTruckChargesSQL+`) ORDER BY t.id`, week)
@@ -138,7 +134,6 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 		return d, err
 	}
 	defer rows.Close()
-	eligible := map[string]bool{}
 	for rows.Next() {
 		var owner TruckChargeOwner
 		if err = rows.Scan(&owner.TruckID, &owner.OwnerID, &owner.OwnerName); err != nil {
@@ -146,32 +141,53 @@ func (r *DriverChargeRepository) TruckChargesForWeek(ctx context.Context, week s
 		}
 		d.EligibleTruckIDs = append(d.EligibleTruckIDs, owner.TruckID)
 		d.Owners = append(d.Owners, owner)
-		eligible[owner.TruckID] = true
 	}
-	terms := []TruckTerm{}
-	for _, term := range d.Terms {
-		if eligible[term.TruckID] {
-			terms = append(terms, term)
-		}
-	}
-	phases := []TruckChargePhase{}
-	for _, phase := range d.Phases {
-		if eligible[phase.TruckID] {
-			phases = append(phases, phase)
-		}
-	}
-	d.Terms, d.Phases = terms, phases
 	if err = rows.Err(); err != nil {
 		return d, err
 	}
 	rows.Close()
-	// Use the same affected-period check as writes, including later finalized
-	// statements, so selecting all can omit protected cells before saving.
-	d.LockedCharges = []TruckChargeLock{}
-	rows, err = r.pool.Query(ctx, `SELECT input.truck_id::text,input.type_id::text
- FROM (SELECT t.id AS truck_id,c.id AS type_id,$2::date AS week_start,'charge'::text AS kind
- FROM trucks t CROSS JOIN driver_charge_types c WHERE t.id=ANY($1::uuid[])) input
- WHERE `+truckPeriodClosedSQL, d.EligibleTruckIDs, week)
+
+	// Keep excluded phases and expired terms as the latest candidates.
+	rows, err = r.pool.Query(ctx, `SELECT s.truck_id::text,s.week_start::text,s.owner_id::text,s.share_percent::text,s.version,
+ coalesce((`+truckTermEndSQL+`)::text,'')
+ FROM unnest($2::uuid[]) ids(id) CROSS JOIN LATERAL (
+ SELECT * FROM truck_settlement_terms WHERE truck_id=ids.id AND week_start<=$1::date
+ ORDER BY week_start DESC LIMIT 1) s`, week, d.EligibleTruckIDs)
+	if err != nil {
+		return d, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var v TruckTerm
+		if err = rows.Scan(&v.TruckID, &v.WeekStart, &v.OwnerID, &v.SharePercent, &v.Version, &v.EndsBefore); err != nil {
+			return d, err
+		}
+		d.Terms = append(d.Terms, v)
+	}
+	if err = rows.Err(); err != nil {
+		return d, err
+	}
+	rows.Close()
+	rows, err = r.pool.Query(ctx, `SELECT p.truck_id::text,p.type_id::text,p.week_start::text,p.amount::text,p.included,p.version,t.version
+ FROM unnest($2::uuid[]) ids(id) CROSS JOIN driver_charge_types t CROSS JOIN LATERAL (
+ SELECT * FROM truck_charge_phases WHERE truck_id=ids.id AND type_id=t.id AND week_start<=$1::date
+ ORDER BY week_start DESC LIMIT 1) p`, week, d.EligibleTruckIDs)
+	if err != nil {
+		return d, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var v TruckChargePhase
+		if err = rows.Scan(&v.TruckID, &v.TypeID, &v.WeekStart, &v.Amount, &v.Included, &v.Version, &v.TypeVersion); err != nil {
+			return d, err
+		}
+		d.Phases = append(d.Phases, v)
+	}
+	if err = rows.Err(); err != nil {
+		return d, err
+	}
+	rows.Close()
+	rows, err = r.pool.Query(ctx, truckClosedPeriodsSQL+` SELECT truck_id::text,type_id::text FROM closed`, week, d.EligibleTruckIDs, "charge", nil)
 	if err != nil {
 		return d, err
 	}
@@ -302,17 +318,42 @@ func lockTruckAccounting(ctx context.Context, tx pgx.Tx) error {
 	return err
 }
 
-const truckPeriodClosedSQL = `EXISTS(SELECT 1 FROM investor_pay_weeks w WHERE w.truck_id=input.truck_id AND w.finalized AND w.week_start >= input.week_start
- AND w.week_start < coalesce((SELECT min(week_start) FROM truck_settlement_terms WHERE truck_id=input.truck_id AND week_start>input.week_start AND input.kind='terms'),
- (SELECT min(week_start) FROM truck_charge_phases WHERE truck_id=input.truck_id AND type_id=input.type_id AND week_start>input.week_start AND input.kind='charge'),'2101-01-01'::date))
- OR EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND s.week_start >= input.week_start AND
- (EXISTS(SELECT 1 FROM truck_settlement_terms t JOIN investors i ON i.id=t.owner_id WHERE t.truck_id=input.truck_id AND i.driver_id=s.driver_id)
- OR EXISTS(SELECT 1 FROM truck_ownership_history h JOIN investors i ON i.id=h.owner_id WHERE h.truck_id=input.truck_id AND i.driver_id=s.driver_id)))`
+// One lock rule for the grid and the fenced write. The driver check is
+// intentionally broader than the investor interval and independent of type.
+const truckClosedPeriodsSQL = `WITH targets AS MATERIALIZED (
+ SELECT id AS truck_id FROM unnest($2::uuid[]) u(id)
+), driver_closed AS MATERIALIZED (
+ SELECT t.truck_id FROM targets x JOIN truck_settlement_terms t USING(truck_id)
+ JOIN investors i ON i.id=t.owner_id JOIN payroll_settlements p ON p.driver_id=i.driver_id
+ WHERE p.finalized AND p.week_start >= $1::date
+ UNION
+ SELECT h.truck_id FROM targets x JOIN truck_ownership_history h USING(truck_id)
+ JOIN investors i ON i.id=h.owner_id JOIN payroll_settlements p ON p.driver_id=i.driver_id
+ WHERE p.finalized AND p.week_start >= $1::date
+), investor_first AS MATERIALIZED (
+ SELECT w.truck_id,min(w.week_start) AS week_start FROM targets x JOIN investor_pay_weeks w USING(truck_id)
+ WHERE w.finalized AND w.week_start >= $1::date GROUP BY w.truck_id
+), types AS (
+ SELECT id AS type_id FROM driver_charge_types WHERE $3::text='charge' AND $4::uuid IS NULL
+ UNION ALL SELECT $4::uuid WHERE $4::uuid IS NOT NULL OR $3::text='terms'
+), closed AS (
+ SELECT x.truck_id,c.type_id FROM targets x CROSS JOIN types c
+ LEFT JOIN driver_closed d USING(truck_id) LEFT JOIN investor_first w USING(truck_id)
+ WHERE CASE WHEN d.truck_id IS NOT NULL THEN true WHEN w.week_start IS NULL THEN false
+ WHEN $3::text='terms' THEN w.week_start < coalesce((
+ SELECT min(s.week_start) FROM truck_settlement_terms s WHERE s.truck_id=x.truck_id AND s.week_start>$1::date),'2101-01-01'::date)
+ ELSE w.week_start < coalesce((
+ SELECT min(p.week_start) FROM truck_charge_phases p WHERE p.truck_id=x.truck_id AND p.type_id=c.type_id AND p.week_start>$1::date),'2101-01-01'::date)
+ END
+)`
 
 func protectTruckPeriod(ctx context.Context, tx pgx.Tx, truck, week, kind, typeID string) error {
 	var closed bool
-	err := tx.QueryRow(ctx, `SELECT `+truckPeriodClosedSQL+`
- FROM (SELECT $1::uuid AS truck_id,$2::date AS week_start,$3::text AS kind,nullif($4,'')::uuid AS type_id) input`, truck, week, kind, typeID).Scan(&closed)
+	var typ *string
+	if typeID != "" {
+		typ = &typeID
+	}
+	err := tx.QueryRow(ctx, truckClosedPeriodsSQL+` SELECT EXISTS(SELECT 1 FROM closed)`, week, []string{truck}, kind, typ).Scan(&closed)
 	if err != nil {
 		return err
 	}
