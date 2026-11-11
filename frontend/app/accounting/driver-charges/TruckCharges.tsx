@@ -5,7 +5,6 @@ import { TableFilters } from "@/app/components/management/TableFilters";
 import type { ReactNode } from "react";
 
 import Link from "@/app/components/AccessLink";
-import { History } from "lucide-react";
 import { usePermissions } from "@/app/lib/access";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchTruckCharges, fetchTruckOptions, fetchInvestorOptions, saveTruckCharge, saveTruckCharges, saveTruckTerm } from "@/app/lib/api";
@@ -35,7 +34,6 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   const [failures, setFailures] = useState<TruckChargeBulkResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [term, setTerm] = useState<TruckTerm | null>(null);
-  const [phase, setPhase] = useState<TruckChargePhase | null>(null);
   const directoryRequest = useRef<Promise<[TruckOption[], InvestorOption[]]> | null>(null);
   const lastDirectoryRefresh = useRef(0);
   const requestDirectory = useCallback(() => {
@@ -69,7 +67,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   useEffect(() => {
     let cancelled = false;
     const refresh = () => {
-      if (busy || term || phase || document.visibilityState === "hidden" || Date.now() - lastDirectoryRefresh.current < 1000) return;
+      if (busy || term || document.visibilityState === "hidden" || Date.now() - lastDirectoryRefresh.current < 1000) return;
       Promise.all([fetchTruckCharges(week), requestDirectory()]).then(([d, directory]) => {
         if (!cancelled) { setData(d); setLoadedWeek(week); applyDirectory(directory); }
       }).catch(e => { if (!cancelled) setError(e.message); });
@@ -77,8 +75,8 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { cancelled = true; window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [week, busy, term, phase, applyDirectory, requestDirectory]);
-  async function run(action: () => Promise<void>) { setBusy(true); setError(""); setFailures([]); try { await action(); await reload(); await onChanged(); setTerm(null); setPhase(null); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save truck charges"); try { await reload(); await onChanged(); } catch { /* Keep the original save error visible. */ } } finally { setBusy(false); } }
+  }, [week, busy, term, applyDirectory, requestDirectory]);
+  async function run(action: () => Promise<void>) { setBusy(true); setError(""); setFailures([]); try { await action(); await reload(); await onChanged(); setTerm(null); } catch (e) { setError(e instanceof Error ? e.message : "Unable to save truck charges"); try { await reload(); await onChanged(); } catch { /* Keep the original save error visible. */ } } finally { setBusy(false); } }
   async function saveCells(updates: TruckChargePhase[]) {
     if (!canWrite || !data || busy || !updates.length) return;
     const previous = data;
@@ -137,10 +135,8 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
     .sort((a,b) => a.ownerName.localeCompare(b.ownerName) || a.unitNumber.localeCompare(b.unitNumber));
   useEffect(() => { onCountChange(visible.length); }, [visible.length, onCountChange]);
   const money = (s: string) => decimalDisplay(hundredths(s), true);
-  const truck = trucks.find(t => t.id === phase?.truckId);
-  const canEditPhase = canWrite && !!phase && !lockedCharges.has(`${phase.truckId}:${phase.typeId}`);
   return <div className="space-y-3">
-    {!term && !phase && error && <ErrorBanner message={error} />}
+    {!term && error && <ErrorBanner message={error} />}
     {!!failures.length && <ul aria-label="Truck charges that could not be saved" className="max-h-48 overflow-y-auto text-xs text-red-300">{failures.map(f => <li key={`${f.truckId}:${f.typeId}:${f.weekStart}`}>Truck {trucks.find(t => t.id === f.truckId)?.unitNumber ?? f.truckId}: {f.error}</li>)}</ul>}
     <div><div className="flex flex-wrap items-center gap-2"><EffectiveWeekPicker week={week} currentWeek={charges.currentWeek} disabled={busy} onChange={setWeek} /><input aria-label="Search trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Owner, truck or driver…" className={`${controlClass} !w-40`} />
         <TableFilters>
@@ -177,10 +173,9 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
         const options = Array.from(new Set([...type.amounts, value.amount]));
         const locked = lockedCharges.has(`${t.id}:${type.id}`);
         const disabled = busy || !canWrite || !validWeek || locked;
-        return <td key={type.id} title={locked ? "Finalized statement: charge stays unchanged" : undefined} className="h-8 border-b border-zinc-800 px-3 py-0"><div className="flex h-[31px] items-center gap-3"><input aria-label={`${t.unitNumber}, ${type.name}`} type="checkbox" className="h-4 w-4 accent-blue-500" checked={value.included} disabled={disabled || (type.archived && !value.included)} onChange={e => void saveCells([{ ...value, included: e.target.checked }])} />{options.length > 1 ? <select aria-label={`${t.unitNumber}, ${type.name} amount`} className={`${controlClass} !h-7 !w-28 !py-0 font-mono`} value={value.amount} disabled={disabled || !value.included || type.archived} onChange={e => void saveCells([{ ...value, amount: e.target.value }])}>{options.map(a => <option key={a} value={a}>{money(a)}{!type.amounts.includes(a) ? " (existing)" : ""}</option>)}</select> : <span className={`min-w-20 font-mono ${value.included ? "text-zinc-200" : "text-zinc-600"}`}>{money(value.amount)}</span>}{current && <button type="button" aria-label={`${t.unitNumber}, ${type.name} history`} title="Schedule / history" disabled={busy} onClick={() => { setError(""); setPhase(value); }} className="rounded p-1 text-zinc-500 hover:text-blue-300"><History size={14} /></button>}</div></td>;
+        return <td key={type.id} title={locked ? "Finalized statement: charge stays unchanged" : undefined} className="h-8 border-b border-zinc-800 px-3 py-0"><div className="flex h-[31px] items-center gap-3"><input aria-label={`${t.unitNumber}, ${type.name}`} type="checkbox" className="h-4 w-4 accent-blue-500" checked={value.included} disabled={disabled || (type.archived && !value.included)} onChange={e => void saveCells([{ ...value, included: e.target.checked }])} />{options.length > 1 ? <select aria-label={`${t.unitNumber}, ${type.name} amount`} className={`${controlClass} !h-7 !w-28 !py-0 font-mono`} value={value.amount} disabled={disabled || !value.included || type.archived} onChange={e => void saveCells([{ ...value, amount: e.target.value }])}>{options.map(a => <option key={a} value={a}>{money(a)}{!type.amounts.includes(a) ? " (existing)" : ""}</option>)}</select> : <span className={`min-w-20 font-mono ${value.included ? "text-zinc-200" : "text-zinc-600"}`}>{money(value.amount)}</span>}</div></td>;
       })}</tr>;
     })}</tbody></table>{!visible.length && <p className="p-8 text-center text-sm text-zinc-500">No trucks match this view.</p>}</div>}
     {term && <Modal title={`Truck ${trucks.find(t => t.id === term.truckId)?.unitNumber} · settlement terms`} description={`Effective ${term.weekStart}`} isSaving={busy} submitLabel="Save terms" onClose={() => setTerm(null)} onSubmit={e => { e.preventDefault(); if(canTerms)void run(() => saveTruckTerm(term)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<Field label="Investor"><select required className={controlClass} value={term.ownerId} onChange={e => setTerm({ ...term, ownerId: e.target.value })}>{investors.filter(i => !i.isCompany && (i.active || i.id === term.ownerId)).map(i => <option key={i.id} value={i.id}>{i.fullName}</option>)}</select></Field><Field label="Investor share of driver gross (%)"><input required type="number" min="0.0001" max="100" step="0.0001" value={term.sharePercent} onChange={e => setTerm({ ...term, sharePercent: e.target.value })} className={controlClass} /></Field></div></Modal>}
-    {phase && <Modal title={`Truck ${truck?.unitNumber} · ${types.find(t => t.id === phase.typeId)?.name}`} description={`Effective ${phase.weekStart}`} isSaving={busy} hideSubmit={!canEditPhase} cancelLabel={canEditPhase ? "Cancel" : "Close"} submitLabel="Save truck fee" onClose={() => setPhase(null)} onSubmit={e => { e.preventDefault(); if (canEditPhase) void run(() => saveTruckCharge(phase)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<div className="space-y-1 text-xs text-zinc-400">{data?.phases.filter(p => p.truckId === phase.truckId && p.typeId === phase.typeId).map(p => <p key={p.weekStart}>{p.weekStart} · {money(p.amount)} · {p.included ? "Included" : "Paused"}</p>)}</div><label className="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={phase.included} disabled={!canEditPhase} onChange={e => { if (canEditPhase) setPhase({ ...phase, included: e.target.checked }); }} />Apply this recurring fee</label><Field label="Weekly amount"><select className={controlClass} value={phase.amount} disabled={!canEditPhase} onChange={e => { if (canEditPhase) setPhase({ ...phase, amount: e.target.value }); }}>{Array.from(new Set([...(types.find(t => t.id === phase.typeId)?.amounts ?? []), phase.amount])).map(a => <option key={a} value={a}>{money(a)}</option>)}</select></Field></div></Modal>}
   </div>;
 }

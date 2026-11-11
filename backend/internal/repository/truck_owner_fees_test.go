@@ -45,7 +45,7 @@ func TestOwnerTruckFeesLoadConflictDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: week, Included: true, Amount: fee.amount, TypeVersion: typ.Version}, actor); err != nil {
+			if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: week, Included: true, Amount: fee.amount, TypeVersion: typ.Version}); err != nil {
 				t.Fatal(err)
 			}
 		}

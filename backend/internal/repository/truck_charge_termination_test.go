@@ -36,7 +36,7 @@ func TestTruckChargeTerminationDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck.ID, TypeID: typ.ID, WeekStart: prior, Amount: "50", Included: true, TypeVersion: typ.Version}, actor); err != nil {
+			if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck.ID, TypeID: typ.ID, WeekStart: prior, Amount: "50", Included: true, TypeVersion: typ.Version}); err != nil {
 				t.Fatal(err)
 			}
 			if err = charges.SaveTruckTerm(ctx, TruckTerm{TruckID: truck.ID, OwnerID: truck.OwnerID, WeekStart: prior, SharePercent: "88"}, actor); err != nil {
@@ -125,12 +125,12 @@ func TestTruckChargeTerminationDatabase(t *testing.T) {
 		assertEligible(homeTruck, week, true)
 		// Both single and bulk APIs reject attempts to put stopped fees back.
 		update := TruckChargePhase{TruckID: stopped.ID, TypeID: typ.ID, WeekStart: week, Amount: "50", Included: true, TypeVersion: typ.Version}
-		if err = charges.SaveTruckCharge(ctx, update, actor); err == nil || !strings.Contains(err.Error(), "termination") {
+		if err = charges.SaveTruckCharge(ctx, update); err == nil || !strings.Contains(err.Error(), "termination") {
 			t.Fatal("terminated truck charge was accepted", err)
 		}
 		allowed := update
 		allowed.TruckID = investorTruck.ID
-		results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{update, allowed}, actor)
+		results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{update, allowed})
 		if err != nil || len(results) != 2 || results[0].Error == "" || results[1].Error != "" {
 			t.Fatal("bulk did not isolate terminated truck", results, err)
 		}

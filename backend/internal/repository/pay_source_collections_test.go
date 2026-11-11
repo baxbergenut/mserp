@@ -44,7 +44,7 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err = cr.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-28", Amount: "100", Included: true, TypeVersion: typ.Version}, actor); err != nil {
+				if err = cr.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-28", Amount: "100", Included: true, TypeVersion: typ.Version}); err != nil {
 					t.Fatal(err)
 				}
 				fee := "truck_charge:" + truck + ":" + typ.ID
@@ -144,7 +144,7 @@ func TestPaySourceCollectionsDatabase(t *testing.T) {
 				if _, err = save(e); err != nil {
 					t.Fatal(err)
 				}
-				if err = cr.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-10-12", Amount: "100", Included: false, TypeVersion: typ.Version}, actor); err != nil {
+				if err = cr.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-10-12", Amount: "100", Included: false, TypeVersion: typ.Version}); err != nil {
 					t.Fatal(err)
 				}
 				third := read("2026-10-12")

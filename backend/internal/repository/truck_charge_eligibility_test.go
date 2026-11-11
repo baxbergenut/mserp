@@ -51,7 +51,7 @@ func TestTruckChargeHistoricalEligibilityDatabase(t *testing.T) {
 		phase := TruckChargePhase{TruckID: transferred.ID, TypeID: typ.ID, WeekStart: oldWeek, Amount: "50", Included: true, TypeVersion: typ.Version}
 		blocked := phase
 		blocked.TruckID = reverse.ID
-		results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{blocked, phase}, actor)
+		results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{blocked, phase})
 		if err != nil || len(results) != 2 || results[0].Error == "" || results[1].Error != "" {
 			t.Fatalf("historical bulk eligibility: %+v %v", results, err)
 		}
@@ -59,7 +59,7 @@ func TestTruckChargeHistoricalEligibilityDatabase(t *testing.T) {
 			t.Fatal("historical investor terms blocked by current company ownership", err)
 		}
 		phase.WeekStart, phase.Version = week, 0
-		if err = charges.SaveTruckCharge(ctx, phase, actor); err == nil {
+		if err = charges.SaveTruckCharge(ctx, phase); err == nil {
 			t.Fatal("current company truck accepted a new fee")
 		}
 		var saved bool

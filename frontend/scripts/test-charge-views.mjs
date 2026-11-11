@@ -178,12 +178,9 @@ try {
   await expect(truckCheck).toBeChecked();
   await expect(frozenCheck).toBeChecked();
   expect(truckWrites.slice(beforeFrozen).some(v => v.truckId === 'truck-b')).toBe(false);
-  await page.getByRole('button', { name: '202, Admin fee history', exact: true }).click();
-  const frozenHistory = page.getByRole('dialog');
-  await expect(frozenHistory.getByRole('checkbox')).toBeDisabled();
-  await expect(frozenHistory.getByRole('combobox')).toBeDisabled();
-  await expect(frozenHistory.getByRole('button', { name: 'Save truck fee', exact: true })).toHaveCount(0);
-  await frozenHistory.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await expect(frozenCheck).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: '202, Admin fee amount', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '202, Admin fee history', exact: true })).toHaveCount(0);
   // Other charge types on the same truck remain independently selectable.
   await expect(page.getByRole('checkbox', { name: '202, Other fee 0', exact: true })).toBeEnabled();
   await page.getByLabel('Search trucks').fill('202');
@@ -249,6 +246,8 @@ try {
   await page.getByRole('button', { name: 'Next week', exact: true }).click();
   await expect(ownerRow.getByRole('link', { name: 'Felix & Den', exact: true })).toBeVisible();
   renamedOwner = 'Updated owner';
+  // Expire the focus deduplication window without waiting in the test.
+  await page.clock.setFixedTime(new Date((await page.evaluate(() => Date.now())) + 1100));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(ownerRow.getByRole('link', { name: 'Updated owner', exact: true })).toBeVisible();
   expect(termWrites).toEqual([]);
@@ -262,13 +261,9 @@ try {
   const writesBefore = truckWrites.length;
   readOnly = true;
   await page.reload();
-  await page.getByRole('button', {name: '201, Admin fee history', exact:true}).click();
-  const history = page.getByRole('dialog');
-  await expect(history.getByRole('checkbox')).toBeDisabled();
-  await expect(history.getByRole('combobox')).toBeDisabled();
-  await expect(history.getByRole('button', {name:'Save truck fee',exact:true})).toHaveCount(0);
-  await history.getByRole('button', {name:'Close',exact:true}).last().click();
-  await expect(history).toHaveCount(0);
+  await expect(page.getByRole('checkbox', {name:'201, Admin fee',exact:true})).toBeDisabled();
+  await expect(page.getByRole('combobox', {name:'201, Admin fee amount',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button', {name:'201, Admin fee history',exact:true})).toHaveCount(0);
   expect(truckWrites.length).toBe(writesBefore);
   await page.goto(base+'/accounting/driver-charges?action=installment');
   await expect(page.getByRole('tab',{name:'Installment plans',exact:true})).toHaveAttribute('aria-selected','true');

@@ -35,7 +35,7 @@ func TestTruckOwnershipTransferPayrollDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck.ID, TypeID: insurance.ID, WeekStart: priorWeek, Included: true, Amount: "375", TypeVersion: insurance.Version}, actor); err != nil {
+		if err := charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck.ID, TypeID: insurance.ID, WeekStart: priorWeek, Included: true, Amount: "375", TypeVersion: insurance.Version}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,original_rate,miles,driver_rate)

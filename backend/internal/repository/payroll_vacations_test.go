@@ -45,7 +45,7 @@ func TestPayrollVacationsDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-21", Amount: "100.00", Included: true, TypeVersion: typ.Version}, actor); err != nil {
+		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-21", Amount: "100.00", Included: true, TypeVersion: typ.Version}); err != nil {
 			t.Fatal(err)
 		}
 		pay := NewDriverPayRepository(pool)

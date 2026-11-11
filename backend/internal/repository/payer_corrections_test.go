@@ -35,7 +35,7 @@ func TestOwnershipFeeCorrectionsDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-28", Amount: "100", Included: true, TypeVersion: typ.Version}, actor); err != nil {
+		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-28", Amount: "100", Included: true, TypeVersion: typ.Version}); err != nil {
 			t.Fatal(err)
 		}
 		exec(`INSERT INTO truck_settlement_terms(truck_id,owner_id,week_start,share_percent) VALUES($1,$2,'2026-09-28',88)`, truck, oldOwner)

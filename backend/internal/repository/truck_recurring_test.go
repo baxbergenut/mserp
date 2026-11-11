@@ -266,10 +266,10 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal(err)
 	}
 	phase := TruckChargePhase{TruckID: truck.ID, TypeID: typ.ID, WeekStart: week, Included: true, Amount: "50", TypeVersion: typ.Version}
-	if err = charges.SaveTruckCharge(ctx, phase, actor); err != nil {
+	if err = charges.SaveTruckCharge(ctx, phase); err != nil {
 		t.Fatal("owner truck fee without investor terms", err)
 	}
-	if err = charges.SaveTruckCharge(ctx, phase, actor); err != ErrChargeConflict {
+	if err = charges.SaveTruckCharge(ctx, phase); err != ErrChargeConflict {
 		t.Fatal("stale fee accepted", err)
 	}
 	report, err := pay.Get(ctx, date)
@@ -354,7 +354,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	}
 	closedChange := phase
 	closedChange.Version, closedChange.Amount = 1, "75"
-	if err = charges.SaveTruckCharge(ctx, closedChange, actor); err == nil {
+	if err = charges.SaveTruckCharge(ctx, closedChange); err == nil {
 		t.Fatal("truck fee changed a finalized owner statement")
 	}
 	var independentBulkOwner string
@@ -368,7 +368,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	good := TruckChargePhase{TruckID: bulkTruck.ID, TypeID: typ.ID, WeekStart: week, Included: true, Amount: "50", TypeVersion: typ.Version}
 	badAmount := good
 	badAmount.TruckID, badAmount.Amount = second.ID, "-1"
-	results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{closedChange, badAmount, good}, actor)
+	results, err := charges.SaveTruckCharges(ctx, []TruckChargePhase{closedChange, badAmount, good})
 	if err != nil || len(results) != 3 || results[0].Error == "" || results[1].Error == "" || results[2].Error != "" {
 		t.Fatalf("bulk did not continue after finalized/invalid rows: %+v %v", results, err)
 	}
@@ -377,8 +377,8 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if err = pool.QueryRow(ctx, `SELECT amount::text FROM truck_charge_phases WHERE truck_id=$1`, bulkTruck.ID).Scan(&savedAmount); err != nil || savedAmount != "50.00" {
 		t.Fatal("later truck fee was not saved", savedAmount, err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 1 {
-		t.Fatal("bulk audit missing", auditCount, err)
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 0 {
+		t.Fatal("bulk wrote recurring charge audit", auditCount, err)
 	}
 	// A stale INSERT triggers a database-level no-rows conflict. Its
 	// savepoint must recover so a later valid update can still commit.
@@ -388,28 +388,28 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	}
 	valid := badAmount
 	valid.TruckID, valid.Amount = nextTruck.ID, "75"
-	results, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, valid}, actor)
+	results, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, valid})
 	if err != nil || len(results) != 2 || results[0].Error != ErrChargeConflict.Error() || results[1].Error != "" {
 		t.Fatalf("bulk stale row stopped later save: %+v %v", results, err)
 	}
-	if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, good}, actor); err == nil {
+	if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{good, good}); err == nil {
 		t.Fatal("duplicate bulk cell accepted")
 	}
-	if _, err = charges.SaveTruckCharges(ctx, nil, actor); err == nil {
+	if _, err = charges.SaveTruckCharges(ctx, nil); err == nil {
 		t.Fatal("empty bulk accepted")
 	}
-	// An unexpected database error rolls back successes and their audit.
+	// An unexpected database error rolls back successful phase edits.
 	changed := good
 	changed.Version, changed.Amount = 1, "75"
 	broken := valid
 	broken.TruckID = "invalid-uuid"
-	if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{changed, broken}, actor); err == nil {
+	if _, err = charges.SaveTruckCharges(ctx, []TruckChargePhase{changed, broken}); err == nil {
 		t.Fatal("unexpected database error hidden")
 	}
 	if err = pool.QueryRow(ctx, `SELECT amount::text FROM truck_charge_phases WHERE truck_id=$1`, bulkTruck.ID).Scan(&savedAmount); err != nil || savedAmount != "50.00" {
 		t.Fatal("failed bulk committed earlier update", savedAmount, err)
 	}
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 1 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM truck_settlement_events WHERE truck_id=$1 AND action='charge'`, bulkTruck.ID).Scan(&auditCount); err != nil || auditCount != 0 {
 		t.Fatal("failed bulk committed audit", auditCount, err)
 	}
 	report, err = pay.Get(ctx, date)
@@ -435,7 +435,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal("company ownership did not change type", got, err)
 	}
 	phase.Version = 1
-	if err = charges.SaveTruckCharge(ctx, phase, actor); err == nil {
+	if err = charges.SaveTruckCharge(ctx, phase); err == nil {
 		t.Fatal("company fee accepted")
 	}
 	var independent string
@@ -479,7 +479,7 @@ func verifyTruckRecurring(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		t.Fatal(err)
 	}
 	started := time.Now()
-	results, err = charges.SaveTruckCharges(ctx, updates, actor)
+	results, err = charges.SaveTruckCharges(ctx, updates)
 	if err != nil || len(results) != 250 {
 		t.Fatal("fleet-sized save failed", len(results), err)
 	}
@@ -536,7 +536,7 @@ func TestTruckRecurringFinalizedSelectionDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		// A later phase bounds the affected investor period, independently per type.
-		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: investorTruck.ID, TypeID: typ.ID, WeekStart: nextWeek, Amount: "50", TypeVersion: typ.Version}, actor); err != nil {
+		if err = charges.SaveTruckCharge(ctx, TruckChargePhase{TruckID: investorTruck.ID, TypeID: typ.ID, WeekStart: nextWeek, Amount: "50", TypeVersion: typ.Version}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = pool.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report) VALUES($1,$2,'{"frozen":"driver"}')`, driver.ID, week); err != nil {
@@ -564,7 +564,7 @@ func TestTruckRecurringFinalizedSelectionDatabase(t *testing.T) {
 		}
 		// Even a stale browser that sends locked trucks cannot change them or
 		// prevent the open truck in the middle of the selection from saving.
-		results, err := charges.SaveTruckCharges(ctx, updates, actor)
+		results, err := charges.SaveTruckCharges(ctx, updates)
 		if err != nil || len(results) != 3 || results[0].Error == "" || results[1].Error != "" || results[2].Error == "" {
 			t.Fatalf("finalized selection results: %+v %v", results, err)
 		}

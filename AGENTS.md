@@ -3338,8 +3338,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 - Recurring Charges contains Truck charges, Installment plans, Charge types.
   The weekly matrix reads effective candidates only and keeps excluded phases and
   expired terms. Grid and writes share the finalized lock predicate. Identical
-  charge saves preserve existing phase versions and produce no audit or payroll
-  publication. Captured charge-only edits use the same effective interval in
+  charge saves preserve the phase version and skip publication. Charge edits store
+  the effective on/off state and amount without actor metadata or per-cell audit
+  events. Captured charge-only edits use the same effective interval in
   atomic publication and worker freshness. A successor bounds recalculation
   only when saved statement and collection evidence rules out later impact.
   Never prune historical phases, collections or finalized statements as a

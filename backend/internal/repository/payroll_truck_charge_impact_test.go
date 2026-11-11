@@ -70,7 +70,10 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 		if err = lockTruckAccounting(baselineCtx, tx); err != nil {
 			t.Fatal(err)
 		}
-		if err = saveTruckCharge(baselineCtx, tx, v, ""); err != nil {
+		if err = saveTruckCharge(baselineCtx, tx, v); err != nil {
+			t.Fatal(err)
+		}
+		if err = truckAudit(baselineCtx, tx, v.TruckID, v.WeekStart, "charge", "", v); err != nil {
 			t.Fatal(err)
 		}
 		var changed bool
@@ -92,7 +95,7 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		write, metrics := db.WithMetrics(WithPayrollPublication(ctx))
-		if err = chargeRepo.SaveTruckCharge(write, v, ""); err != nil {
+		if err = chargeRepo.SaveTruckCharge(write, v); err != nil {
 			t.Fatal(err)
 		}
 		t.Logf("matched edit: all-weeks=%d scoped=%d queries, phases=%v; baseline=%v", baseline.Queries.Load(), metrics.Queries.Load(), metrics.Events(), baseline.Events())
@@ -133,7 +136,7 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 		v.Version, v.Amount = 1, "25.00"
 		noop, noops := db.WithMetrics(WithPayrollPublication(ctx))
 		for _, phase := range []TruckChargePhase{v, inherited} {
-			if err = chargeRepo.SaveTruckCharge(noop, phase, ""); err != nil {
+			if err = chargeRepo.SaveTruckCharge(noop, phase); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -144,12 +147,12 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 			v.TruckID, v.TypeID, v.WeekStart, inherited.WeekStart).Scan(&audits, &version, &inheritedRows); err != nil {
 			t.Fatal(err)
 		}
-		if audits != 1 || version != 1 || inheritedRows != 0 || noops.Events()["truck_charge_noop"] != 2 || noops.Events()["payroll_calculation"] != 0 {
+		if audits != 0 || version != 1 || inheritedRows != 0 || noops.Events()["truck_charge_noop"] != 2 || noops.Events()["payroll_calculation"] != 0 {
 			t.Fatalf("identical saves wrote history or recalculated: %d %d %d %v", audits, version, inheritedRows, noops.Events())
 		}
 		stale := v
 		stale.Version = 0
-		if err = chargeRepo.SaveTruckCharge(noop, stale, ""); !errors.Is(err, ErrChargeConflict) {
+		if err = chargeRepo.SaveTruckCharge(noop, stale); !errors.Is(err, ErrChargeConflict) {
 			t.Fatalf("stale exact version passed no-op: %v", err)
 		}
 
@@ -160,7 +163,7 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 		future.WeekStart, future.TypeID, future.Amount = current.AddDate(0, 0, 7).Format(time.DateOnly), other, "25"
 		stale.WeekStart, stale.Version = dates[2], 77
 		bulk, bulkMetrics := db.WithMetrics(WithPayrollPublication(ctx))
-		results, err := chargeRepo.SaveTruckCharges(bulk, []TruckChargePhase{v, stale, future}, "")
+		results, err := chargeRepo.SaveTruckCharges(bulk, []TruckChargePhase{v, stale, future})
 		if err != nil || len(results) != 3 || results[0].Error != "" || results[1].Error == "" || results[2].Error != "" || bulkMetrics.Events()["payroll_calculation"] != 0 {
 			t.Fatalf("future bulk changed completed payroll: %+v %v %v", results, bulkMetrics.Events(), err)
 		}
@@ -169,7 +172,7 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 		// A capture consumed by the worker must reach the same date proof,
 		// even before the dispatcher has processed it.
 		future.Amount, future.Version = "30", 1
-		if err = chargeRepo.SaveTruckCharge(ctx, future, ""); err != nil {
+		if err = chargeRepo.SaveTruckCharge(ctx, future); err != nil {
 			t.Fatal(err)
 		}
 		read, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
@@ -217,7 +220,7 @@ func TestTruckChargePublicationScopeDatabase(t *testing.T) {
 		}
 		defer check.Rollback(ctx)
 		v.Amount = "20"
-		if err = saveTruckCharge(write, check, v, ""); err != nil {
+		if err = saveTruckCharge(write, check, v); err != nil {
 			t.Fatal(err)
 		}
 		impact, err = payrollMutationImpact(write, check, &payrollCommand{name: "native", beforeSnapshot: check.(*payrollMutationTransaction).beforeSnapshot}, "", "")

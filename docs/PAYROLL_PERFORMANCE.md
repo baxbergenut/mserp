@@ -519,8 +519,9 @@ check uses the next phase or term boundary. The browser reuses directory choices
 when changing weeks.
 
 Charge-only captures use old/new truck, type and Monday identities in both
-publication and freshness checks. A matching charge audit is validated against
-the same transaction. Existing completed generations outside the proven window
+publication and freshness checks. Older captured charge audits remain valid only
+when paired with a phase change in the same transaction. New saves write the
+effective charge change without a separate audit event. Existing completed generations outside the proven window
 stay in place; readers still verify the complete source interval and exact
 resource revisions. Saved collections or statements keep the conservative later
 window. A same-value save does not insert a phase or audit, bump a version, or

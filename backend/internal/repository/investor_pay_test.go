@@ -215,7 +215,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			phase := TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-01-05", Amount: "100.00", Included: true, TypeVersion: typ.Version}
-			if e = cr.SaveTruckCharge(ctx, phase, actor); e != nil {
+			if e = cr.SaveTruckCharge(ctx, phase); e != nil {
 				t.Fatal(e)
 			}
 			week, _ := time.Parse(time.DateOnly, "2026-09-28")
@@ -345,7 +345,7 @@ func TestInvestorPayDatabase(t *testing.T) {
 			if _, e = pr.SaveInvestorPay(ctx, saved, actor); e == nil {
 				t.Fatal("edited finalized pay")
 			}
-			if e = cr.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-28", Amount: "100.00", Included: false, TypeVersion: typ.Version}, actor); e == nil {
+			if e = cr.SaveTruckCharge(ctx, TruckChargePhase{TruckID: truck, TypeID: typ.ID, WeekStart: "2026-09-28", Amount: "100.00", Included: false, TypeVersion: typ.Version}); e == nil {
 				t.Fatal("changed finalized truck charge")
 			}
 			if _, e = pool.Exec(ctx, `UPDATE drivers SET pay_rate=30 WHERE id=$1`, driver); e != nil {

@@ -77,7 +77,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeAPIError(w, 400, "Invalid truck charge")
 			return
 		}
-		if err := charges.SaveTruckCharge(r.Context(), v, actor(r)); err != nil {
+		if err := charges.SaveTruckCharge(r.Context(), v); err != nil {
 			fail(w, err)
 			return
 		}
@@ -96,7 +96,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 				return
 			}
 		}
-		results, err := charges.SaveTruckCharges(r.Context(), input.Updates, actor(r))
+		results, err := charges.SaveTruckCharges(r.Context(), input.Updates)
 		if err != nil {
 			fail(w, err)
 			return

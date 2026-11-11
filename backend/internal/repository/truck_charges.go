@@ -436,7 +436,7 @@ func lockTruckChargeWrite(ctx context.Context, tx pgx.Tx) error {
 	return lockTruckAccounting(ctx, tx)
 }
 
-func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckChargePhase, actor string) error {
+func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckChargePhase) error {
 	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
@@ -445,7 +445,7 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 	if err = lockTruckChargeWrite(ctx, tx); err != nil {
 		return err
 	}
-	if err = saveTruckCharge(ctx, tx, v, actor); err != nil {
+	if err = saveTruckCharge(ctx, tx, v); err != nil {
 		return err
 	}
 	return commitPayrollMutation(ctx, tx)
@@ -455,7 +455,7 @@ func (r *DriverChargeRepository) SaveTruckCharge(ctx context.Context, v TruckCha
 // isolate expected row failures so a stale or finalized truck cannot stop later
 // trucks. Unexpected database failures roll back the batch rather than claiming
 // that any uncommitted rows succeeded.
-func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates []TruckChargePhase, actor string) ([]TruckChargeBulkResult, error) {
+func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates []TruckChargePhase) ([]TruckChargeBulkResult, error) {
 	if len(updates) == 0 || len(updates) > MaxTruckChargeBulkSize {
 		return nil, chargeInvalid("Choose between 1 and %d truck charges", MaxTruckChargeBulkSize)
 	}
@@ -482,7 +482,7 @@ func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates [
 			return nil, err
 		}
 		result := TruckChargeBulkResult{TruckID: v.TruckID, TypeID: v.TypeID, WeekStart: v.WeekStart}
-		if err = saveTruckCharge(ctx, row, v, actor); err != nil {
+		if err = saveTruckCharge(ctx, row, v); err != nil {
 			if rollbackErr := row.Rollback(ctx); rollbackErr != nil {
 				return nil, rollbackErr
 			}
@@ -509,7 +509,7 @@ func (r *DriverChargeRepository) SaveTruckCharges(ctx context.Context, updates [
 	return results, nil
 }
 
-func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor string) error {
+func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase) error {
 	defer db.Phase(ctx, "truck_charge_write")()
 	if _, err := chargeWeek(v.WeekStart); err != nil {
 		return err
@@ -561,17 +561,14 @@ func saveTruckCharge(ctx context.Context, tx pgx.Tx, v TruckChargePhase, actor s
 		return nil
 	}
 	if v.Version == 0 {
-		err = tx.QueryRow(ctx, `INSERT INTO truck_charge_phases(truck_id,type_id,week_start,amount,included,updated_by) VALUES($1,$2,$3::date,$4::numeric,$5,nullif($6,'')::uuid) ON CONFLICT DO NOTHING RETURNING version`, v.TruckID, v.TypeID, v.WeekStart, v.Amount, v.Included, actor).Scan(&version)
+		err = tx.QueryRow(ctx, `INSERT INTO truck_charge_phases(truck_id,type_id,week_start,amount,included) VALUES($1,$2,$3::date,$4::numeric,$5) ON CONFLICT DO NOTHING RETURNING version`, v.TruckID, v.TypeID, v.WeekStart, v.Amount, v.Included).Scan(&version)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE truck_charge_phases SET amount=$4::numeric,included=$5,updated_by=nullif($6,'')::uuid,version=version+1 WHERE truck_id=$1 AND type_id=$2 AND week_start=$3::date AND version=$7 RETURNING version`, v.TruckID, v.TypeID, v.WeekStart, v.Amount, v.Included, actor, v.Version).Scan(&version)
+		err = tx.QueryRow(ctx, `UPDATE truck_charge_phases SET amount=$4::numeric,included=$5,updated_by=NULL,version=version+1 WHERE truck_id=$1 AND type_id=$2 AND week_start=$3::date AND version=$6 RETURNING version`, v.TruckID, v.TypeID, v.WeekStart, v.Amount, v.Included, v.Version).Scan(&version)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrChargeConflict
 	}
 	if err != nil {
-		return err
-	}
-	if err = truckAudit(ctx, tx, v.TruckID, v.WeekStart, "charge", actor, v); err != nil {
 		return err
 	}
 	return nil
