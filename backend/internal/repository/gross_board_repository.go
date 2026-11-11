@@ -89,13 +89,14 @@ type GrossBoardDriver struct {
 }
 
 type GrossBoard struct {
-	ManagedInSheets bool                      `json:"managedInSheets,omitempty"`
-	CutoverWeek     string                    `json:"cutoverWeek,omitempty"`
-	WeekStart       string                    `json:"weekStart"`
-	Drivers         []GrossBoardDriver        `json:"drivers"`
-	Entries         []GrossBoardEntry         `json:"entries"`
-	PlanningEntries []GrossBoardPlanningEntry `json:"planningEntries"`
-	Balances        []GrossBoardBalance       `json:"balances"`
+	ManagedInSheets     bool                           `json:"managedInSheets,omitempty"`
+	CutoverWeek         string                         `json:"cutoverWeek,omitempty"`
+	WeekStart           string                         `json:"weekStart"`
+	Drivers             []GrossBoardDriver             `json:"drivers"`
+	Entries             []GrossBoardEntry              `json:"entries"`
+	PlanningEntries     []GrossBoardPlanningEntry      `json:"planningEntries"`
+	NextDayDestinations []GrossBoardNextDayDestination `json:"nextDayDestinations,omitempty"`
+	Balances            []GrossBoardBalance            `json:"balances"`
 }
 
 type GrossBoardBalance struct {
@@ -335,6 +336,12 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 	}
 	if err := decorateGrossBoardTerminations(ctx, tx, &board); err != nil {
 		return board, err
+	}
+	if includePlanning {
+		board.NextDayDestinations, err = readGrossBoardNextDayDestinations(ctx, tx, week, board)
+		if err != nil {
+			return board, err
+		}
 	}
 	return board, nil
 }

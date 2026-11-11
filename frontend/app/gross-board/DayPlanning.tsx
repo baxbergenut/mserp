@@ -25,8 +25,9 @@ function updatePlanningSession(key: string, value: Partial<PlanningSession>) {
 }
 const kinds = ["note", "destination"] as const;
 
-export function useDayPlanning({ entries, driverId, driverName, date, week, readOnly, fullDayEligible, onSaved }: {
+export function useDayPlanning({ entries, driverId, driverName, date, week, readOnly, fullDayEligible, suggestedDestination, onSaved }: {
   entries: GrossBoardPlanningEntry[]; driverId: string; driverName: string; date: string; week: string; readOnly: boolean; fullDayEligible: boolean;
+  suggestedDestination?: string;
   onSaved: (entries: GrossBoardPlanningEntry[]) => void;
 }) {
   const userId = useContext(CurrentUserIDContext);
@@ -40,7 +41,7 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   const forThisDay = (entry: GrossBoardPlanningEntry) => entry.driverId === driverId && entry.date === date;
   const saved = (kind: GrossBoardPlanningKind): GrossBoardPlanningEntry =>
     mergePlanningEntries(entries.filter(forThisDay), session.value.receipts.filter(forThisDay)).find(entry => entry.kind === kind)
-    ?? { driverId, date, kind, text: "", version: 0 };
+    ?? { driverId, date, kind, text: kind === "destination" && fullDayEligible ? suggestedDestination ?? "" : "", version: 0 };
   const putDrafts = (next: PlanningDrafts) => patch({ drafts: next, storageError: !writePlanningDrafts(storageKey, next) });
   const edit = (kind: GrossBoardPlanningKind, text: string) => {
     if (readOnly) return;
@@ -115,7 +116,8 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   };
   const fullDay = fullDayEligible && kinds.some(kind => !!saved(kind).text || (!readOnly && !!drafts[kind]));
   const hasPlanning = kinds.some(kind => !!saved(kind).text || (!readOnly && !!drafts[kind]));
-  const planningContent = hasPlanning ? <div data-gross-planning data-gross-planning-full-day={fullDay || undefined}
+  const automaticDestination = !!suggestedDestination && fullDayEligible && saved("destination").version === 0 && !!saved("destination").text;
+  const planningContent = hasPlanning ? <div data-gross-planning data-gross-planning-full-day={fullDay || undefined} data-gross-suggested-destination={automaticDestination || undefined}
     className={fullDay ? "flex h-full min-h-[152px] flex-col px-1 py-1 font-sans text-xs" : "border-t border-zinc-800/70 px-1 py-1 text-left font-sans text-xs"}
     onContextMenu={event => event.stopPropagation()}>
     <div className={fullDay ? "flex flex-1 flex-col" : undefined}>

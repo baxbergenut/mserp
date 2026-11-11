@@ -1214,6 +1214,7 @@ export interface GrossBoard {
   drivers: GrossBoardDriver[];
   entries: GrossBoardEntry[];
   planningEntries?: GrossBoardPlanningEntry[];
+  nextDayDestinations?: { driverId: string; date: string; text: string }[];
   balances: GrossBoardBalance[];
 }
 

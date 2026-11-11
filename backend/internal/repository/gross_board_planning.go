@@ -41,7 +41,7 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
 		return nil, err
 	}
-	changed := false
+	changed, dismissed := false, false
 	days := grossBoardDays(nil, entries)
 	if err = lockGrossBoardDays(ctx, tx, days); err != nil {
 		return nil, err
@@ -62,11 +62,13 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 		e := entries[i]
 		// DO NOTHING is intentionally separate from SELECT FOR UPDATE: under
 		// READ COMMITTED an insert racing another creator must read its commit.
-		_, err = tx.Exec(ctx, `INSERT INTO gross_board_planning_entries(driver_id,service_date,kind,text,version,updated_by)
- VALUES($1,$2::date,$3,'',0,NULLIF($4,'')::uuid) ON CONFLICT DO NOTHING`, e.DriverID, e.Date, e.Kind, actor)
-		if err != nil {
-			return nil, err
+		dismiss := e.Kind == "destination" && e.Text == "" && e.Version == 0
+		inserted, insertErr := tx.Exec(ctx, `INSERT INTO gross_board_planning_entries(driver_id,service_date,kind,text,version,updated_by)
+ VALUES($1,$2::date,$3,'',CASE WHEN $5 THEN 1 ELSE 0 END,NULLIF($4,'')::uuid) ON CONFLICT DO NOTHING`, e.DriverID, e.Date, e.Kind, actor, dismiss)
+		if insertErr != nil {
+			return nil, insertErr
 		}
+		dismissed = dismissed || (dismiss && inserted.RowsAffected() != 0)
 		var current GrossBoardPlanningEntry
 		err = tx.QueryRow(ctx, `SELECT driver_id::text,service_date::text,kind,text,version
  FROM gross_board_planning_entries WHERE driver_id=$1 AND service_date=$2::date AND kind=$3 FOR UPDATE`, e.DriverID, e.Date, e.Kind).
@@ -87,6 +89,13 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 			current.Text = e.Text
 		}
 		result[i] = current
+	}
+	if dismissed {
+		// The planning trigger ignores empty inserts. A new dismissal still
+		// changes the derived Gross Board display in every open tab.
+		if _, err = tx.Exec(ctx, `SELECT pg_notify('mserp_gross_board','')`); err != nil {
+			return nil, err
+		}
 	}
 	if changed {
 		// Commit-only refresh of open pay-page display overlays, without enqueuing

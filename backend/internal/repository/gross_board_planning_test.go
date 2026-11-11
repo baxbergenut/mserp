@@ -112,7 +112,65 @@ func TestGrossBoardPlanningDatabase(t *testing.T) {
 			}
 			verifyGrossBoardPlanning(t, ctx, pool, admin)
 			verifyGrossBoardModeWrites(t, ctx, pool)
+			verifyGrossBoardNextDayDestinations(t, ctx, pool)
 		})
+	}
+}
+
+func verifyGrossBoardNextDayDestinations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES
+ (18281,'NEXT-DAY-SUN','delivered',0,0,'{"stops":[{"stop_type":"delivery","ordering":2,"location":{"city":"Omaha","state":"NE"}}]}'),
+ (18282,'NEXT-DAY-FIRST','delivered',0,0,'{"stops":[{"stop_type":"delivery","ordering":2,"location":{"city":"Boulder","state":"CO"}}]}'),
+ (18283,'NEXT-DAY-LAST','delivered',0,0,'{"stops":[
+  {"stop_type":"delivery","ordering":3,"location":{"city":"Boise","state":"ID","address1":"123 Test St","zip_code":"83702"}},
+  {"stop_type":"pickup","ordering":1,"location":{"city":"Denver","state":"CO"}},
+  {"stop_type":"delivery","ordering":2,"location":{"city":"Ogden","state":"UT"}}]}'),
+ (18284,'NEXT-DAY-THU','delivered',0,0,'{"stops":[{"stop_type":"delivery","ordering":2,"location":{"city":"Austin","state":"TX"}}]}'),
+ (18285,'NEXT-DAY-SAT','delivered',0,0,'{"stops":[{"stop_type":"delivery","ordering":2,"location":{"city":"Tulsa","state":"OK"}}]}');
+ INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id)
+ VALUES ('`+projectionDriver+`','2026-10-18','NEXT-DAY-SUN',18281),
+ ('`+projectionDriver+`','2026-10-20','NEXT-DAY-FIRST',18282),
+ ('`+projectionDriver+`','2026-10-22','NEXT-DAY-THU',18284),
+ ('`+projectionDriver+`','2026-10-24','NEXT-DAY-SAT',18285),
+ ('`+projectionDriver+`','2026-10-25','UNKNOWN-100',NULL);
+ INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id)
+ VALUES ('`+projectionDriver+`','2026-10-20',1,'NEXT-DAY-LAST',18283);
+ INSERT INTO gross_board_planning_entries(driver_id,service_date,kind,text)
+ VALUES ('`+projectionDriver+`','2026-10-23','note','Keep manual status');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewGrossBoardRepository(pool)
+	week, _ := time.Parse(time.DateOnly, "2026-10-19")
+	assertDestinations := func(week time.Time, want ...GrossBoardNextDayDestination) {
+		t.Helper()
+		board, err := repo.Get(ctx, week)
+		if err != nil || !reflect.DeepEqual(board.NextDayDestinations, want) {
+			t.Fatalf("next-day destinations: got %v, want %v; %v", board.NextDayDestinations, want, err)
+		}
+	}
+	monday := GrossBoardNextDayDestination{projectionDriver, "2026-10-19", "Omaha, NE"}
+	wednesday := GrossBoardNextDayDestination{projectionDriver, "2026-10-21", "Boise, ID"}
+	assertDestinations(week, monday, wednesday)
+	assertDestinations(week.AddDate(0, 0, 7)) // Sunday was an unresolved load.
+	// A later import resolves the original manual number without a board save.
+	if _, err = pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload)
+ VALUES (18286,'UNKNOWN-100','delivered',0,0,'{"stops":[{"stop_type":"delivery","ordering":2,"location":{"city":"Albany","state":"NY"}}]}')`); err != nil {
+		t.Fatal(err)
+	}
+	assertDestinations(week.AddDate(0, 0, 7), GrossBoardNextDayDestination{projectionDriver, "2026-10-26", "Albany, NY"})
+	clear := GrossBoardPlanningEntry{DriverID: projectionDriver, Date: wednesday.Date, Kind: "destination"}
+	for i := 0; i < 2; i++ {
+		saved, err := repo.SavePlanningChanges(ctx, []GrossBoardPlanningEntry{clear}, "")
+		if err != nil || len(saved) != 1 || saved[0].Version != 1 || saved[0].Text != "" {
+			t.Fatalf("destination dismissal/retry: %v, %v", saved, err)
+		}
+	}
+	assertDestinations(week, monday)
+	// A dismissal is not a stored status and does not block scheduling a load.
+	if _, err = repo.SaveChanges(ctx, []GrossBoardEntry{{DriverID: projectionDriver, Date: wednesday.Date, LoadNumber: "NEXT-DAY-MANUAL-200"}}, ""); err != nil {
+		t.Fatal("dismissal blocked a load", err)
 	}
 }
 
