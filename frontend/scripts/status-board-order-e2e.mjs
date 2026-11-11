@@ -37,8 +37,8 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   expect((await viewer.request.post(`${base}/api/driver-board/order`,{headers:{'X-CSRF-Token':auth.csrfToken},data:action})).status()).toBe(403);
   const handle = () => page.getByRole('button',{name:'Move Order Charlie',exact:true});
   const row = id => page.locator(`tr[data-driver-id="${id}"]`);
-  const drag = async (target, y=3) => {
-    await handle().dragTo(target,{targetPosition:{x:180,y}});
+  const drag = async (target, y=3, source=handle()) => {
+    await source.dragTo(target,{targetPosition:{x:180,y}});
     await expect(page.locator('[data-row-dragging]')).toHaveCount(0);
   };
   // Within-group animation and delayed response preserve the preview until saved.
@@ -133,6 +133,39 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   await expect.poll(async()=>group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   await cdp.detach();await page.emulateMedia({reducedMotion:'no-preference'});
+  // Auto-order accepts transfers in either direction and places arrivals by status.
+  const autoOrder = page.getByRole('switch',{name:'Auto-order for Order Dispatcher',exact:true});
+  await expect(handle()).toBeEnabled();
+  await autoOrder.click();
+  await expect(autoOrder).toHaveAttribute('aria-checked','true');
+  await expect(handle()).toBeEnabled();
+  await drag(row(ids[1]));
+  expect(group(await read())).toEqual([ids[2],ids[0],ids[1]]);
+  await drag(row(ids[3]));
+  await expect.poll(async()=>group(await read(),other)).toEqual([ids[2],ids[3]]);
+  await expect(handle()).toBeEnabled();
+  await drag(row(ids[1]),20);
+  await expect.poll(async()=>group(await read())).toEqual([ids[0],ids[2],ids[1]]);
+  await expect.poll(()=>order(page)).toEqual([ids[0],ids[2],ids[1],ids[3]]);
+  await expect.poll(()=>order(viewer)).toEqual([ids[0],ids[2],ids[1],ids[3]]);
+  const otherAutoOrder = page.getByRole('switch',{name:'Auto-order for Order Second',exact:true});
+  const otherHandle = page.getByRole('button',{name:'Move Order Other',exact:true});
+  await otherAutoOrder.click();
+  await expect(otherAutoOrder).toHaveAttribute('aria-checked','true');
+  await expect(otherHandle).toBeEnabled();
+  await drag(row(ids[1]),3,otherHandle);
+  await expect.poll(async()=>group(await read(),other)).toEqual([]);
+  await expect(otherHandle).toBeEnabled();
+  await expect(otherAutoOrder).toBeVisible();
+  await drag(page.locator(`tr[data-dispatcher-id="${other}"]`),16,otherHandle);
+  await expect.poll(async()=>group(await read(),other)).toEqual([ids[3]]);
+  await otherAutoOrder.click();
+  await expect(otherAutoOrder).toHaveAttribute('aria-checked','false');
+  await autoOrder.click();
+  await expect(autoOrder).toHaveAttribute('aria-checked','false');
+  await expect(handle()).toBeEnabled();
+  await drag(row(ids[0]));
+  await expect.poll(async()=>group(await read())).toEqual([ids[2],ids[0],ids[1]]);
   // A pending hire arrives live without becoming an assignable fleet record.
   sql(`SET search_path TO ${schema},public; INSERT INTO fleetscope_driver_intake(id,company_id,fleetscope_driver_id,driver_data,normalized_name,occurred_at) VALUES('${intake}',gen_random_uuid(),gen_random_uuid(),'{"fullName":"Order New Hire","phone":"4703344443"}','order new hire',now());`);
   const pending=page.locator(`tr[data-pending-intake-id="${intake}"]`);
@@ -217,5 +250,5 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   expect(page.url()).toBe(`${base}/driver-board`);expect(navigations).toBe(0);
   page.off('framenavigated',navigation);
   await page.getByLabel('Search Status Board',{exact:true}).fill('');
-  console.log('Status Board order E2E passed: within/cross-group mouse, keyboard and touch, empty Unassigned, live viewers, history time/actor, reload, hidden rows, cancellation, failures, stale fences, pending-hire visibility, movable group, and inline setup with immediate loading, cancel/retry, retained save drafts and no navigation.');
+  console.log('Status Board order E2E passed: within/cross-group mouse, keyboard and touch, empty Unassigned, Auto-order transfers and status placement, live viewers, history time/actor, reload, hidden rows, cancellation, failures, stale fences, pending-hire visibility, movable group, and inline setup with immediate loading, cancel/retry, retained save drafts and no navigation.');
 }

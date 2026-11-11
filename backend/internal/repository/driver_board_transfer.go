@@ -35,13 +35,14 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	}
 	groups := map[string][]string{}
 	versions := map[string]int64{}
+	var destinationAutoOrder bool
 	for _, key := range keys {
 		ids, version, autoOrder, err := readBoardOrderGroup(ctx, tx, key)
 		if err != nil {
 			return result, err
 		}
-		if autoOrder {
-			return result, ErrDriverBoardAutoOrder
+		if key == destination {
+			destinationAutoOrder = autoOrder
 		}
 		groups[key], versions[key] = ids, version
 	}
@@ -59,7 +60,7 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	index := slices.Index(source, a.DriverID)
 	groups[a.DispatcherID] = slices.Delete(source, index, index+1)
 	index = len(target)
-	if a.TargetDriverID != "" {
+	if !destinationAutoOrder && a.TargetDriverID != "" {
 		index = slices.Index(target, a.TargetDriverID)
 		if a.After {
 			index++
@@ -79,5 +80,12 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	result.DriverIDs = groups[destination]
 	result.Revision = boardOrderRevision(destination, versions[destination], result.DriverIDs)
 	result.SourceRevision = boardOrderRevision(a.DispatcherID, versions[a.DispatcherID], groups[a.DispatcherID])
+	if destinationAutoOrder {
+		statuses, err := r.readBoardOrderStatuses(ctx, tx, result.DriverIDs)
+		if err != nil {
+			return result, err
+		}
+		sortBoardOrderByStatus(result.DriverIDs, statuses)
+	}
 	return result, commitPayrollMutation(ctx, tx)
 }

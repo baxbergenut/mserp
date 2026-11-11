@@ -81,6 +81,7 @@ type DriverBoard struct {
 	PendingDrivers          []BoardPendingDriver  `json:"pendingDrivers"`
 	StatusSyncEnabled       bool                  `json:"statusSyncEnabled"`
 	AutoOrderDispatchers    map[string]bool       `json:"autoOrderDispatchers"`
+	AutoOrderGroupNames     map[string]string     `json:"autoOrderGroupNames,omitempty"`
 	DriverOrderRevisions    map[string]string     `json:"driverOrderRevisions"`
 	DispatcherOrderRevision string                `json:"dispatcherOrderRevision"`
 	WeekStart               string                `json:"weekStart"`

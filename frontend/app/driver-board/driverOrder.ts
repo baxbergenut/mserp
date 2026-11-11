@@ -2,12 +2,12 @@ import type { DriverBoardDriver } from "@/app/lib/types";
 
 // Render transfers using ordinary table layout, including the destination's
 // group metadata. No translated row is left floating over its neighbours.
-export function transferDriverRows<T extends DriverBoardDriver>(drivers: T[], id: string, dispatcherId: string, targetId: string, after: boolean): T[] {
+export function transferDriverRows<T extends DriverBoardDriver>(drivers: T[], id: string, dispatcherId: string, targetId: string, after: boolean, dispatcherName?: string): T[] {
   const driver = drivers.find(d => d.id === id);
   if (!driver) return drivers;
   const group = drivers.find(d => d.dispatcherId === dispatcherId);
   const moved: T = { ...driver, dispatcherId,
-    dispatcherName: group?.dispatcherName ?? "Unassigned",
+    dispatcherName: group?.dispatcherName ?? dispatcherName ?? "Unassigned",
     dispatcherExtension: group?.dispatcherExtension ?? null,
     mainUpdaterName: group?.mainUpdaterName ?? "",
     mainUpdaterExtension: group?.mainUpdaterExtension ?? null,
@@ -23,4 +23,12 @@ export function transferDriverRows<T extends DriverBoardDriver>(drivers: T[], id
   }
   rows.splice(index, 0, moved);
   return rows;
+}
+
+export function orderDriverRows<T extends DriverBoardDriver>(drivers: T[], dispatcherId: string, driverIds: string[]): T[] {
+  const ranks = new Map(driverIds.map((id, index) => [id, index]));
+  const group = drivers.filter(d => d.dispatcherId === dispatcherId)
+    .sort((a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity));
+  let index = 0;
+  return drivers.map(d => d.dispatcherId === dispatcherId ? group[index++] : d);
 }

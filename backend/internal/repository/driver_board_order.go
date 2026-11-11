@@ -66,7 +66,9 @@ func applyBoardDriverOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) e
 	}
 	versions := map[string]int64{}
 	board.AutoOrderDispatchers = map[string]bool{}
-	rows, err := tx.Query(ctx, `SELECT dispatcher_key,driver_ids,version,auto_order FROM driver_board_driver_order`)
+	board.AutoOrderGroupNames = map[string]string{}
+	rows, err := tx.Query(ctx, `SELECT o.dispatcher_key,o.driver_ids,o.version,o.auto_order,d.full_name
+ FROM driver_board_driver_order o LEFT JOIN dispatchers d ON d.id=o.dispatcher_id AND d.active`)
 	if err != nil {
 		return err
 	}
@@ -75,12 +77,19 @@ func applyBoardDriverOrder(ctx context.Context, tx pgx.Tx, board *DriverBoard) e
 		var ids []string
 		var version int64
 		var autoOrder bool
-		if err = rows.Scan(&key, &ids, &version, &autoOrder); err != nil {
+		var name *string
+		if err = rows.Scan(&key, &ids, &version, &autoOrder, &name); err != nil {
 			rows.Close()
 			return err
 		}
 		if autoOrder {
 			board.AutoOrderDispatchers[key] = true
+			if name != nil {
+				board.AutoOrderGroupNames[key] = *name
+				if _, exists := groups[key]; !exists {
+					groups[key] = []string{}
+				}
+			}
 		}
 		if current, ok := groups[key]; ok {
 			groups[key] = boardOrder(current, ids)

@@ -535,6 +535,7 @@ export interface DriverBoard {
   pendingDrivers?: { intakeId: string; fullName: string }[];
 	statusSyncEnabled?: boolean;
   autoOrderDispatchers?: Record<string, boolean>;
+  autoOrderGroupNames?: Record<string, string>;
   driverOrderRevisions: Record<string, string>;
   dispatcherOrderRevision: string;
   weekStart: string;

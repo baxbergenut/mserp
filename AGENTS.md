@@ -1072,8 +1072,10 @@ positive Reimburse-method expense credits already included in net payable.
   propagates through live board snapshots. Migration 201 adds shared Auto-order
   per dispatcher (including Unassigned). While enabled, snapshots sort the complete
   roster by Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses,
-  with ties preserving the saved order. Dragging into or out of those groups is
-  blocked. Turning Auto-order off saves the current sorted roster as manual order.
+  with ties preserving the saved order. Cross-group drops update the assignment,
+  then Auto-order places arrivals by status and appends them within their status
+  tier. Empty active Auto-order groups remain available as drop targets. Within-group
+  manual moves require Auto-order off. Turning it off saves the current sorted roster.
   PUT /driver-board/auto-order requires driver_board.write and uses the same
   dispatcher lock as row moves. Status/assignment records are left intact.
   Unassigned defaults first, uses the same group heading and remains a drop

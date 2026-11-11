@@ -9,7 +9,7 @@ type Move = (id: string, target: string, after: boolean, revision: string, dispa
 
 // Keep DOM order stable during the gesture and save. Transforms move the actual
 // rows, including their sticky cells, while group headers identify drop targets.
-export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, autoOrder?: Readonly<Record<string, boolean>>) {
+export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, autoOrder?: Readonly<Record<string, boolean>>, autoOrderGroupNames?: Readonly<Record<string, string>>) {
   const [frozen, setFrozen] = useState<T[] | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
@@ -18,7 +18,7 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, aut
   useLayoutEffect(() => () => { cleanup.current?.(); cleanup.current = null; }, []);
 
   function start(event: ReactPointerEvent<HTMLButtonElement>, driver: T, revision: string) {
-    if (event.button !== 0 || !event.isPrimary || cleanup.current || autoOrder?.[driver.dispatcherId]) return;
+    if (event.button !== 0 || !event.isPrimary || cleanup.current) return;
     const table = event.currentTarget.closest("table");
     if (!table) return;
     event.preventDefault(); event.stopPropagation();
@@ -62,21 +62,20 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, aut
     const update = () => {
       const pointerTop = y - table.getBoundingClientRect().top;
       destinationGroup = [...headers].reverse().find(h => pointerTop >= h.top)?.id ?? headers[0]?.id ?? driver.dispatcherId;
-      for (const h of headers) h.element.style.outline = !autoOrder?.[destinationGroup] && destinationGroup !== driver.dispatcherId && h.id === destinationGroup ? "2px solid #60a5fa" : "";
-      if (autoOrder?.[destinationGroup]) {
-        preview = rows;
-        paint();
-        return;
-      }
+      for (const h of headers) h.element.style.outline = destinationGroup !== driver.dispatcherId && h.id === destinationGroup ? "2px solid #60a5fa" : "";
       if (destinationGroup !== driver.dispatcherId) {
         for (const row of rows) row.element.style.transform = row === source ? `translate3d(0,${Math.max(headers[0]?.top ?? 0, Math.min(tableMax, pointerTop - grabOffset)) - row.top}px,0)` : "";
-        const groupTargets = targets.filter(t => t.dispatcher === destinationGroup);
+        const groupTargets = autoOrder?.[destinationGroup] ? [] : targets.filter(t => t.dispatcher === destinationGroup);
         const target = groupTargets.find(t => pointerTop < t.top + t.height / 2) ?? groupTargets.at(-1);
         targetId = target?.id ?? "";
         targetAfter = !!target && pointerTop >= target.top + target.height / 2;
         return;
       }
-      const top = Math.max(min, Math.min(max, y - table.getBoundingClientRect().top - grabOffset));
+      const top = Math.max(min, Math.min(max, pointerTop - grabOffset));
+      if (autoOrder?.[driver.dispatcherId]) {
+        paint(top);
+        return;
+      }
       // Choose the nearest available slot, also for rows with unequal heights.
       let slot = min, distance = Infinity;
       for (let i = 0; i <= rest.length; i++) {
@@ -112,10 +111,7 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, aut
     };
     const finish = async (cancel: boolean) => {
       if (!pointerActive) return;
-      if (!cancel) {
-        update();
-        cancel = !!autoOrder?.[destinationGroup];
-      }
+      if (!cancel) update();
       stopListening();
       source.element.style.transition = transition;
       if (cancel) preview = rows;
@@ -124,12 +120,12 @@ export function useDriverRowDrag<T extends Driver>(drivers: T[], move: Move, aut
         // End the pointer styling before React lays out the pending destination.
         // Network latency must never keep translated/sticky cells over other rows.
         restoreStyles();
-        setFrozen(transferDriverRows(drivers, source.id, destinationGroup, targetId, targetAfter));
+        setFrozen(transferDriverRows(drivers, source.id, destinationGroup, targetId, targetAfter, autoOrderGroupNames?.[destinationGroup]));
         try { await move(source.id, targetId, targetAfter, revision, destinationGroup); }
         finally { if (!disposed) setFrozen(null); }
         return;
       }
-      if (!transfer) paint();
+      paint();
       const target = destination < sourceIndex ? preview[destination + 1] : preview[destination - 1];
       const saving = !cancel && destination !== sourceIndex && target
         ? move(source.id, target.id, destination > sourceIndex, revision) : Promise.resolve(true);

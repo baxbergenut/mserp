@@ -77,7 +77,8 @@ export default function DriverBoardPage() {
  useEffect(() => { const timer = setInterval(() => setToday(leaveToday()), 30000); return () => clearInterval(timer); }, []);
  const state = useDriverBoard(nextStop?.id ?? etaEditor?.id ?? pickupEditor?.id ?? leaveEditor?.id ?? restriction?.id);
   const { board: sourceBoard, entries, loading, saving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refreshELD, leaving } = state;
-  const dispatcherOrder = useDispatcherOrder(sourceBoard?.drivers ?? []);
+  const autoOrderGroupNames = sourceBoard?.autoOrderGroupNames;
+  const dispatcherOrder = useDispatcherOrder(sourceBoard?.drivers ?? [], autoOrderGroupNames);
   const board = useMemo(() => sourceBoard ? { ...sourceBoard, drivers: dispatcherOrder.drivers } : null, [sourceBoard, dispatcherOrder.drivers]);
   const permissions = usePermissions();
   const canEdit = permissions.includes("driver_board.write");
@@ -137,7 +138,7 @@ export default function DriverBoardPage() {
     (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "")) &&
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase())), [board, entries, search, selectedDispatchers, selectedStatuses]);
   const autoOrder = board?.autoOrderDispatchers;
-  const rowDrag = useDriverRowDrag(drivers, moveDriver, autoOrder);
+  const rowDrag = useDriverRowDrag(drivers, moveDriver, autoOrder, autoOrderGroupNames);
   const renderedDrivers = rowDrag.drivers;
   const savedEntries = useMemo(() => new Map(sourceBoard?.entries.map(entry => [entry.driverId, entry])), [sourceBoard?.entries]);
   const widthValues = useMemo(() => JSON.stringify(renderedDrivers.map(driver => {
@@ -193,7 +194,7 @@ export default function DriverBoardPage() {
     }));
   }, [columns, columnWidth]);
   const dispatcherNames = new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName]));
-  const dispatchers: [string, string][] = dispatcherOrder.ids.map(id => [id, id === "" ? "Unassigned" : dispatcherNames.get(id) ?? id]);
+  const dispatchers: [string, string][] = dispatcherOrder.ids.map(id => [id, id === "" ? "Unassigned" : dispatcherNames.get(id) ?? autoOrderGroupNames?.[id] ?? id]);
   const pendingDrivers = (board?.pendingDrivers ?? []).filter(d => (selectedDispatchers === null || selectedDispatchers.includes("")) && (selectedStatuses === null || selectedStatuses.includes("NEW DRIVER")) && d.fullName.toLowerCase().includes(search.trim().toLowerCase()));
   const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
   const ids = new Set(drivers.map(d => d.id));
@@ -345,8 +346,12 @@ export default function DriverBoardPage() {
         <tbody>
           {loading ? Array.from({ length: 12 }, (_, i) => <tr key={i}>{columns.map(column => <td key={column} className={`${cellClass} h-8 px-2`}><SkeletonBar className="h-3 w-3/4" /></td>)}</tr>) : dispatcherOrder.ids.flatMap(dispatcherId => {
             const members = renderedDrivers.filter(d => d.dispatcherId === dispatcherId);
-            if (!members.length && (dispatcherId !== "" || (selectedDispatchers !== null && !selectedDispatchers.includes("")))) return [];
-            return [groupHeader(members[0] ?? { dispatcherId: "", dispatcherName: "Unassigned" }),
+            const emptyGroupName = dispatcherId === "" ? "Unassigned" : autoOrderGroupNames?.[dispatcherId];
+            const showEmptyGroup = emptyGroupName && (dispatcherId === "" || !dispatcherNames.has(dispatcherId)) &&
+              (selectedDispatchers === null || selectedDispatchers.includes(dispatcherId));
+            const heading = members[0] ?? (showEmptyGroup ? { dispatcherId, dispatcherName: emptyGroupName } : undefined);
+            if (!heading) return [];
+            return [groupHeader(heading),
               ...(dispatcherId === "" ? pendingDrivers.map(d => <tr key={d.intakeId} data-pending-intake-id={d.intakeId} className="bg-zinc-950/20">
             {columns.map(column => {
               if (column === "driver") return <th key={column} scope="row" className={`${cellClass} bg-zinc-950 h-8 px-1.5 text-left font-medium text-zinc-200`} title={d.fullName}>{d.fullName}</th>;
@@ -377,26 +382,25 @@ export default function DriverBoardPage() {
             const next = loads?.next[0];
             const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
             const nextPickup = nextStop?.schedule;
-            const dragDisabled = orderDisabled || !!autoOrder?.[d.dispatcherId];
             const cells: Record<BoardColumn, ReactElement> = {
               currentLoad: <td key="currentLoad" data-board-column="currentLoad" className={`${cellClass} bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>,
               driver: <th key="driver" data-board-column="driver" scope="row" title={d.fullName} className={`${cellClass} bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
-                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title={autoOrder?.[d.dispatcherId] ? "Turn off Auto-order to move drivers." : "Drag to change the shared driver order or move between dispatchers. Arrow Up / Down moves rows; Alt + Arrow Up unassigns."} disabled={dragDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
+                  {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title={autoOrder?.[d.dispatcherId] ? "Drag to move to another dispatcher. Alt + Arrow Up unassigns." : "Drag to change the shared driver order or move between dispatchers. Arrow Up / Down moves rows; Alt + Arrow Up unassigns."} disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
                     className="flex h-8 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
                     onPointerDown={event => {
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (!dragDisabled && revision) { rowDrag.start(event, d, revision); setOrderNotice(""); }
+                      if (!orderDisabled && revision) { rowDrag.start(event, d, revision); setOrderNotice(""); }
                     }}
                     onKeyDown={event => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                       event.preventDefault(); event.stopPropagation();
                       if (event.altKey && event.key === "ArrowUp" && d.dispatcherId) {
-                        if (!dragDisabled && !autoOrder?.[""] && !rowDrag.active) void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], "");
+                        if (!orderDisabled && !rowDrag.active) void moveDriver(d.id, "", false, board!.driverOrderRevisions[d.dispatcherId], "");
                         return;
                       }
                       const target = drivers[i + (event.key === "ArrowUp" ? -1 : 1)];
                       const revision = board?.driverOrderRevisions?.[d.dispatcherId];
-                      if (target && revision && !dragDisabled && !autoOrder?.[target.dispatcherId] && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
+                      if (target && revision && !orderDisabled && (target.dispatcherId !== d.dispatcherId || !autoOrder?.[d.dispatcherId]) && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>,
               truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,

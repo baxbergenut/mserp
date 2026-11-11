@@ -9,7 +9,7 @@ import { applyCommittedFleetStatus, progressStatus, reconcileDriverBoard } from 
 import { usePermissions } from "@/app/lib/access";
 import { useBoardLive } from "./useBoardLive";
 import { selectedBoardCell } from "./boardCells";
-import { transferDriverRows } from "./driverOrder";
+import { orderDriverRows, transferDriverRows } from "./driverOrder";
 
 export function useDriverBoard(lockedDriverId?: string) {
   const canEdit = usePermissions().includes("driver_board.write");
@@ -145,12 +145,14 @@ export function useDriverBoard(lockedDriverId?: string) {
     const target = board?.drivers.find(d => d.id === targetDriverId);
     const targetDispatcherId = destination ?? target?.dispatcherId;
     if (!driver || targetDispatcherId === undefined || driverId === targetDriverId) throw new Error("The driver list changed. Reload the board and try again.");
-    if (board?.autoOrderDispatchers?.[driver.dispatcherId] || board?.autoOrderDispatchers?.[targetDispatcherId]) throw new Error("Turn off Auto-order before moving drivers in this group.");
     const transfer = driver.dispatcherId !== targetDispatcherId;
+    const autoOrder = board?.autoOrderDispatchers?.[targetDispatcherId];
+    if (!transfer && autoOrder) throw new Error("Turn off Auto-order before reordering within this group.");
+    const anchor = autoOrder ? "" : targetDriverId;
     orderSavingRef.current = true;
     setOrderSaving(true);
     try {
-      const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId, after, revision,
+      const result = await reorderBoardDrivers({ dispatcherId: driver.dispatcherId, driverId, targetDriverId: anchor, after, revision,
         ...(transfer ? { targetDispatcherId, targetRevision: board?.driverOrderRevisions[targetDispatcherId] } : {}) });
       if (transfer) {
         setBoard(current => {
@@ -158,8 +160,10 @@ export function useDriverBoard(lockedDriverId?: string) {
           // committed placement immediately, without a second blocking request.
           if (!current || current.driverOrderRevisions[driver.dispatcherId] !== revision ||
               current.driverOrderRevisions[targetDispatcherId] !== board?.driverOrderRevisions[targetDispatcherId]) return current;
+          const moved = transferDriverRows(current.drivers, driverId, targetDispatcherId,
+            anchor, after, current.autoOrderGroupNames?.[targetDispatcherId]);
           return { ...current,
-            drivers: transferDriverRows(current.drivers, driverId, targetDispatcherId, targetDriverId, after),
+            drivers: orderDriverRows(moved, targetDispatcherId, result.driverIds),
             dispatcherOrderRevision: "",
             driverOrderRevisions: { ...current.driverOrderRevisions,
               [driver.dispatcherId]: result.sourceRevision ?? "", [targetDispatcherId]: result.revision },
@@ -170,10 +174,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       }
       setBoard(current => {
         if (!current || current.driverOrderRevisions?.[result.dispatcherId] !== revision) return current;
-        const ranks = new Map(result.driverIds.map((id, i) => [id, i]));
-        const group = current.drivers.filter(d => d.dispatcherId === result.dispatcherId).sort((a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity));
-        let index = 0;
-        return { ...current, drivers: current.drivers.map(d => d.dispatcherId === result.dispatcherId ? group[index++] : d), driverOrderRevisions: { ...current.driverOrderRevisions, [result.dispatcherId]: result.revision } };
+        return { ...current, drivers: orderDriverRows(current.drivers, result.dispatcherId, result.driverIds), driverOrderRevisions: { ...current.driverOrderRevisions, [result.dispatcherId]: result.revision } };
       });
     } finally { orderSavingRef.current = false; setOrderSaving(false); }
   }

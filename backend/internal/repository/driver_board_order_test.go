@@ -201,11 +201,34 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		if _, err := repo.ReorderDrivers(ctx, move, actor); !errors.Is(err, ErrDriverBoardAutoOrder) {
 			t.Fatal("manual reorder was not blocked", err)
 		}
-		unassigned := ""
-		transfer := DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[1], TargetDispatcherID: &unassigned, Revision: move.Revision, TargetRevision: current.DriverOrderRevisions[""]}
-		if _, err := repo.ReorderDrivers(ctx, transfer, actor); !errors.Is(err, ErrDriverBoardAutoOrder) {
-			t.Fatal("transfer from auto-order group was not blocked", err)
+		if err := repo.SetDriverAutoOrder(ctx, otherDispatcher, true, actor); err != nil {
+			t.Fatal(err)
 		}
+		current = get()
+		if current.AutoOrderGroupNames[otherDispatcher] != "Order dispatcher" || current.DriverOrderRevisions[otherDispatcher] == "" {
+			t.Fatal("empty Auto-order destination is missing", current.AutoOrderGroupNames)
+		}
+		transfer := DriverBoardOrderAction{DispatcherID: dispatcher, DriverID: ids[1], TargetDispatcherID: &otherDispatcher, Revision: move.Revision, TargetRevision: current.DriverOrderRevisions[otherDispatcher]}
+		result, err := repo.ReorderDrivers(ctx, transfer, actor)
+		if err != nil || !slices.Equal(result.DriverIDs, []string{ids[1]}) {
+			t.Fatal("transfer between Auto-order groups", result, err)
+		}
+		current = get()
+		if !slices.Equal(group(current, dispatcher), []string{ids[2], added, ids[0]}) || !slices.Equal(group(current, otherDispatcher), result.DriverIDs) {
+			t.Fatal("transferred driver did not change groups", current.Drivers)
+		}
+		back := DriverBoardOrderAction{DispatcherID: otherDispatcher, DriverID: ids[1], TargetDriverID: ids[0], After: true, TargetDispatcherID: &dispatcher, Revision: result.Revision, TargetRevision: move.Revision}
+		if _, err := repo.ReorderDrivers(ctx, back, actor); !errors.Is(err, ErrDriverBoardOrderConflict) {
+			t.Fatal("stale Auto-order destination accepted", err)
+		}
+		back.TargetRevision = current.DriverOrderRevisions[dispatcher]
+		result, err = repo.ReorderDrivers(ctx, back, actor)
+		current = get()
+		if err != nil || !slices.Equal(result.DriverIDs, want) || !slices.Equal(group(current, dispatcher), want) ||
+			result.Revision != current.DriverOrderRevisions[dispatcher] || result.SourceRevision != current.DriverOrderRevisions[otherDispatcher] {
+			t.Fatal("transfer did not return the status-sorted placement and saved roster revisions", result, err)
+		}
+		move.Revision = result.Revision
 
 		exec(`UPDATE driver_board SET status='READY' WHERE driver_id=$1`, added)
 		exec(`UPDATE driver_board SET status='REST' WHERE driver_id=$1`, ids[2])

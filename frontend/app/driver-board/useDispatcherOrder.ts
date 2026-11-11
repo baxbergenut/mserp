@@ -11,7 +11,7 @@ function readOrder(key: string): string[] {
   } catch { return []; }
 }
 
-export function useDispatcherOrder(drivers: DriverBoardDriver[]) {
+export function useDispatcherOrder(drivers: DriverBoardDriver[], autoOrderGroupNames?: Readonly<Record<string, string>>) {
   const userId = useContext(CurrentUserIDContext);
   // AppShell remounts the page when the signed-in account changes.
   const key = `mserp:dispatcher-order:v1:${userId}`;
@@ -25,10 +25,11 @@ export function useDispatcherOrder(drivers: DriverBoardDriver[]) {
   }, [key]);
   const ids = useMemo(() => {
     const current = new Set(drivers.map(driver => driver.dispatcherId));
+    for (const id of Object.keys(autoOrderGroupNames ?? {})) current.add(id);
     current.add(""); // The empty/pending-hire group is always available.
     const defaults = ["", ...Array.from(current).filter(Boolean)];
     return [...preferred.filter(id => current.has(id)), ...defaults.filter(id => !preferred.includes(id))];
-  }, [drivers, preferred]);
+  }, [drivers, autoOrderGroupNames, preferred]);
   const ordered = useMemo(() => {
     const ranks = new Map(ids.map((id, index) => [id, index]));
     return [...drivers].sort((a, b) => ranks.get(a.dispatcherId)! - ranks.get(b.dispatcherId)!);
