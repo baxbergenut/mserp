@@ -2,6 +2,7 @@
 
 import { useContext, useState, useSyncExternalStore } from "react";
 import { CurrentUserIDContext } from "@/app/lib/access";
+import { compactLoadLocation } from "@/app/lib/usStates";
 import { fetchGrossBoard, saveGrossBoardPlanningEntries } from "@/app/lib/api";
 import type { GrossBoardPlanningEntry, GrossBoardPlanningKind } from "@/app/lib/types";
 import { acknowledgePlanningDraft, mergePlanningEntries, planningLength, readPlanningDrafts, writePlanningDrafts, type PlanningDrafts } from "./planning";
@@ -41,7 +42,7 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   const forThisDay = (entry: GrossBoardPlanningEntry) => entry.driverId === driverId && entry.date === date;
   const saved = (kind: GrossBoardPlanningKind): GrossBoardPlanningEntry =>
     mergePlanningEntries(entries.filter(forThisDay), session.value.receipts.filter(forThisDay)).find(entry => entry.kind === kind)
-    ?? { driverId, date, kind, text: kind === "destination" && fullDayEligible ? suggestedDestination ?? "" : "", version: 0 };
+    ?? { driverId, date, kind, text: kind === "destination" && fullDayEligible ? compactLoadLocation(suggestedDestination ?? "") : "", version: 0 };
   const putDrafts = (next: PlanningDrafts) => patch({ drafts: next, storageError: !writePlanningDrafts(storageKey, next) });
   const edit = (kind: GrossBoardPlanningKind, text: string) => {
     if (readOnly) return;
@@ -58,28 +59,36 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
     const next = { ...session.value.drafts }; delete next[kind]; putDrafts(next);
     patch({ error: "" }); setEditing(null);
   };
-  const save = async (kind: GrossBoardPlanningKind, replace = false): Promise<void> => {
+  const save = async (kind: GrossBoardPlanningKind | GrossBoardPlanningKind[], replace = false): Promise<void> => {
     if (readOnly) return;
+    const types = Array.isArray(kind) ? kind : [kind];
     // Serialize requests across both legacy kinds without dropping blur saves.
     const active = requests.get(storageKey);
     if (active) { await active; return save(kind, replace); }
     const run = async () => {
       let replaceNext = replace;
-      while (session.value.drafts[kind]) {
-        const pending = session.value.drafts[kind]!;
-        if (planningLength(pending.text) > 1000) throw new Error("Custom status must be 1,000 characters or fewer.");
-        const latest = saved(kind);
-        if (!replaceNext && pending.version !== latest.version && pending.text.trim() !== latest.text)
-          throw new Error("This custom status changed elsewhere. Review the saved text below.");
-        const sent = { ...pending, driverId, date, kind, version: replaceNext ? latest.version : pending.version };
+      while (types.some(type => !!session.value.drafts[type])) {
+        const sent = types.flatMap(type => {
+          const pending = session.value.drafts[type];
+          if (!pending) return [];
+          if (planningLength(pending.text) > 1000) throw new Error("Custom status must be 1,000 characters or fewer.");
+          const latest = saved(type);
+          if (!replaceNext && pending.version !== latest.version && pending.text.trim() !== latest.text)
+            throw new Error("This custom status changed elsewhere. Review the saved text below.");
+          return [{ ...pending, driverId, date, kind: type, version: replaceNext ? latest.version : pending.version }];
+        });
         replaceNext = false;
-        if (sent.version !== pending.version) putDrafts({ ...session.value.drafts, [kind]: sent });
-        const committed = await saveGrossBoardPlanningEntries(week, [sent]);
-        const receipt = committed.find(entry => forThisDay(entry) && entry.kind === kind);
-        if (!receipt) throw new Error("The save could not be verified. Your draft is kept; retry to check it.");
+        for (const entry of sent) {
+          if (entry.version !== session.value.drafts[entry.kind]?.version) putDrafts({ ...session.value.drafts, [entry.kind]: entry });
+        }
+        const committed = await saveGrossBoardPlanningEntries(week, sent);
+        if (sent.some(entry => !committed.some(receipt => forThisDay(receipt) && receipt.kind === entry.kind)))
+          throw new Error("The save could not be verified. Your draft is kept; retry to check it.");
         patch({ receipts: mergePlanningEntries(session.value.receipts.filter(forThisDay), committed.filter(forThisDay)) });
         onSaved(committed);
-        putDrafts(acknowledgePlanningDraft(session.value.drafts, sent, receipt));
+        let next = session.value.drafts;
+        for (const entry of sent) next = acknowledgePlanningDraft(next, entry, committed.find(receipt => forThisDay(receipt) && receipt.kind === entry.kind)!);
+        putDrafts(next);
         // If typing continued during the request, save that newer draft using
         // the acknowledged version instead of falsely marking it saved.
       }
@@ -100,6 +109,14 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
   };
   const finish = (kind: GrossBoardPlanningKind, replace = false) => {
     void save(kind, replace).then(() => setEditing(current => current === kind ? null : current)).catch(() => { /* Inline error and retained draft. */ });
+  };
+  const clear = () => {
+    if (readOnly) return;
+    // Clear both legacy keys atomically; a note clear must not briefly reveal
+    // an automatic destination and replace the selected cell during the save.
+    const types = kinds.filter(kind => kind === "destination" || saved(kind).text || session.value.drafts[kind]);
+    for (const kind of types) edit(kind, "");
+    void save(types).then(() => setEditing(null)).catch(() => { /* Existing error, draft recovery and retry controls. */ });
   };
   const createCustomStatus = async (text: string): Promise<void> => {
     if (readOnly) return;
@@ -155,7 +172,8 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
     </div>
     {!readOnly && saving && <p role="status" className="text-[10px] text-zinc-400">Saving…</p>}
     {!readOnly && error && <div role="alert" className="text-xs text-red-300">{error} Your draft is kept. <button type="button" disabled={saving} className="underline" onClick={() => {
-      const kind = kinds.find(type => session.value.drafts[type]); if (kind) { setEditing(kind); finish(kind); }
+      const types = kinds.filter(type => session.value.drafts[type]);
+      if (types.length) { setEditing(types[0]); void save(types).then(() => setEditing(null)).catch(() => { /* Drafts and inline error remain. */ }); }
     }}>Retry</button></div>}
     {!readOnly && storageError && <p role="alert" className="text-xs text-amber-300">Keep this page open; draft recovery is unavailable.</p>}
   </div> : null;
@@ -164,5 +182,5 @@ export function useDayPlanning({ entries, driverId, driverName, date, week, read
     <p className="py-1">This older day contains both load data and a saved status. Clear the saved status, or clear the loads before using it. Nothing has been removed.</p>
     {planningContent}
   </details> : planningContent;
-  return { planning, fullDay, dialog: null, createCustomStatus };
+  return { planning, fullDay, dialog: null, createCustomStatus, clear };
 }

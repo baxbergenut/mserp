@@ -3834,6 +3834,8 @@ Status Board database tests verify the production payroll coverage check.
   including Sunday to Monday. This dispatch-only read projection uses the last
   load slot and respects existing loads and statuses. Deleting a suggestion
   writes a destination tombstone; it does not occupy a load slot or affect payroll.
+  Automatic locations use state abbreviations. Selected custom-status days clear
+  with Backspace/Delete; textarea editing keeps native character deletion.
 
 - Load identifiers and custom statuses share an inline day-cell input. Free-form
   text uses Add as status/destination; there is no planning chooser/modal. New statuses

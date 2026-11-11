@@ -178,8 +178,8 @@ try {
   await page.getByRole('option', { name: 'Add as status/destination: Dallas, TX', exact: true }).click();
   await expect(fullDay(statusDate)).toBeVisible();
   await expect(fullDay(statusDate).getByRole('combobox')).toHaveCount(0);
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Dallas, TX');
-  expect(planning.find(e => e.date === statusDate).kind).toBe('note');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('Dallas, TX');
+  expect(planning.find(e => e.date === statusDate && e.kind === 'note').kind).toBe('note');
   expect(loadWrites).toHaveLength(loadsBeforeCustom);
   // Reproduce a lost acknowledgement deterministically: saved text is newer
   // than the matching recovery draft, which must rebase before the next edit.
@@ -192,23 +192,29 @@ try {
   });
   await page.reload(); await expect(fullDay(statusDate)).toContainText('Dallas, TX');
   await statusButton(statusDate).dblclick(); await editor(statusDate).fill('Chicago, IL'); await editor(statusDate).press('Enter');
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Chicago, IL');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('Chicago, IL');
   await statusButton(statusDate).dblclick(); await editor(statusDate).fill('Discard me'); await editor(statusDate).press('Escape');
   await expect(fullDay(statusDate)).toContainText('Chicago, IL');
-  expect(planning.find(e => e.date === statusDate).text).toBe('Chicago, IL');
+  expect(planning.find(e => e.date === statusDate && e.kind === 'note').text).toBe('Chicago, IL');
+  await statusButton(statusDate).dblclick();
+  await editor(statusDate).press('End'); await editor(statusDate).press('Backspace');
+  await expect(editor(statusDate)).toHaveValue('Chicago, I');
+  await editor(statusDate).press('Escape');
   await statusButton(statusDate).dblclick(); await editor(statusDate).fill('Available Friday'); await editor(statusDate).blur();
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Available Friday');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('Available Friday');
 
   // A status day has no load input: explicitly clear status before switching types.
   await expect(cell(statusDate).getByRole('combobox')).toHaveCount(0);
-  await statusButton(statusDate).dblclick(); await editor(statusDate).fill(''); await editor(statusDate).press('Enter');
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('');
+  await statusButton(statusDate).click(); await expect(cell(statusDate)).toBeFocused();
+  await cell(statusDate).press('Backspace');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('');
+  await expect(cell(statusDate)).toBeFocused();
   await expect(cell(statusDate).getByRole('combobox')).toHaveValue('');
   await cell(statusDate).getByRole('combobox').fill('STATUS-123');
   await page.keyboard.press('Enter');
   await expect.poll(() => saved(statusDate)?.loadNumber).toBe('STATUS-123');
   await expect(fullDay(statusDate)).toHaveCount(0);
-  expect(planning.find(e => e.date === statusDate).text).toBe('');
+  expect(planning.find(e => e.date === statusDate && e.kind === 'note').text).toBe('');
   await cell(statusDate).getByRole('combobox').fill('');
   await expect.poll(() => saved(statusDate)?.loadNumber).toBe('');
   await cell(statusDate).getByRole('combobox').fill('Available Friday');
@@ -276,35 +282,39 @@ try {
   await editor('2026-11-03').fill('Updated legacy destination'); await editor('2026-11-03').press('Enter');
   await expect.poll(() => planning.find(e => e.date === '2026-11-03' && e.kind === 'destination')?.text).toBe('Updated legacy destination');
   expect(planning.find(e => e.date === '2026-11-03' && e.kind === 'note').text).toBe('Legacy note');
+  await statusButton('2026-11-03').first().click();
+  await cell('2026-11-03').press('Backspace');
+  await expect.poll(() => planning.filter(e => e.date === '2026-11-03').every(e => !e.text)).toBe(true);
+  await expect(fullDay('2026-11-03')).toHaveCount(0);
 
   // Failed saves retain a recoverable draft; reload and retry do not duplicate loads.
   failPlanning = true;
   await statusButton(statusDate).dblclick(); await editor(statusDate).fill('Recover after reload'); await editor(statusDate).press('Enter');
   await expect(cell(statusDate).getByRole('alert').filter({ hasText: 'Temporary planning save failure' })).toBeVisible();
-  expect(planning.find(e => e.date === statusDate).text).toBe('Available Friday');
+  expect(planning.find(e => e.date === statusDate && e.kind === 'note').text).toBe('Available Friday');
   await page.reload(); await expect(fullDay(statusDate)).toContainText('Recover after reload');
   failPlanning = false;
   await statusButton(statusDate).dblclick(); await editor(statusDate).press('Enter');
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Recover after reload');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('Recover after reload');
 
   // A stale editor cannot overwrite another user's newer text without review.
   await statusButton(statusDate).dblclick(); await editor(statusDate).fill('My concurrent draft');
-  planning = planning.map(e => e.date === statusDate ? { ...e, text: 'Saved elsewhere', version: e.version + 1 } : e);
+  planning = planning.map(e => e.date === statusDate && e.kind === 'note' ? { ...e, text: 'Saved elsewhere', version: e.version + 1 } : e);
   await editor(statusDate).press('Enter');
   await expect(cell(statusDate).getByRole('button', { name: 'Replace with my text', exact: true })).toBeVisible();
-  expect(planning.find(e => e.date === statusDate).text).toBe('Saved elsewhere');
+  expect(planning.find(e => e.date === statusDate && e.kind === 'note').text).toBe('Saved elsewhere');
   await cell(statusDate).getByRole('button', { name: 'Use saved text', exact: true }).click();
   await expect(fullDay(statusDate)).toContainText('Saved elsewhere');
   await statusButton(statusDate).dblclick(); await editor(statusDate).fill('Reviewed replacement');
-  planning = planning.map(e => e.date === statusDate ? { ...e, text: 'Second external edit', version: e.version + 1 } : e);
+  planning = planning.map(e => e.date === statusDate && e.kind === 'note' ? { ...e, text: 'Second external edit', version: e.version + 1 } : e);
   await editor(statusDate).press('Enter');
   await cell(statusDate).getByRole('button', { name: 'Replace with my text', exact: true }).click();
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('Reviewed replacement');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('Reviewed replacement');
 
   // Clearing the only status returns a normal empty load cell without load writes.
   const beforeClear = loadWrites.length;
-  await statusButton(statusDate).dblclick(); await editor(statusDate).fill(''); await editor(statusDate).press('Enter');
-  await expect.poll(() => planning.find(e => e.date === statusDate)?.text).toBe('');
+  await statusButton(statusDate).click(); await cell(statusDate).press('Delete');
+  await expect.poll(() => planning.find(e => e.date === statusDate && e.kind === 'note')?.text).toBe('');
   await expect(fullDay(statusDate)).toHaveCount(0);
   expect(loadWrites).toHaveLength(beforeClear);
   await cell(statusDate).getByRole('combobox').fill('HOME');
@@ -347,8 +357,10 @@ try {
   readOnly = true; await page.reload();
   for (const input of await page.locator('[data-gross-board-grid]').getByRole('combobox').all()) await expect(input).toBeDisabled();
   const before = [loadWrites.length, planningWrites.length];
-  await expect(statusButton('2026-11-03').first()).toBeDisabled();
-  const readEditor = editor('2026-11-03');
+  await expect(statusButton('2026-11-08').first()).toBeDisabled();
+  await cell('2026-11-08').click({ position: { x: 2, y: 2 } });
+  await cell('2026-11-08').press('Backspace');
+  const readEditor = editor('2026-11-08');
   if (await readEditor.count()) await expect(readEditor).toHaveAttribute('readonly', '');
   expect([loadWrites.length, planningWrites.length]).toEqual(before);
   expect(errors).toEqual([]);

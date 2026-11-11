@@ -43,6 +43,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, p
   const tooltipId = useId();
   const cellId = useId();
   const scrolledTarget = useRef<string | null>(null);
+  const clearingSelection = useRef(false);
   useEffect(() => {
     if (focusSlot === undefined) return;
     const key = `${driverId}:${date}:${focusSlot}`;
@@ -118,11 +119,23 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, p
       return true;
   }
 
-  const { planning, fullDay, createCustomStatus, dialog: planningDialog } = useDayPlanning({
+  const { planning, fullDay, createCustomStatus, clear, dialog: planningDialog } = useDayPlanning({
     fullDayEligible: visible.length === 0, suggestedDestination: pendingLoadSave ? undefined : suggestedDestination, entries: planningEntries, driverId, driverName, date, week, readOnly, onSaved: onPlanningSaved,
   });
+  useEffect(() => {
+    if (!clearingSelection.current || fullDay) return;
+    clearingSelection.current = false;
+    // Keep spreadsheet selection when the status is replaced by an empty load
+    // cell, without taking focus back after the user has moved elsewhere.
+    if (document.activeElement !== document.body) return;
+    const cell = document.getElementById(cellId);
+    if (cell) { cell.tabIndex = -1; cell.focus({ preventScroll: true }); }
+  }, [fullDay, cellId]);
   return <>
-    {fullDay ? <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={blank.slot} id={cellId} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} onCustomStatus={createCustomStatus} customStatusUnavailable={visible.length ? "Clear this day’s loads or fixed status first." : pendingLoadSave ? "Waiting for load changes to save." : undefined} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly || displayed[0].dayStatus ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
+    {fullDay ? <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={blank.slot} id={cellId} onKeyDown={event => {
+      if (readOnly || event.target !== event.currentTarget || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing || !["Backspace", "Delete"].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation(); clearingSelection.current = true; clear();
+    }} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} onCustomStatus={createCustomStatus} customStatusUnavailable={visible.length ? "Clear this day’s loads or fixed status first." : pendingLoadSave ? "Waiting for load changes to save." : undefined} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly || displayed[0].dayStatus ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span>
         {!readOnly && !displayed.some(entry => entry.dayStatus) && displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
       </div>

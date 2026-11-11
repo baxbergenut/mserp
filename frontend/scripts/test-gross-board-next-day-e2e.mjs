@@ -20,7 +20,7 @@ sql(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_dat
  ON CONFLICT DO NOTHING;
  INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
  (989961,'DEMO-101','Delivered',1800,2000,800,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Denver","state":"CO"}},
- {"ordering":3,"stop_type":"delivery","location":{"city":"Boise","state":"ID","address1":"123 Delivery Lane","zip_code":"83702"}},
+ {"ordering":3,"stop_type":"delivery","location":{"city":"Boise","state":"Idaho","address1":"123 Delivery Lane","zip_code":"83702"}},
  {"ordering":2,"stop_type":"delivery","location":{"city":"Ogden","state":"UT"}}]}'),
  (989962,'DEMO-102','Dispatched',1500,1700,600,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Boise","state":"ID"}},
  {"ordering":2,"stop_type":"delivery","location":{"city":"Portland","state":"OR","zip_code":"97201"}}]}'),
@@ -28,7 +28,7 @@ sql(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_dat
  (989964,'DEMO-104','Dispatched',1200,1400,500,'{"stops":[{"ordering":2,"stop_type":"delivery","location":{"city":"Seattle","state":"WA"}}]}')
  ON CONFLICT(id) DO UPDATE SET raw_payload=excluded.raw_payload;
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate)
- SELECT id,'${week}','DEMO-101',989961,1800 FROM drivers WHERE full_name IN ('Destination Example','Jordan Lee','Sam Rivera')
+ SELECT id,'${week}','DEMO-101',989961,1800 FROM drivers WHERE full_name IN ('Destination Example','Jordan Lee','Sam Rivera','Casey Park')
  ON CONFLICT(driver_id,service_date) DO NOTHING;
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate)
  SELECT id,'${next}','DEMO-102',989962,1500 FROM drivers WHERE full_name='Jordan Lee' ON CONFLICT DO NOTHING;
@@ -36,6 +36,9 @@ sql(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_dat
  SELECT id,'${next}','HOME' FROM drivers WHERE full_name='Sam Rivera' ON CONFLICT DO NOTHING;
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate)
  SELECT id,'2026-11-08','DEMO-103',989963,900 FROM drivers WHERE full_name='Taylor Brooks' ON CONFLICT DO NOTHING;
+ DELETE FROM gross_board_planning_entries WHERE driver_id=(SELECT id FROM drivers WHERE full_name='Casey Park') AND service_date='${next}';
+ INSERT INTO gross_board_planning_entries(driver_id,service_date,kind,text)
+ SELECT id,'${next}','note','Wait for dispatch' FROM drivers WHERE full_name='Casey Park' ON CONFLICT DO NOTHING;
  DELETE FROM gross_board_entries WHERE driver_id=(SELECT id FROM drivers WHERE full_name='Destination Example') AND service_date='${next}';
  DELETE FROM gross_board_planning_entries WHERE driver_id=(SELECT id FROM drivers WHERE full_name='Destination Example') AND service_date='${next}';
  SELECT pg_notify('mserp_gross_board','');`);
@@ -49,19 +52,29 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   expect((await page.request.post(`${base}/api/auth/login`, { data: { email, password }, headers: { origin: base } })).ok()).toBe(true);
   const read = async () => (await (await page.request.get(`${base}/api/gross-board?weekStart=${week}`)).json());
-  await expect.poll(async () => (await read()).nextDayDestinations?.some(entry => entry.date === next && entry.text === 'Boise, ID')).toBe(true);
+  await expect.poll(async () => (await read()).nextDayDestinations?.some(entry => entry.date === next && entry.text === 'Boise, Idaho')).toBe(true);
   const board = await read();
   const alex = board.drivers.find(driver => driver.fullName === 'Destination Example').id;
   const jordan = board.drivers.find(driver => driver.fullName === 'Jordan Lee').id;
   const sam = board.drivers.find(driver => driver.fullName === 'Sam Rivera').id;
   const taylor = board.drivers.find(driver => driver.fullName === 'Taylor Brooks').id;
+  const casey = board.drivers.find(driver => driver.fullName === 'Casey Park').id;
   const suggestions = board.nextDayDestinations ?? [];
-  expect(suggestions).toContainEqual({ driverId: alex, date: next, text: 'Boise, ID' });
+  expect(suggestions).toContainEqual({ driverId: alex, date: next, text: 'Boise, Idaho' });
   expect(suggestions).toContainEqual({ driverId: taylor, date: week, text: 'Omaha, NE' });
   expect(suggestions.some(entry => [jordan, sam].includes(entry.driverId) && entry.date === next)).toBe(false);
   const cell = target => target.locator(`td[data-gross-driver="${alex}"][data-gross-date="${next}"]`);
   await page.goto(`${base}/gross-board`);
+  const manualCell = page.locator(`td[data-gross-driver="${casey}"][data-gross-date="${next}"]`);
+  await page.getByRole('button', { name: `Custom status for Casey Park, ${next}`, exact: true }).click();
+  await manualCell.press('Backspace');
+  await expect(manualCell.getByRole('combobox')).toBeVisible();
+  await expect(manualCell).toBeFocused();
+  await expect.poll(async () => (await read()).planningEntries.some(entry => entry.driverId === casey && entry.date === next && entry.kind === 'destination' && entry.text === '')).toBe(true);
+  await page.reload();
+  await expect(manualCell.locator('[data-gross-planning-full-day]')).toHaveCount(0);
   await expect(cell(page).locator('[data-gross-suggested-destination]')).toContainText('Boise, ID');
+  await expect(cell(page).locator('[data-gross-suggested-destination]')).not.toContainText('Idaho');
   expect(await cell(page).innerText()).not.toMatch(/83702|Delivery Lane|Ogden/);
   const statusLabel = `Custom status for Destination Example, ${next}, existing destination`;
   await expect(cell(page).locator('[data-gross-planning-full-day]')).toContainText('Boise, ID');
@@ -69,6 +82,7 @@ try {
   await expect(cell(page).getByRole('textbox')).toHaveCount(0);
   await expect(cell(page).getByRole('button')).toHaveCount(1);
   await page.getByRole('button', { name: statusLabel, exact: true }).dblclick();
+  await expect(page.getByRole('textbox', { name: statusLabel, exact: true })).toHaveValue('Boise, ID');
   await page.getByRole('textbox', { name: statusLabel, exact: true }).fill('Meridian, ID');
   await page.getByRole('textbox', { name: statusLabel, exact: true }).press('Enter');
   await expect(cell(page).getByRole('button', { name: statusLabel, exact: true })).toHaveText('Meridian, ID');
@@ -77,10 +91,11 @@ try {
   await other.clock.setFixedTime(new Date('2026-11-10T12:00:00Z'));
   await other.goto(`${base}/gross-board`);
   await expect(cell(other).locator('[data-gross-planning-full-day]')).toContainText('Meridian, ID');
-  await page.getByRole('button', { name: statusLabel, exact: true }).dblclick();
-  await page.getByRole('textbox', { name: statusLabel, exact: true }).fill('');
-  await page.getByRole('textbox', { name: statusLabel, exact: true }).press('Enter');
+  await page.getByRole('button', { name: statusLabel, exact: true }).click();
+  await expect(cell(page)).toBeFocused();
+  await cell(page).press('Backspace');
   await expect(cell(page).locator('[data-gross-planning-full-day]')).toHaveCount(0);
+  await expect(cell(page)).toBeFocused();
   await expect(cell(other).locator('[data-gross-planning-full-day]')).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('combobox', { name: `Destination Example, ${next}, load number or status`, exact: true })).toBeVisible();
@@ -88,6 +103,16 @@ try {
   expect((await read()).planningEntries).toContainEqual({ driverId: alex, date: next, kind: 'destination', text: '', version: 2 });
   await other.close();
   // Restore the synthetic example for the user's review.
+  sql(`DELETE FROM gross_board_planning_entries WHERE driver_id='${alex}' AND service_date='${next}' AND kind='destination'; SELECT pg_notify('mserp_gross_board','');`);
+  await page.reload();
+  await expect(cell(page).locator('[data-gross-suggested-destination]')).toContainText('Boise, ID');
+  await page.getByRole('button', { name: statusLabel, exact: true }).click();
+  await cell(page).press('Backspace');
+  await expect(cell(page).getByRole('combobox')).toBeVisible();
+  await expect(cell(page)).toBeFocused();
+  await page.reload();
+  await expect(cell(page).locator('[data-gross-planning-full-day]')).toHaveCount(0);
+  expect((await read()).planningEntries).toContainEqual({ driverId: alex, date: next, kind: 'destination', text: '', version: 1 });
   sql(`DELETE FROM gross_board_planning_entries WHERE driver_id='${alex}' AND service_date='${next}' AND kind='destination'; SELECT pg_notify('mserp_gross_board','');`);
   await page.reload();
   await expect(cell(page).locator('[data-gross-suggested-destination]')).toContainText('Boise, ID');

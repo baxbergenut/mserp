@@ -22,10 +22,14 @@ Fixed day statuses also cannot be added beside another load.
 An empty day can show the city and state of the previous day’s last load’s final
 delivery stop, including Sunday to Monday. The load must resolve to an available
 system record with both fields. Existing loads and saved statuses take priority.
+Automatic destinations display the state abbreviation (Boise, ID). Manual custom
+status text remains as entered.
 The suggested destination fills the whole day using the regular custom-status
 editor. Double-click to edit; clearing all text and saving removes it and
 records an empty destination tombstone so it stays dismissed across sessions.
 Only Gross Board snapshots include suggestions; they do not become payroll day labels.
+Backspace or Delete on a selected custom-status day also clears its text through
+the normal versioned save. Text editing retains ordinary character deletion.
 
 Legacy mixed days are not migrated or erased. They show a Review saved status
 disclosure for explicit cleanup, with normal financial edits and clearing
