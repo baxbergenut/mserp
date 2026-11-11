@@ -97,10 +97,11 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     expect((await read(week)).driverRate).toBe('820.00');
 
     await page.goto(base + '/gross-board');
-    const lock = page.getByRole('button', { name: 'Lock week', exact: true });
-    await expect(first.getByRole('button', { name: 'Lock week', exact: true })).toHaveCount(0);
+    const lock = page.getByRole('button', { name: 'Lock', exact: true });
+    const unlock = page.getByRole('button', { name: 'Unlock', exact: true });
+    await expect(first.getByRole('button', { name: /^(Lock|Unlock)$/ })).toHaveCount(0);
     await lock.click();
-    await expect(lock).toHaveAttribute('aria-pressed', 'true');
+    await expect(unlock).toBeVisible();
     await expect(rate(first, sharedDay)).toHaveAttribute('readonly', '');
     await expect(rate(second, sharedDay)).toHaveAttribute('readonly', '');
     const { csrfToken } = await (await second.request.get(base + '/api/auth/session')).json();
@@ -117,13 +118,13 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     await expect(rate(page, sharedDay)).toBeEditable();
     await fillRate(page, sharedDay, '560');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('560.00');
-    await expect(accountant.getByRole('button', { name: 'Lock week', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(accountant.getByRole('button', { name: 'Unlock', exact: true })).toBeVisible();
     await expect(rate(accountant, sharedDay)).toBeEditable();
     await fillRate(accountant, sharedDay, '570');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('570.00');
     await expect(rate(second, sharedDay)).toHaveValue('$570.00');
     await expect(rate(second, sharedDay)).toHaveAttribute('readonly', '');
-    await expect(lock).toHaveAttribute('aria-pressed', 'true');
+    await expect(unlock).toBeVisible();
 
     const accountantSession = await (await accountant.request.get(base + '/api/auth/session')).json();
     const accountantHeaders = { 'X-CSRF-Token': accountantSession.csrfToken };
@@ -142,7 +143,8 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     });
     expect(reset.status()).toBe(200);
 
-    await lock.click();
+    await unlock.click();
+    await expect(lock).toBeVisible();
     await expect(rate(second, sharedDay)).toBeEditable();
     await fillRate(second, sharedDay, '590');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('590.00');

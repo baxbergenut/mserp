@@ -416,9 +416,10 @@ export default function GrossBoardPage() {
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
         <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers or load numbers…" /></div>
-        {canManageWeek && <button type="button" aria-pressed={weekLocked} className={`${buttonClass} aria-pressed:border-blue-500/50 aria-pressed:text-blue-300`}
+        {canManageWeek && <button type="button" data-locked={weekLocked} className={`${buttonClass} data-[locked=true]:border-blue-500/50 data-[locked=true]:text-blue-300`}
           disabled={lockPending || loading || board?.weekStart !== week} onClick={toggleWeekLock}>
-          {weekLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />} Lock week
+          {weekLocked ? <LockOpen aria-hidden="true" className="h-4 w-4" /> : <Lock aria-hidden="true" className="h-4 w-4" />}
+          {weekLocked ? "Unlock" : "Lock"}
         </button>}
         {driverTarget && <button className={buttonClass} onClick={() => { setDriverTarget(null); router.replace("/gross-board", { scroll: false }); }}>All drivers</button>}
         <BoardFilter label="Dispatcher" options={dispatchers} selected={selectedDispatchers} onChange={setDispatcher} />

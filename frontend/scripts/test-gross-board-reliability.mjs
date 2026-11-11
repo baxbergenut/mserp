@@ -197,12 +197,13 @@ try {
   expect(stored().driverRate).toBe('1400');
 
   const manager = await open(true);
-  const toggle = manager.getByRole('button', { name: 'Lock week', exact: true });
-  await expect(page.getByRole('button', { name: 'Lock week', exact: true })).toHaveCount(0);
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  const lock = manager.getByRole('button', { name: 'Lock', exact: true });
+  const unlock = manager.getByRole('button', { name: 'Unlock', exact: true });
+  await expect(page.getByRole('button', { name: /^(Lock|Unlock)$/ })).toHaveCount(0);
+  await expect(lock.locator('svg.lucide-lock')).toBeVisible();
   const staleUnlocked = board();
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await lock.click();
+  await expect(unlock.locator('svg.lucide-lock-open')).toBeVisible();
   const rate = field(page, 'driver rate');
   await expect(rate).toHaveAttribute('readonly', '');
   await expect(field(manager)).toBeEditable();
@@ -234,7 +235,8 @@ try {
   await page.getByRole('button', { name: 'Previous week' }).click();
   await expect(rate).toHaveAttribute('readonly', '');
   expect(writes.length).toBe(writesBeforeLock);
-  await toggle.click();
+  await unlock.click();
+  await expect(lock.locator('svg.lucide-lock')).toBeVisible();
   await expect(rate).toBeEditable();
   await fill(rate, '1500');
   await saved(page);
