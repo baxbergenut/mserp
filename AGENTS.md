@@ -73,6 +73,12 @@ conversion used that faulty check and created duplicate slots.
 
 ## Pay-page actions
 
+Expanded Driver Pay and Investor Pay load rows show a blue warning for
+dispatcher name differences. The read-only comparison uses the synced
+DataTruck name and the dated Clustie assignment on the original service day.
+Close name variants are labelled separately. Comparison evidence is absent
+from saved statements, payroll review counts and financial revisions.
+
 Migration 203 adds the Accessorials expense category and the Driver Pay entry
 button. Accessorials use the ordinary expense date and finalization-only draft
 choices, with a dedicated driver payout ledger. Owner-covered accessorials and

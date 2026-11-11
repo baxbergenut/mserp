@@ -62,6 +62,9 @@ func (r *DriverPayRepository) PayrollPage(ctx context.Context, kind string, week
 	if err := decoratePayHomeWeeks(ctx, tx, kind, &page); err != nil {
 		return page, err
 	}
+	if err := decoratePayDispatcherComparisons(ctx, tx, kind, &page); err != nil {
+		return page, err
+	}
 	return page, tx.Commit(ctx)
 }
 

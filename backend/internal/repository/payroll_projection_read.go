@@ -257,6 +257,9 @@ func (r *DriverPayRepository) ReadPreparedPayrollPage(ctx context.Context, kind 
 	if err = decorateFrozenSourceComparisons(ctx, tx, &result.Report); err != nil {
 		return result, err
 	}
+	if err = decoratePayDispatcherComparisons(ctx, tx, kind, &result.Report); err != nil {
+		return result, err
+	}
 	if err = decoratePayPlanningStatuses(ctx, tx, kind, &result.Report); err != nil {
 		return result, err
 	}

@@ -25,6 +25,9 @@ func (r *DriverPayRepository) PayrollStatement(ctx context.Context, kind string,
 	if len(result.Drivers) == 0 {
 		return result, pgx.ErrNoRows
 	}
+	if err = decoratePayDispatcherComparisons(ctx, tx, kind, &result); err != nil {
+		return result, err
+	}
 	return result, tx.Commit(ctx)
 }
 

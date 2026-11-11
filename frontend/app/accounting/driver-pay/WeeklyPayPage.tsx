@@ -214,7 +214,13 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       }
       setPreparationError("");
       setOutgoingRefresh(value => value + 1);
-      setReport(current => current && value.preparation && current.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state && JSON.stringify(current.pagination) === JSON.stringify(value.pagination) && current.drivers.length === value.drivers.length && current.drivers.every((row, i) => row.id === value.drivers[i].id && !!row.statementRevision && row.statementRevision === value.drivers[i].statementRevision && row.expenseRevision === value.drivers[i].expenseRevision && row.preparationState === value.drivers[i].preparationState && JSON.stringify(row.dayStatuses ?? []) === JSON.stringify(value.drivers[i].dayStatuses ?? [])) ? current : value);
+      setReport(current => current && value.preparation && current.preparation?.generation === value.preparation?.generation && current?.preparation?.state === value.preparation?.state && JSON.stringify(current.pagination) === JSON.stringify(value.pagination) && current.drivers.length === value.drivers.length && current.drivers.every((row, i) => {
+        const next = value.drivers[i];
+        return row.id === next.id && !!row.statementRevision && row.statementRevision === next.statementRevision &&
+          row.expenseRevision === next.expenseRevision && row.preparationState === next.preparationState &&
+          JSON.stringify(row.dayStatuses ?? []) === JSON.stringify(next.dayStatuses ?? []) &&
+          JSON.stringify(row.loads?.map(load => load.dispatcherComparison)) === JSON.stringify(next.loads?.map(load => load.dispatcherComparison));
+      }) ? current : value);
     },
     failed: reason => setPreparationError(reason instanceof Error ? reason.message : "Unable to load payroll changes"),
   });

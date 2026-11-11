@@ -121,6 +121,8 @@ type DriverPayLoad struct {
 	DeadheadMiles           string   `json:"deadheadMiles"`
 	Fee                     string   `json:"fee"`
 	Issues                  []string `json:"issues"`
+
+	DispatcherComparison *PayDispatcherComparison `json:"dispatcherComparison,omitempty"`
 }
 type PayPerson struct {
 	ID   string `json:"id"`
@@ -212,6 +214,9 @@ func (r *DriverPayRepository) GetDriverWeek(ctx context.Context, week time.Time,
 	result, err := r.cachedPayrollWeek(ctx, tx, "driver:"+driverID, week, func() (DriverPayWeek, error) { return readDriverPayWeek(ctx, tx, week, driverID) })
 	result = selectPayDriver(result, driverID)
 	if err != nil {
+		return result, err
+	}
+	if err = decoratePayDispatcherComparisons(ctx, tx, "driver", &result); err != nil {
 		return result, err
 	}
 	return result, tx.Commit(ctx)

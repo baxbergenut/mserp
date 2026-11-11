@@ -579,7 +579,11 @@ func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, t
 	if len(targetTruck) > 0 {
 		target = targetTruck[0]
 	}
-	return investorPayView(result, target), tx.Commit(ctx)
+	result = investorPayView(result, target)
+	if err = decoratePayDispatcherComparisons(ctx, tx, "investor", &result); err != nil {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
 }
 
 func investorPayView(report DriverPayWeek, target string) DriverPayWeek {

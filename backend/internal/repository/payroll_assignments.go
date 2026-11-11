@@ -26,16 +26,21 @@ type payAssignment struct {
 	employmentType string
 }
 
+func payLoadAssignmentDay(statementID, kind string, load DriverPayLoad) (string, string) {
+	id, date := load.SourceDriverID, load.SourceDate
+	if id == "" && kind == "driver" {
+		id = statementID
+	}
+	if date == "" {
+		date = load.Date
+	}
+	return id, date
+}
+
 func payAssignmentReferences(d DriverPayDriver, kind string, week time.Time) []payAssignmentReference {
 	refs := []payAssignmentReference{}
 	for _, l := range d.Loads {
-		id, date := l.SourceDriverID, l.SourceDate
-		if id == "" && kind == "driver" {
-			id = d.ID
-		}
-		if date == "" {
-			date = l.Date
-		}
+		id, date := payLoadAssignmentDay(d.ID, kind, l)
 		if id != "" && date != "" {
 			refs = append(refs, payAssignmentReference{payAssignmentDay{id, date}, l.TransferVersion > 0, PayPerson{l.CreditedDispatcherID, l.CreditedDispatcherName}})
 		}

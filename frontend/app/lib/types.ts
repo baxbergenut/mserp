@@ -1390,6 +1390,7 @@ export interface DriverPayLoad {
  creditedDispatcherId?: string;
  creditedDispatcherName?: string;
   loadTripId?: number;
+  dispatcherComparison?: { dataTruck: string; clustie: string; similar: boolean };
   tripReview?: boolean;
   boardVersion?: number;
   systemOriginalRate?: string;
