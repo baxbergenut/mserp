@@ -166,7 +166,7 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 	}
 	defer rows.Close()
 	seen := map[string]map[int64]bool{}
-	var ids, boardIDs, otherIDs []int64
+	var ids, boardIDs, loadIDs, otherIDs []int64
 	for rows.Next() {
 		var id, revision int64
 		var table string
@@ -178,9 +178,12 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 		}
 		seen[table][revision] = true
 		ids = append(ids, id)
-		if table == "gross_board_entries" || table == "gross_board_extra_entries" {
+		switch table {
+		case "gross_board_entries", "gross_board_extra_entries":
 			boardIDs = append(boardIDs, id)
-		} else {
+		case "loads":
+			loadIDs = append(loadIDs, id)
+		default:
 			otherIDs = append(otherIDs, id)
 		}
 	}
@@ -194,22 +197,34 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 		}
 	}
 	impactIDs := ids
-	if week != "" && len(boardIDs) > 0 && len(otherIDs) > 0 {
-		// A provider or ledger change in the same interval must not discard
-		// the date and placement proof for later Gross Board edits.
-		board, err := payrollCapturedImpact(ctx, tx, nil, "", "", boardIDs)
-		if err != nil {
-			return nil, err
+	if week != "" {
+		// Preserve date proofs when independent board and provider changes
+		// share an interval with one another or with a ledger change.
+		impactIDs = append([]int64{}, otherIDs...)
+		for _, scoped := range [][]int64{boardIDs, loadIDs} {
+			if len(scoped) == 0 {
+				continue
+			}
+			if len(scoped) != len(ids) {
+				impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", scoped)
+				if err != nil {
+					return nil, err
+				}
+				if impact != nil && impact.weeks != nil && !impact.weeks[week] {
+					continue
+				}
+			}
+			impactIDs = append(impactIDs, scoped...)
 		}
-		if board != nil && board.weeks != nil && !board.weeks[week] {
-			impactIDs = otherIDs
+		if len(impactIDs) == 0 {
+			return &payrollPublicationImpact{roots: []string{}, weeks: map[string]bool{}, changeIDs: ids}, nil
 		}
 	}
 	impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", impactIDs)
 	if err != nil || impact == nil || (len(impact.roots) == 0 && impact.weeks == nil) {
 		return nil, err
 	}
-	// Even when a board event cannot change this week's values, it can bump
+	// Even when an event cannot change this week's values, it can bump
 	// a shared resource epoch. Keep its captured delta in the exact proof.
 	impact.changeIDs = ids
 	return impact, nil

@@ -198,3 +198,82 @@ func TestPayrollFrozenLoadImpactDatabase(t *testing.T) {
 		}
 	})
 }
+
+func TestPayrollLoadUpdateWeekScopeDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		exec := func(sql string, args ...any) {
+			t.Helper()
+			if _, err := pool.Exec(ctx, sql, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,driver_id,truck_id)
+ VALUES(18202,'LATER-ONLY','delivered',600,700,300,$1,$2),
+ (18203,'UNPLACED','delivered',600,700,300,$1,$2)`, projectionDriver, projectionTruck)
+		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate)
+ VALUES($1,'2026-10-12','LATER-ONLY',18202,500)`, projectionDriver)
+
+		repo := NewDriverPayRepository(pool)
+		repo.preparedReads, repo.preparedCommands, repo.resourceConcurrency = true, true, true
+		if err := repo.EnablePayrollShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		exec(`UPDATE payroll_projection_control SET protocol_mode='resources'`)
+		earlier, _ := chargeWeek("2026-10-05")
+		later, _ := chargeWeek("2026-10-12")
+		for _, week := range []time.Time{earlier, later} {
+			if err := repo.RequestPayrollPreparation(ctx, week, false); err != nil {
+				t.Fatal(err)
+			}
+			if worked, err := repo.PrepareNextPayrollWeek(ctx); !worked || err != nil {
+				t.Fatal(worked, err)
+			}
+		}
+		ready := func(week time.Time, want string) string {
+			t.Helper()
+			page, err := repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{}, true)
+			if err != nil || page.Preparation == nil || page.Preparation.State != want || len(page.Drivers) != 1 || page.Drivers[0].PreparationState != want {
+				t.Fatalf("%s page state want %s: preparation=%+v rows=%d err=%v", week.Format(time.DateOnly), want, page.Preparation, len(page.Drivers), err)
+			}
+			return page.Drivers[0].StatementRevision
+		}
+		revision := ready(earlier, "ready")
+		ready(later, "ready")
+		// Both provider rows carry the same driver/truck as the older statement.
+		// Only the native placement of the later load can affect payroll.
+		exec(`UPDATE loads SET total_pay=total_pay+10 WHERE id IN (18202,18203)`)
+		if ready(earlier, "ready") != revision {
+			t.Fatal("unrelated loads changed the statement revision")
+		}
+		if _, err := repo.PreparedPayroll(ctx, "driver", earlier, PayPageQuery{}, false); err != nil {
+			t.Fatal("completed-week export blocked by later and unplaced loads", err)
+		}
+		ready(later, "updating")
+		if _, err := repo.DispatchPayrollChanges(ctx); err != nil {
+			t.Fatal(err)
+		}
+		ready(earlier, "ready")
+		for range 2 {
+			if worked, err := repo.PrepareNextPayrollWeek(ctx); !worked || err != nil {
+				t.Fatal(worked, err)
+			}
+		}
+		ready(later, "ready")
+		if ready(earlier, "ready") != revision {
+			t.Fatal("preparation changed the unrelated statement revision")
+		}
+
+		// A later board edit in the same capture interval preserves both proofs.
+		exec(`UPDATE loads SET total_pay=total_pay+10 WHERE id=18202`)
+		exec(`UPDATE gross_board_entries SET entered_miles=310 WHERE load_record_id=18202`)
+		ready(earlier, "ready")
+		ready(later, "updating")
+
+		// The later load acquiring an old number can break a prior number-only
+		// match. The provider date/placement cannot exclude that earlier week.
+		exec(`UPDATE loads SET load_id='PROJECTION-1' WHERE id=18202`)
+		ready(earlier, "updating")
+		ready(later, "updating")
+	})
+}

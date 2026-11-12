@@ -409,7 +409,6 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 	ctx = context.WithValue(ctx, payrollNormalizedFactsKey{}, true)
 	readCtx := context.WithValue(ctx, payrollSnapshotKey{}, payrollSnapshot{tx, snapshot})
 	readCtx = payrollRoutingFactsContext(readCtx, snapshot)
-	rebaseOnly := false
 	var impact *payrollPublicationImpact
 	if job.Roots != nil {
 		impact, err = payrollPendingWeekImpact(ctx, tx, job.Week, snapshot)
@@ -417,13 +416,13 @@ func (r *DriverPayRepository) preparePayrollProjection(ctx context.Context, job 
 			return err
 		}
 	}
-	if selectedResources && (impact == nil || !payrollSelectionCovers(lockedSelection, impact.roots)) {
+	rebaseOnly := impact != nil && (len(impact.roots) == 0 || (impact.weeks != nil && !impact.weeks[job.Week.Format(time.DateOnly)]))
+	if selectedResources && (impact == nil || (!rebaseOnly && !payrollSelectionCovers(lockedSelection, impact.roots))) {
 		// The combined proof can be broader than the union of dispatched
 		// batches. Release these locks and retry with full claims.
 		return errPayrollProjectionNeedsFullClaims
 	}
 	if impact != nil {
-		rebaseOnly = len(impact.roots) == 0 || (impact.weeks != nil && !impact.weeks[job.Week.Format(time.DateOnly)])
 		if rebaseOnly {
 			readCtx = context.WithValue(readCtx, payrollSelectionKey{}, &payrollSelection{drivers: []string{}, trucks: []string{}, owners: []string{}})
 		} else {

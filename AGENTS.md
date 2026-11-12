@@ -244,6 +244,10 @@ Reimbursed Amount equals Total Payable, including when Salary is negative.
   Mixed source intervals preserve the board-date and placement proof for earlier
   weeks while retaining every captured resource revision delta. Completed-week
   exports stay available when that proof and every statement revision are current.
+  Imported load changes use exact IDs and captured old/new numbers to scope
+  invalidation to native board dates, payroll transfer dates, placement history
+  and frozen statement weeks. Provider driver/truck labels alone do not establish
+  payroll impact. Mixed captures retain these period proofs and all epoch deltas.
   Unproven impact retains conservative calculation. Expense eligibility remains
   before the following Thursday (week+10, exclusive); unpaid carry and finalized
   guards are unchanged. APIs expose latestWeek alongside the actual currentWeek. Future

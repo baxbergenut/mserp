@@ -435,22 +435,21 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		changedLoads = append(changedLoads, id)
 	}
 	sort.Slice(changedLoads, func(i, j int) bool { return changedLoads[i] < changedLoads[j] })
+	var loadWeeks map[string]bool
 	if len(changedLoads) > 0 || len(loadNumbers) > 0 {
-		if err := payrollLoadImpactRoots(ctx, tx, changedLoads, keys(loadNumbers), roots); err != nil {
+		loadWeeks, err = payrollLoadImpact(ctx, tx, changedLoads, keys(loadNumbers), roots)
+		if err != nil {
 			return nil, err
 		}
 	}
-	// Expand these old/new roots separately for EVERY materialized week. The
-	// selection contract includes that week's dated routing, open legacy cost
-	// weeks, future reservations and unpaid saved destinations. Fully paid old
-	// assignments do not connect otherwise independent present-day obligations.
+	// Expand old/new roots separately for each affected week using its dated
+	// routing and open financial dependencies.
 	impact := &payrollPublicationImpact{roots: keys(roots), refreshHeader: refreshHeader, loadIDs: changedLoads}
-	// A complete load identity/old-new-number lookup covered native board rows,
-	// explicit placements and frozen reports. An unplaced provider load cannot
-	// affect a statement. Keep that proven empty result distinct from unknown.
-	if loadsOnly && len(changedLoads) > 0 && len(roots) == 0 {
-		impact.weeks = map[string]bool{}
-		impact.refreshHeader = false
+	if loadsOnly && loadWeeks != nil {
+		// Provider driver/truck labels are not payroll placements. A complete
+		// native lookup can prove that a load has no impact, even with labels.
+		impact.weeks = loadWeeks
+		impact.refreshHeader = len(loadWeeks) > 0
 	}
 	if c != nil {
 		impact.snapshot = c.beforeSnapshot
