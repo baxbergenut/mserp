@@ -278,6 +278,13 @@ func saveLoadState(ctx context.Context, tx pgx.Tx, id string, s boardLoadState) 
  ON CONFLICT(driver_id) DO UPDATE SET payload=EXCLUDED.payload`, id, raw)
 	return err
 }
+
+// Board readers need stops and load-level appointment fallbacks, not provider
+// documents, trips, contacts or the rest of the imported order payload.
+const boardStopSourceSQL = `jsonb_build_object('stops',l.raw_payload->'stops',
+ 'pickup_appointment_time',l.raw_payload->'pickup_appointment_time',
+ 'delivery_appointment_time',l.raw_payload->'delivery_appointment_time')`
+
 func boardStops(raw []byte) []BoardStop {
 	result := []BoardStop{}
 	var load datatruck.Load
@@ -504,7 +511,7 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 		return nil, err
 	}
 	plans := map[string][]BoardLoad{}
-	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),coalesce(l.raw_payload,'{}'::jsonb),NOT (`+boardAvailableSourceSQL+`)
+	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),`+boardStopSourceSQL+`,NOT (`+boardAvailableSourceSQL+`)
  FROM `+boardPlansSQL+` e `+boardResolvedLoad+`
  LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''

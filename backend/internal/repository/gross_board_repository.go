@@ -143,9 +143,12 @@ const grossBoardEntriesSQL = `(SELECT driver_id,service_date,0 AS slot,false AS 
 // remain plans until a dispatcher chooses the intended upstream record.
 const grossBoardResolvedLoad = `
  LEFT JOIN LATERAL (
-   SELECT min(l.id) AS id FROM loads l
-   WHERE NOT e.deleted AND e.day_status='' AND ((e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
-      OR (e.load_record_id IS NULL AND e.load_number<>'' AND lower(btrim(l.load_id))=lower(btrim(e.load_number))))
+   SELECT l.id FROM loads l
+   WHERE NOT e.deleted AND e.day_status='' AND l.id=e.load_record_id
+   UNION ALL
+   SELECT min(l.id) FROM loads l
+   WHERE NOT e.deleted AND e.day_status='' AND e.load_record_id IS NULL AND e.load_number<>''
+     AND lower(btrim(l.load_id))=lower(btrim(e.load_number))
    HAVING count(*)=1
  ) matched ON true
  LEFT JOIN loads l ON l.id=matched.id `
@@ -160,7 +163,7 @@ var grossBoardEffective = `WITH ranked AS MATERIALIZED (
  FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
  WHERE e.source_date < $1::date+7
 ), resolved AS (
- SELECT e.*, coalesce(to_jsonb(l)->>'status','') AS source_status,
+ SELECT e.*, coalesce(l.status,'') AS source_status,
  CASE WHEN l.id IS NOT NULL THEN l.load_id ELSE e.load_number END AS display_number,
  CASE WHEN trip_source.review THEN NULL ELSE CASE WHEN trip_source.reviewed THEN trip_source.original ELSE coalesce(e.entered_original_rate, CASE WHEN l.id IS NOT NULL THEN trip_source.original ELSE e.original_rate END) END END AS effective_original,
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
@@ -412,7 +415,8 @@ func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID stri
 func (r *GrossBoardRepository) SearchLoads(ctx context.Context, search string) ([]GrossBoardLoad, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,load_id,total_pay::text,coalesce(total_miles::text,''),
  coalesce(driver_name,''),coalesce((coalesce(pickup_time,pickup_appointment_time) AT TIME ZONE 'UTC')::date::text,''),trip_source.options,trip_source.split,trip_source.review_reason,coalesce(trip_source.driver_gross::text,''),coalesce(l.source_status,'')
- FROM (SELECT c.*,to_jsonb(source)->'split_allocation' split_allocation,to_jsonb(source)->>'status' source_status FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0 AND `+boardAvailableSourceSQL+`
+ FROM (SELECT c.id,c.load_id,c.total_pay,c.total_miles,c.driver_name,c.pickup_time,c.pickup_appointment_time,c.raw_payload,c.split_expected,
+ source.split_allocation,source.status AS source_status FROM clustie_loads c JOIN loads source ON source.id=c.id) l CROSS JOIN (SELECT NULL::integer load_trip_id) e `+loadTripSourceSQL+` WHERE load_id<>'' AND strpos(lower(load_id),lower($1))>0 AND `+boardAvailableSourceSQL+`
  ORDER BY (lower(btrim(load_id))=lower(btrim($1))) DESC,id DESC LIMIT 20`, search)
 	if err != nil {
 		return nil, err

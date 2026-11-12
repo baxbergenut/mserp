@@ -56,7 +56,7 @@ func readDriverTruckAssignment(ctx context.Context, tx pgx.Tx, id string) (Drive
 	if err != nil {
 		return v, mapNotFound(err)
 	}
-	v.Choices, err = readTruckAssignmentChoices(ctx, tx)
+	v.Choices, err = readTruckAssignmentChoices(ctx, tx, false)
 	if err != nil {
 		return v, err
 	}
@@ -71,12 +71,18 @@ func readDriverTruckAssignment(ctx context.Context, tx pgx.Tx, id string) (Drive
 
 func readTruckAssignmentChoices(ctx context.Context, q interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
-}) ([]TruckAssignmentChoice, error) {
+}, readProjection bool) ([]TruckAssignmentChoice, error) {
 	choices := []TruckAssignmentChoice{}
-	rows, err := q.Query(ctx, `SELECT t.id::text,t.unit_number,fleet_truck_operating_status(t.id),t.active,
+	status, join := "fleet_truck_operating_status(t.id)", ""
+	if readProjection {
+		// Bulk dropdown reads share the fleet's set-based live projection. Reviewed
+		// handovers and saves retain the authoritative status function above.
+		status, join = "fleet_read.operating_status", " JOIN fleet_truck_read_state fleet_read ON fleet_read.id=t.id "
+	}
+	rows, err := q.Query(ctx, `SELECT t.id::text,t.unit_number,`+status+`,t.active,
  coalesce(a.driver_id::text,''),coalesce(d.full_name,''),coalesce(a.id::text,''),t.updated_at::text,
  btrim(coalesce(b.current_load,''))
- FROM trucks t LEFT JOIN truck_driver_assignments a ON a.truck_id=t.id AND a.unassigned_at IS NULL
+ FROM trucks t `+join+` LEFT JOIN truck_driver_assignments a ON a.truck_id=t.id AND a.unassigned_at IS NULL
  LEFT JOIN drivers d ON d.id=a.driver_id LEFT JOIN driver_board b ON b.driver_id=a.driver_id
  ORDER BY t.unit_number,t.id`)
 	if err != nil {
@@ -94,7 +100,7 @@ func readTruckAssignmentChoices(ctx context.Context, q interface {
 }
 
 func (r *FleetRepository) TruckAssignmentChoices(ctx context.Context) ([]TruckAssignmentChoice, error) {
-	return readTruckAssignmentChoices(ctx, r.pool)
+	return readTruckAssignmentChoices(ctx, r.pool, true)
 }
 
 func (r *FleetRepository) GetDriverTruckAssignment(ctx context.Context, id string) (DriverTruckAssignment, error) {

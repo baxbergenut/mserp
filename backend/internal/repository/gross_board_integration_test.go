@@ -138,7 +138,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	week, _ := time.Parse(time.DateOnly, "2026-09-28")
-	if _, err = pool.Exec(ctx, `ALTER TABLE loads ADD COLUMN raw_payload jsonb, ADD COLUMN split_expected boolean NOT NULL DEFAULT false; ALTER TABLE gross_board_entries ADD COLUMN load_trip_id integer; ALTER TABLE gross_board_extra_entries ADD COLUMN load_trip_id integer;`); err != nil {
+	if _, err = pool.Exec(ctx, `ALTER TABLE loads ADD COLUMN split_allocation jsonb, ADD COLUMN status text, ADD COLUMN raw_payload jsonb, ADD COLUMN split_expected boolean NOT NULL DEFAULT false; ALTER TABLE gross_board_entries ADD COLUMN load_trip_id integer; ALTER TABLE gross_board_extra_entries ADD COLUMN load_trip_id integer;`); err != nil {
 		t.Fatal(err)
 	}
 	// This minimal, connection-local fixture tests load identity/value queries;
@@ -737,7 +737,7 @@ func TestGrossBoardDatabase(t *testing.T) {
 	})
 
 	t.Run("display source status", func(t *testing.T) {
-		if _, err := pool.Exec(ctx, "ALTER TABLE pg_temp.loads ADD COLUMN status text; UPDATE pg_temp.loads SET status='in_transit'"); err != nil {
+		if _, err := pool.Exec(ctx, "UPDATE pg_temp.loads SET status='in_transit'"); err != nil {
 			t.Fatal(err)
 		}
 		matches, err := repo.SearchLoads(ctx, "L100")

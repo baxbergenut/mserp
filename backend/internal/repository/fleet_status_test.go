@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -88,6 +89,17 @@ func TestFleetStatusDatabase(t *testing.T) {
 				return v
 			}
 			fleet := NewFleetRepository(pool)
+			checkChoices := func() {
+				t.Helper()
+				got, err := fleet.TruckAssignmentChoices(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want, err := readTruckAssignmentChoices(ctx, pool, false)
+				if err != nil || !reflect.DeepEqual(got, want) {
+					t.Fatalf("dropdown/canonical assignment mismatch: got %#v want %#v err %v", got, want, err)
+				}
+			}
 			board := NewDriverBoardRepository(pool)
 			actor := scalar(`INSERT INTO app_users(username,password_hash,email,role_id) VALUES('Status Reviewer','$2a$test','status-review@example.test',(SELECT id FROM app_roles WHERE system_role)) RETURNING id::text`)
 			d, e := fleet.CreateDriver(ctx, DriverInput{FullName: "Status Test Driver", PayType: "cpm", PayRate: 0.6, Active: true})
@@ -99,6 +111,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			exec(`INSERT INTO driver_board(driver_id,status,notes) VALUES($1,'HOME','Preserved notes')`, d.ID)
+			checkChoices()
 			preview, e := fleet.PreviewStatuses(ctx)
 			if e != nil {
 				t.Fatal(e)
@@ -130,6 +143,7 @@ func TestFleetStatusDatabase(t *testing.T) {
 				entry.StatusReason = "Reported equipment issue"
 				entry.StatusEdited = true
 				_, e = board.Save(ctx, []DriverBoardEntry{entry}, actor)
+				checkChoices()
 				return e
 			}
 			if e = save("DISPATCHED"); e == nil {

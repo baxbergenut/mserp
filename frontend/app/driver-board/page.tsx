@@ -12,6 +12,7 @@ import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } fro
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 import { BoardNavigationNotice } from "@/app/components/BoardNavigationNotice";
+import { ProgressiveBoardRow } from "@/app/components/boards/ProgressiveBoardRow";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
 import { controlClass, Modal, Field } from "@/app/components/management/ManagementUI";
@@ -441,9 +442,9 @@ export default function DriverBoardPage() {
               homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,
               driverAddress: <td key="driverAddress" data-board-column="driverAddress" className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>,
             };
-            return <tr key={d.id} className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
+            return <ProgressiveBoardRow key={d.id} immediate={i < 24 || rowDrag.active} columns={columns.length} height={33} label={d.fullName}><tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 {columns.map(column => cells[column])}
-              </tr>;
+              </tr></ProgressiveBoardRow>;
           })];
           })}
           {!loading && drivers.length === 0 && pendingDrivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}

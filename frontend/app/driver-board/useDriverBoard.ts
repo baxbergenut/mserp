@@ -31,6 +31,8 @@ export function useDriverBoard(lockedDriverId?: string) {
   const busyDrivers = useRef<string[]>([]);
   const lockedDriver = useRef(lockedDriverId);
   const live = useBoardLive(useCallback((value?: DriverBoard) => refreshWanted.current(value), []));
+  const connectedRef = useRef(false);
+  useLayoutEffect(() => { connectedRef.current = live.connected; }, [live.connected]);
   const savedRef = useRef<Record<string, DriverBoardEntry>>({});
   const changesRef = useRef(changes);
   const undoStack = useRef<{ id: number; driverId: string; group: number }[]>([]);
@@ -61,6 +63,8 @@ export function useDriverBoard(lockedDriverId?: string) {
     let cancelled = false, inFlight = false, pending = false;
     let latest: DriverBoard | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let blurTimer: ReturnType<typeof setTimeout> | undefined;
+    let revision = 0;
     const accept = (value: DriverBoard) => {
       if (cancelled) return;
       latest = value;
@@ -88,20 +92,24 @@ export function useDriverBoard(lockedDriverId?: string) {
       if (!idle.current || document.visibilityState !== "visible" || inFlight) return;
       pending = false;
       inFlight = true;
+      const started = revision;
       try {
         const value = await fetchDriverBoard(currentChargeWeek());
-        accept(value);
+        if (started === revision) accept(value);
       } catch { if (!cancelled) setRefreshError("Live refresh is unavailable. Retry to update totals and assignments."); }
       finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
     const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
-    refreshWanted.current = value => value ? accept(value) : schedule();
+    refreshWanted.current = value => { if (value) { revision++; accept(value); } else schedule(); };
     resumeLive.current = () => { if (latest) accept(latest); };
-    const fallback = setInterval(schedule, 30000);
+    const fallback = setInterval(() => { if (!connectedRef.current) schedule(); }, 30000);
     const focus = () => schedule();
     window.addEventListener("focus", focus); document.addEventListener("visibilitychange", focus);
-    document.addEventListener("focusout", focus);
-    return () => { cancelled = true; refreshWanted.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", focus); };
+    // Release the focused row from the latest stream snapshot without fetching
+    // the whole board every time a dispatcher moves to another input.
+    const blur = () => { clearTimeout(blurTimer); blurTimer = setTimeout(() => { if (latest) accept(latest); }, 0); };
+    document.addEventListener("focusout", blur);
+    return () => { cancelled = true; refreshWanted.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearTimeout(blurTimer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", blur); };
   }, []);
 
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string, patch?: Partial<DriverBoardEntry>) => {
