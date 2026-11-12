@@ -131,6 +131,9 @@ func routeTruckPayUncached(ctx context.Context, tx pgx.Tx, source DriverPayWeek)
 	if err = applyInvestorSalaryCarry(ctx, tx, &investors); err != nil {
 		return drivers, investors, err
 	}
+	if err = applyInvestorCarry(ctx, tx, &investors); err != nil {
+		return drivers, investors, err
+	}
 	err = applyPaySources(ctx, tx, &drivers, &investors)
 	return drivers, investors, err
 }

@@ -132,3 +132,48 @@ func TestInvestorRetainedPayDatabase(t *testing.T) {
 		}
 	})
 }
+
+func TestInvestorRetainedPayWithoutTermsDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		const owner = "18200000-0000-0000-0000-000000006003"
+		latest, _ := chargeWeek(PayrollLatestWeek())
+		prior := latest.AddDate(0, 0, -7)
+		var actor string
+		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Retained fallback tester',crypt('test-only',gen_salt('bf'))) RETURNING id::text`).Scan(&actor); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO investors(id,full_name) VALUES('18200000-0000-0000-0000-000000006003','Original Investor');
+ INSERT INTO trucks(id,unit_number,owner_id,active) VALUES('18200000-0000-0000-0000-000000000002','INACTIVE-KEEP','18200000-0000-0000-0000-000000006003',false)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO investor_pay_weeks(truck_id,week_start,owner_id,edits,finalized,report) VALUES($1,$2,$3,'{}',true,jsonb_build_object('id',$1::uuid::text,'truckId',$1::uuid::text,'truckUnit','INACTIVE-KEEP','investorId',$3::uuid::text,'fullName','Original Investor','retainedPay','100.00','loads',jsonb_build_array(jsonb_build_object('fee','100.00')),'settlement',jsonb_build_object('finalized',true),'edits',jsonb_build_object('driverId',$1::uuid::text,'weekStart',$2::date)))`, projectionTruck, prior, owner); err != nil {
+			t.Fatal(err)
+		}
+		repo := NewDriverPayRepository(pool)
+		page, err := repo.InvestorPay(ctx, latest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Drivers) != 1 || page.Drivers[0].InvestorCarry != "100.00" || page.Drivers[0].NetPayCents() != 10000 || len(page.Drivers[0].Loads) != 0 {
+			t.Fatalf("lost or replayed inactive balance: %+v", page)
+		}
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		changed := page.Drivers[0]
+		changed.InvestorID = "18200000-0000-0000-0000-000000006004"
+		err = guardInvestorCarryOrder(ctx, tx, changed, page.WeekStart, false)
+		tx.Rollback(ctx)
+		if err == nil || !strings.Contains(err.Error(), "previous investor") {
+			t.Fatalf("transferred retained money to new investor: %v", err)
+		}
+		paid, err := repo.SettleInvestor(ctx, latest, projectionTruck, page.Revision, actor, "", false, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(paid.Drivers) != 1 || paid.Drivers[0].NetPayCents() != 10000 || paid.Drivers[0].RetainedPay != "" || !paid.Drivers[0].Settlement.Finalized {
+			t.Fatalf("inactive payout failed: %+v", paid)
+		}
+	})
+}

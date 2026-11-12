@@ -669,9 +669,6 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	if err != nil {
 		return result, err
 	}
-	if err = applyInvestorCarry(ctx, tx, &result); err != nil {
-		return result, err
-	}
 	selection, _ := ctx.Value(payrollPublicationSelectionKey{}).(*payrollSelection)
 	refreshHeader, _ := ctx.Value(payrollPublicationHeaderKey{}).(bool)
 	authoritative, _ := ctx.Value(payrollAuthoritativeKey{}).(bool)
