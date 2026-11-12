@@ -30,6 +30,8 @@ type Client struct {
 	roster        []odometerUnit
 	odometerMu    sync.Mutex
 	odometers     map[string]cachedOdometer
+	historyMu     sync.Mutex
+	history       map[string]cachedTrackingHistory
 	baseURL       string
 	apiKey        string
 	providerToken string

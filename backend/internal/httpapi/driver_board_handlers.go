@@ -119,6 +119,19 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		writeJSON(w, 200, result)
 	})
+	r.Get("/driver-board/loads/{driverId}/map-route", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "driverId")
+		if !isUUID(id) {
+			writeAPIError(w, 400, "valid driver id is required")
+			return
+		}
+		route, err := repo.MapRoute(r.Context(), id)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]*repository.BoardMapRoute{"route": route})
+	})
 	r.Post("/driver-board/loads/{driverId}", func(w http.ResponseWriter, r *http.Request) {
 		var a repository.BoardLoadAction
 		if err := decodeJSON(r, &a); err != nil {

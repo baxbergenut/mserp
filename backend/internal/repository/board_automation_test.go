@@ -612,6 +612,10 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 			}
 			return
 		}
+		if req.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"routes":[{"summary":{"travelTimeInSeconds":3600,"lengthInMeters":160934},"legs":[{"encodedPolyline":"_p~iF~ps|U_ulLnnqC","encodedPolylinePrecision":5}]}]}`))
+			return
+		}
 		var request struct {
 			Destination struct {
 				Address string `json:"address"`
@@ -636,10 +640,11 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"routes":[{"duration":"3600s","distanceMeters":160934,"travelAdvisory":{"routeRestrictionsPartiallyIgnored":false}}]}`))
+		_, _ = w.Write([]byte(`{"routes":[{"duration":"3600s","distanceMeters":160934}]}`))
 	}))
 	defer routeServer.Close()
-	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, APIKey: "fixture", SpeedUnit: "mph", RequestsPerMinute: 120, GoogleMonthlyFree: 10000, TomTomBillingTimezone: "UTC"})
+	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, APIKey: "fixture", TomTomAPIKey: "fixture", SpeedUnit: "mph", RequestsPerMinute: 120, GoogleMonthlyFree: 10000, TomTomMonthlyFree: 20000, TomTomBillingTimezone: "UTC"})
+	routes.TomTomURL = routeServer.URL
 	routes.URL = routeServer.URL
 	routes.Budget = boardroutes.NewPostgresBudget(pool)
 	// A just-edited destination must settle before any paid provider request.
@@ -670,6 +675,15 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	calls := routeCalls.Load()
 	if calls == 0 {
 		t.Fatal("last known distance was not routed")
+	}
+	mapRoute, err := repo.MapRoute(ctx, d.ID)
+	if err != nil || mapRoute == nil || !mapRoute.Stale || mapRoute.Context != view.Automation.Context ||
+		mapRoute.Destination != "South River, NJ" || mapRoute.Geometry.Polyline != "_p~iF~ps|U_ulLnnqC" ||
+		view.Automation.MapRoute != nil || routeCalls.Load() != calls {
+		t.Fatal("map geometry was not isolated to the read-only selected route", mapRoute, err)
+	}
+	if truckID, matchedVIN, err := repo.MapTruckIdentity(ctx, d.ID); err != nil || truckID != truck.ID || matchedVIN != vin {
+		t.Fatal("map trail did not resolve the board truck and VIN", truckID, matchedVIN, err)
 	}
 	if err = repo.ReconcileAutomation(ctx, routes, nil, ""); err != nil || routeCalls.Load() != calls {
 		t.Fatal("unchanged resting position caused another route request", err)
@@ -724,6 +738,9 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	view, err = repo.Loads(ctx, d.ID, "")
 	if err != nil || view.Automation.TravelValue != "" || view.Automation.Arrived {
 		t.Fatal("Samsara cache remained visible", view.Automation, err)
+	}
+	if mapRoute, err = repo.MapRoute(ctx, d.ID); err != nil || mapRoute != nil {
+		t.Fatal("map showed route from the wrong GPS source", mapRoute, err)
 	}
 	calls = routeCalls.Load()
 	if err = repo.ReconcileAutomation(ctx, routes, eld, "fixture"); err != nil {

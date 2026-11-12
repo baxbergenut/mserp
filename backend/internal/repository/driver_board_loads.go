@@ -467,6 +467,10 @@ func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) stri
 
 // Read-only reconciliation: no calendar or upstream status can promote a load.
 func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time) (map[string]BoardLoads, error) {
+	return readBoardLoadViews(ctx, tx, ids, from, now, false)
+}
+
+func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, includeRoute bool) (map[string]BoardLoads, error) {
 	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return nil, err
 	}
@@ -748,13 +752,25 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 		}
 		result[id] = view
 	}
-	if err := enrichBoardAutomation(ctx, tx, result, states, entries); err != nil {
+	if err := enrichBoardAutomation(ctx, tx, result, states, entries, includeRoute); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
 func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (BoardLoads, error) {
+	return r.loadView(ctx, id, from, false)
+}
+
+func (r *DriverBoardRepository) MapRoute(ctx context.Context, id string) (*BoardMapRoute, error) {
+	view, err := r.loadView(ctx, id, "", true)
+	if err != nil || view.Automation == nil {
+		return nil, err
+	}
+	return view.Automation.MapRoute, nil
+}
+
+func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, includeRoute bool) (BoardLoads, error) {
 	from = r.loadStartDate(from)
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -764,7 +780,7 @@ func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (Boa
 	if _, err = tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return BoardLoads{}, err
 	}
-	views, err := readBoardLoads(ctx, tx, []string{id}, from, r.now())
+	views, err := readBoardLoadViews(ctx, tx, []string{id}, from, r.now(), includeRoute)
 	if err != nil {
 		return BoardLoads{}, err
 	}

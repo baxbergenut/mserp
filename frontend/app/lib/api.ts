@@ -205,9 +205,9 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
   stream.addEventListener("unauthorized", () => { stream.close(); connection(false); unauthorized(); });
   return () => { ready.close(); stream.close(); };
 }
-export const fetchDriverBoard = async (weekStart: string) => {
+export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) => {
   await boardReadiness.wait("status");
-  return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "1" })).then(expandBoard);
+  return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "1" }), { signal }).then(expandBoard);
 };
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }, (key, value) => key === "fleetStatus" ? undefined : value) });
@@ -239,6 +239,10 @@ export const fetchDriverBoardHistory = (driverIds: string[], before = 0, field =
 export const retryBoardETA = (driverId: string, context: string) =>
   apiRequest<{ loads: BoardLoads }>(`/driver-board/eta-retry/${driverId}`, { method: "POST", body: JSON.stringify({ context }) });
 export const fetchBoardLoads = (driverId: string, from?: string, signal?: AbortSignal) => apiRequest<BoardLoads>(withQuery(`/driver-board/loads/${driverId}`, { from }), { signal });
+export const fetchBoardMapRoute = (driverId: string, signal?: AbortSignal) =>
+  apiRequest<{ route: import("./types").BoardMapRoute | null }>(`/driver-board/loads/${encodeURIComponent(driverId)}/map-route`, { signal });
+export const fetchBoardMapHistory = (driverId: string, signal?: AbortSignal) =>
+  apiRequest<{ truckId: string; points: import("./types").BoardMapHistoryPoint[] }>(`/driver-board/loads/${encodeURIComponent(driverId)}/map-history`, { signal });
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
   apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, revision: view.revision, fromDate: view.fromDate }) });
 export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry, personal = false) =>

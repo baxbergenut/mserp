@@ -15,29 +15,51 @@ import (
 )
 
 type BoardTravel struct {
-	RetryRequestedAt  time.Time           `json:"retryRequestedAt,omitempty"`
-	RetryCompletedAt  time.Time           `json:"retryCompletedAt,omitempty"`
-	Source            string              `json:"source,omitempty"`
-	Enabled           bool                `json:"enabled"`
-	Context           string              `json:"context"`
-	CalculatedAt      time.Time           `json:"calculatedAt"`
-	AttemptedAt       time.Time           `json:"attemptedAt"`
-	ReportedAt        time.Time           `json:"reportedAt"`
-	ArrivalAt         time.Time           `json:"arrivalAt"`
-	Miles             float64             `json:"miles"`
-	Motion            string              `json:"motion"`
-	Error             string              `json:"error"`
-	Assumptions       string              `json:"assumptions,omitempty"`
-	AddressRejected   bool                `json:"addressRejected,omitempty"`
-	LastKnownPosition bool                `json:"lastKnownPosition,omitempty"`
-	Position          *boardRoutePosition `json:"position,omitempty"`
-	Mode              string              `json:"mode,omitempty"`
+	Geometry          *boardroutes.RouteGeometry `json:"geometry,omitempty"`
+	RetryRequestedAt  time.Time                  `json:"retryRequestedAt,omitempty"`
+	RetryCompletedAt  time.Time                  `json:"retryCompletedAt,omitempty"`
+	Source            string                     `json:"source,omitempty"`
+	Enabled           bool                       `json:"enabled"`
+	Context           string                     `json:"context"`
+	CalculatedAt      time.Time                  `json:"calculatedAt"`
+	AttemptedAt       time.Time                  `json:"attemptedAt"`
+	ReportedAt        time.Time                  `json:"reportedAt"`
+	ArrivalAt         time.Time                  `json:"arrivalAt"`
+	Miles             float64                    `json:"miles"`
+	Motion            string                     `json:"motion"`
+	Error             string                     `json:"error"`
+	Assumptions       string                     `json:"assumptions,omitempty"`
+	AddressRejected   bool                       `json:"addressRejected,omitempty"`
+	LastKnownPosition bool                       `json:"lastKnownPosition,omitempty"`
+	Position          *boardRoutePosition        `json:"position,omitempty"`
+	Mode              string                     `json:"mode,omitempty"`
 }
 
 // Position belongs to the last successful provider route, never to a skipped poll.
 type boardRoutePosition struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
+}
+
+type BoardMapRoute struct {
+	Context      string                    `json:"context"`
+	Destination  string                    `json:"destination"`
+	StopType     string                    `json:"stopType"`
+	CalculatedAt time.Time                 `json:"calculatedAt"`
+	ReportedAt   time.Time                 `json:"reportedAt"`
+	Stale        bool                      `json:"stale"`
+	Geometry     boardroutes.RouteGeometry `json:"geometry"`
+}
+
+func (t BoardTravel) mapRoute(key string, stop BoardStop, now, gpsAt time.Time) *BoardMapRoute {
+	if !t.Enabled || t.Geometry == nil || t.Context != key || t.CalculatedAt.IsZero() ||
+		t.CalculatedAt.After(now) || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || gpsAt.IsZero() || gpsAt.After(now) {
+		return nil
+	}
+	return &BoardMapRoute{
+		Context: key, Destination: stop.Location, StopType: stop.Type, CalculatedAt: t.CalculatedAt,
+		ReportedAt: t.ReportedAt, Stale: t.stale(now, gpsAt) || t.Error != "", Geometry: *t.Geometry,
+	}
 }
 
 const (
@@ -435,6 +457,7 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 				}
 				t.Miles = float64(estimate.Meters) / 1609.344
 				t.Assumptions, t.LastKnownPosition = estimate.Assumptions, job.lastKnown
+				t.Geometry = estimate.Geometry
 			}
 		}
 		if manualRetry {

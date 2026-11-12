@@ -5,18 +5,12 @@ import type * as Leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { DriverBoardLocation } from "@/app/lib/types";
 import { isOldLocation } from "@/app/driver-board/board";
+import { truckHeadingPin, truckHeadingPinSize } from "./truckHeadingPin";
 
 function locationIcon(L: typeof Leaflet, heading: number | null | undefined, old: boolean) {
-  const hasHeading = heading != null && Number.isFinite(heading) && heading >= 0 && heading < 360;
-  const marker = document.createElement("div");
-  marker.setAttribute("role", "img");
-  marker.setAttribute("aria-label", hasHeading ? `Reported heading ${heading} degrees` : "Truck location; heading unavailable");
-  marker.dataset.heading = hasHeading ? String(heading) : "unknown";
-  marker.style.cssText = `width:30px;height:30px;border:2px solid white;border-radius:50%;background:${old ? "#71717a" : "#8b5cf6"};box-shadow:0 1px 8px #0008;display:grid;place-items:center;transform:rotate(${hasHeading ? heading : 0}deg)`;
-  marker.innerHTML = hasHeading
-    ? '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 21 12 17 4 21Z" fill="white"/></svg>'
-    : '<span style="width:9px;height:9px;background:white;border-radius:50%"></span>';
-  return L.divIcon({ html: marker, className: "truck-heading-marker", iconSize: [30, 30], iconAnchor: [15, 15] });
+  const marker = truckHeadingPin(heading);
+  marker.style.backgroundColor = old ? "#71717a" : "#8b5cf6";
+  return L.divIcon({ html: marker, className: "truck-heading-marker", iconSize: [truckHeadingPinSize, truckHeadingPinSize] });
 }
 
 export function TruckLocationMap({ location }: { location: DriverBoardLocation }) {
