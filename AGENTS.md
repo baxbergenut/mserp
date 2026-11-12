@@ -830,16 +830,17 @@ positive Reimburse-method expense credits already included in net payable.
 
 - Product branding is Clustie. `components/BrandLogo.tsx` uses the supplied logo
   pack artwork in `frontend/public/brand/`, with transparent backgrounds and the
-  symbol in the collapsed sidebar. A CSS alpha mask makes only the wordmark light
-  on dark themes; light themes retain navy, and the symbol/i dot keep their colors. Root metadata,
+  symbol in the collapsed sidebar. CSS selects a complete light-lettered wordmark
+  on dark themes and the original navy artwork on light themes. Both keep the
+  original symbol and blue dot over the i. Root metadata,
   `favicon.ico`, `icon.png`, `apple-icon.png` and `manifest.webmanifest` own browser
   and home-screen branding. Keep existing MSERP API/wire identifiers, environment
   variables, cookie/storage/event keys, sheet headers and historical records
   compatible; MS Express remains the operating company.
   Sidebar branding uses a 96px wordmark whose visible symbol matches the padded
-  32px collapsed icon. Reserve the frame's aspect ratio, remount image variants,
-  and clip the header during width transitions to avoid stale-image enlargement.
-  `node scripts/test-sidebar-branding.mjs` checks delayed image loads and toggling.
+  32px collapsed icon. Reserve each variant's frame and clip the header so a slow
+  image request cannot change its size. `node scripts/test-sidebar-branding.mjs`
+  checks theme contrast, delayed image loads and toggling.
 
 - Fleet > Inventory (`/fleet/inventory?tab=tablets`) and Fleet > Trailers
   (`/fleet/trailers`) use migration 119, repository `inventory.go` /

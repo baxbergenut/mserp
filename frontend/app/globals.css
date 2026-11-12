@@ -7,14 +7,13 @@
   outline-offset: -2px;
 }
 
-/* Reuse the original artwork's alpha for light lettering on dark surfaces.
-   The clip preserves the full-color symbol and the blue dot over the i. */
+/* Select a complete wordmark so dark surfaces never show the navy fallback. */
 .brand-logo-wordmark {
-  background: #f4f4f5;
-  mask: url("/brand/clustie-logo.png") center / 100% 100% no-repeat;
-  clip-path: polygon(28% 0, 81% 0, 81% 25%, 86% 25%, 86% 0, 100% 0, 100% 100%, 28% 100%);
+  background: url("/brand/clustie-logo-dark.png") center / contain no-repeat;
 }
-html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-logo-wordmark { display: none; }
+html:is([data-theme="solarized-light"], [data-theme="default-light"]) .brand-logo-wordmark {
+  background-image: url("/brand/clustie-logo.png");
+}
 
 :root {
   --ui-font-size: 13px;
