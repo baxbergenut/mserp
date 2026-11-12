@@ -69,7 +69,12 @@ export default function InvestorsPage() {
     <TableShell>
       <table className="w-full min-w-[760px] text-left text-[13px]">
           <thead><tr className="border-b border-zinc-800/50 text-zinc-500">{["Investor", "Type", "Contact", "Owned trucks", "Status", "Actions"].map((label) => <th key={label} className={`px-4 py-3 font-medium ${label === "Actions" ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
-          <tbody>{isLoading ? <tr><td colSpan={6} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : investors.length === 0 ? <tr><td colSpan={6}>{<EmptyState message={search ? "No investors match your search." : "No investors yet."} />}</td></tr> : <>{investors.map((investor) => <tr key={investor.id} className="border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
+          <tbody>{isLoading ? <tr><td colSpan={6} className="p-8 text-center text-zinc-500" role="status">Loading…</td></tr> : investors.length === 0 ? <tr><td colSpan={6}>{<EmptyState message={search ? "No investors match your search." : "No investors yet."} />}</td></tr> : <>{investors.map((investor) => <tr key={investor.id}
+            onClick={(event) => {
+              if (!(event.target instanceof Element) || event.target.closest("a, button") || window.getSelection()?.type === "Range") return;
+              event.currentTarget.cells[0]?.querySelector("a")?.click();
+            }}
+            className="cursor-pointer border-b border-zinc-900/70 text-zinc-300 transition last:border-0 hover:bg-zinc-800/15">
             <td className="px-4 py-3 font-medium text-zinc-200"><Link className="hover:text-blue-400" href={`/investors/detail?id=${investor.id}`}>{investor.fullName}</Link></td>
             <td className="px-4 py-3"><span className="rounded-full bg-blue-500/10 px-2 py-1 text-[11px] text-blue-400">{investor.isCompany ? "Company" : investor.driverId ? "Driver" : "Investor"}</span></td>
             <td className="px-4 py-3"><div className="text-zinc-400">{formatPhone(investor.phone) || "—"}</div><div className="mt-0.5 text-[11px] text-zinc-500">{investor.email ?? "No email"}</div></td>
