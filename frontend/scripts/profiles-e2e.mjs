@@ -93,8 +93,8 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await expect(profileHeader.getByText('Investor share', { exact: true })).toHaveCount(0);
   await expect(profileHeader.getByRole('table', { name: 'Owned trucks' })).toHaveCount(0);
   const truckTerms = page.getByRole('table', { name: 'Owned trucks' }).getByRole('row').filter({ has: page.getByRole('link', { name: '102', exact: true }) });
-  await expect(truckTerms).toContainText('88% of driver gross');
-  await expect(truckTerms).toContainText('2026-09-28');
+  await expect(truckTerms).toContainText('No current agreement');
+  await expect(truckTerms.getByRole('button')).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Investor statement history' })).toHaveCount(0);
   await page.screenshot({ path: join(temp, 'investor-profile.png'), fullPage: true });
   await profileHeader.getByRole('link', { name: 'Investor Pay', exact: true }).click();
@@ -186,6 +186,7 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await page.goto(`${base}/investors/detail?id=${f.investor}`);
   await expect(profileHeader.getByRole('link', { name: 'Investor Pay', exact: true })).toBeVisible();
   await expect(truckTerms).toContainText('88% of driver gross');
+  await expect(truckTerms).toContainText('2026-09-28');
   expect(await page.evaluate(() => document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'investor-profile-mobile.png'), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
