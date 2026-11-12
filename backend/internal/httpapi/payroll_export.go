@@ -31,12 +31,7 @@ func registerPayrollExport(r chi.Router, path, kind string, repo *repository.Dri
 			writeAPIError(w, http.StatusBadRequest, "Invalid statement")
 			return
 		}
-		var report repository.DriverPayWeek
-		if repo.PreparedReadsEnabled() {
-			report, err = repo.PreparedPayroll(r.Context(), kind, week, query, false)
-		} else {
-			report, err = repo.PayrollPage(r.Context(), kind, week, query)
-		}
+		report, err := repo.PayrollExportPage(r.Context(), kind, week, query)
 		if err != nil {
 			fail(w, err)
 			return

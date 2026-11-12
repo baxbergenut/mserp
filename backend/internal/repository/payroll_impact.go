@@ -87,6 +87,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	fuelUnits := map[string]bool{}
 	loadIDs := map[int64]bool{}
 	loadNumbers := map[string]bool{}
+	brokerNumbers := map[string]bool{}
 	refreshHeader := false
 	safe := true
 	periodOnly := c != nil && (strings.HasSuffix(c.name, ".finalize") || strings.HasSuffix(c.name, ".reopen"))
@@ -234,6 +235,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 					broker = true
 					if number := strings.ToLower(strings.TrimSpace(value("broker_load_number"))); number != "" {
 						loadNumbers[number] = true
+						brokerNumbers[number] = true
 					}
 				}
 			}
@@ -437,7 +439,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	sort.Slice(changedLoads, func(i, j int) bool { return changedLoads[i] < changedLoads[j] })
 	var loadWeeks map[string]bool
 	if len(changedLoads) > 0 || len(loadNumbers) > 0 {
-		loadWeeks, err = payrollLoadImpact(ctx, tx, changedLoads, keys(loadNumbers), roots)
+		loadWeeks, err = payrollLoadImpact(ctx, tx, changedLoads, keys(loadNumbers), keys(brokerNumbers), roots)
 		if err != nil {
 			return nil, err
 		}
@@ -459,7 +461,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		// Board duplicate ranking is chronological and transfers only move a
 		// weekend into the following week. Ordinary board edits therefore cannot
 		// change earlier weeks. Explicit placements can bring that source back
-		// into an earlier statement, including frozen discrepancy evidence.
+		// into an earlier statement.
 		// Include cross-driver placements and retained placement history too:
 		// a removed/reassigned placement can still be shown by a frozen report.
 		err = tx.QueryRow(ctx, `SELECT least($1::date,coalesce(min(week_start),$1::date))::text

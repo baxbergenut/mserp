@@ -73,7 +73,7 @@ conversion used that faulty check and created duplicate slots.
 
 ## Pay-page actions
 
-Expanded Driver Pay and Investor Pay load rows show a blue warning for
+Expanded open Driver Pay and Investor Pay load rows show a blue warning for
 dispatcher name differences. The read-only comparison uses the synced
 DataTruck name and the dated Clustie assignment on the original service day.
 Close name variants are labelled separately. Comparison evidence is absent
@@ -128,6 +128,10 @@ positive Reimburse-method expense credits already included in net payable.
 Driver exports show Driver Name, Salary, Reimbursed Amount and Total Payable;
 Salary is net payable minus those reimbursement credits, so Salary plus
 Reimbursed Amount equals Total Payable, including when Salary is negative.
+During Driver Pay preparation, Export reads a current authoritative report
+in one snapshot, with frozen finalizations and current drafts. Add driver checks
+current membership under its native guards. Finalized rows show their settlement
+status while background source evidence refreshes.
 
 ## Repository map
 
@@ -246,8 +250,9 @@ Reimbursed Amount equals Total Payable, including when Salary is negative.
   exports stay available when that proof and every statement revision are current.
   Imported load changes use exact IDs and captured old/new numbers to scope
   invalidation to native board dates, payroll transfer dates, placement history
-  and frozen statement weeks. Provider driver/truck labels alone do not establish
-  payroll impact. Mixed captures retain these period proofs and all epoch deltas.
+  and their captured destinations. Provider driver/truck labels alone do not
+  establish payroll impact. Broker expenses can also route to frozen load numbers.
+  Mixed captures retain these period proofs and all epoch deltas.
   Unproven impact retains conservative calculation. Expense eligibility remains
   before the following Thursday (week+10, exclusive); unpaid carry and finalized
   guards are unchanged. APIs expose latestWeek alongside the actual currentWeek. Future
@@ -505,8 +510,8 @@ Reimbursed Amount equals Total Payable, including when Salary is negative.
   indexes restrict this to pending rows and refreshed IDs; identical refreshes do
   not change board versions or financial revisions. Board and Driver/Investor Pay
   expose current driver-gross comparisons and independent versioned acceptance.
-  Frozen amounts stay frozen while display-only source comparisons refresh in one
-  bounded read. Projection schema 9 and the driver_base source-card fingerprint
+  Finalized rows read their saved amounts and skip live source comparisons.
+  Projection schema 9 and the driver_base source-card fingerprint
   refresh the API contract without invalidating unrelated reusable facts.
   Install the matching deploy helper before 195; it pauses writers while adding
   the pending-default columns and triggers. Migration alone changes no amounts.

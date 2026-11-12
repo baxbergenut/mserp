@@ -5,15 +5,17 @@ import type { DriverPayLoad } from "@/app/lib/types";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 import { StatementMenu } from "./StatementMenu";
 
-export function PaySourceCell({ load, field, className, disabled, onAccept, children }: {
-  load: DriverPayLoad; field: "originalRate" | "totalMiles" | "driverGross"; className: string; disabled: boolean;
+export function PaySourceCell({ load, field, className, disabled, compareSource, onAccept, children }: {
+  load: DriverPayLoad; field: "originalRate" | "totalMiles" | "driverGross"; className: string; disabled: boolean; compareSource: boolean;
   onAccept?: (load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => Promise<void>;
   children?: ReactNode;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const close = useCallback(() => setMenu(null), []);
   const value = load[field];
-  const source = field === "originalRate" ? load.systemOriginalRate : field === "driverGross" ? load.systemDriverGross : load.systemMiles;
+  const source = compareSource ? {
+    originalRate: load.systemOriginalRate, driverGross: load.systemDriverGross, totalMiles: load.systemMiles,
+  }[field] : undefined;
   const mismatch = load.loadRecordId !== null && source != null && (field === "driverGross" ? source === "" || value === "" || hundredths(value) !== hundredths(source) : !!value && (source === "" || hundredths(value) !== hundredths(source)));
   const money = field !== "totalMiles";
   const label = field === "driverGross" ? "Driver gross" : money ? "Total gross" : "Miles";

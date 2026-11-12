@@ -4,11 +4,26 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/jackc/pgx/v5"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
+
+// PayrollExportPage uses prepared statements when current. Driver Pay can
+// export during preparation by reading the same authoritative financial report
+// in a fresh snapshot, including saved finalizations and current drafts.
+func (r *DriverPayRepository) PayrollExportPage(ctx context.Context, kind string, week time.Time, query PayPageQuery) (DriverPayWeek, error) {
+	if r.PreparedReadsEnabled() {
+		report, err := r.PreparedPayroll(ctx, kind, week, query, false)
+		if kind != "driver" || !errors.Is(err, ErrPayrollPreparing) {
+			return report, err
+		}
+	}
+	return r.PayrollPage(ctx, kind, week, query)
+}
 
 // Financial routing is shared with full reports. Cache the compact projection,
 // then hydrate only the requested connected set in the SAME database snapshot.
@@ -120,9 +135,6 @@ func finishPayrollRead(ctx context.Context, tx pgx.Tx, kind string, report *Driv
 		return err
 	}
 	if !payrollSummaryOnly(ctx) {
-		if err := decorateFrozenSourceComparisons(ctx, tx, report); err != nil {
-			return err
-		}
 		if err := decoratePayDayStatuses(ctx, tx, kind, report); err != nil {
 			return err
 		}

@@ -33,7 +33,7 @@ func dispatcherFirstInitialMatches(abbreviated, full []string) bool {
 		utf8.RuneCountInString(abbreviated[0]) == 1 && strings.HasPrefix(full[0], abbreviated[0])
 }
 
-// Add current comparison evidence only to returned load rows. Financial calculations,
+// Compare current dispatcher evidence only on open statements. Financial calculations,
 // prepared revisions and frozen statement bodies do not contain this decoration.
 func decoratePayDispatcherComparisons(ctx context.Context, tx pgx.Tx, kind string, report *DriverPayWeek) error {
 	type loadReference struct {
@@ -44,6 +44,9 @@ func decoratePayDispatcherComparisons(ctx context.Context, tx pgx.Tx, kind strin
 	}
 	var refs []loadReference
 	for i, d := range report.Drivers {
+		if d.Settlement != nil && d.Settlement.Finalized {
+			continue
+		}
 		for j, load := range d.Loads {
 			if load.LoadRecordID == nil {
 				continue
