@@ -416,7 +416,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 				return source, investor, err
 			}
 			if g.card.Settlement == nil || !g.card.Settlement.Finalized {
-				if err = addInvestorAccounts(ctx, tx, &g.card, charges, chargeLoads); err != nil {
+				if err = addInvestorAccounts(ctx, tx, &g.card, charges, chargeLoads, source.WeekStart); err != nil {
 					return source, investor, err
 				}
 			}

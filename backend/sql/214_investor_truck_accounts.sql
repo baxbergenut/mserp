@@ -147,4 +147,18 @@ BEGIN
  RETURN NEW;
 END $$;
 
+
+-- Default-only accounts should not prevent deleting an unused truck. Any balance,
+-- correction, payment or release history retains the restrictive foreign key.
+CREATE FUNCTION remove_unused_investor_truck_escrow() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ DELETE FROM driver_escrows e WHERE e.truck_id=OLD.id AND e.opening_paid=0 AND e.balance_version=1
+ AND NOT EXISTS(SELECT 1 FROM driver_escrow_payments p WHERE p.escrow_id=e.id)
+ AND NOT EXISTS(SELECT 1 FROM driver_escrow_releases r WHERE r.escrow_id=e.id)
+ AND NOT EXISTS(SELECT 1 FROM driver_escrow_opening_events h WHERE h.escrow_id=e.id);
+ RETURN OLD;
+END $$;
+CREATE TRIGGER investor_truck_escrow_unused BEFORE DELETE ON trucks
+ FOR EACH ROW EXECUTE FUNCTION remove_unused_investor_truck_escrow();
+
 COMMIT;

@@ -32,28 +32,29 @@ func investorEscrowDeductions(ctx context.Context, tx pgx.Tx, truck, owner, week
 	return out, rows.Err()
 }
 
-func addInvestorAccounts(ctx context.Context, tx pgx.Tx, d *DriverPayDriver, data ChargeData, loads map[string]map[string]bool) error {
-	escrow, err := investorEscrowDeductions(ctx, tx, d.ID, d.InvestorID, d.Edits.WeekStart)
+// Use the report week: legacy saved edits may omit their weekStart.
+func addInvestorAccounts(ctx context.Context, tx pgx.Tx, d *DriverPayDriver, data ChargeData, loads map[string]map[string]bool, week string) error {
+	escrow, err := investorEscrowDeductions(ctx, tx, d.ID, d.InvestorID, week)
 	if err != nil {
 		return err
 	}
 	d.Edits.ExpenseDeductions = append(d.Edits.ExpenseDeductions, escrow...)
 	data.Schedules = truckOwnerSchedules(data.Schedules, d.ID, d.InvestorID)
-	eligible, checkErr := investorAccountEligible(ctx, tx, d.ID, d.InvestorID, d.Edits.WeekStart)
+	eligible, checkErr := investorAccountEligible(ctx, tx, d.ID, d.InvestorID, week)
 	if checkErr != nil {
 		return checkErr
 	}
 	if !eligible {
 		data.Schedules = nil
 	}
-	generated, e := generatedForWeek(data, loads, d.Edits.WeekStart)
+	generated, e := generatedForWeek(data, loads, week)
 	err = e
 	d.Edits.GeneratedCharges = generated[d.ID]
 	if err != nil {
 		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT r.id::text,r.amount::text FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id
- WHERE e.truck_id=$1 AND e.owner_id=$2 AND r.week_start=$3::date AND NOT r.cancelled AND r.payroll_return IS NULL AND r.correction_reason IS NULL`, d.ID, d.InvestorID, d.Edits.WeekStart)
+ WHERE e.truck_id=$1 AND e.owner_id=$2 AND r.week_start=$3::date AND NOT r.cancelled AND r.payroll_return IS NULL AND r.correction_reason IS NULL`, d.ID, d.InvestorID, week)
 	if err != nil {
 		return err
 	}
