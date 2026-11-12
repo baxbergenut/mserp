@@ -1932,8 +1932,12 @@ assignment lookup lists.
   amounts, explicit overrides, pause/reopen and audit rules remain in effect.
   Truck phases are effective Mondays, use exact amount options and calendar/loads/
   no_loads eligibility, and retain later phases. Optimistic versions and the shared
-  financial lock protect saves; finalized driver or investor statements block
-  changes. Charge type deletion normally requires no truck assignments; Archive
+  financial lock protect saves; finalized investor statements and dated owner-driver
+  statements block changes. Recurring-charge Driver Pay locks use ownership at the
+  finalized week's end, ignoring ended/empty ownership records and stale agreements;
+  a former owner's finalized hired-driver wages do not lock the new investor's fees.
+  Settlement-term edits retain their broader routing guard. Charge type deletion
+  normally requires no truck assignments; Archive
   retains used types. The one-time removal of "charge" is explicit migration data
   cleanup, not a reusable destructive deletion endpoint.
   Truck matrix selections update immediately and save through

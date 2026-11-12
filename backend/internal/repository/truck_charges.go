@@ -329,18 +329,24 @@ func lockTruckAccounting(ctx context.Context, tx pgx.Tx) error {
 	return err
 }
 
-// One lock rule for the grid and the fenced write. The driver check is
-// intentionally broader than the investor interval and independent of type.
+// One lock rule for the grid and the fenced write. Recurring fees follow dated
+// ownership, not every driver ever recorded as an owner. Terms retain their
+// broader guard because they can change settlement routing and earnings.
 const truckClosedPeriodsSQL = `WITH targets AS MATERIALIZED (
  SELECT id AS truck_id FROM unnest($2::uuid[]) u(id)
 ), driver_closed AS MATERIALIZED (
  SELECT t.truck_id FROM targets x JOIN truck_settlement_terms t USING(truck_id)
  JOIN investors i ON i.id=t.owner_id JOIN payroll_settlements p ON p.driver_id=i.driver_id
- WHERE p.finalized AND p.week_start >= $1::date
+ WHERE p.finalized AND p.week_start >= $1::date AND $3::text='terms'
  UNION
  SELECT h.truck_id FROM targets x JOIN truck_ownership_history h USING(truck_id)
  JOIN investors i ON i.id=h.owner_id JOIN payroll_settlements p ON p.driver_id=i.driver_id
  WHERE p.finalized AND p.week_start >= $1::date
+ AND ($3::text='terms' OR (
+   (NOT h.start_known OR h.unassigned_at IS NULL OR h.unassigned_at>h.assigned_at)
+   AND (NOT h.start_known OR h.assigned_at < ((p.week_start+7)::timestamp AT TIME ZONE 'America/New_York'))
+   AND (h.unassigned_at IS NULL OR h.unassigned_at >= ((p.week_start+7)::timestamp AT TIME ZONE 'America/New_York'))
+ ))
 ), investor_first AS MATERIALIZED (
  SELECT w.truck_id,min(w.week_start) AS week_start FROM targets x JOIN investor_pay_weeks w USING(truck_id)
  WHERE w.finalized AND w.week_start >= $1::date GROUP BY w.truck_id
