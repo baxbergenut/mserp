@@ -3693,6 +3693,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Status Board requests compact overview responses, relies on live snapshots while
   connected, and applies the latest retained snapshot on focusout without a GET.
   An older in-flight refresh cannot overwrite a newer stream snapshot.
+  Board streams flush their authenticated connection before snapshot work.
+  `initial=none` skips the duplicate opening snapshot: new clients subscribe before
+  their initial GET, with a 150 ms HTTP fallback and explicit reconnect recovery.
+  Pending invalidations resume after opening finishes; legacy stream clients keep
+  initial snapshots. Check `TestBoardStreamOpeningDoesNotWaitForSnapshot` and
+  `frontend/scripts/test-read-requests.mjs` alongside browser refresh/reliability tests.
   Truck dropdown reads use `fleet_truck_read_state`; reviewed handovers and saves
   retain authoritative status functions and revision checks. `TestFleetStatusDatabase`
   compares the complete dropdown choices against the canonical query after transitions.

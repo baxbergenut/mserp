@@ -190,6 +190,86 @@ func TestTaskEventsCoalesce(t *testing.T) {
 	}
 }
 
+func TestBoardStreamOpeningDoesNotWaitForSnapshot(t *testing.T) {
+	for _, initial := range []string{"", "none"} {
+		t.Run("initial="+initial, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			board := newDatabaseEvents(nil, logger, "test", "driver_board.read")
+			board.cancel = func() {}
+			board.snapshotEvent = "board"
+			defer board.shutdown()
+			presence := newDatabaseEvents(nil, logger, "presence", "driver_board.read")
+			presence.cancel = func() {}
+			presence.snapshotEvent = "peers"
+			presence.snapshot = func(context.Context) ([]byte, error) { return []byte(`[]`), nil }
+			defer presence.shutdown()
+			started := make(chan struct{}, 1)
+			release := make(chan struct{})
+			board.snapshot = func(ctx context.Context) ([]byte, error) {
+				started <- struct{}{}
+				select {
+				case <-release:
+					return []byte(`{"entries":[]}`), nil
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			hash := hashToken("opening-session")
+			store := &fakeAuthStore{sessions: map[string]repository.AuthSession{hash: {User: repository.AuthUser{Permissions: []string{"driver_board.read"}}}}}
+			server := httptest.NewServer(board.serve(newAuthHandler(logger, store, AuthOptions{}), presence))
+			defer server.Close()
+			request, _ := http.NewRequest("GET", server.URL+"?initial="+initial, nil)
+			request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "opening-session"})
+			client := server.Client()
+			client.Timeout = 2 * time.Second
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal("connection blocked on board calculation", err)
+			}
+			defer response.Body.Close()
+			scanner := bufio.NewScanner(response.Body)
+			for scanner.Scan() {
+				if scanner.Text() == ": connected" {
+					break
+				}
+			}
+			if scanner.Err() != nil {
+				t.Fatal(scanner.Err())
+			}
+			if initial == "none" {
+				// Presence follows the optional initial snapshot. Reaching it proves
+				// startup skipped calculation, rather than just racing the goroutine.
+				for scanner.Scan() {
+					if scanner.Text() == "event: peers" {
+						break
+					}
+				}
+				if scanner.Err() != nil {
+					t.Fatal(scanner.Err())
+				}
+				select {
+				case <-started:
+					t.Fatal("opening duplicated the HTTP board read")
+				default:
+				}
+				board.publish()
+			}
+			select {
+			case <-started:
+			case <-time.After(time.Second):
+				t.Fatal("legacy snapshot or committed update missing")
+			}
+			close(release)
+			for scanner.Scan() {
+				if scanner.Text() == "event: board" {
+					return
+				}
+			}
+			t.Fatal("snapshot was not delivered", scanner.Err())
+		})
+	}
+}
+
 func TestTaskEventsDatabase(t *testing.T) {
 	dsn := os.Getenv("MSERP_ACCESS_TEST_DATABASE_URL")
 	if dsn == "" {

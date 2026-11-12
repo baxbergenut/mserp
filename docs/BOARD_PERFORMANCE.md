@@ -66,6 +66,19 @@ progress, and existing financial guards.
 
 ## Reproduce and verify
 
+### Connection establishment
+
+Opening previously calculated the board once for HTTP and again for the initial
+event-stream snapshot. The stream did not flush its headers until that calculation
+and any shared snapshot mutex wait finished, so Connecting could last seconds.
+Streams now flush the authorized connection first. New clients request
+`initial=none`, wait for that subscription before their initial HTTP read, and
+recover with a GET after reconnect. A 150 ms fallback keeps HTTP opening available
+when streaming is blocked; a late connection then reconciles any missed interval.
+Invalidations received while loading remain pending until the board can apply them.
+Legacy clients still receive an initial snapshot, and commit snapshots retain
+per-subscriber permissions and existing draft/version checks.
+
 Build with `NEXT_PUBLIC_API_URL=/api`, then run from `frontend/`:
 
 ```powershell

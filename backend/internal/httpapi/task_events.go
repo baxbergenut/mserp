@@ -270,9 +270,19 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			// before waiting: an expired HTTP write deadline cannot be extended.
 			return controller.SetWriteDeadline(time.Time{}) == nil
 		}
-		lastFrame := h.frame(r.Context(), "changed")
-		if !send("retry: 5000\n" + lastFrame) {
+		// Establish the authorized stream before any expensive snapshot or cache
+		// mutex wait. New board clients fetch once after this subscription opens;
+		// legacy clients still receive their initial snapshot below.
+		if !send("retry: 5000\n: connected\n\n") {
 			return
+		}
+		lastFrame := ""
+		deferInitial := (h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard") && r.URL.Query().Get("initial") == "none"
+		if !deferInitial {
+			lastFrame = h.frame(r.Context(), "changed")
+			if !send(lastFrame) {
+				return
+			}
 		}
 		if presenceChanges != nil && !send(presence[0].frame(r.Context(), "presence")) {
 			return
