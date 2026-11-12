@@ -33,7 +33,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
-  { href: "/map", label: "Map", icon: Map },
+  { href: "/map", label: "Map", icon: Map, isNew: true },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
@@ -220,6 +220,9 @@ export function Sidebar() {
                 }`}
               />
               {!collapsed && <span>{item.label}</span>}
+              {!collapsed && "isNew" in item && item.isNew && (
+                <span className="ml-auto rounded-full bg-blue-500/15 px-1.5 text-[11px] font-semibold text-blue-300">New</span>
+              )}
               <NavBadge badge={badge} collapsed={collapsed} />
             </Link>
           );
