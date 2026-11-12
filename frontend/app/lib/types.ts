@@ -587,6 +587,12 @@ export interface BoardAutomation {
   travelRetryPending?: boolean; travelStale?: boolean; travelArrivalAt?: string; customDestination?: boolean;
   requiresConfirmation: boolean; routingEnabled: boolean; manualETAValid: boolean;
 }
+export interface BoardMapLeg {
+  kind: "current" | "deadhead" | "next-load";
+  loadNumber: string;
+  miles: number;
+  geometry: { polyline: string; precision: number };
+}
 export interface BoardMapRoute {
   context: string;
   destination: string;
@@ -595,6 +601,8 @@ export interface BoardMapRoute {
   reportedAt: string;
   stale: boolean;
   geometry: { polyline: string; precision: number };
+  miles?: number;
+  following?: BoardMapLeg[];
 }
 export interface BoardMapHistoryPoint {
   latitude: number;

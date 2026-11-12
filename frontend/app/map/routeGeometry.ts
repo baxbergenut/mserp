@@ -26,7 +26,7 @@ export function drivenTrail(history: BoardMapHistoryPoint[], location: DriverBoa
   return segments.filter(points => points.length > 1);
 }
 
-function decodeRoute({ polyline, precision }: BoardMapRoute["geometry"]): Coordinates[] {
+export function decodeRoute({ polyline, precision }: BoardMapRoute["geometry"]): Coordinates[] {
   if (precision !== 5 && precision !== 7) return [];
   const scale = 10 ** precision;
   const points: Coordinates[] = [];
@@ -52,10 +52,26 @@ function decodeRoute({ polyline, precision }: BoardMapRoute["geometry"]): Coordi
   return points;
 }
 
+export function distanceMeters([lat, lng]: Coordinates, [otherLat, otherLng]: Coordinates) {
+  const radians = Math.PI / 180;
+  const a = Math.sin((otherLat - lat) * radians / 2) ** 2 +
+    Math.cos(lat * radians) * Math.cos(otherLat * radians) * Math.sin((otherLng - lng) * radians / 2) ** 2;
+  return 12_742_000 * Math.asin(Math.sqrt(Math.min(1, a)));
+}
+
+function pathLength(points: Coordinates[]) {
+  return points.slice(1).reduce((length, point, i) => length + distanceMeters(points[i], point), 0);
+}
+
+export function formatRouteMiles(miles?: number) {
+  if (miles == null || !Number.isFinite(miles) || miles < 0) return "";
+  return miles > 0 && miles < 1 ? "<1 mi" : `${Math.round(miles).toLocaleString("en-US")} mi`;
+}
+
 export function remainingRoute(route: BoardMapRoute, location: DriverBoardLocation) {
   const points = decodeRoute(route.geometry);
   if (points.length < 2) return null;
-  if (Date.parse(location.reportedAt) <= Date.parse(route.reportedAt)) return { points, stale: route.stale };
+  if (Date.parse(location.reportedAt) <= Date.parse(route.reportedAt)) return { points, stale: route.stale, miles: route.miles };
 
   // Match a newer GPS fix to the road before dropping the already driven portion.
   const longitudeScale = Math.cos(location.latitude * Math.PI / 180);
@@ -75,6 +91,9 @@ export function remainingRoute(route: BoardMapRoute, location: DriverBoardLocati
       closest = { end, point: [startLat + dy * fraction, startLng + (endLng - startLng) * fraction], distance };
     }
   }
-  if (!closest || closest.distance > 250) return { points, stale: true };
-  return { points: [closest.point, ...points.slice(closest.end)], stale: route.stale };
+  if (!closest || closest.distance > 250) return { points, stale: true, miles: route.miles };
+  const remaining = [closest.point, ...points.slice(closest.end)];
+  const total = pathLength(points);
+  const miles = route.miles != null && total > 0 ? route.miles * Math.min(1, pathLength(remaining) / total) : route.miles;
+  return { points: remaining, stale: route.stale, miles };
 }

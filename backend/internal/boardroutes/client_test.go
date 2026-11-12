@@ -11,6 +11,35 @@ import (
 	"time"
 )
 
+func TestTomTomItineraryUsesOneRequestAndKeepsActiveStopEstimate(t *testing.T) {
+	calls, reservations := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if !strings.HasSuffix(r.URL.Path, "/40.0000000,-74.0000000:41.0000000,-73.0000000:42.0000000,-72.0000000:43.0000000,-71.0000000/json") {
+			t.Errorf("unexpected waypoint order: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"routes":[{"summary":{"travelTimeInSeconds":3000,"lengthInMeters":20000},"legs":[
+			{"summary":{"travelTimeInSeconds":600,"lengthInMeters":3000},"encodedPolyline":"first","encodedPolylinePrecision":5},
+			{"summary":{"travelTimeInSeconds":900,"lengthInMeters":5000},"encodedPolyline":"second","encodedPolylinePrecision":5},
+			{"summary":{"travelTimeInSeconds":1500,"lengthInMeters":12000},"encodedPolyline":"third","encodedPolylinePrecision":7}
+		]}]}`))
+	}))
+	defer server.Close()
+	client := NewClient(Options{TomTomAPIKey: "fixture", RequestsPerMinute: 120})
+	client.TomTomURL = server.URL
+	client.Budget = budgetFunc(func(context.Context, Options) (string, error) { reservations++; return "tomtom", nil })
+	estimate, err := client.Route(context.Background(), 40, -74, 41, -73, Waypoint{42, -72}, Waypoint{43, -71})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || reservations != 1 || estimate.Duration != 10*time.Minute || estimate.Meters != 3000 || estimate.Geometry == nil || estimate.Geometry.Polyline != "first" {
+		t.Fatalf("calls=%d reservations=%d estimate=%+v", calls, reservations, estimate)
+	}
+	if len(estimate.Following) != 2 || estimate.Following[0].Meters != 5000 || estimate.Following[1].Meters != 12000 || estimate.Following[1].Geometry == nil || estimate.Following[1].Geometry.Precision != 7 {
+		t.Fatalf("unexpected following legs: %+v", estimate.Following)
+	}
+}
+
 func TestCarRoutes(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string

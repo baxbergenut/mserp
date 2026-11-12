@@ -5,15 +5,29 @@ import { ChevronDown, Map as MapIcon } from "lucide-react";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { PageHeader } from "@/app/components/PageHeader";
 import { isOldLocation, statusColor, statusLabel } from "@/app/driver-board/board";
+import { facilityETATitle } from "@/app/driver-board/eta";
 import { fetchBoardMapHistory, fetchBoardMapRoute, fetchDriverBoard, subscribeBoardEvents } from "@/app/lib/api";
-import type { BoardMapHistoryPoint, BoardMapRoute, DriverBoard } from "@/app/lib/types";
-import { FleetLocationMap, type FleetStopFlag } from "./FleetLocationMap";
-import { drivenTrail, remainingRoute } from "./routeGeometry";
+import type { BoardLoad, BoardMapHistoryPoint, BoardMapRoute, DriverBoard } from "@/app/lib/types";
+import { FleetLocationMap, type FleetRouteLine, type FleetStopFlag } from "./FleetLocationMap";
+import { decodeRoute, distanceMeters, drivenTrail, formatRouteMiles, remainingRoute } from "./routeGeometry";
 
 const reportTime = new Intl.DateTimeFormat("en-US", {
   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   timeZone: "America/New_York", timeZoneName: "short",
 });
+
+function stopFlags(load: BoardLoad | null | undefined, activeStopKey?: string, arrived = false, eta = ""): FleetStopFlag[] {
+  if (!load || load.sourceMissing) return [];
+  return (load.stops ?? []).flatMap(({ key, type, latitude, longitude, streetAddress, location }) => {
+    const kind = type.toLowerCase();
+    if ((kind !== "pickup" && kind !== "delivery") || latitude == null || longitude == null ||
+      !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 || Math.abs(longitude) > 180 || (latitude === 0 && longitude === 0)) return [];
+    const address = [streetAddress?.trim(), location?.trim()].filter(Boolean).join(", ");
+    const active = key === activeStopKey;
+    return [{ kind, point: [latitude, longitude], address, loadNumber: load.number, arrived: active && arrived, eta: active ? eta : "" }];
+  });
+}
 
 export default function FleetMapPage() {
   const [board, setBoard] = useState<DriverBoard | null>(null);
@@ -21,7 +35,7 @@ export default function FleetMapPage() {
   const [selectedId, setSelectedId] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [routeResult, setRouteResult] = useState<{ driverId: string; context: string; route: BoardMapRoute | null } | null>(null);
+  const [routeResult, setRouteResult] = useState<{ driverId: string; context: string; revision?: string; route: BoardMapRoute | null } | null>(null);
   const [historyResult, setHistoryResult] = useState<{ driverId: string; truckId: string; points: BoardMapHistoryPoint[] | null } | null>(null);
 
   useEffect(() => {
@@ -76,29 +90,37 @@ export default function FleetMapPage() {
   const drivers = useMemo(() => (board?.drivers ?? []).slice().sort((a, b) => a.fullName.localeCompare(b.fullName)), [board]);
   const selected = drivers.find(driver => driver.id === selectedId);
   const selectedPin = pins.find(pin => pin.driverId === selectedId);
-  const selectedLoad = selected ? board?.loads[selected.id]?.current : null;
-  const stops = useMemo<FleetStopFlag[]>(() => {
-    if (!selectedLoad || selectedLoad.sourceMissing) return [];
-    return (selectedLoad.stops ?? []).flatMap(({ type, latitude, longitude, streetAddress, location }) => {
-      const kind = type.toLowerCase();
-      if ((kind !== "pickup" && kind !== "delivery") || latitude == null || longitude == null ||
-        !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-        Math.abs(latitude) > 90 || Math.abs(longitude) > 180 || (latitude === 0 && longitude === 0)) return [];
-      const address = [streetAddress?.trim(), location?.trim()].filter(Boolean).join(", ");
-      return [{ kind, point: [latitude, longitude], address }];
-    });
-  }, [selectedLoad]);
+  const selectedLoads = selected ? board?.loads[selected.id] : undefined;
+  const selectedLoad = selectedLoads?.current;
+  const nextLoad = selectedLoads?.next?.[0];
+  const automation = selectedLoads?.automation;
+  const activeStop = selectedLoad?.stops?.find(stop => stop.key === selectedLoads?.stopKey);
+  const activeStopKey = activeStop?.key;
+  const selectedEntry = selected && entries.get(selected.id);
+  const pinLocation = selectedPin?.location;
+  const truckAtStop = !!(pinLocation && activeStop?.latitude != null && activeStop.longitude != null &&
+    distanceMeters([pinLocation.latitude, pinLocation.longitude], [activeStop.latitude, activeStop.longitude]) <= 125);
+  const hasActiveDestination = !!automation?.context && !!selectedLoads?.destinationSource && !automation.customDestination;
+  const gpsAge = now - Date.parse(pinLocation?.reportedAt ?? "");
+  const arrived = hasActiveDestination && (!!automation?.arrived || (truckAtStop && gpsAge >= 0 && gpsAge <= 10 * 60_000));
+  const eta = hasActiveDestination && !arrived && activeStop ? facilityETATitle(selectedEntry?.eta ?? "", { ...automation }, { ...activeStop }, new Date(now)) : "";
   const truckId = selectedPin?.truckId;
-  const routeContext = selectedPin ? board?.loads[selectedId]?.automation?.context : undefined;
+  const routeContext = selectedPin ? automation?.context : undefined;
+  const routeRevision = selectedLoads?.revision;
+  const matchingResult = routeResult?.driverId === selectedId && routeResult.context === routeContext ? routeResult : null;
+  const mapRoute = matchingResult?.route?.context === routeContext ? matchingResult?.route : null;
+  const following = matchingResult?.revision === routeRevision ? mapRoute?.following : undefined;
+  const hasNextRoute = following?.some(leg => leg.kind !== "current");
+  const stops = [...stopFlags(selectedLoad, activeStopKey, arrived, eta), ...stopFlags(hasNextRoute ? nextLoad : null)];
   useEffect(() => {
     if (!routeContext) return;
     const controller = new AbortController();
     const accept = (route: BoardMapRoute | null) => {
-      if (!controller.signal.aborted) setRouteResult({ driverId: selectedId, context: routeContext, route });
+      if (!controller.signal.aborted) setRouteResult({ driverId: selectedId, context: routeContext, revision: routeRevision, route });
     };
     void fetchBoardMapRoute(selectedId, controller.signal).then(result => accept(result.route), () => accept(null));
     return () => controller.abort();
-  }, [selectedId, routeContext, now]);
+  }, [selectedId, routeContext, routeRevision, now]);
   useEffect(() => {
     if (!truckId) return;
     const controller = new AbortController();
@@ -109,13 +131,18 @@ export default function FleetMapPage() {
       .then(result => accept(result.truckId === truckId ? result.points : null), () => accept(null));
     return () => controller.abort();
   }, [selectedId, truckId, now]);
-  const matchingResult = routeResult?.driverId === selectedId && routeResult.context === routeContext ? routeResult : null;
-  const mapRoute = matchingResult?.route?.context === routeContext ? matchingResult?.route : null;
-  const route = useMemo(() => mapRoute && selectedPin ? remainingRoute(mapRoute, selectedPin.location) : null, [mapRoute, selectedPin]);
+  const route = mapRoute && pinLocation ? remainingRoute(mapRoute, pinLocation) : null;
+  const followingLines = useMemo(() => (following ?? []).flatMap(leg => {
+      const points = decodeRoute(leg.geometry);
+      return points.length >= 2 ? [{ kind: leg.kind, loadNumber: leg.loadNumber, miles: leg.miles, points }] : [];
+  }), [following]);
+  const routeLines: FleetRouteLine[] = !route || arrived ? followingLines : [
+    { kind: "current", loadNumber: selectedLoad?.number ?? "", miles: route.miles, points: route.points }, ...followingLines,
+  ];
+  const milesLeft = formatRouteMiles(route?.miles);
   const history = historyResult?.driverId === selectedId && historyResult.truckId === truckId ? historyResult : null;
-  const trail = useMemo(() => history?.points && selectedPin ? drivenTrail(history.points, selectedPin.location, now) : [], [history, selectedPin, now]);
-  const selectedEntry = selected && entries.get(selected.id);
-  const reportedAt = Date.parse(selectedPin?.location.reportedAt ?? "");
+  const trail = history?.points && pinLocation ? drivenTrail(history.points, pinLocation, now) : [];
+  const reportedAt = Date.parse(pinLocation?.reportedAt ?? "");
 
   return (
     <section className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col gap-3">
@@ -143,7 +170,7 @@ export default function FleetMapPage() {
             className="flex max-h-full flex-wrap items-center gap-x-4 gap-y-0.5 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm leading-5">
             <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="font-medium text-zinc-100">{selected.fullName}</span>
-              {selectedEntry?.status && <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${statusColor(selectedEntry.status)}`}>{statusLabel(selectedEntry.status)}</span>}
+              {selectedEntry?.status && <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${statusColor(selectedEntry.status === "RESERVED" ? "ENROUTE" : selectedEntry.status)}`}>{statusLabel(selectedEntry.status)}</span>}
             </span>
             <span className="text-zinc-400">{!selectedPin ? "GPS location unavailable" : Number.isFinite(reportedAt) ?
               `${isOldLocation(selectedPin.location.reportedAt, now) ? "Last known location" : "GPS reported"} · ${reportTime.format(reportedAt)}` : "GPS report time unavailable"}</span>
@@ -151,9 +178,13 @@ export default function FleetMapPage() {
               {route && mapRoute ? <>
                 <span className="mr-2 text-sky-300">{route.stale ? "Last TomTom route" : "TomTom route"}</span>
                 {mapRoute.stopType === "pickup" ? "Pickup" : mapRoute.stopType === "delivery" ? "Delivery" : "Stop"} · {mapRoute.destination}
+                {arrived ? " · Arrived" : milesLeft && ` · ${milesLeft} left`}
                 {route.stale && Number.isFinite(Date.parse(mapRoute.reportedAt)) && ` · From GPS at ${reportTime.format(new Date(mapRoute.reportedAt))}`}
               </> : !routeContext ? "No active load stop to route to" : matchingResult ? "TomTom route unavailable" : "Loading TomTom route…"}
             </span>}
+            {followingLines.map((leg, i) => <span key={i} className={leg.kind === "deadhead" ? "font-medium text-red-300" : leg.kind === "next-load" ? "text-emerald-300" : "text-sky-300"}>
+              {leg.kind === "deadhead" ? "Empty miles" : leg.loadNumber} · {formatRouteMiles(leg.miles)}
+            </span>)}
             {truckId && <span className={`xl:ml-auto ${trail.length ? "text-amber-300" : "text-zinc-400"}`}>
               {trail.length ? "Driven · Last 24 hours" : !history ? "Loading GPS history…" :
                 history.points ? "No GPS trail in the last 24 hours" : "GPS history unavailable"}
@@ -166,7 +197,7 @@ export default function FleetMapPage() {
         <button type="button" className="underline" onClick={() => setAttempt(value => value + 1)}>Retry</button>
       </div>}
       <FleetLocationMap pins={pins} selectedDriverId={selected?.id ?? ""} onSelect={setSelectedId}
-        route={route} routeLoadNumber={selectedLoad?.number?.trim() ?? ""} trail={trail} stops={stops} />
+        routes={routeLines} trail={trail} stops={stops} combineTruckLabel={truckAtStop && arrived} />
     </section>
   );
 }

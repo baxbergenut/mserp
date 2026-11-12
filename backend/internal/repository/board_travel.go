@@ -16,6 +16,9 @@ import (
 
 type BoardTravel struct {
 	Geometry          *boardroutes.RouteGeometry `json:"geometry,omitempty"`
+	Following         []BoardMapLeg              `json:"following,omitempty"`
+	FollowingContext  string                     `json:"followingContext,omitempty"`
+	RejectedItinerary string                     `json:"rejectedItinerary,omitempty"`
 	RetryRequestedAt  time.Time                  `json:"retryRequestedAt,omitempty"`
 	RetryCompletedAt  time.Time                  `json:"retryCompletedAt,omitempty"`
 	Source            string                     `json:"source,omitempty"`
@@ -49,6 +52,8 @@ type BoardMapRoute struct {
 	ReportedAt   time.Time                 `json:"reportedAt"`
 	Stale        bool                      `json:"stale"`
 	Geometry     boardroutes.RouteGeometry `json:"geometry"`
+	Miles        float64                   `json:"miles"`
+	Following    []BoardMapLeg             `json:"following,omitempty"`
 }
 
 func (t BoardTravel) mapRoute(key string, stop BoardStop, now, gpsAt time.Time) *BoardMapRoute {
@@ -58,7 +63,7 @@ func (t BoardTravel) mapRoute(key string, stop BoardStop, now, gpsAt time.Time) 
 	}
 	return &BoardMapRoute{
 		Context: key, Destination: stop.Location, StopType: stop.Type, CalculatedAt: t.CalculatedAt,
-		ReportedAt: t.ReportedAt, Stale: t.stale(now, gpsAt) || t.Error != "", Geometry: *t.Geometry,
+		ReportedAt: t.ReportedAt, Stale: t.stale(now, gpsAt) || t.Error != "", Geometry: *t.Geometry, Miles: t.Miles,
 	}
 }
 
@@ -435,15 +440,30 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 		if point != nil {
 			var estimate boardroutes.Estimate
 			var e error
+			var waypoints []boardMapWaypoint
+			var itinerary string
 			if a.CustomDestination {
 				estimate, e = routes.RouteAddress(ctx, point.Coordinates.Lat, point.Coordinates.Lng, a.routeAddress)
 			} else {
-				estimate, e = routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude)
+				waypoints, itinerary = boardMapItinerary(job.view, job.stop)
+				if itinerary == t.RejectedItinerary {
+					waypoints = nil
+				}
+				points := make([]boardroutes.Waypoint, len(waypoints))
+				for i, waypoint := range waypoints {
+					points[i] = waypoint.Waypoint
+				}
+				estimate, e = routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude, points...)
+			}
+			if len(waypoints) > 0 && (estimate.FollowingRejected || errors.Is(e, boardroutes.ErrTomTomNoRoute)) {
+				// A later stop can reject the itinerary. Use the active stop alone
+				// on the next ordinary refresh for this itinerary.
+				t.RejectedItinerary = itinerary
 			}
 			if e != nil {
 				t.Error = e.Error()
 				t.AddressRejected = errors.Is(e, boardroutes.ErrAddressUnmatched)
-				if t.AddressRejected || errors.Is(e, boardroutes.ErrRouteUnavailable) {
+				if t.AddressRejected || (len(waypoints) == 0 && errors.Is(e, boardroutes.ErrRouteUnavailable)) {
 					t.CalculatedAt = time.Time{}
 				}
 			} else {
@@ -458,6 +478,16 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 				t.Miles = float64(estimate.Meters) / 1609.344
 				t.Assumptions, t.LastKnownPosition = estimate.Assumptions, job.lastKnown
 				t.Geometry = estimate.Geometry
+				t.Following, t.FollowingContext = nil, ""
+				for i, leg := range estimate.Following {
+					if leg.Geometry != nil {
+						waypoint := waypoints[i]
+						t.Following = append(t.Following, BoardMapLeg{Kind: waypoint.Kind, LoadNumber: waypoint.LoadNumber, Miles: float64(leg.Meters) / 1609.344, Geometry: *leg.Geometry})
+					}
+				}
+				if len(t.Following) > 0 {
+					t.FollowingContext = itinerary
+				}
 			}
 		}
 		if manualRetry {

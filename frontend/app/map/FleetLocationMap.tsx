@@ -5,8 +5,8 @@ import type * as Leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { truckHeadingPin, truckHeadingPinSize } from "@/app/components/fleet/truckHeadingPin";
 import { statusColor, statusLabel } from "@/app/driver-board/board";
-import type { DriverBoardLocation } from "@/app/lib/types";
-import type { Coordinates, remainingRoute } from "./routeGeometry";
+import type { BoardMapLeg, DriverBoardLocation } from "@/app/lib/types";
+import { formatRouteMiles, type Coordinates } from "./routeGeometry";
 
 export interface FleetPin {
   driverId: string;
@@ -21,7 +21,23 @@ export interface FleetStopFlag {
   point: Coordinates;
   kind: "pickup" | "delivery";
   address: string;
+  loadNumber: string;
+  arrived: boolean;
+  eta: string;
 }
+
+export interface FleetRouteLine {
+  kind: BoardMapLeg["kind"];
+  points: Coordinates[];
+  loadNumber: string;
+  miles?: number;
+}
+
+const routeStyle = {
+  current: { color: "#38bdf8", border: "#082f49", label: "border-sky-400 bg-sky-950 text-white" },
+  deadhead: { color: "#f43f5e", border: "#4c0519", label: "border-red-400 bg-neutral-950 text-[#fca5a5]" },
+  "next-load": { color: "#34d399", border: "#022c22", label: "border-emerald-400 bg-emerald-950 text-white" },
+};
 
 function stopFlagIcon(L: typeof Leaflet, stops: FleetStopFlag[], showAddress: (flag: HTMLButtonElement, stop: FleetStopFlag) => void) {
   const icon = document.createElement("div");
@@ -32,19 +48,26 @@ function stopFlagIcon(L: typeof Leaflet, stops: FleetStopFlag[], showAddress: (f
     const flag = document.createElement("button");
     flag.type = "button";
     flag.className = `pointer-events-auto cursor-pointer py-1 pr-2 pl-1 font-mono text-[11px] font-bold leading-none text-neutral-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-950 [clip-path:polygon(0_0,100%_0,85%_50%,100%_100%,0_100%)] ${pickup ? "bg-yellow-300" : "bg-blue-300"}`;
-    flag.textContent = pickup ? "PU" : "DEL";
+    const abbreviation = pickup ? "PU" : "DEL";
+    flag.textContent = stop.arrived ? `At ${abbreviation}${stop.loadNumber ? ` · ${stop.loadNumber}` : ""}` : abbreviation;
     flag.setAttribute("aria-label", pickup ? "Show pickup address" : "Show delivery address");
     flag.addEventListener("click", () => showAddress(flag, stop));
     icon.append(flag);
+    if (stop.eta) {
+      const eta = document.createElement("span");
+      eta.className = "absolute bottom-full left-0 mb-1 w-max whitespace-nowrap rounded border border-sky-400 bg-sky-950 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white";
+      eta.textContent = stop.eta;
+      icon.append(eta);
+    }
   }
   return L.divIcon({ html: icon, className: "fleet-map-stop", iconSize: [0, 28], iconAnchor: [1, 28] });
 }
 
-function truckIcon(L: typeof Leaflet, pin: FleetPin, selected: boolean) {
+function truckIcon(L: typeof Leaflet, pin: FleetPin, selected: boolean, hideUnit: boolean) {
   const icon = document.createElement("div");
   icon.className = "relative";
   const marker = truckHeadingPin(pin.location.heading);
-  const fill = statusColor(pin.status).split(" ").find(value => value.startsWith("bg-"));
+  const fill = statusColor(pin.status === "RESERVED" ? "ENROUTE" : pin.status).split(" ").find(value => value.startsWith("bg-"));
   marker.className = `${fill || "bg-zinc-700"} group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-sky-300 [&>*]:drop-shadow-[0_1px_1px_#000b]`;
   if (selected) marker.classList.add("outline-2", "outline-offset-2", "outline-sky-300");
 
@@ -52,18 +75,19 @@ function truckIcon(L: typeof Leaflet, pin: FleetPin, selected: boolean) {
   label.className = "absolute bottom-full left-1/2 mb-1 w-max -translate-x-1/2 whitespace-nowrap rounded border border-white/60 bg-neutral-950 px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-white shadow-[0_1px_5px_#000b]";
   label.setAttribute("aria-hidden", "true");
   label.textContent = pin.unit || "—";
-  icon.append(marker, label);
+  icon.append(marker);
+  if (!hideUnit) icon.append(label);
   return L.divIcon({ html: icon, className: "fleet-map-pin group", iconSize: [truckHeadingPinSize, truckHeadingPinSize] });
 }
 
-export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, routeLoadNumber, trail, stops }: {
+export function FleetLocationMap({ pins, selectedDriverId, onSelect, routes, trail, stops, combineTruckLabel }: {
   pins: FleetPin[];
   selectedDriverId: string;
   onSelect: (driverId: string) => void;
-  route: ReturnType<typeof remainingRoute>;
-  routeLoadNumber: string;
+  routes: FleetRouteLine[];
   trail: Coordinates[][];
   stops: FleetStopFlag[];
+  combineTruckLabel: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [runtime, setRuntime] = useState<{ L: typeof Leaflet; map: Leaflet.Map } | null>(null);
@@ -112,7 +136,7 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, rout
       const selected = pin.driverId === selectedDriverId;
       if (selectedDriverId && !selected) continue;
       const marker = L.marker(point, {
-        icon: truckIcon(L, pin, selected),
+        icon: truckIcon(L, pin, selected, selected && combineTruckLabel),
         title: [pin.unit ? `Truck ${pin.unit}` : "Truck", pin.driverName, statusLabel(pin.status)].filter(Boolean).join(" · "),
         zIndexOffset: selected ? 1000 : 0,
         autoPanOnFocus: false,
@@ -125,10 +149,10 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, rout
       fittedFleet.current = true;
     }
     return () => { layer.remove(); };
-  }, [runtime, pins, selectedDriverId, onSelect]);
+  }, [runtime, pins, selectedDriverId, onSelect, combineTruckLabel]);
 
   useEffect(() => {
-    if (!runtime || (!route && !trail.length)) return;
+    if (!runtime || (!routes.length && !trail.length)) return;
     const { L, map } = runtime;
     const layer = L.layerGroup().addTo(map);
     if (trail.length) {
@@ -137,24 +161,53 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, rout
         color: "#fbbf24", weight: 3, dashArray: "5 6", interactive: false, className: "fleet-map-trail",
       }).addTo(layer);
     }
-    if (route) {
-      L.polyline(route.points, { color: "#082f49", weight: 7, interactive: false }).addTo(layer);
+    const labels: Leaflet.Marker[] = [];
+    for (const route of routes) {
+      const style = routeStyle[route.kind];
+      const smoothFactor = route.kind === "current" ? 1 : 2;
+      L.polyline(route.points, { color: style.border, weight: 7, interactive: false, smoothFactor }).addTo(layer);
       const line = L.polyline(route.points, {
-        color: "#38bdf8", weight: 4, interactive: false,
-        className: "fleet-map-route",
+        color: style.color, weight: 4, interactive: false, smoothFactor,
+        className: `fleet-map-route fleet-map-route-${route.kind}`,
       }).addTo(layer);
-      if (routeLoadNumber) {
+      const text = [route.kind === "deadhead" ? "Empty miles" : route.loadNumber.trim(), formatRouteMiles(route.miles)].filter(Boolean).join(" · ");
+      if (text) {
         const label = document.createElement("span");
-        label.className = "absolute top-0 left-0 w-max -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-sky-400 bg-sky-950 px-1.5 py-0.5 font-mono text-xs font-semibold leading-none text-white shadow-[0_1px_5px_#000b]";
-        label.textContent = routeLoadNumber;
-        L.marker(line.getCenter(), {
+        label.className = `absolute top-0 left-0 w-max -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-xs font-semibold leading-none shadow-[0_1px_5px_#000b] ${style.label}`;
+        label.textContent = text;
+        labels.push(L.marker(line.getCenter(), {
           icon: L.divIcon({ html: label, className: "fleet-map-route-label", iconSize: [0, 0] }),
           interactive: false, keyboard: false, zIndexOffset: -1100,
-        }).addTo(layer);
+        }).addTo(layer));
       }
     }
-    return () => { layer.remove(); };
-  }, [runtime, route, routeLoadNumber, trail]);
+    const selected = pins.find(pin => pin.driverId === selectedDriverId);
+    const updateLabels = () => {
+      const blocked = stops.map(stop => ({
+        point: map.latLngToLayerPoint(stop.point), left: 5,
+        right: stop.arrived || stop.eta ? 155 : 40, above: stop.eta ? 52 : 34, below: 5,
+      }));
+      if (selected) {
+        blocked.push({ point: map.latLngToLayerPoint([selected.location.latitude, selected.location.longitude]), left: 26, right: 26, above: 40, below: 15 });
+      }
+      for (const marker of labels) {
+        const element = marker.getElement();
+        if (!element) continue;
+        const point = map.latLngToLayerPoint(marker.getLatLng());
+        const halfWidth = (element.firstElementChild?.getBoundingClientRect().width ?? 0) / 2 + 4;
+        const overlaps = blocked.some(box => point.x + halfWidth > box.point.x - box.left && point.x - halfWidth < box.point.x + box.right &&
+          point.y + 11 > box.point.y - box.above && point.y - 11 < box.point.y + box.below);
+        element.style.visibility = overlaps ? "hidden" : "visible";
+        if (!overlaps) blocked.push({ point, left: halfWidth, right: halfWidth, above: 11, below: 11 });
+      }
+    };
+    updateLabels();
+    map.on("zoomend", updateLabels);
+    return () => {
+      map.off("zoomend", updateLabels);
+      layer.remove();
+    };
+  }, [runtime, routes, trail, stops, pins, selectedDriverId]);
 
   useEffect(() => {
     if (!runtime || !stops.length) return;
@@ -169,7 +222,7 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, rout
       const content = document.createElement("div");
       const heading = document.createElement("div");
       heading.className = "mb-1 font-semibold";
-      heading.textContent = stop.kind === "pickup" ? "Pickup address" : "Delivery address";
+      heading.textContent = [stop.kind === "pickup" ? "Pickup address" : "Delivery address", stop.loadNumber].filter(Boolean).join(" · ");
       const address = document.createElement("div");
       address.textContent = stop.address || "Address unavailable";
       content.append(heading, address);

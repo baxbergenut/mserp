@@ -248,7 +248,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 	}
 	rows, err := tx.Query(ctx, `WITH vin_counts AS MATERIALIZED (
  SELECT upper(regexp_replace(vin,'[^A-Za-z0-9]','','g')) vin,count(*) matches FROM trucks WHERE vin IS NOT NULL GROUP BY 1
- ) SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(CASE WHEN $2 THEN c.travel ELSE c.travel-'geometry' END,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
+ ) SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(CASE WHEN $2 THEN c.travel ELSE c.travel-'geometry'-'following' END,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
  (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND coalesce(vc.matches,0)=1),coalesce(el.source,''),el.reported_at,coalesce(c.ready_location,'{}'::jsonb),c.ready_location_requested_at
  FROM drivers d LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN vin_counts vc ON vc.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
@@ -331,6 +331,11 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		if key != "" {
 			if includeRoute && stop != nil && address == "" && telemetrySafe && gpsAt != nil && sameTelemetrySource(travel.Source, telemetrySource) {
 				a.MapRoute = travel.mapRoute(key, *stop, time.Now(), *gpsAt)
+				if a.MapRoute != nil && len(travel.Following) > 0 {
+					if _, itinerary := boardMapItinerary(v, *stop); itinerary == travel.FollowingContext {
+						a.MapRoute.Following = travel.Following
+					}
+				}
 			}
 			if address == "" && evidence.Context == key && telemetrySafe && sameTelemetrySource(evidence.Source, telemetrySource) {
 				a.Arrived = evidence.Arrived

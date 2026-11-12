@@ -2385,7 +2385,10 @@ assignment lookup lists.
   It reuses Status Board GPS and status colors, with one unit-labelled pin per
   located truck and driver selection for shared trucks or missing GPS.
   Selecting a truck preserves the viewport and reads the TomTom route cached
-  by the existing ETA request for the current load stop. Route geometry stays
+    by the existing ETA request. Its first leg supplies the active stop ETA.
+    The same request includes remaining current stops and the next queued load
+    when coordinates are available. Planned geometry is fenced to the ordered
+    stops and queue and does not trigger an extra TomTom refresh. Route geometry stays
   out of ordinary board payloads, and selection adds no TomTom requests.
   The amber trail reads the selected truck's last 24 hours of Five ELD GPS
   through the same board permission, sampling roughly every five minutes with

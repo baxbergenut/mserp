@@ -106,10 +106,24 @@ func NewClient(o Options) *Client {
 }
 
 type Estimate struct {
-	Duration    time.Duration
-	Meters      int
-	Assumptions string
-	Geometry    *RouteGeometry
+	Duration          time.Duration
+	Meters            int
+	Assumptions       string
+	Geometry          *RouteGeometry
+	Following         []RouteLeg
+	FollowingRejected bool
+}
+
+type Waypoint struct{ Latitude, Longitude float64 }
+
+type RouteLeg struct {
+	Meters   int
+	Geometry *RouteGeometry
+}
+
+type routeSummary struct {
+	Seconds *int64 `json:"travelTimeInSeconds"`
+	Meters  *int   `json:"lengthInMeters"`
 }
 
 type RouteGeometry struct {
@@ -121,15 +135,15 @@ var ErrRouteUnavailable = errors.New("route unavailable")
 var ErrTomTomNoRoute = fmt.Errorf("%w: TomTom could not find a drivable route (NO_ROUTE_FOUND)", ErrRouteUnavailable)
 var ErrAddressUnmatched = errors.New("Enter a complete destination address for automatic ETA")
 
-func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64) (Estimate, error) {
-	return c.route(ctx, lat, lng, toLat, toLng, "")
+func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, following ...Waypoint) (Estimate, error) {
+	return c.route(ctx, lat, lng, toLat, toLng, "", following)
 }
 
 func (c *Client) RouteAddress(ctx context.Context, lat, lng float64, address string) (Estimate, error) {
-	return c.route(ctx, lat, lng, 0, 0, address)
+	return c.route(ctx, lat, lng, 0, 0, address, nil)
 }
 
-func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, address string) (Estimate, error) {
+func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, address string, following []Waypoint) (Estimate, error) {
 	options := c.Options
 	if address != "" {
 		// Google resolves address waypoints in the same metered route request.
@@ -138,7 +152,7 @@ func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, addr
 		}
 		options.TomTomAPIKey = ""
 	}
-	estimate, err := c.routeAttempt(ctx, lat, lng, toLat, toLng, address, options)
+	estimate, err := c.routeAttempt(ctx, lat, lng, toLat, toLng, address, options, following)
 	if !errors.Is(err, ErrTomTomNoRoute) || address != "" {
 		return estimate, err
 	}
@@ -149,14 +163,15 @@ func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, addr
 	// only Google's remaining allowance or an explicitly selected paid Google plan.
 	// In particular, paid TomTom does not authorize paid Google.
 	options.TomTomAPIKey = ""
-	fallback, fallbackErr := c.routeAttempt(ctx, lat, lng, toLat, toLng, "", options)
+	fallback, fallbackErr := c.routeAttempt(ctx, lat, lng, toLat, toLng, "", options, nil)
 	if fallbackErr != nil {
 		return Estimate{}, fmt.Errorf("%w; Google fallback unavailable: %w", err, fallbackErr)
 	}
+	fallback.FollowingRejected = len(following) > 0
 	return fallback, nil
 }
 
-func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float64, address string, options Options) (Estimate, error) {
+func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float64, address string, options Options, following []Waypoint) (Estimate, error) {
 	if c.Budget == nil {
 		return Estimate{}, errors.New("routing usage accounting unavailable")
 	}
@@ -191,7 +206,11 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 		}
 	} else if provider == "tomtom" && address == "" {
 		q := url.Values{"key": {c.Options.TomTomAPIKey}, "traffic": {"true"}, "departAt": {"now"}, "travelMode": {"car"}, "routeType": {"fastest"}, "routeRepresentation": {"encodedPolyline"}, "maxAlternatives": {"0"}}
-		endpoint := fmt.Sprintf("%s/%.7f,%.7f:%.7f,%.7f/json?%s", c.TomTomURL, lat, lng, toLat, toLng, q.Encode())
+		locations := fmt.Sprintf("%.7f,%.7f:%.7f,%.7f", lat, lng, toLat, toLng)
+		for _, point := range following {
+			locations += fmt.Sprintf(":%.7f,%.7f", point.Latitude, point.Longitude)
+		}
+		endpoint := c.TomTomURL + "/" + locations + "/json?" + q.Encode()
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		// Avoid net/http's automatic GET replay on a failed reused connection.
 		if req != nil {
@@ -236,13 +255,11 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 	if provider == "tomtom" {
 		var response struct {
 			Routes []struct {
-				Summary struct {
-					Seconds *int64 `json:"travelTimeInSeconds"`
-					Meters  *int   `json:"lengthInMeters"`
-				} `json:"summary"`
-				Legs []struct {
-					Polyline  string `json:"encodedPolyline"`
-					Precision int    `json:"encodedPolylinePrecision"`
+				Summary routeSummary `json:"summary"`
+				Legs    []struct {
+					Summary   routeSummary `json:"summary"`
+					Polyline  string       `json:"encodedPolyline"`
+					Precision int          `json:"encodedPolylinePrecision"`
 				} `json:"legs"`
 			} `json:"routes"`
 		}
@@ -251,14 +268,30 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 		}
 		route := response.Routes[0]
 		summary := route.Summary
+		if len(following) > 0 {
+			if len(route.Legs) != len(following)+1 {
+				return Estimate{}, ErrRouteUnavailable
+			}
+			// The board's ETA and arrival evidence belong to the active stop.
+			summary = route.Legs[0].Summary
+		}
 		if summary.Seconds == nil || *summary.Seconds < 0 || *summary.Seconds > 31536000 || summary.Meters == nil || *summary.Meters < 0 {
 			return Estimate{}, ErrRouteUnavailable
 		}
 		estimate := Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: "TomTom traffic-aware " + EstimateAssumptions}
-		if len(route.Legs) == 1 {
-			leg := route.Legs[0]
+		for i, leg := range route.Legs {
+			var geometry *RouteGeometry
 			if leg.Polyline != "" && (leg.Precision == 5 || leg.Precision == 7) {
-				estimate.Geometry = &RouteGeometry{Polyline: leg.Polyline, Precision: leg.Precision}
+				geometry = &RouteGeometry{Polyline: leg.Polyline, Precision: leg.Precision}
+			}
+			if i == 0 && len(route.Legs) == len(following)+1 {
+				estimate.Geometry = geometry
+			} else if len(following) > 0 {
+				result := RouteLeg{}
+				if leg.Summary.Meters != nil && *leg.Summary.Meters >= 0 {
+					result = RouteLeg{Meters: *leg.Summary.Meters, Geometry: geometry}
+				}
+				estimate.Following = append(estimate.Following, result)
 			}
 		}
 		return estimate, nil
