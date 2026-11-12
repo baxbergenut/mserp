@@ -46,6 +46,17 @@ finishes any pending rows before reading the logical grid.
   responses, stream updates while connected, and retained snapshots on focusout.
   Disconnected polling and focus/reconnect recovery remain. Older HTTP refreshes
   cannot replace a newer stream snapshot.
+- Truck dropdown choices use the existing live bulk fleet read projection instead
+  of recalculating the complete operator graph separately for every truck. A live
+  read-only comparison returned zero status differences across 147 trucks; query
+  time fell from 256 ms to 8 ms in that sample. Reviewed handovers and assignment
+  saves retain their authoritative status functions and revision checks.
+
+A later pre-release observation found the production CPU fully occupied with
+concurrent board and truck-choice reads. Under that contention, even the optimized
+standalone board reader took seconds. The dropdown improvement and removal of
+redundant connected refreshes address this shared load; the synthetic browser
+results alone do not establish a sub-400 ms production guarantee.
 
 Read-only repeatable-snapshot `EXCEPT ALL` comparisons against production returned
 zero differences in both directions for current Gross Board entries, opening

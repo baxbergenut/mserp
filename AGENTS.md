@@ -3688,6 +3688,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Status Board requests compact overview responses, relies on live snapshots while
   connected, and applies the latest retained snapshot on focusout without a GET.
   An older in-flight refresh cannot overwrite a newer stream snapshot.
+  Truck dropdown reads use `fleet_truck_read_state`; reviewed handovers and saves
+  retain authoritative status functions and revision checks. `TestFleetStatusDatabase`
+  compares the complete dropdown choices against the canonical query after transitions.
   Board rows mount visible editors first and progressively mount off-screen
   editors without unmounting them afterward. Scroll/deep-link targets load eagerly;
   spreadsheet selection/navigation flushes remaining rows before using the DOM.
