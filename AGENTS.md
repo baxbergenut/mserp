@@ -1238,9 +1238,10 @@ positive Reimburse-method expense credits already included in net payable.
   It stops the API/active exporter for migration 151 and refuses releases that
   still require manager_verified once that column is gone. Recovery requires a
   compatible release; prior records are not recreated by application rollback.
-- `frontend/app/investors/`: truck owners, independent investors and driver-linked
-  investors. The company is hidden by default with a Show company filter.
-  The directory includes driver-linked owners regardless of truck count.
+- `frontend/app/investors/`: independent investors and driver-linked owners with
+  at least one active owned truck assigned to a different driver. A driver on
+  the assigned driver's current team counts as operating the same truck.
+  The directory hides the company.
   `/investors/detail` and linked drivers' Ownership tabs share owned-truck and
   investor statement summaries. Driver and investor statements stay separate.
   Truck forms select explicit owners; ownership is separate from operation.

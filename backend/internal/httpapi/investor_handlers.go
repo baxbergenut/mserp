@@ -37,17 +37,17 @@ func (v investorRequest) validate() (repository.InvestorInput, error) {
 	return repository.InvestorInput{FullName: v.FullName, DriverID: v.DriverID, Email: optionalString(v.Email), Phone: optionalString(normalizedPhone), Notes: optionalString(v.Notes), Active: v.Active}, nil
 }
 func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
-	values, err := h.repo.ListInvestors(r.Context(), strings.TrimSpace(r.URL.Query().Get("search")))
-	if err != nil {
-		h.writeError(w, err)
-		return
-	}
+	query := r.URL.Query()
+	search := strings.TrimSpace(query.Get("search"))
 	if wantsPagination(r) {
-		// Driver-linked owners remain discoverable regardless of truck count.
-		values = investorDirectory(values, strings.EqualFold(r.URL.Query().Get("includeCompany"), "true"))
 		p, err := parsePagination(r)
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
+			return
+		}
+		values, err := h.repo.ListInvestorDirectory(r.Context(), search, strings.EqualFold(query.Get("includeCompany"), "true"))
+		if err != nil {
+			h.writeError(w, err)
 			return
 		}
 		p = p.Normalize(len(values))
@@ -56,17 +56,12 @@ func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, repository.NewPage(values[start:end], len(values), p))
 		return
 	}
-	writeJSON(w, 200, values)
-}
-func investorDirectory(values []repository.Investor, includeCompany bool) []repository.Investor {
-	filtered := make([]repository.Investor, 0, len(values))
-	for _, investor := range values {
-		if investor.IsCompany && !includeCompany {
-			continue
-		}
-		filtered = append(filtered, investor)
+	values, err := h.repo.ListInvestors(r.Context(), search)
+	if err != nil {
+		h.writeError(w, err)
+		return
 	}
-	return filtered
+	writeJSON(w, 200, values)
 }
 func (h fleetHandler) saveInvestor(w http.ResponseWriter, r *http.Request) {
 	id := ""

@@ -16,8 +16,12 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
     INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('${ownTruck}','${owner}','2026-01-01');
   `);
   let directory = await (await page.request.get(`${base}/api/investors?page=1&pageSize=100`)).json();
-  expect(directory.items.some(i => i.id === investor)).toBe(true);
+  expect(directory.items.some(i => i.id === investor)).toBe(false);
   expect((await (await page.request.get(`${base}/api/investors`)).json()).some(i => i.id === investor)).toBe(true);
+  await page.goto(`${base}/investors`);
+  await expect(page.getByRole('table')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Payroll Hector', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Show company' })).toHaveCount(0);
   sql(`SET search_path TO ${schema},public;
     INSERT INTO trucks(id,unit_number,owner_id) VALUES('${extraTruck}','PAY-EXTRA','${investor}');
     INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES('${extraTruck}','${hired}','2026-01-01');
@@ -33,6 +37,8 @@ export async function runInvestorPayE2E({ page, base, sql, schema, temp }) {
   `);
   directory = await (await page.request.get(`${base}/api/investors?page=1&pageSize=100`)).json();
   expect(directory.items.some(i => i.id === investor)).toBe(true);
+  await page.reload();
+  await expect(page.getByRole('row').filter({ hasText: 'Payroll Hector' })).toContainText('PAY-EXTRA');
   const session = await (await page.request.get(`${base}/api/auth/session`)).json();
   const headers = { 'x-csrf-token': session.csrfToken };
   for (const truckId of [extraTruck]) {

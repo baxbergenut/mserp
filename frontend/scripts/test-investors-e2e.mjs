@@ -167,7 +167,7 @@ try {
   } else {
   if (!process.argv.includes('--offboarding-only')) {
   await expect(page.getByText('No investors yet.', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Show company')).not.toBeChecked();
+  await expect(page.getByLabel('Show company')).toHaveCount(0);
   const companyCell = page.getByRole('cell', { name: 'MS Express Inc.', exact: true });
   await expect(companyCell).toHaveCount(0);
   const directory = await (await page.request.get(`${base}/api/investors?page=1&pageSize=25`)).json();
@@ -175,12 +175,8 @@ try {
   expect(directory.items).toEqual([]);
   const owners = await (await page.request.get(`${base}/api/investors`)).json();
   expect(owners.some((owner) => owner.isCompany)).toBe(true);
-  await page.getByLabel('Show company').check();
-  await expect(companyCell).toBeVisible();
   const withCompany = await (await page.request.get(`${base}/api/investors?page=1&pageSize=25&includeCompany=true`)).json();
   expect(withCompany.total).toBe(1);
-  await page.getByLabel('Show company').uncheck();
-  await expect(page.getByText('No investors yet.', { exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/investors`, { data: { fullName: 'Blocked' } })).status()).toBe(403);
   await page.getByRole('button', { name: 'Add investor', exact: true }).click();
   await page.getByLabel('Full name', { exact: true }).fill('E2e Investor');
