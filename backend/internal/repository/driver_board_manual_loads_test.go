@@ -218,13 +218,13 @@ func testManualNextLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	exec(`UPDATE gross_board_entries SET load_record_id=989003 WHERE driver_id=$1`, d.ID)
 	v = view()
 	foundMissing := false
-	for _, p := range v.Unavailable {
-		if p.LoadID != nil && *p.LoadID == 989003 && p.SourceMissing {
+	for _, p := range v.Next {
+		if !p.Manual && p.LoadID != nil && *p.LoadID == 989003 && p.SourceMissing && len(p.Stops) == 0 {
 			foundMissing = true
 		}
 	}
 	if !foundMissing {
-		t.Fatal("explicit missing source silently retargeted", v)
+		t.Fatal("explicit missing Gross Board source must stay queued without retargeting", v)
 	}
 	exec(`DELETE FROM load_source_availability WHERE load_id=989003`)
 	exec(`DELETE FROM gross_board_entries WHERE driver_id=$1`, d.ID)

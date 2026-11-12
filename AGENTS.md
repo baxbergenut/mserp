@@ -691,8 +691,10 @@ positive Reimburse-method expense credits already included in net payable.
   Migration 187 records complete ID-filtered lookup presence separately in
   `load_source_availability`. Failed/partial lookups never mark records missing.
   Status Board number lookups exclude confirmed missing sources; pinned IDs never
-  rebind to a recreated same-number order. Missing queued sources become unavailable;
-  current selections retain identity with a review warning and no stale stops.
+  rebind to a recreated same-number order. Upcoming Gross Board plans stay queued
+  when their source goes missing. Pinned plans and current selections retain
+  identity with a review warning and omit stale stops. Manual-only missing sources
+  become unavailable.
   Historical loads and all financial resolution remain unchanged. Presence evidence
   is explicitly unrelated to payroll, including its cache registry. Install the
   updated deploy helper before 187; it quiesces writers and rejects older binaries.
