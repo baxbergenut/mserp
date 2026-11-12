@@ -15,6 +15,7 @@ import { payButtonClass } from "../driver-pay/DriverCard";
 import { validChargeWeek } from "./charges";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
 import EffectiveWeekPicker from "./EffectiveWeekPicker";
+import { TruckTermsDialog } from "./TruckTermsDialog";
 
 export function TruckCharges({ charges, onChanged, onCountChange, actions }: { actions?: ReactNode; charges: ChargeData; onCountChange: (count: number) => void; onChanged: () => Promise<void> }) {
   const permissions=usePermissions();
@@ -186,6 +187,13 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
         return <td key={type.id} title={locked ? "Finalized statement: charge stays unchanged" : undefined} className="h-8 border-b border-zinc-800 px-3 py-0"><div className="flex h-[31px] items-center gap-3"><input aria-label={`${t.unitNumber}, ${type.name}`} type="checkbox" className="h-4 w-4 accent-blue-500" checked={value.included} disabled={disabled || (type.archived && !value.included)} onChange={e => void saveCells([{ ...value, included: e.target.checked }])} />{options.length > 1 ? <select aria-label={`${t.unitNumber}, ${type.name} amount`} className={`${controlClass} !h-7 !w-28 !py-0 font-mono`} value={value.amount} disabled={disabled || !value.included || type.archived} onChange={e => void saveCells([{ ...value, amount: e.target.value }])}>{options.map(a => <option key={a} value={a}>{money(a)}{!type.amounts.includes(a) ? " (existing)" : ""}</option>)}</select> : <span className={`min-w-20 font-mono ${value.included ? "text-zinc-200" : "text-zinc-600"}`}>{money(value.amount)}</span>}</div></td>;
       })}</tr>;
     })}</tbody></table>{!visible.length && <p className="p-8 text-center text-sm text-zinc-500">No trucks match this view.</p>}</div>}
-    {term && <Modal title={`Truck ${trucks.find(t => t.id === term.truckId)?.unitNumber} · settlement terms`} description={`Effective ${term.weekStart}`} isSaving={busy} submitLabel="Save terms" onClose={() => setTerm(null)} onSubmit={e => { e.preventDefault(); if(canTerms)void run(() => saveTruckTerm(term)); }}><div className="space-y-4">{error && <ErrorBanner message={error} />}<Field label="Investor"><select required className={controlClass} value={term.ownerId} onChange={e => setTerm({ ...term, ownerId: e.target.value })}>{investors.filter(i => !i.isCompany && (i.active || i.id === term.ownerId)).map(i => <option key={i.id} value={i.id}>{i.fullName}</option>)}</select></Field><Field label="Investor share of driver gross (%)"><input required type="number" min="0.0001" max="100" step="0.0001" value={term.sharePercent} onChange={e => setTerm({ ...term, sharePercent: e.target.value })} className={controlClass} /></Field></div></Modal>}
+    {term && <TruckTermsDialog unitNumber={trucks.find(t => t.id === term.truckId)?.unitNumber ?? ""} term={term}
+      saving={busy} error={error} onClose={() => setTerm(null)}
+      onShareChange={sharePercent => setTerm({ ...term, sharePercent })}
+      onSave={() => { if (canTerms && !busy) void run(() => saveTruckTerm(term)); }}
+      ownerField={<Field label="Investor"><select required className={controlClass} value={term.ownerId} disabled={busy} onChange={e => setTerm({ ...term, ownerId: e.target.value })}>
+        {investors.filter(i => !i.isCompany && (i.active || i.id === term.ownerId)).map(i => <option key={i.id} value={i.id}>{i.fullName}</option>)}
+      </select></Field>}
+    />}
   </div>;
 }

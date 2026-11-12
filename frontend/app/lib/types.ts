@@ -1523,6 +1523,7 @@ export interface PayPageFilters {
   dispatcherId: string;
   statementId: string;
   driverType?: EmploymentType | "";
+  investorId?: string;
 }
 export interface PayPageQuery extends PayPageFilters {
   summary?: string;

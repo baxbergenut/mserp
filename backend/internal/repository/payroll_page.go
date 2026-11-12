@@ -11,6 +11,7 @@ type PayPageQuery struct {
 	Pagination
 	Search, DispatcherID, ID string
 	DriverType               string
+	InvestorID               string
 	Summary                  bool
 	Interactive              bool // Current HTTP page reads briefly prioritize their week.
 	DetailIDs                map[string]bool
@@ -114,6 +115,9 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	var fee, payable int64
 	for i := range report.Drivers {
 		d := &report.Drivers[i]
+		if query.InvestorID != "" && query.InvestorID != d.InvestorID {
+			continue
+		}
 		if len(d.Dispatchers) == 0 {
 			names[d.DispatcherID] = d.DispatcherName
 		}
@@ -172,6 +176,9 @@ func PaginatePay(report DriverPayWeek, query PayPageQuery) DriverPayWeek {
 	}
 	for i := range report.SetupRequired {
 		s := &report.SetupRequired[i]
+		if query.InvestorID != "" && query.InvestorID != s.OwnerID {
+			continue
+		}
 		names[s.DispatcherID] = s.DispatcherName
 		if matches(s.TruckID, s.DispatcherID, s.OwnerName+" "+s.TruckUnit+" "+s.DriverName) {
 			rows = append(rows, row{s.OwnerName, s.TruckUnit, nil, s})

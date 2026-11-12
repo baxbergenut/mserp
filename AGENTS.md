@@ -1820,6 +1820,11 @@ assignment lookup lists.
 
 - Investor Pay at /accounting/investor-pay shares driver-pay/WeeklyPayPage.tsx
   and DriverCard.tsx with Driver Pay, using the same compact expandable rows.
+  Investor profiles show per-truck settlement terms in the Owned Trucks table.
+  Users with terms edit access can open the current week's editor from Setup
+  required or the existing rate. The Investor Pay link opens the latest completed
+  week. The investorId filter uses the recorded statement or dated setup owner
+  and scopes paging, totals, exports, and outgoing transfers.
   Each row is one truck statement with separate investor/unit columns, followed
   by operating drivers, dispatcher and tariff. Names are frozen in new reports;
   older snapshots use their recorded driver-earnings names. Reports retain
