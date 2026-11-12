@@ -1016,6 +1016,7 @@ export interface Expense {
   paymentType: string | null;
   expenseType: string | null;
   referenceNumber: string | null;
+  efsReferenceNumber: string | null;
   description: string | null;
   workOrderDescription?: string | null;
   coveredBy: string | null;
@@ -1065,6 +1066,7 @@ export interface ExpenseInput {
   paymentType: string;
   expenseType: string;
   referenceNumber: string;
+  efsReferenceNumber: string;
   description: string;
   coveredBy: string;
   brokerLoadNumber?: string;

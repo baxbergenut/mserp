@@ -8,6 +8,7 @@ import { ExpenseNameSelect } from "./ExpenseNameSelect";
 import { ExpenseMaintenanceFields } from "./ExpenseMaintenanceFields";
 import { centsLabel, expenseCents } from "@/app/lib/expenseCosts";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
+import { isEFSPayment } from "../lib/expenseCosts";
 import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
 import type { Expense, ExpensePage, ExpenseInput } from "../lib/types";
@@ -30,6 +31,7 @@ export const emptyExpenseInput: ExpenseInput = {
   paymentType: "",
   expenseType: "",
   referenceNumber: "",
+  efsReferenceNumber: "",
   description: "",
   coveredBy: "Company",
   brokerLoadNumber: "",
@@ -56,6 +58,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     paymentType: expense.paymentType ?? "",
     expenseType: expense.expenseType ?? "",
     referenceNumber: expense.referenceNumber ?? "",
+    efsReferenceNumber: expense.efsReferenceNumber ?? "",
     description: expense.maintenance ? Array.from(new Set([expense.workOrderDescription?.trim(), expense.description?.trim()].filter(Boolean))).join("\n\n") : expense.description ?? "",
     coveredBy: expense.coveredBy ?? "",
     brokerLoadNumber: expense.brokerLoadNumber ?? "",
@@ -178,7 +181,10 @@ export function ExpenseForm({
           <ExpensePayerSelect value={value.paidBy} users={options.paidBy} onChange={next => set("paidBy", next)} className={controlClass} />
         </Field>}
         </>}
-        <Field label="Reference number" wide>
+        {isEFSPayment(value.paymentType) && <Field label="EFS reference number">
+          <input required maxLength={100} value={value.efsReferenceNumber} onChange={event => set("efsReferenceNumber", event.target.value)} className={controlClass} />
+        </Field>}
+        <Field label="Invoice reference number" wide>
           <input
             value={value.referenceNumber}
             onChange={(event) => set("referenceNumber", event.target.value)}

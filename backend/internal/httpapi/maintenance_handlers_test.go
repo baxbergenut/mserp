@@ -54,7 +54,7 @@ func TestMaintenanceRequestValidation(t *testing.T) {
 	paid.DriverName = "Unmatched Applicant"
 	paid.Services = append([]repository.MaintenanceWork(nil), base.Services...)
 	paid.Services[0].Amount = stringPointer("500.01")
-	paid.Expense = &expenseRequest{ExpenseDate: "2026-10-01", ExpenseType: "Oil change", Amount: "500.01", BaseAmount: stringPointer("500.01"), PaymentType: "EFS"}
+	paid.Expense = &expenseRequest{ExpenseDate: "2026-10-01", ExpenseType: "Oil change", Amount: "500.01", BaseAmount: stringPointer("500.01"), PaymentType: "EFS", EFSReferenceNumber: "EFS-100"}
 	input, err := paid.validate(testExpenseCategoryID)
 	if err != nil || input.Expense.Amount != "506.01" {
 		t.Fatal("EFS base validation", input, err)

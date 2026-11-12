@@ -20,10 +20,12 @@ export function costBreakdownError(value: ExpenseInput): string {
   return expenseCents(value.amount) === sum ? "" : "Cost breakdown total must exactly equal the entered amount.";
 }
 
+export const isEFSPayment = (method: string) => method.trim().toUpperCase() === "EFS";
+
 export function expensePayload(value: ExpenseInput) {
   const { legacyPaymentTotal, savedAmount, ...input } = value;
-  const preserveLegacyTotal = !!input.updatedAt && legacyPaymentTotal === input.amount && input.paymentType.trim().toUpperCase() === "EFS";
-  return { ...input, baseAmount: preserveLegacyTotal ? undefined : input.amount, costBreakdown: input.updatedAt && savedAmount === input.amount ? undefined : [] };
+  const preserveLegacyTotal = !!input.updatedAt && legacyPaymentTotal === input.amount && isEFSPayment(input.paymentType);
+  return { ...input, efsReferenceNumber: isEFSPayment(input.paymentType) ? input.efsReferenceNumber.trim() : "", baseAmount: preserveLegacyTotal ? undefined : input.amount, costBreakdown: input.updatedAt && savedAmount === input.amount ? undefined : [] };
 }
 
 export function centsLabel(cents: bigint) {

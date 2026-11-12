@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +28,73 @@ func TestExpenseSearchAmount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExpenseEFSReferenceDatabase(t *testing.T) {
+	withTruckChargeDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ string) {
+		repo := NewExpenseRepository(pool)
+		category := func(name string) string {
+			t.Helper()
+			var id string
+			if err := pool.QueryRow(ctx, `SELECT id FROM expense_settings WHERE kind='category' AND name=$1`, name).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		visible, hidden := category("Other"), category("Safety")
+		day, _ := time.Parse(time.DateOnly, "2026-10-14")
+		input := ExpenseInput{CategoryID: visible, ExpenseDate: day, Amount: "25", CoveredBy: payTestString("Company"), ExpenseType: payTestString("Repair"), PaymentType: payTestString("EFS"), ReferenceNumber: payTestString("INV-817"), EFSReferenceNumber: payTestString("00042-ALPHA")}
+		saved, err := repo.CreateExpense(ctx, input)
+		if err != nil || saved.EFSReferenceNumber == nil || *saved.EFSReferenceNumber != "00042-ALPHA" || saved.ReferenceNumber == nil || *saved.ReferenceNumber != "INV-817" {
+			t.Fatalf("create: %+v %v", saved, err)
+		}
+		hiddenInput := input
+		hiddenInput.CategoryID = hidden
+		if _, err := repo.CreateExpense(ctx, hiddenInput); err != nil {
+			t.Fatal(err)
+		}
+		search := func(term string, total int) {
+			t.Helper()
+			page, err := repo.ListExpensesPage(ctx, ExpensePageQuery{VisibleCategoryIDs: []string{visible}, AccessibleCategoryIDs: []string{visible}, History: true, Search: term, Pagination: Pagination{Page: 1, PageSize: 10}})
+			if err != nil || page.Total != total || len(page.Items) != total || (total == 1 && page.Items[0].ID != saved.ID) {
+				t.Fatalf("search %q: total=%d items=%v error=%v", term, page.Total, page.Items, err)
+			}
+		}
+		search("42-alpha", 1)
+		search("00042", 1)
+		search("INV-817", 1)
+		input.EFSReferenceNumber = payTestString("REPLACEMENT-702")
+		updated, err := repo.UpdateExpense(ctx, saved.ID, input)
+		if err != nil || updated.EFSReferenceNumber == nil || *updated.EFSReferenceNumber != "REPLACEMENT-702" {
+			t.Fatalf("update: %+v %v", updated, err)
+		}
+		search("42-alpha", 0)
+		search("replacement-702", 1)
+		input.PaymentType, input.EFSReferenceNumber = payTestString("Cash"), nil
+		if _, err := repo.UpdateExpense(ctx, saved.ID, input); err != nil {
+			t.Fatal(err)
+		}
+		search("replacement-702", 0)
+		search("INV-817", 1)
+
+		// Confirm that the same predicate used by the directory can use the index.
+		conn, err := pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Release()
+		if _, err := conn.Exec(ctx, `SET enable_seqscan=off`); err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Exec(ctx, `RESET enable_seqscan`)
+		var plan string
+		err = conn.QueryRow(ctx, `EXPLAIN (FORMAT JSON) SELECT id FROM expenses
+			WHERE efs_reference_number IS NOT NULL AND lower(btrim(payment_type))='efs'
+			AND efs_reference_number ILIKE '%alpha%'`).Scan(&plan)
+		if err != nil || !strings.Contains(plan, "expenses_efs_reference_trgm_idx") {
+			t.Fatalf("EFS index unavailable: %v\n%s", err, plan)
+		}
+	})
 }
 
 func TestExpenseAmountSearchDatabase(t *testing.T) {

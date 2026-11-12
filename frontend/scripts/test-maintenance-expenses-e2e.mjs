@@ -11,7 +11,7 @@ try {
   const maintenanceDescription='Unified maintenance expense '+Date.now();
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(access.base+'/login');
-  await page.getByLabel('Email or existing username').fill(access.email);
+  await page.getByLabel('Email',{exact:true}).fill(access.email);
   await page.getByLabel('Password',{exact:true}).fill(access.password);
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
   await page.waitForURL(url=>!url.pathname.startsWith('/login'));
@@ -114,7 +114,7 @@ try {
   await page.reload();
   await page.getByRole('row',{name:'Open '+maintenanceDescription,exact:true}).click();
   await expect(page.getByLabel('Odometer',{exact:true})).toHaveValue('400000');
-  await expect(page.getByRole('link',{name:'maintenance-receipt.txt',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Invoice and receipt preview'}).getByText('maintenance-receipt.txt',{exact:true})).toBeVisible();
   await page.getByLabel('Shop address',{exact:true}).fill('202 Updated Lane');
   await page.getByLabel('Amount',{exact:true}).fill('130.30');
   await page.getByRole('button',{name:'Save changes',exact:true}).click();
@@ -145,7 +145,7 @@ try {
   const session=await api('/auth/session');
   const retired=await page.request.post(access.base+'/api/maintenance',{headers:{'X-CSRF-Token':session.csrfToken,Origin:access.base},data:{expense:{categoryId:options.categoryId}}});
   expect(retired.status()).toBe(410);
-  const legacyResponse=await page.request.post(access.base+'/api/expenses',{headers:{'X-CSRF-Token':session.csrfToken,Origin:access.base},data:{categoryId:options.categoryId,expenseType:'Electrical',expenseDate:'2026-10-01',amount:'100.00',paymentType:'EFS',paidBy:'Local Review',coveredBy:'Company',description:'Legacy EFS expense total',maintenance:{odometer:null,vendorId:null,vendorName:'Legacy shop',vendorAddress:'',vendorPhone:'',vendorContact:'',oilType:''}}});
+  const legacyResponse=await page.request.post(access.base+'/api/expenses',{headers:{'X-CSRF-Token':session.csrfToken,Origin:access.base},data:{categoryId:options.categoryId,expenseType:'Electrical',expenseDate:'2026-10-01',amount:'100.00',paymentType:'EFS',efsReferenceNumber:'LEGACY-EFS-100',paidBy:'Local Review',coveredBy:'Company',description:'Legacy EFS expense total',maintenance:{odometer:null,vendorId:null,vendorName:'Legacy shop',vendorAddress:'',vendorPhone:'',vendorContact:'',oilType:''}}});
   expect(legacyResponse.status()).toBe(201);
   const legacy=await legacyResponse.json();
   expect(legacy.baseAmount).toBeNull();

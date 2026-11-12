@@ -78,6 +78,7 @@ type Expense struct {
 	Amount                   *string               `json:"amount"`
 	PaymentType              *string               `json:"paymentType"`
 	ExpenseType              *string               `json:"expenseType"`
+	EFSReferenceNumber       *string               `json:"efsReferenceNumber"`
 	ReferenceNumber          *string               `json:"referenceNumber"`
 	Description              *string               `json:"description"`
 	WorkOrderDescription     *string               `json:"workOrderDescription"`
@@ -112,6 +113,7 @@ type ExpenseInput struct {
 	Amount               string
 	PaymentType          *string
 	ExpenseType          *string
+	EFSReferenceNumber   *string
 	ReferenceNumber      *string
 	Description          *string
 	CoveredBy            *string
@@ -188,6 +190,13 @@ type ExpensePage struct {
 
 func (r *ExpenseRepository) ListExpensesPage(ctx context.Context, query ExpensePageQuery) (ExpensePage, error) {
 	search := expenseTextSearchSQL
+	if query.Search != "" {
+		// An independent lookup lets PostgreSQL use the EFS index alongside the joined text search.
+		search = "(" + search + ` OR e.id IN (
+			SELECT id FROM expenses WHERE efs_reference_number IS NOT NULL
+			AND lower(btrim(payment_type))='efs' AND efs_reference_number ILIKE '%' || $1 || '%' AND category_id=ANY($2::uuid[])
+		))`
+	}
 	amount := normalizeExpenseSearchAmount(query.Search)
 	if amount != "" {
 		// Keep numeric truck/reference searches working. A separate ID lookup lets
@@ -611,18 +620,18 @@ func insertExpense(ctx context.Context, queryer expenseQueryer, input ExpenseInp
 		INSERT INTO expenses (
 			category_id, category, expense_date, truck_id, driver_id, unit_number, driver_name, amount,
 			payment_type, expense_type, reference_number, description, covered_by,
-			paid_by, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown, applicant_id, broker_load_number
+			paid_by, accounting_verified, owner_id, created_by, created_by_name, base_amount, payment_fee, cost_breakdown, applicant_id, broker_load_number, efs_reference_number
 		) VALUES (
 			$1, (SELECT name FROM expense_settings WHERE id=$1 AND kind='category' AND active), $2, $3, $4,
 			CASE WHEN $3::uuid IS NULL THEN $5 ELSE (SELECT unit_number FROM trucks WHERE id = $3) END,
 			CASE WHEN $4::uuid IS NULL THEN $6 ELSE (SELECT full_name FROM drivers WHERE id = $4) END,
-			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, NULLIF($16,'')::uuid, NULLIF($17,''), $18::numeric, coalesce(nullif($19,''),'0')::numeric, coalesce($20::jsonb,'[]'::jsonb), $21, $22
+			$7::numeric, $8, $9, $10, $11, $12, $13, $14, $15, NULLIF($16,'')::uuid, NULLIF($17,''), $18::numeric, coalesce(nullif($19,''),'0')::numeric, coalesce($20::jsonb,'[]'::jsonb), $21, $22, $23
 		) RETURNING id`,
 		input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
 		input.AccountingVerified, input.OwnerID, input.CreatedBy, input.CreatedByName,
-		input.BaseAmount, input.PaymentFee, breakdown, input.ApplicantID, input.BrokerLoadNumber,
+		input.BaseAmount, input.PaymentFee, breakdown, input.ApplicantID, input.BrokerLoadNumber, input.EFSReferenceNumber,
 	).Scan(&id)
 	return id, err
 }
@@ -671,12 +680,12 @@ func updateExpenseRow(ctx context.Context, tx pgx.Tx, id string, input ExpenseIn
 			driver_name = CASE WHEN $5::uuid IS NULL THEN $7 ELSE (SELECT full_name FROM drivers WHERE id = $5) END,
 			amount = $8::numeric, payment_type = $9,
 			expense_type = $10, reference_number = $11, description = $12,
-			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown), applicant_id=$20, broker_load_number=$21
+			covered_by = $13, paid_by = $14, owner_id = $15, updated_at = now(), base_amount=$16::numeric, payment_fee=coalesce(nullif($17,''),'0')::numeric, cost_breakdown=coalesce($19::jsonb,cost_breakdown), applicant_id=$20, broker_load_number=$21, efs_reference_number=$22
 		WHERE id = $1 AND ($18::timestamptz IS NULL OR updated_at=$18)`,
 		id, input.CategoryID, input.ExpenseDate, input.TruckID, input.DriverID,
 		input.UnitNumber, input.DriverName, input.Amount, input.PaymentType, input.ExpenseType,
 		input.ReferenceNumber, input.Description, input.CoveredBy, input.PaidBy,
-		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown, input.ApplicantID, input.BrokerLoadNumber,
+		input.OwnerID, input.BaseAmount, input.PaymentFee, input.UpdatedAt, breakdown, input.ApplicantID, input.BrokerLoadNumber, input.EFSReferenceNumber,
 	)
 	if err != nil {
 		return err
@@ -784,7 +793,7 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
 	to_char(date_trunc('week', e.expense_date)::date, 'YYYY-MM-DD'),
 	to_char(e.expense_date, 'YYYY-MM-DD'), COALESCE(t.unit_number, e.unit_number),
 	COALESCE(d.full_name, e.driver_name), e.amount::text, e.payment_type,
-	e.expense_type, e.reference_number, e.description, e.covered_by, e.paid_by,
+	e.expense_type, e.reference_number, CASE WHEN lower(btrim(e.payment_type))='efs' THEN e.efs_reference_number END, e.description, e.covered_by, e.paid_by,
 	e.accounting_verified, e.source_spreadsheet_id,
 	e.source_sheet, e.source_row, e.created_at, e.updated_at,
  CASE WHEN (lower(btrim(e.covered_by)) IN ('driver','truck owner') OR e.charge_driver_id IS NOT NULL) THEN
@@ -805,7 +814,7 @@ func scanExpense(row rowScanner) (Expense, error) {
 	err := row.Scan(
 		&value.ID, &value.TruckID, &value.DriverID, &value.Category, &value.CategoryID, &value.CreatedByName, &value.WeekStart,
 		&value.ExpenseDate, &value.UnitNumber, &value.DriverName, &value.Amount,
-		&value.PaymentType, &value.ExpenseType, &value.ReferenceNumber,
+		&value.PaymentType, &value.ExpenseType, &value.ReferenceNumber, &value.EFSReferenceNumber,
 		&value.Description, &value.CoveredBy, &value.PaidBy,
 		&value.AccountingVerified,
 		&value.SourceSpreadsheetID, &value.SourceSheet, &value.SourceRow,

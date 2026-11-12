@@ -2591,6 +2591,12 @@ assignment lookup lists.
   category Edit/Create rules and optionally check updatedAt for stale edits.
   Opening from payroll waits for pending payroll edits to save; saving reloads
   the current report. Finalized financial guards remain authoritative.
+- Migration 215 stores and indexes the EFS payment reference separately from the
+  invoice reference. EFS expense creates, bulk creates and edits require it;
+  Expenses search matches it case-insensitively, including partial matches.
+  The Payment column shows the reference beside EFS. Historical rows are not
+  backfilled. Maintenance invoices use the same expense form. Verify with
+  TestExpenseEFSReferenceDatabase and scripts/test-expense-efs-reference-e2e.mjs.
 - Migration 089 makes EFS a permanent active payment method (no rename/archive/delete).
   Fee-aware expense requests send baseAmount; the server computes $3 for each
   started $500 using exact arithmetic (zero has no fee, negatives are rejected).

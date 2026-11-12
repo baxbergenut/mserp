@@ -575,7 +575,7 @@ export default function ExpensesPage() {
                     <div className="mt-0.5 text-[11px] text-zinc-500">{expense.category}{expense.expenseType && ` · ${expense.expenseType}`}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-zinc-300">{expense.paymentType || "—"}</div>
+                    <div className="text-zinc-300">{expense.paymentType || "—"}{expense.efsReferenceNumber && <> - <span className="break-all">{expense.efsReferenceNumber}</span></>}</div>
                     <div className="mt-0.5 text-[11px] text-zinc-600">{expense.managedInSheets?"Managed in Sheets":`Paid by ${expense.paidBy || "—"}`}</div>
                   </td>
                   <td className="px-4 py-3">

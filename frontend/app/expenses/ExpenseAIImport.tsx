@@ -13,6 +13,7 @@ import { ExpensePayerSelect, ExpensePaymentMethodSelect, ExpenseResponsibilitySe
 import { ExpenseDriverSelect } from "./ExpenseDriverSelect";
 import { expenseAssignment } from "./assignments";
 import type { Investor } from "../lib/types";
+import { isEFSPayment } from "../lib/expenseCosts";
 import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
 
 const compactControl = `${controlClass} min-w-32 px-2 py-1.5 text-[12px]`;
@@ -55,6 +56,7 @@ function toInput(draft: AIExpenseDraft): ExpenseInput {
     paymentType: draft.paymentType,
     expenseType: draft.expenseType,
     referenceNumber: draft.referenceNumber,
+    efsReferenceNumber: draft.efsReferenceNumber ?? "",
     description: draft.description,
     coveredBy: draft.coveredBy,
     paidBy: draft.paidBy,
@@ -236,7 +238,7 @@ export function ExpenseBatchEditor({
               <th className="px-2 py-2 font-medium">Driver</th>
               <th className="px-2 py-2 font-medium">Amount</th>
               <th className="px-2 py-2 font-medium">Payment</th>
-              <th className="px-2 py-2 font-medium">Reference</th>
+              <th className="px-2 py-2 font-medium">Invoice reference</th>
               <th className="px-2 py-2 font-medium">Covered by</th>
               <th className="px-2 py-2 font-medium">Paid by</th>
               <th className="w-10 px-2 py-2"><span className="sr-only">Remove</span></th>
@@ -270,7 +272,7 @@ export function ExpenseBatchEditor({
                 </td>
                 <td className="px-2 py-2"><input required type="number" step="0.01" value={value.amount} onChange={(event) => update(index, { amount: event.target.value })} className={compactControl} /><ExpenseFeePreview amount={value.amount} paymentType={isDriverOnlyExpense(settings, value.categoryId) ? "" : value.paymentType} /></td>
                 <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <ExpensePaymentMethodSelect label={`Transaction ${index + 1} payment method`} value={value.paymentType} methods={settings.filter(item => item.kind === "payment_method" && item.active).map(item => item.name)} onChange={paymentType => update(index, { paymentType })} className={compactControl} />}</td>
-                <td className="px-2 py-2"><input value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
+                <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && isEFSPayment(value.paymentType) && <label className="mb-2 block text-xs">EFS reference number<input aria-label={`Transaction ${index + 1} EFS reference number`} required maxLength={100} value={value.efsReferenceNumber} onChange={event => update(index, { efsReferenceNumber: event.target.value })} className={compactControl} /></label>}<input aria-label={`Transaction ${index + 1} invoice reference number`} value={value.referenceNumber} onChange={(event) => update(index, { referenceNumber: event.target.value })} className={compactControl} /></td>
                 <td className="px-2 py-2">{isDriverOnlyExpense(settings, value.categoryId) ? <span>Driver</span> : <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={next => update(index, next)} className={compactControl} label={`Transaction ${index + 1} responsibility`} />}</td>
                 <td className="px-2 py-2">{!isDriverOnlyExpense(settings, value.categoryId) && <ExpensePayerSelect value={value.paidBy} users={users} onChange={paidBy => update(index, { paidBy })} className={compactControl} label={`Transaction ${index + 1} paid by`} />}</td>
                 <td className="px-2 py-2">

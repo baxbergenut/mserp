@@ -50,7 +50,7 @@ func TestExtractExpenseMultimodal(t *testing.T) {
 						t.Error("missing PDF data")
 					}
 				}
-				body := map[string]any{"ok": true, "items": []any{map[string]any{"amt": "125.00", "costBreakdown": []any{map[string]any{"name": "Oil change", "amount": "125.00"}}}}}
+				body := map[string]any{"ok": true, "items": []any{map[string]any{"amt": "125.00", "pay": "EFS", "ref": "INV-825", "efsRef": "EFS-007", "costBreakdown": []any{map[string]any{"name": "Oil change", "amount": "125.00"}}}}}
 				raw, _ := json.Marshal(body)
 				json.NewEncoder(w).Encode(map[string]any{"status": "completed", "output": []any{map[string]any{"content": []any{map[string]any{"type": "output_text", "text": string(raw)}}}}})
 			}))
@@ -64,6 +64,10 @@ func TestExtractExpenseMultimodal(t *testing.T) {
 			result, err := client.ExtractExpense(context.Background(), input)
 			if err != nil || !result.IsExpense || len(result.Expenses) != 1 || len(result.Expenses[0].CostBreakdown) != 0 {
 				t.Fatal(result, err)
+			}
+			item := result.Expenses[0]
+			if item.ReferenceNumber == nil || *item.ReferenceNumber != "INV-825" || item.EFSReferenceNumber == nil || *item.EFSReferenceNumber != "EFS-007" {
+				t.Fatal("invoice and EFS references must remain separate", item)
 			}
 		})
 	}

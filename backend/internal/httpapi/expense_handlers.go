@@ -71,6 +71,7 @@ type expenseRequest struct {
 	Amount             string          `json:"amount"`
 	PaymentType        string          `json:"paymentType"`
 	ExpenseType        string          `json:"expenseType"`
+	EFSReferenceNumber string          `json:"efsReferenceNumber"`
 	ReferenceNumber    string          `json:"referenceNumber"`
 	Description        string          `json:"description"`
 	CoveredBy          string          `json:"coveredBy"`
@@ -107,25 +108,26 @@ func (handler expenseHandler) normalizeExpenseRequest(ctx context.Context, reque
 }
 
 type extractedExpense struct {
-	ApplicantID     *string                      `json:"applicantId"`
-	Maintenance     *openai.MaintenanceDetails   `json:"maintenance,omitempty"`
-	CostBreakdown   []repository.ExpenseCostItem `json:"costBreakdown"`
-	Category        string                       `json:"category"`
-	CategoryID      string                       `json:"categoryId"`
-	ExpenseDate     string                       `json:"expenseDate"`
-	TruckID         *string                      `json:"truckId"`
-	DriverID        *string                      `json:"driverId"`
-	UnitNumber      string                       `json:"unitNumber"`
-	DriverName      string                       `json:"driverName"`
-	Amount          string                       `json:"amount"`
-	PaymentType     string                       `json:"paymentType"`
-	ExpenseType     string                       `json:"expenseType"`
-	ReferenceNumber string                       `json:"referenceNumber"`
-	Description     string                       `json:"description"`
-	CoveredBy       string                       `json:"coveredBy"`
-	PaidBy          string                       `json:"paidBy"`
-	Confidence      float64                      `json:"confidence"`
-	Evidence        []string                     `json:"evidence"`
+	ApplicantID        *string                      `json:"applicantId"`
+	Maintenance        *openai.MaintenanceDetails   `json:"maintenance,omitempty"`
+	CostBreakdown      []repository.ExpenseCostItem `json:"costBreakdown"`
+	Category           string                       `json:"category"`
+	CategoryID         string                       `json:"categoryId"`
+	ExpenseDate        string                       `json:"expenseDate"`
+	TruckID            *string                      `json:"truckId"`
+	DriverID           *string                      `json:"driverId"`
+	UnitNumber         string                       `json:"unitNumber"`
+	DriverName         string                       `json:"driverName"`
+	Amount             string                       `json:"amount"`
+	PaymentType        string                       `json:"paymentType"`
+	ExpenseType        string                       `json:"expenseType"`
+	EFSReferenceNumber string                       `json:"efsReferenceNumber"`
+	ReferenceNumber    string                       `json:"referenceNumber"`
+	Description        string                       `json:"description"`
+	CoveredBy          string                       `json:"coveredBy"`
+	PaidBy             string                       `json:"paidBy"`
+	Confidence         float64                      `json:"confidence"`
+	Evidence           []string                     `json:"evidence"`
 }
 
 type expenseExtractionResponse struct {
@@ -155,6 +157,19 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 			}
 		}
 	}
+	efs := strings.EqualFold(strings.TrimSpace(request.PaymentType), "EFS")
+	request.EFSReferenceNumber = strings.TrimSpace(request.EFSReferenceNumber)
+	if efs {
+		if request.EFSReferenceNumber == "" {
+			return repository.ExpenseInput{}, errors.New("EFS reference number is required")
+		}
+		if utf8.RuneCountInString(request.EFSReferenceNumber) > 100 {
+			return repository.ExpenseInput{}, errors.New("EFS reference number must be at most 100 characters")
+		}
+		request.PaymentType = "EFS"
+	} else {
+		request.EFSReferenceNumber = ""
+	}
 	fee := "0.00"
 	if request.BaseAmount != nil {
 		base := strings.TrimSpace(*request.BaseAmount)
@@ -163,7 +178,7 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		}
 		request.BaseAmount = &base
 		request.Amount = base
-		if strings.EqualFold(strings.TrimSpace(request.PaymentType), "EFS") {
+		if efs {
 			principal, _ := new(big.Rat).SetString(base)
 			if principal.Sign() < 0 {
 				return repository.ExpenseInput{}, errors.New("EFS amount must be nonnegative")
@@ -173,7 +188,6 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 			feeValue := new(big.Rat).SetInt(new(big.Int).Mul(blocks, big.NewInt(3)))
 			fee = feeValue.FloatString(2)
 			request.Amount = new(big.Rat).Add(principal, feeValue).FloatString(2)
-			request.PaymentType = "EFS"
 		}
 	}
 	request.CategoryID = strings.TrimSpace(request.CategoryID)
@@ -254,7 +268,8 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 		UnitNumber: optionalString(request.UnitNumber), DriverName: optionalString(request.DriverName),
 		Amount: request.Amount, PaymentType: optionalString(request.PaymentType),
 		ExpenseType: optionalString(request.ExpenseType), ReferenceNumber: optionalString(request.ReferenceNumber),
-		Description: optionalString(request.Description), CoveredBy: optionalString(request.CoveredBy),
+		EFSReferenceNumber: optionalString(request.EFSReferenceNumber),
+		Description:        optionalString(request.Description), CoveredBy: optionalString(request.CoveredBy),
 		BrokerLoadNumber:   optionalString(request.BrokerLoadNumber),
 		PaidBy:             optionalString(request.PaidBy),
 		AccountingVerified: false,
@@ -637,7 +652,7 @@ func (handler expenseHandler) extractExpenses(w http.ResponseWriter, r *http.Req
 			ExpenseDate: validExtractedDate(item.ExpenseDate), TruckID: truckID, DriverID: driverID, ApplicantID: applicantID,
 			UnitNumber: unitNumber, DriverName: driverName, Amount: validExtractedAmount(item.Amount),
 			PaymentType: cleanExtractedValue(item.PaymentType), ExpenseType: cleanExtractedValue(item.ExpenseType),
-			ReferenceNumber: cleanExtractedValue(item.ReferenceNumber), Description: cleanExtractedValue(item.Description),
+			ReferenceNumber: cleanExtractedValue(item.ReferenceNumber), EFSReferenceNumber: cleanExtractedValue(item.EFSReferenceNumber), Description: cleanExtractedValue(item.Description),
 			CoveredBy: defaultExtractedValue(item.CoveredBy, "Company"), PaidBy: cleanExtractedValue(item.PaidBy),
 			Confidence: item.Confidence, Evidence: item.Evidence,
 		})

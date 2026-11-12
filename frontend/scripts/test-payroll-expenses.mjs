@@ -62,7 +62,8 @@ try {
         const sourceTotal = driver[`${cost}Total`];
         return route.fulfill({json:{sourceTotal,carry,due:driver.edits.costs?.[`${cost}Due`] ?? sourceTotal,transactions:carry !== '0.00' ? [{id:'old-def',transactionId:'old-relay',date:'2026-09-22',weekStart:'2026-09-21',description:'Pilot · DEF',location:'Dayton, OH',amount:'50.00',remaining:carry,carried:true}] : cost === 'fuel' ? [{id:'diesel',transactionId:'relay-1',date:week,weekStart:week,description:'Pilot · DIESEL',location:'Columbus, OH',amount:'30.00',carried:false},{id:'def',transactionId:'relay-2',date:week,weekStart:week,description:'Pilot · DEF',location:'Columbus, OH',amount:'10.00',carried:false}] : []}});
       }
-      if (request.url().includes('/api/lookups/')) expensiveLookups.push(path);
+      // Investor Pay loads options for its page filter independently of expense dialogs.
+      if (request.url().includes('/api/lookups/') && !(investor && path === '/investors')) expensiveLookups.push(path);
       if (request.method() === 'GET' && path.startsWith('/expenses/')) expenseReads.push(path);
       if (path === '/expenses/reimbursement') {
         if (request.method() === 'PUT') {
@@ -76,7 +77,7 @@ try {
       }
       if (path === '/expenses/expense') {
         if (request.method() === 'PUT') {
-          const input=request.postDataJSON(); expect(input.coveredBy).toBe('Broker'); expect(input.brokerLoadNumber).toBe('L0'); expect(input.baseAmount).toBe('634'); expect(input.updatedAt).toBe(expense.updatedAt);
+          const input=request.postDataJSON(); expect(input.coveredBy).toBe('Broker'); expect(input.brokerLoadNumber).toBe('L0'); expect(input.efsReferenceNumber).toBe('PAYROLL-EFS-100'); expect(input.baseAmount).toBe('634'); expect(input.updatedAt).toBe(expense.updatedAt);
           expense={...expense,...input,amount:'640.00',baseAmount:'634.00',paymentFee:'6.00'}; writes++;
           driver.edits.expenseDeductions[0]={...driver.edits.expenseDeductions[0],name:input.expenseType,expenseDate:input.expenseDate,total:'640.00',available:'640.00',openingBalance:'640.00'};
         }
@@ -257,6 +258,7 @@ try {
     expect(await modal.getByLabel('Broker load number').evaluate(e=>e.checkValidity())).toBe(false);
     await modal.getByLabel('Broker load number').fill('L0');
     await modal.getByLabel('Payment method',{exact:true}).selectOption('EFS');
+    await modal.getByLabel('EFS reference number', {exact:true}).fill('PAYROLL-EFS-100');
     await modal.getByLabel('Amount',{exact:true}).fill('300');
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $3.00 · Total: $303.00');
     await modal.getByLabel('Amount',{exact:true}).fill('500');
@@ -276,6 +278,7 @@ try {
     await page.getByRole('button',{name:'Open expense Parking',exact:true}).click();
     await expect(modal.getByLabel('Broker load number')).toHaveValue('L0');
     await expect(modal.getByLabel('Amount',{exact:true})).toHaveValue('634.00');
+    await expect(modal.getByLabel('EFS reference number',{exact:true})).toHaveValue('PAYROLL-EFS-100');
     await expect(modal.getByRole('status')).toHaveText('EFS fee: $6.00 · Total: $640.00');
     await modal.getByLabel('Broker load number').scrollIntoViewIfNeeded();
     await page.screenshot({path:join(tmpdir(), investor ? 'mserp-broker-investor-expense.png':'mserp-broker-driver-expense.png'),fullPage:true,animations:"disabled"});

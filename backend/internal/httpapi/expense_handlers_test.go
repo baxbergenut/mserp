@@ -123,7 +123,7 @@ func TestExpenseCostBreakdownValidation(t *testing.T) {
 	}
 	rows := []repository.ExpenseCostItem{{Name: "Oil change", Amount: "500.01"}}
 	base := "500.01"
-	value, err := (expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-14", ExpenseType: "Oil change", Amount: base, BaseAmount: &base, PaymentType: "EFS", CostBreakdown: &rows}).validate()
+	value, err := (expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-14", ExpenseType: "Oil change", Amount: base, BaseAmount: &base, PaymentType: "EFS", EFSReferenceNumber: "EFS-100", CostBreakdown: &rows}).validate()
 	if err != nil || value.Amount != "506.01" {
 		t.Fatal("breakdown must match base before EFS fee", value, err)
 	}
@@ -136,7 +136,7 @@ func TestExpenseEFSFee(t *testing.T) {
 		{"500.01", "6.00", "506.01"}, {"634", "6.00", "640.00"},
 		{"1000", "6.00", "1006.00"}, {"1000.01", "9.00", "1009.01"},
 	} {
-		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Parking", BaseAmount: &tc.base, Amount: "999", PaymentType: " eFs "}
+		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Parking", BaseAmount: &tc.base, Amount: "999", PaymentType: " eFs ", EFSReferenceNumber: "EFS-100"}
 		value, err := r.validate()
 		if err != nil || value.Amount != tc.total || value.PaymentFee != tc.fee || *value.BaseAmount != tc.base {
 			t.Fatalf("%s: %+v %v", tc.base, value, err)
@@ -153,10 +153,30 @@ func TestExpenseEFSFee(t *testing.T) {
 		}
 	}
 	for _, base := range []string{"-1", "1.001", "", "abc"} {
-		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Parking", BaseAmount: &base, PaymentType: "EFS"}
+		r := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Parking", BaseAmount: &base, PaymentType: "EFS", EFSReferenceNumber: "EFS-100"}
 		if _, err := r.validate(); err == nil {
 			t.Fatal("invalid EFS base accepted", base)
 		}
+	}
+}
+
+func TestExpenseEFSReferenceValidation(t *testing.T) {
+	request := expenseRequest{CategoryID: testExpenseCategoryID, ExpenseDate: "2026-10-12", ExpenseType: "Repair", Amount: "10", PaymentType: " eFs ", ReferenceNumber: "INV-123"}
+	for _, ref := range []string{"", " \t ", strings.Repeat("x", 101)} {
+		request.EFSReferenceNumber = ref
+		if _, err := request.validate(); err == nil || !strings.Contains(err.Error(), "EFS reference number") {
+			t.Fatalf("accepted invalid EFS reference %q: %v", ref, err)
+		}
+	}
+	request.EFSReferenceNumber = " 00012-A "
+	input, err := request.validate()
+	if err != nil || input.EFSReferenceNumber == nil || *input.EFSReferenceNumber != "00012-A" || *input.ReferenceNumber != "INV-123" || *input.PaymentType != "EFS" {
+		t.Fatalf("reference did not survive validation independently of invoice: %+v, %v", input, err)
+	}
+	request.PaymentType = "Cash"
+	input, err = request.validate()
+	if err != nil || input.EFSReferenceNumber != nil || *input.ReferenceNumber != "INV-123" {
+		t.Fatalf("non-EFS payment retained an EFS reference: %+v, %v", input, err)
 	}
 }
 

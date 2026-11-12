@@ -30,6 +30,7 @@ try {
   await expect(page.getByRole('dialog')).toHaveCount(1);
   await page.getByLabel('Cost breakdown 2 amount', { exact: true }).fill('20.20');
   await page.getByLabel('Payment method', { exact: true }).selectOption('EFS');
+  await page.getByLabel('EFS reference number', { exact: true }).fill('ENTRY-EFS-100');
   await page.getByRole('button', { name: 'Create entry', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const settings = await (await page.request.get(`${access.base}/api/expense-settings`)).json();
@@ -63,6 +64,7 @@ try {
   await page.getByRole('combobox', { name: 'Driver', exact: true }).fill(applicantName);
   await page.getByLabel('Amount', { exact: true }).fill('85');
   await page.getByLabel('Payment method', { exact: true }).selectOption('EFS');
+  await page.getByLabel('EFS reference number', { exact: true }).fill('ENTRY-EFS-100');
   await page.getByRole('button', { name: 'Create entry', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const applicantPage = await (await page.request.get(`${access.base}/api/expenses?search=${encodeURIComponent(applicantName)}`)).json();
