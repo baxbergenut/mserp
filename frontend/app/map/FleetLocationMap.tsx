@@ -112,7 +112,9 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, trai
     const bounds = L.latLngBounds([]);
     for (const pin of trucks.values()) {
       const point: Leaflet.LatLngTuple = [pin.location.latitude, pin.location.longitude];
+      bounds.extend(point);
       const selected = pin.driverId === selectedDriverId;
+      if (selectedDriverId && !selected) continue;
       const marker = L.marker(point, {
         icon: truckIcon(L, pin, selected),
         title: [pin.unit ? `Truck ${pin.unit}` : "Truck", pin.driverName, statusLabel(pin.status)].filter(Boolean).join(" · "),
@@ -121,7 +123,6 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, trai
       }).on("click", () => onSelect(pin.driverId)).addTo(layer);
       const element = marker.getElement();
       if (element) element.setAttribute("aria-label", marker.options.title ?? pin.driverName);
-      bounds.extend(point);
     }
     if (!fittedFleet.current && bounds.isValid()) {
       map.fitBounds(bounds, { paddingTopLeft: [40, 52], paddingBottomRight: [40, 40], maxZoom: 10, animate: false });
