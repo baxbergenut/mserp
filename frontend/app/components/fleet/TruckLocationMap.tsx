@@ -56,8 +56,6 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
         referrerPolicy: "strict-origin",
         maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
-      const tiles = map.getPane("tilePane");
-      if (tiles) tiles.style.filter = "invert(1) hue-rotate(180deg) brightness(.75) contrast(.85)";
       const marker = L.marker(point, { icon: locationIcon(L, current.heading, current.old), interactive: false, keyboard: false }).addTo(map);
       runtime.current = { L, map, marker };
       // Wait for painted world tiles and a visible card, not a mount timer.
@@ -112,7 +110,7 @@ export function TruckLocationMap({ location }: { location: DriverBoardLocation }
   }, [latitude, longitude, heading, old]);
 
   return <div className="relative isolate border-t border-zinc-800">
-    <div ref={container} aria-label="Truck location map" className="h-64 w-full bg-zinc-900" />
+    <div ref={container} aria-label="Truck location map" className="fleet-tile-map h-64 w-full bg-card" />
     {failed && <p role="status" className="absolute inset-x-4 top-4 z-[1000] rounded bg-zinc-950 p-3 text-xs text-zinc-400">Map could not load. Coordinates remain available above.</p>}
   </div>;
 }

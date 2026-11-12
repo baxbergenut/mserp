@@ -79,12 +79,13 @@ export default function FleetMapPage() {
   const selectedLoad = selected ? board?.loads[selected.id]?.current : null;
   const stops = useMemo<FleetStopFlag[]>(() => {
     if (!selectedLoad || selectedLoad.sourceMissing) return [];
-    return (selectedLoad.stops ?? []).flatMap(({ type, latitude, longitude, location }) => {
+    return (selectedLoad.stops ?? []).flatMap(({ type, latitude, longitude, streetAddress, location }) => {
       const kind = type.toLowerCase();
       if ((kind !== "pickup" && kind !== "delivery") || latitude == null || longitude == null ||
         !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
         Math.abs(latitude) > 90 || Math.abs(longitude) > 180 || (latitude === 0 && longitude === 0)) return [];
-      return [{ kind, point: [latitude, longitude], location }];
+      const address = [streetAddress?.trim(), location?.trim()].filter(Boolean).join(", ");
+      return [{ kind, point: [latitude, longitude], address }];
     });
   }, [selectedLoad]);
   const truckId = selectedPin?.truckId;
@@ -164,7 +165,8 @@ export default function FleetMapPage() {
         <span>{error}{board ? " Showing last known positions." : ""}</span>
         <button type="button" className="underline" onClick={() => setAttempt(value => value + 1)}>Retry</button>
       </div>}
-      <FleetLocationMap pins={pins} selectedDriverId={selected?.id ?? ""} onSelect={setSelectedId} route={route} trail={trail} stops={stops} />
+      <FleetLocationMap pins={pins} selectedDriverId={selected?.id ?? ""} onSelect={setSelectedId}
+        route={route} routeLoadNumber={selectedLoad?.number?.trim() ?? ""} trail={trail} stops={stops} />
     </section>
   );
 }

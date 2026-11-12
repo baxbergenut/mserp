@@ -70,9 +70,13 @@ html[data-theme]:not([data-theme="default"]) {
 html[data-theme]:not([data-theme="default"]) .bg-blue-600 { background-color: var(--ui-primary); }
 html[data-theme]:not([data-theme="default"]) .bg-blue-600:hover { background-color: var(--ui-primary-hover); }
 .status-board-updater { color: rgb(191 219 254 / 0.8); }
-/* Light themes need darker text for semantic labels. Only text is adapted;
-   status fills, maps and red/green financial meaning stay unchanged. */
+.fleet-tile-map.leaflet-container { background: var(--card); }
+.fleet-tile-map .leaflet-tile-pane { filter: var(--fleet-tile-filter, invert(1) hue-rotate(180deg) brightness(.75) contrast(.85)); }
+.fleet-map-stop-address :is(.leaflet-popup-content-wrapper, .leaflet-popup-tip) { background: var(--card); color: var(--foreground); }
+.fleet-tile-map .fleet-map-stop-address .leaflet-popup-close-button { color: var(--muted); }
+/* Light themes need darker text for semantic labels. */
 html[data-theme]:is([data-theme="solarized-light"], [data-theme="default-light"]) {
+  --fleet-tile-filter: none;
   --ui-link: #075985;
   .status-board-updater { color: var(--ui-link); }
   :is(.text-blue-200, .text-blue-300, .text-blue-400) { color: var(--ui-link); }
