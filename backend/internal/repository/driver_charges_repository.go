@@ -69,14 +69,14 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT s.id::text,s.driver_id::text,d.full_name,s.type_id::text,s.kind,s.name,s.direction,s.start_week::text,s.end_week::text,s.eligibility,s.total::text,s.version,s.installment_count,(s.kind='installment' AND NOT accounting_live_source('installment',s.id,s.start_week)) FROM driver_charge_schedules s JOIN drivers d ON d.id=s.driver_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY d.full_name,s.name,s.id`, driver, payrollDriverIDs(ctx))
+	rows, err = q.Query(ctx, `SELECT s.id::text,coalesce(s.driver_id::text,s.truck_id::text),coalesce(d.full_name,i.full_name||' - Truck '||t.unit_number),s.type_id::text,s.kind,s.name,s.direction,s.start_week::text,s.end_week::text,s.eligibility,s.total::text,s.version,s.installment_count,(s.kind='installment' AND NOT accounting_live_source('installment',s.id,s.start_week)),coalesce(s.truck_id::text,''),coalesce(s.owner_id::text,'') FROM driver_charge_schedules s LEFT JOIN drivers d ON d.id=s.driver_id LEFT JOIN trucks t ON t.id=s.truck_id LEFT JOIN investors i ON i.id=s.owner_id WHERE ($1='' OR coalesce(s.driver_id,s.truck_id)::text=$1) AND ($2::uuid[] IS NULL OR coalesce(s.driver_id,s.truck_id)=ANY($2::uuid[])) ORDER BY d.full_name,s.name,s.id`, driver, payrollAccountIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
 	index := map[string]int{}
 	for rows.Next() {
 		var s ChargeSchedule
-		if err = rows.Scan(&s.ID, &s.DriverID, &s.DriverName, &s.TypeID, &s.Kind, &s.Name, &s.Direction, &s.StartWeek, &s.EndWeek, &s.Eligibility, &s.Total, &s.Version, &s.InstallmentCount, &s.ManagedInSheets); err != nil {
+		if err = rows.Scan(&s.ID, &s.DriverID, &s.DriverName, &s.TypeID, &s.Kind, &s.Name, &s.Direction, &s.StartWeek, &s.EndWeek, &s.Eligibility, &s.Total, &s.Version, &s.InstallmentCount, &s.ManagedInSheets, &s.TruckID, &s.OwnerID); err != nil {
 			rows.Close()
 			return data, loads, err
 		}
@@ -98,7 +98,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if len(data.Schedules) == 0 {
 		return data, loads, nil
 	}
-	rows, err = q.Query(ctx, `SELECT p.schedule_id::text,p.week_start::text,p.amount::text,p.paused FROM driver_charge_phases p JOIN driver_charge_schedules s ON s.id=p.schedule_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY p.week_start`, driver, payrollDriverIDs(ctx))
+	rows, err = q.Query(ctx, `SELECT p.schedule_id::text,p.week_start::text,p.amount::text,p.paused FROM driver_charge_phases p JOIN driver_charge_schedules s ON s.id=p.schedule_id WHERE ($1='' OR coalesce(s.driver_id,s.truck_id)::text=$1) AND ($2::uuid[] IS NULL OR coalesce(s.driver_id,s.truck_id)=ANY($2::uuid[])) ORDER BY p.week_start`, driver, payrollAccountIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
@@ -117,7 +117,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT o.schedule_id::text,o.week_start::text,o.name,o.scheduled_amount::text,o.amount::text,o.overridden,o.confirmed_at,o.confirmed_by::text,o.version,coalesce(o.base_amount,o.scheduled_amount)::text,o.waive_remainder FROM driver_charge_occurrences o JOIN driver_charge_schedules s ON s.id=o.schedule_id WHERE ($1='' OR s.driver_id::text=$1) AND ($2::uuid[] IS NULL OR s.driver_id=ANY($2::uuid[])) ORDER BY o.week_start`, driver, payrollDriverIDs(ctx))
+	rows, err = q.Query(ctx, `SELECT o.schedule_id::text,o.week_start::text,o.name,o.scheduled_amount::text,o.amount::text,o.overridden,o.confirmed_at,o.confirmed_by::text,o.version,coalesce(o.base_amount,o.scheduled_amount)::text,o.waive_remainder FROM driver_charge_occurrences o JOIN driver_charge_schedules s ON s.id=o.schedule_id WHERE ($1='' OR coalesce(s.driver_id,s.truck_id)::text=$1) AND ($2::uuid[] IS NULL OR coalesce(s.driver_id,s.truck_id)=ANY($2::uuid[])) ORDER BY o.week_start`, driver, payrollAccountIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
@@ -138,7 +138,7 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	if err != nil {
 		return data, loads, err
 	}
-	rows, err = q.Query(ctx, `SELECT DISTINCT e.driver_id::text,date_trunc('week',e.service_date)::date::text FROM `+payrollBoardEntriesSQL+` e WHERE NOT e.deleted AND btrim(e.load_number)<>'' AND e.day_status='' AND ($1='' OR e.driver_id::text=$1) AND ($2::uuid[] IS NULL OR e.driver_id=ANY($2::uuid[])) AND EXISTS(SELECT 1 FROM driver_charge_schedules s WHERE s.driver_id=e.driver_id)`, driver, payrollDriverIDs(ctx))
+	rows, err = q.Query(ctx, `SELECT DISTINCT e.driver_id::text,date_trunc('week',e.service_date)::date::text FROM `+payrollBoardEntriesSQL+` e WHERE NOT e.deleted AND btrim(e.load_number)<>'' AND e.day_status='' AND ($1='' OR e.driver_id::text=$1) AND ($2::uuid[] IS NULL OR e.driver_id=ANY($2::uuid[])) AND EXISTS(SELECT 1 FROM driver_charge_schedules s WHERE s.driver_id=e.driver_id)`, driver, payrollAccountIDs(ctx))
 	if err != nil {
 		return data, loads, err
 	}
@@ -156,6 +156,15 @@ func chargeData(ctx context.Context, q chargeQuery, driver string) (ChargeData, 
 	err = rows.Err()
 	rows.Close()
 	if err == nil {
+		trucks := []string{}
+		for _, s := range data.Schedules {
+			if s.TruckID != "" {
+				trucks = append(trucks, s.TruckID)
+			}
+		}
+		err = addTruckInstallmentLoads(ctx, q, loads, trucks)
+	}
+	if err == nil {
 		err = addTeamChargeLoads(ctx, q, loads)
 	}
 	return data, loads, err
@@ -167,6 +176,10 @@ func (r *DriverChargeRepository) List(ctx context.Context, driver string) (Charg
 	}
 	defer tx.Rollback(ctx)
 	data, loads, err := chargeData(ctx, tx, driver)
+	if err != nil {
+		return data, err
+	}
+	data.InvestorTrucks, err = investorAccountTrucks(ctx, tx)
 	if err != nil {
 		return data, err
 	}
@@ -208,6 +221,12 @@ func lockChargeDrivers(ctx context.Context, tx pgx.Tx, ids []string) error {
 	return nil
 }
 func validateChargeCreate(c *ChargeCreate, currentWeek string) error {
+	if c.TruckID != "" {
+		if len(c.DriverIDs) != 0 {
+			return chargeInvalid("Choose a driver or an investor truck")
+		}
+		c.DriverIDs = []string{c.TruckID}
+	}
 	if c.Installments < 0 || c.Installments > 5200 || (c.Kind == "recurring" && c.Installments != 0) {
 		return chargeInvalid("Invalid installment count")
 	}
@@ -288,6 +307,9 @@ func (r *DriverChargeRepository) Create(ctx context.Context, c ChargeCreate, act
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	if c.TruckID != "" {
+		return createTruckInstallment(ctx, tx, c, actor)
+	}
 	if err = lockChargeDrivers(ctx, tx, c.DriverIDs); err != nil {
 		return nil, err
 	}
@@ -411,7 +433,7 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 	for _, v := range b.Targets {
 		ids = append(ids, v.ID)
 	}
-	rows, err := tx.Query(ctx, `SELECT DISTINCT driver_id::text FROM driver_charge_schedules WHERE id::text=ANY($1::text[]) ORDER BY driver_id::text`, ids)
+	rows, err := tx.Query(ctx, `SELECT DISTINCT driver_id::text FROM driver_charge_schedules WHERE driver_id IS NOT NULL AND id::text=ANY($1::text[]) ORDER BY driver_id::text`, ids)
 	if err != nil {
 		return err
 	}
@@ -493,7 +515,16 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 		case "resume":
 			p.Paused = false
 		}
-		if b.Action == "resume" {
+		if b.Action == "resume" && s.TruckID != "" {
+			owner, e := truckInstallmentOwner(ctx, tx, s.TruckID, b.WeekStart)
+			if e != nil {
+				return e
+			}
+			if owner != s.OwnerID {
+				return chargeInvalid("This plan belongs to the previous investor")
+			}
+		}
+		if b.Action == "resume" && s.TruckID == "" {
 			var active bool
 			if err = tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1`, s.DriverID).Scan(&active); err != nil {
 				return err
@@ -521,8 +552,10 @@ func (r *DriverChargeRepository) Bulk(ctx context.Context, b ChargeBulk, actor s
 		if err = chargeAudit(ctx, tx, s.ID, "", actor, b.Action, b); err != nil {
 			return err
 		}
-		if err = handoffInvestorDriverCharges(ctx, tx, s.DriverID, actor); err != nil {
-			return err
+		if s.TruckID == "" {
+			if err = handoffInvestorDriverCharges(ctx, tx, s.DriverID, actor); err != nil {
+				return err
+			}
 		}
 	}
 	return commitPayrollMutation(ctx, tx)
@@ -578,6 +611,9 @@ func (r *DriverChargeRepository) Draft(ctx context.Context, c ChargeCreate) ([]C
 		return nil, err
 	}
 	var loads map[string]bool
+	if c.TruckID != "" {
+		return previewTruckInstallment(ctx, r.pool, c)
+	}
 	if c.StartWeek < currentWeek {
 		driver := c.DriverIDs[0]
 		if err := assertPriorInstallmentWeekOpen(ctx, r.pool, driver, c.StartWeek); err != nil {

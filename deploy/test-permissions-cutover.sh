@@ -39,8 +39,10 @@ mock_escrow_settlement=f
 mock_scale_carry=f
 mock_scale_partial=f
 mock_investor_retained=f
+mock_investor_accounts=f
 runuser() {
     local result=$mock
+    if [[ $* == *"table_name='driver_escrows'"* && $* == *"column_name='truck_id'"* ]]; then result=$mock_investor_accounts; fi
     if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
     if [[ $* == *public.accounting_cutover* ]]; then result=$mock_accounting; fi
@@ -351,3 +353,14 @@ compatible_release "$test_root/new"
 mock_gross_week_lock=error
 if compatible_release "$test_root/new"; then echo 'Week lock schema query failure allowed rollback' >&2; exit 1; fi
 echo 'Gross Board week lock compatibility checks passed'
+
+mock_gross_week_lock=t
+mock_investor_accounts=t
+if compatible_release "$test_root/new"; then echo 'Investor accounts allowed incompatible rollback' >&2; exit 1; fi
+sed -i 's/case "$1" in /case "$1" in -investor-truck-accounts-capability) echo investor-truck-accounts-v1;; /' "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_investor_accounts=error
+if compatible_release "$test_root/new"; then echo 'Investor account query failure allowed rollback' >&2; exit 1; fi
+mock_investor_accounts=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown investor account schema allowed rollback' >&2; exit 1; fi
+echo 'Investor truck account compatibility checks passed'

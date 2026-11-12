@@ -1661,6 +1661,7 @@ export interface ChargeOccurrence {
   version: number; scheduleVersion: number; typeVersion: number; reset?: boolean;
 }
 export interface ChargeSchedule {
+  truckId?: string; ownerId?: string;
   managedInSheets?: boolean;
   typeVersion: number;
   installmentCount: number;
@@ -1669,7 +1670,8 @@ export interface ChargeSchedule {
   eligibility: ChargeEligibility; total: string | null; version: number; phases: ChargePhase[]; occurrences: ChargeOccurrence[];
   confirmed: string; remaining: string; scheduled: string; completionWeek: string; status: string;
 }
-export interface ChargeData { types: ChargeType[]; schedules: ChargeSchedule[]; currentWeek: string; teamPeriods?: DriverTeamPeriod[] }
+export interface InvestorAccountTruck { id: string; unitNumber: string; ownerName: string }
+export interface ChargeData { investorTrucks?: InvestorAccountTruck[]; types: ChargeType[]; schedules: ChargeSchedule[]; currentWeek: string; teamPeriods?: DriverTeamPeriod[] }
 
 export interface DriverTeamPeriod {
   id: string;
@@ -1688,6 +1690,7 @@ export interface DriverTeam { version: number; periods: DriverTeamPeriod[] }
 export interface DriverTeamInput { teamDriverId: string; weekStart: string; version: number }
 export interface DriverTeamTruck { truckId: string; unitNumber: string; mainDriverId: string; mainDriverName: string; mainVersion: number; dispatcherId: string | null; dispatcherName: string | null; teamDriverId: string | null }
 export interface ChargeCreate {
+  truckId?: string;
   driverIds: string[]; typeId: string; kind: "recurring" | "installment"; name: string; amount: string; total: string;
   installments: number; startWeek: string; endWeek: string | null; eligibility: "calendar" | "loads";
 }
@@ -1709,6 +1712,7 @@ export interface TruckChargeData { eligibleTruckIds: string[]; owners?: TruckCha
 export interface EscrowRelease { correctionReason?: string; payrollReturn?: string; collectionStopped?: boolean; id: string; weekStart: string; amount: string; cancelled: boolean; version: number; editable: boolean }
 export interface EscrowReleaseInput { id: string; weekStart: string; amount: string; version: number; escrowVersion: number; cancelled: boolean }
 export interface Escrow {
+  truckId?: string; ownerId?: string;
   collectionStopped?: boolean;
   managedInSheets?: boolean;
   heldAmount: string;

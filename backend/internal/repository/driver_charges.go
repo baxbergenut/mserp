@@ -101,6 +101,8 @@ type ChargeOccurrence struct {
 	Reset           bool       `json:"reset,omitempty"`
 }
 type ChargeSchedule struct {
+	TruckID          string             `json:"truckId,omitempty"`
+	OwnerID          string             `json:"ownerId,omitempty"`
 	ManagedInSheets  bool               `json:"managedInSheets,omitempty"`
 	TypeVersion      int                `json:"typeVersion"`
 	TypeRules        []ChargeTypeRule   `json:"-"`
@@ -133,12 +135,14 @@ type ChargeEvent struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 type ChargeData struct {
-	TeamPeriods []DriverTeamPeriod `json:"teamPeriods,omitempty"`
-	Types       []ChargeType       `json:"types"`
-	Schedules   []ChargeSchedule   `json:"schedules"`
-	CurrentWeek string             `json:"currentWeek"`
+	InvestorTrucks []InvestorAccountTruck `json:"investorTrucks,omitempty"`
+	TeamPeriods    []DriverTeamPeriod     `json:"teamPeriods,omitempty"`
+	Types          []ChargeType           `json:"types"`
+	Schedules      []ChargeSchedule       `json:"schedules"`
+	CurrentWeek    string                 `json:"currentWeek"`
 }
 type ChargeCreate struct {
+	TruckID      string   `json:"truckId,omitempty"`
 	DriverIDs    []string `json:"driverIds"`
 	TypeID       string   `json:"typeId"`
 	Kind         string   `json:"kind"`

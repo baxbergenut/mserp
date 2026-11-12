@@ -83,7 +83,7 @@ try {
   await expect(page.getByRole('heading', { name: 'Recurring Charges', exact: true })).toBeVisible();
   expect((await page.request.post(`${base}/api/driver-charges/types`, { data: {} })).status()).toBe(403);
   const priorWeekOnly = process.argv.includes('--prior-week-only');
-  if (priorWeekOnly) {
+  if (process.argv.includes("--investor-accounts-only")) { const {runInvestorAccountsE2E}=await import("./investor-accounts-e2e.mjs");await runInvestorAccountsE2E({page,base,temp,sql,schema}); } else if (priorWeekOnly) {
     const { currentWeek } = await (await page.request.get(`${base}/api/driver-charges`)).json();
     const priorWeek = new Date(Date.parse(currentWeek) - 7 * 86400000).toISOString().slice(0, 10);
     await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
@@ -105,7 +105,7 @@ try {
     await expect(page.getByLabel('E2e Driver, Prior-week advance, charge amount', { exact: true })).toHaveValue('-100.00');
   } else if (process.argv.includes("--payer-corrections-only")) { await runPayerCorrectionsE2E({page,base,temp,sql,schema}); }
   else if (process.argv.includes("--pay-source-only")) { await runPaySourceE2E({page,base,temp,sql,schema}); } else { await runTruckRecurringE2E({page,base,temp}); }
-  if (!priorWeekOnly && !process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only") && !process.argv.includes("--payer-corrections-only")) {
+  if (!process.argv.includes("--investor-accounts-only") && !priorWeekOnly && !process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only") && !process.argv.includes("--payer-corrections-only")) {
   await verifyExpenseSettings(page, base, temp, { sql, schema });
   await page.getByRole('tab', { name: 'Installment plans', exact: true }).click();
   await page.getByRole('button', { name: 'New installment plan', exact: true }).click();

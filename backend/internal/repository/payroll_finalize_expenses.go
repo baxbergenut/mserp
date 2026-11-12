@@ -90,20 +90,20 @@ func finalizePayrollExpenses(ctx context.Context, tx pgx.Tx, kind, week, actor s
 		}
 	}
 	if len(escrowIDs) > 0 {
-		rows, err = tx.Query(ctx, `SELECT id::text,driver_id::text,balance_version FROM driver_escrows WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, escrowIDs)
+		rows, err = tx.Query(ctx, `SELECT id::text,coalesce(driver_id::text,truck_id::text),balance_version,coalesce(owner_id::text,'') FROM driver_escrows WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, escrowIDs)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
-			var id, driver string
+			var id, driver, owner string
 			var version int
-			if err = rows.Scan(&id, &driver, &version); err != nil {
+			if err = rows.Scan(&id, &driver, &version, &owner); err != nil {
 				rows.Close()
 				return err
 			}
 			key := "escrow:" + id
 			a := selected[key]
-			if found[key] || kind != "driver" || a.item.Source != "escrow" || version != a.item.Version || driver != a.statement {
+			if found[key] || (kind == "investor" && owner != a.owner) || (kind == "driver" && owner != "") || a.item.Source != "escrow" || version != a.item.Version || driver != a.statement {
 				rows.Close()
 				return ErrDriverPayConflict
 			}

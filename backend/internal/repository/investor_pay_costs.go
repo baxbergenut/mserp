@@ -170,14 +170,29 @@ func investorExpenseDeductions(ctx context.Context, tx pgx.Tx, truck, owner, wee
 		}
 		result = append(result, d)
 	}
-	return result, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if !ownerOnly {
+		escrow, e := investorEscrowDeductions(ctx, tx, truck, owner, week)
+		if e != nil {
+			return nil, e
+		}
+		result = append(result, escrow...)
+	}
+	return result, nil
 }
 
 func saveInvestorExpenses(ctx context.Context, tx pgx.Tx, d DriverPayDriver, actor string, items []ExpenseDeduction) error {
+	if err := saveInvestorEscrow(ctx, tx, d, actor, items); err != nil {
+		return err
+	}
 	ids := []string{}
 	seen := map[string]bool{}
 	for _, v := range items {
-		if !v.Apply {
+		if !v.Apply || v.Source == "escrow" {
 			continue
 		}
 		if seen[v.ExpenseID] {
@@ -220,7 +235,7 @@ func saveInvestorExpenses(ctx context.Context, tx pgx.Tx, d DriverPayDriver, act
 	}
 	batch := &pgx.Batch{}
 	for _, v := range items {
-		if !v.Apply {
+		if !v.Apply || v.Source == "escrow" {
 			continue
 		}
 		version, exists := versions[v.ExpenseID]

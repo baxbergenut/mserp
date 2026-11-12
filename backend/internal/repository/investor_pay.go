@@ -163,7 +163,7 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 		routeTruckDriverCosts(&source, nil, nil)
 		return source, investor, nil
 	}
-	charges, _, err := payrollChargeData(ctx, tx, "")
+	charges, chargeLoads, err := payrollChargeData(ctx, tx, "")
 	if err != nil {
 		return source, investor, err
 	}
@@ -414,6 +414,11 @@ func routeTruckPaySources(ctx context.Context, tx pgx.Tx, source DriverPayWeek) 
 		if !g.ownerOnly {
 			if err = inputs.applyEdits(&g.card); err != nil {
 				return source, investor, err
+			}
+			if g.card.Settlement == nil || !g.card.Settlement.Finalized {
+				if err = addInvestorAccounts(ctx, tx, &g.card, charges, chargeLoads); err != nil {
+					return source, investor, err
+				}
 			}
 			investor.Drivers = append(investor.Drivers, g.card)
 		}

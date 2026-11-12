@@ -58,7 +58,12 @@ func main() {
 	escrowBalanceCapability := flag.Bool("escrow-balance-reductions-capability", false, "print escrow balance reduction support and exit")
 	escrowAdjustmentCapability := flag.Bool("escrow-balance-adjustments-capability", false, "print bidirectional escrow balance support and exit")
 	retainedPayCapability := flag.Bool("investor-retained-pay-capability", false, "print retained investor payment support and exit")
+	investorAccountsCapability := flag.Bool("investor-truck-accounts-capability", false, "print investor truck account schema support and exit")
 	flag.Parse()
+	if *investorAccountsCapability {
+		fmt.Println("investor-truck-accounts-v1")
+		return
+	}
 	if *retainedPayCapability {
 		fmt.Println("investor-retained-pay-v1")
 		return

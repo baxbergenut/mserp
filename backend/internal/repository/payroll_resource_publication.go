@@ -114,6 +114,8 @@ func payrollPublicationResourceLinks(ctx context.Context, tx pgx.Tx, keys []stri
  SELECT p.principal key,'expense:'||p.expense_id resource FROM expense_principals p JOIN principals wanted ON wanted.key=p.principal
  UNION SELECT 'driver:'||e.driver_id,'escrow:'||e.id FROM driver_escrows e WHERE e.driver_id=ANY($2::uuid[])
  UNION SELECT 'driver:'||s.driver_id,'schedule:'||s.id FROM driver_charge_schedules s WHERE s.driver_id=ANY($2::uuid[])
+ UNION SELECT 'truck:'||e.truck_id,'escrow:'||e.id FROM driver_escrows e WHERE e.truck_id=ANY($3::uuid[])
+ UNION SELECT 'truck:'||s.truck_id,'schedule:'||s.id FROM driver_charge_schedules s WHERE s.truck_id=ANY($3::uuid[])
  UNION SELECT 'driver:'||w.driver_id,'statement:driver:'||w.driver_id||':'||w.week_start FROM driver_pay_weeks w
  WHERE w.driver_id=ANY($2::uuid[]) AND (w.fuel_override IS NOT NULL OR w.toll_override IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM driver_pay_cost_collections c WHERE c.driver_id=w.driver_id AND c.week_start=w.week_start)

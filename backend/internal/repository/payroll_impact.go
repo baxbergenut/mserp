@@ -336,8 +336,8 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
  CASE WHEN lower(btrim(covered_by))='truck owner' THEN 'truck:'||truck_id END,
  CASE WHEN lower(btrim(covered_by))='truck owner' THEN 'owner:'||owner_id END] FROM expenses WHERE id=ANY($1::uuid[])
  UNION ALL SELECT 'expense_id',expense_id::text,ARRAY['truck:'||investor_truck_id] FROM expense_payments WHERE expense_id=ANY($1::uuid[]) AND investor_truck_id IS NOT NULL
- UNION ALL SELECT 'escrow_id',id::text,ARRAY['driver:'||driver_id] FROM driver_escrows WHERE id=ANY($2::uuid[])
- UNION ALL SELECT 'schedule_id',id::text,ARRAY['driver:'||driver_id] FROM driver_charge_schedules WHERE id=ANY($3::uuid[])`, keys(refs["expense_id"]), keys(refs["escrow_id"]), keys(refs["schedule_id"]))
+ UNION ALL SELECT 'escrow_id',id::text,array_remove(ARRAY['driver:'||driver_id,'truck:'||truck_id,'owner:'||owner_id],NULL) FROM driver_escrows WHERE id=ANY($2::uuid[])
+ UNION ALL SELECT 'schedule_id',id::text,array_remove(ARRAY['driver:'||driver_id,'truck:'||truck_id,'owner:'||owner_id],NULL) FROM driver_charge_schedules WHERE id=ANY($3::uuid[])`, keys(refs["expense_id"]), keys(refs["escrow_id"]), keys(refs["schedule_id"]))
 		if err != nil {
 			return nil, err
 		}

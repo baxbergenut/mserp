@@ -46,18 +46,33 @@ func (r *EscrowRepository) SaveRelease(ctx context.Context, escrow string, input
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var driver string
-	if err = tx.QueryRow(ctx, `SELECT coalesce(driver_id::text,'') FROM driver_escrows WHERE id=$1`, escrow).Scan(&driver); err != nil {
+	var driver, truck string
+	if err = tx.QueryRow(ctx, `SELECT coalesce(driver_id::text,''),coalesce(truck_id::text,'') FROM driver_escrows WHERE id=$1`, escrow).Scan(&driver, &truck); err != nil {
 		return err
 	}
-	if driver == "" {
+	if driver == "" && truck == "" {
 		return chargeInvalid("This escrow no longer has a driver")
 	}
-	if err = lockChargeDrivers(ctx, tx, []string{driver}); err != nil {
-		return err
+	if driver != "" {
+		if err = lockChargeDrivers(ctx, tx, []string{driver}); err != nil {
+			return err
+		}
+	}
+	if truck != "" {
+		owner, e := truckInstallmentOwner(ctx, tx, truck, input.WeekStart)
+		if e != nil {
+			return e
+		}
+		var same bool
+		if e = tx.QueryRow(ctx, `SELECT owner_id=$2 FROM driver_escrows WHERE id=$1`, escrow, owner).Scan(&same); e != nil {
+			return e
+		}
+		if !same {
+			return chargeInvalid("This escrow belongs to the previous investor")
+		}
 	}
 	var version int
-	if err = tx.QueryRow(ctx, `SELECT balance_version FROM driver_escrows WHERE id=$1 AND driver_id=$2 FOR UPDATE`, escrow, driver).Scan(&version); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT balance_version FROM driver_escrows WHERE id=$1 FOR UPDATE`, escrow).Scan(&version); err != nil {
 		return err
 	}
 	if version != input.EscrowVersion {
@@ -73,8 +88,10 @@ func (r *EscrowRepository) SaveRelease(ctx context.Context, escrow string, input
 			return chargeInvalid("Cancellation cannot change the release amount or week")
 		}
 	}
-	if err = assertPayrollOpen(ctx, tx, driver, input.WeekStart); err != nil {
-		return err
+	if driver != "" {
+		if err = assertPayrollOpen(ctx, tx, driver, input.WeekStart); err != nil {
+			return err
+		}
 	}
 	if input.Version == 0 {
 		if input.Cancelled {

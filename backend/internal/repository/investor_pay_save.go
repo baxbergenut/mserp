@@ -75,8 +75,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if edits.Version != card.Edits.Version {
 		return edits, ErrDriverPayConflict
 	}
-	if len(edits.GeneratedCharges) > 0 {
-		return edits, chargeInvalid("Manage recurring truck fees on Charges")
+	edits.GeneratedCharges, err = saveGeneratedCharges(ctx, tx, card.ID, edits.WeekStart, actor, edits.GeneratedCharges, card.InvestorID)
+	if err != nil {
+		return edits, err
 	}
 	edits.ScaleDeductions, err = reviewScaleDeductions(*card, edits.ScaleDeductions)
 	if err != nil {
@@ -260,6 +261,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		}
 	}
 	queueFinal := func(d DriverPayDriver) (DriverPayDriver, error) {
+		if err := finalizeInvestorInstallments(ctx, tx, &d, actor); err != nil {
+			return d, err
+		}
 		if err := validatePayrollScaleCollection(ctx, tx, d.AutoCharges); err != nil {
 			return d, err
 		}
@@ -333,6 +337,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			}
 			if bulkExpenses {
 				d.Edits.ExpenseDeductions = expenseInputs.deductions(d.ID, false)
+				escrow, e := investorEscrowDeductions(ctx, tx, d.ID, d.InvestorID, report.WeekStart)
+				if e != nil {
+					return empty, e
+				}
+				d.Edits.ExpenseDeductions = append(d.Edits.ExpenseDeductions, escrow...)
 			} else if postExpenses {
 				d.Edits.ExpenseDeductions, err = investorExpenseDeductions(ctx, tx, d.ID, d.InvestorID, report.WeekStart, false)
 				if err != nil {
@@ -387,6 +396,11 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		return empty, err
 	}
 	if reopen {
+		for id := range selectedIDs {
+			if err = reopenInvestorInstallments(ctx, tx, id, report.WeekStart); err != nil {
+				return empty, err
+			}
+		}
 		if err = reversePayrollExpenses(ctx, tx, "investor", report.WeekStart, payrollReceipt(report, selectedIDs).Drivers); err != nil {
 			return empty, err
 		}

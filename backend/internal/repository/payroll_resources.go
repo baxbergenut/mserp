@@ -104,8 +104,8 @@ func payrollResourcesForSelection(ctx context.Context, tx pgx.Tx, selection *pay
 	rows, err := tx.Query(ctx, `SELECT 'expense:'||id FROM expenses
  WHERE driver_id=ANY($1::uuid[]) OR charge_driver_id=ANY($1::uuid[]) OR truck_id=ANY($2::uuid[]) OR owner_id=ANY($3::uuid[])
  UNION SELECT 'expense:'||expense_id FROM expense_payments WHERE investor_truck_id=ANY($2::uuid[])
- UNION SELECT 'escrow:'||id FROM driver_escrows WHERE driver_id=ANY($1::uuid[])
- UNION SELECT 'schedule:'||id FROM driver_charge_schedules WHERE driver_id=ANY($1::uuid[])`, selection.drivers, selection.trucks, selection.owners)
+ UNION SELECT 'escrow:'||id FROM driver_escrows WHERE driver_id=ANY($1::uuid[]) OR truck_id=ANY($2::uuid[]) OR owner_id=ANY($3::uuid[])
+ UNION SELECT 'schedule:'||id FROM driver_charge_schedules WHERE driver_id=ANY($1::uuid[]) OR truck_id=ANY($2::uuid[]) OR owner_id=ANY($3::uuid[])`, selection.drivers, selection.trucks, selection.owners)
 	if err != nil {
 		return nil, err
 	}

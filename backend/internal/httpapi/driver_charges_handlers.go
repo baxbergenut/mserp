@@ -125,6 +125,10 @@ func registerDriverChargeRoutes(r chi.Router, logger *slog.Logger, repo *reposit
 			if !decode(w, r, &c) {
 				return
 			}
+			if c.TruckID != "" && !isUUID(c.TruckID) {
+				writeAPIError(w, 400, "Invalid truck ID")
+				return
+			}
 			for _, id := range c.DriverIDs {
 				if !isUUID(id) {
 					writeAPIError(w, 400, "Invalid driver ID")

@@ -18,6 +18,8 @@ type EscrowPayment struct {
 }
 
 type Escrow struct {
+	TruckID           *string         `json:"truckId,omitempty"`
+	OwnerID           *string         `json:"ownerId,omitempty"`
 	CollectionStopped bool            `json:"collectionStopped,omitempty"`
 	ManagedInSheets   bool            `json:"managedInSheets,omitempty"`
 	HeldAmount        string          `json:"heldAmount"`
@@ -58,16 +60,16 @@ type EscrowPage struct {
 	Summary EscrowSummary `json:"summary"`
 }
 
-const escrowBalancesSQL = `SELECT NOT accounting_live_source('escrow',e.id,e.start_date) managed_in_sheets,e.id,e.driver_id,coalesce(d.full_name,e.driver_name) driver_name,
+const escrowBalancesSQL = `SELECT NOT accounting_live_source('escrow',e.id,e.start_date) managed_in_sheets,e.id,e.driver_id,coalesce(i.full_name||' - Truck '||t.unit_number,d.full_name,e.driver_name) driver_name,e.truck_id,e.owner_id,
  coalesce(r.released,0) released_amount,e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0) held_amount,
- coalesce(d.active,false) active,e.start_date,e.amount,e.opening_paid,
+ coalesce(CASE WHEN e.truck_id IS NOT NULL THEN t.active AND i.active AND t.owner_id=e.owner_id AND investor_truck_account_eligible(e.truck_id,e.owner_id,(now() AT TIME ZONE 'America/New_York')::date,(now() AT TIME ZONE 'America/New_York')::date+1) ELSE d.active END,false) active,e.start_date,e.amount,e.opening_paid,
  e.opening_paid+coalesce(p.paid,0) paid_amount,e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.outflow,0) remaining_amount,
- CASE WHEN NOT coalesce(d.active,false) THEN CASE WHEN
+ CASE WHEN NOT coalesce(CASE WHEN e.truck_id IS NOT NULL THEN t.active AND i.active AND t.owner_id=e.owner_id AND investor_truck_account_eligible(e.truck_id,e.owner_id,(now() AT TIME ZONE 'America/New_York')::date,(now() AT TIME ZONE 'America/New_York')::date+1) ELSE d.active END,false) THEN CASE WHEN
  (coalesce(r.released,0)>0 OR EXISTS(SELECT 1 FROM escrow_release_reviews review WHERE review.id=d.termination_id AND review.decision='released' AND review.completed_at IS NOT NULL))
  AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)=0 THEN 'released' WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)>0 AND e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)<e.amount THEN 'partially_released' ELSE 'not_released' END
  WHEN e.amount-e.opening_paid-coalesce(p.paid,0)+coalesce(r.outflow,0)<=0 THEN 'paid'
  WHEN e.opening_paid+coalesce(p.paid,0)-coalesce(r.outflow,0)>0 THEN 'partial' ELSE 'unpaid' END status,e.balance_version,escrow_collection_stopped(e.id,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date) collection_stopped
- FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id
+ FROM driver_escrows e LEFT JOIN drivers d ON d.id=e.driver_id LEFT JOIN trucks t ON t.id=e.truck_id LEFT JOIN investors i ON i.id=e.owner_id
  LEFT JOIN LATERAL (SELECT sum(amount) paid FROM driver_escrow_payments WHERE escrow_id=e.id) p ON true
  LEFT JOIN LATERAL (SELECT sum(amount) outflow,sum(amount) FILTER (WHERE correction_reason IS NULL) released FROM driver_escrow_releases WHERE escrow_id=e.id AND NOT cancelled) r ON true`
 
@@ -89,14 +91,14 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 		return EscrowPage{}, err
 	}
 	page := q.Pagination.Normalize(total)
-	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text,managed_in_sheets,collection_stopped FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $6 OFFSET $7`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group, page.PageSize, page.Offset())
+	rows, err := tx.Query(ctx, `WITH balances AS (`+escrowBalancesSQL+`) SELECT id,driver_id,driver_name,active,start_date::text,amount::text,opening_paid::text,paid_amount::text,remaining_amount::text,status,balance_version,held_amount::text,released_amount::text,managed_in_sheets,collection_stopped,truck_id::text,owner_id::text FROM balances`+filter+` ORDER BY lower(driver_name),start_date,id LIMIT $6 OFFSET $7`, q.Search, q.DriverID, q.Status, q.IncludeInactive || q.Group == "terminated", q.Group, page.PageSize, page.Offset())
 	if err != nil {
 		return EscrowPage{}, err
 	}
 	items := []Escrow{}
 	for rows.Next() {
 		var e Escrow
-		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version, &e.HeldAmount, &e.ReleasedAmount, &e.ManagedInSheets, &e.CollectionStopped); err != nil {
+		if err = rows.Scan(&e.ID, &e.DriverID, &e.DriverName, &e.Active, &e.StartDate, &e.Amount, &e.OpeningPaid, &e.PaidAmount, &e.RemainingAmount, &e.Status, &e.Version, &e.HeldAmount, &e.ReleasedAmount, &e.ManagedInSheets, &e.CollectionStopped, &e.TruckID, &e.OwnerID); err != nil {
 			rows.Close()
 			return EscrowPage{}, err
 		}
@@ -128,8 +130,8 @@ func (r *EscrowRepository) List(ctx context.Context, q EscrowQuery) (EscrowPage,
 			return EscrowPage{}, e
 		}
 		releases, releaseErr := tx.Query(ctx, `SELECT r.id::text,r.week_start::text,r.amount::text,r.cancelled,r.version,
- r.correction_reason IS NULL AND r.payroll_return IS NULL AND NOT r.cancelled AND $3::uuid IS NOT NULL AND r.week_start >= $2::date AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=$3 AND s.week_start=r.week_start AND s.finalized),r.payroll_return::text,r.collection_stopped,r.correction_reason
- FROM driver_escrow_releases r WHERE r.escrow_id=$1 ORDER BY r.week_start DESC,r.created_at DESC`, items[i].ID, ChargeCurrentWeek(), items[i].DriverID)
+ r.correction_reason IS NULL AND r.payroll_return IS NULL AND NOT r.cancelled AND ($3::uuid IS NOT NULL OR $4::uuid IS NOT NULL) AND r.week_start >= $2::date AND NOT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.driver_id=$3 AND s.week_start=r.week_start AND s.finalized) AND NOT EXISTS(SELECT 1 FROM investor_pay_weeks s WHERE s.truck_id=$4 AND s.week_start>=r.week_start AND s.finalized),r.payroll_return::text,r.collection_stopped,r.correction_reason
+ FROM driver_escrow_releases r WHERE r.escrow_id=$1 ORDER BY r.week_start DESC,r.created_at DESC`, items[i].ID, ChargeCurrentWeek(), items[i].DriverID, items[i].TruckID)
 		if releaseErr != nil {
 			return EscrowPage{}, releaseErr
 		}

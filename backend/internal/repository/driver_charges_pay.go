@@ -25,13 +25,28 @@ func generatedForWeek(data ChargeData, loads map[string]map[string]bool, week st
 	}
 	return out, nil
 }
-func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor string, submitted []ChargeOccurrence) ([]ChargeOccurrence, error) {
+func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor string, submitted []ChargeOccurrence, owners ...string) ([]ChargeOccurrence, error) {
+	if len(owners) > 0 {
+		eligible, err := investorAccountEligible(ctx, tx, driver, owners[0], week)
+		if err != nil {
+			return nil, err
+		}
+		if !eligible {
+			if len(submitted) > 0 {
+				return nil, chargeInvalid("Owner-operated trucks use the driver installment plan")
+			}
+			return []ChargeOccurrence{}, nil
+		}
+	}
 	if err := lockChargeTypes(ctx, tx); err != nil {
 		return nil, err
 	}
 	data, loads, err := chargeData(ctx, tx, driver)
 	if err != nil {
 		return nil, err
+	}
+	if len(owners) > 0 {
+		data.Schedules = truckOwnerSchedules(data.Schedules, driver, owners[0])
 	}
 	seen := map[string]bool{}
 	for _, input := range submitted {
@@ -163,6 +178,9 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 	data, loads, err = chargeData(ctx, tx, driver)
 	if err != nil {
 		return nil, err
+	}
+	if len(owners) > 0 {
+		data.Schedules = truckOwnerSchedules(data.Schedules, driver, owners[0])
 	}
 	generated, err := generatedForWeek(data, loads, week)
 	if err != nil {

@@ -4095,3 +4095,11 @@ finalization, and test-payroll-concurrent-finalization.mjs. See
   with the configured disposable projection DB for changes to this path.
 - Investor load-placement preflight uses conservative truck component selection;
   do not propagate this read scope into the source mutation/publication context.
+
+
+## Investor truck accounts (214)
+
+- Investor trucks are operated by someone other than their owner; owner-operator trucks are excluded from truck escrow enrollment and installment selection. Eligibility is per truck, so an owner may drive one truck while investing in another staffed truck. Driver-linked unstaffed trucks wait for a non-owner assignment. Investor trucks have escrow accounts in the shared ledger, keyed by truck and original investor. Onboarding and existing-truck enrollment use the driver escrow default; new accounts begin in the current New York week. Changing owners never transfers balances or installment debt.
+- Installment plans accept either a driver or an investor truck. Truck plans use the existing projection, overrides, pause/resume, history and principal limits. Investor Pay confirms deductions on finalization and removes confirmations on reopening; escrow collections retain the existing saved-collection behavior.
+- The Escrow directory includes investor accounts as `Investor name - Truck 043`, with the same balances, balance corrections and dated releases. Credits route only to the matching investor truck statement.
+- Install the matching deploy helper before migration 214: it stops writers and fences incompatible rollback binaries. Projection schema 13 registers truck escrow/installment resources and source routing. Validate TestInvestorTruckAccountsDatabase and test-driver-charges-e2e.mjs --investor-accounts-only.
