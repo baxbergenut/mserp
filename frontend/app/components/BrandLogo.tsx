@@ -5,17 +5,19 @@ export function BetaBadge({ className = "" }: { className?: string }) {
 }
 
 export function BrandLogo({ compact = false, className = "w-24" }: { compact?: boolean; className?: string }) {
-  return <span className={`relative inline-flex shrink-0 ${compact ? "h-8 w-8" : `aspect-[640/153] ${className}`}`}>
+  if (!compact) {
+    return <span role="img" aria-label="Clustie" className={`brand-logo-wordmark inline-block shrink-0 aspect-[640/153] ${className}`} />;
+  }
+
+  return <span className="inline-flex h-8 w-8 shrink-0">
     <Image
-      key={compact ? "symbol" : "wordmark"}
-      src={compact ? "/brand/clustie-symbol-192.png" : "/brand/clustie-logo.png"}
+      src="/brand/clustie-symbol-192.png"
       alt="Clustie"
-      width={compact ? 192 : 640}
-      height={compact ? 192 : 153}
+      width={192}
+      height={192}
       className="h-full w-full object-contain"
       unoptimized
       preload
     />
-    {!compact && <span aria-hidden="true" className="brand-logo-wordmark pointer-events-none absolute inset-0" />}
   </span>;
 }
