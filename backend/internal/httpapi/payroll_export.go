@@ -61,6 +61,11 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 		return nil, err
 	}
 	headers := []string{"Driver Name", "Total Salary Payable", "Reimbursed Amount"}
+	lastColumn := "C"
+	if kind == "driver" {
+		headers = []string{"Driver Name", "Salary", "Reimbursed Amount", "Total Payable"}
+		lastColumn = "D"
+	}
 	if err := book.SetSheetRow(sheet, "A1", &headers); err != nil {
 		return nil, err
 	}
@@ -68,7 +73,7 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 	if err != nil {
 		return nil, err
 	}
-	if err := book.SetCellStyle(sheet, "A1", "C1", header); err != nil {
+	if err := book.SetCellStyle(sheet, "A1", lastColumn+"1", header); err != nil {
 		return nil, err
 	}
 	currencyFormat := `"$"#,##0.00;-"$"#,##0.00`
@@ -76,13 +81,13 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 	if err != nil {
 		return nil, err
 	}
-	if err := book.SetColStyle(sheet, "B:C", currency); err != nil {
+	if err := book.SetColStyle(sheet, "B:"+lastColumn, currency); err != nil {
 		return nil, err
 	}
 	if err := book.SetColWidth(sheet, "A", "A", 48); err != nil {
 		return nil, err
 	}
-	if err := book.SetColWidth(sheet, "B", "C", 28); err != nil {
+	if err := book.SetColWidth(sheet, "B", lastColumn, 28); err != nil {
 		return nil, err
 	}
 	type exportRow struct {
@@ -118,6 +123,10 @@ func payrollStatementWorkbook(kind string, statements []repository.DriverPayDriv
 	})
 	for i, entry := range rows {
 		row := []any{entry.name, float64(entry.payable) / 100, float64(entry.reimbursed) / 100}
+		if kind == "driver" {
+			row[1] = float64(entry.payable-entry.reimbursed) / 100
+			row = append(row, float64(entry.payable)/100)
+		}
 		if err := book.SetSheetRow(sheet, fmt.Sprintf("A%d", i+2), &row); err != nil {
 			return nil, err
 		}

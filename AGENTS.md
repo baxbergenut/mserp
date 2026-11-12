@@ -125,6 +125,9 @@ matching pages using the respective read permissions. The XLSX includes only
 positive net payables, sorted case-insensitively by driver name. Investor rows
 use the statement's operating drivers. The Reimbursed Amount column totals
 positive Reimburse-method expense credits already included in net payable.
+Driver exports show Driver Name, Salary, Reimbursed Amount and Total Payable;
+Salary is net payable minus those reimbursement credits, so Salary plus
+Reimbursed Amount equals Total Payable, including when Salary is negative.
 
 ## Repository map
 

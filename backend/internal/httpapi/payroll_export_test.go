@@ -36,10 +36,15 @@ func TestPayrollStatementWorkbook(t *testing.T) {
 			defer book.Close()
 			rows, err := book.GetRows("Statements")
 			want := [][]string{{"Driver Name", "Total Salary Payable", "Reimbursed Amount"}, {"alice", "$83.00", "$1.01"}, {"Zoe", "$457.75", "$37.75"}}
+			cells := []string{"B2", "C2", "B3", "C3"}
+			if kind == "driver" {
+				want = [][]string{{"Driver Name", "Salary", "Reimbursed Amount", "Total Payable"}, {"alice", "$81.99", "$1.01", "$83.00"}, {"Zoe", "$420.00", "$37.75", "$457.75"}}
+				cells = append(cells, "D2", "D3")
+			}
 			if err != nil || !reflect.DeepEqual(rows, want) {
 				t.Fatalf("got %v, want %v: %v", rows, want, err)
 			}
-			for _, cell := range []string{"B2", "C2", "B3", "C3"} {
+			for _, cell := range cells {
 				kind, err := book.GetCellType("Statements", cell)
 				if err != nil || (kind != excelize.CellTypeNumber && kind != excelize.CellTypeUnset) {
 					t.Fatalf("%s is not numeric: %v %v", cell, kind, err)
@@ -65,10 +70,51 @@ func TestPayrollStatementWorkbookEscrow(t *testing.T) {
 	defer book.Close()
 	rows, err := book.GetRows("Statements")
 	want := [][]string{
-		{"Driver Name", "Total Salary Payable", "Reimbursed Amount"},
-		{"Former Driver", "$1,500.00", "$0.00"},
+		{"Driver Name", "Salary", "Reimbursed Amount", "Total Payable"},
+		{"Former Driver", "$1,500.00", "$0.00", "$1,500.00"},
 	}
 	if err != nil || !reflect.DeepEqual(rows, want) {
 		t.Fatalf("got %v, want %v: %v", rows, want, err)
+	}
+}
+
+func TestDriverPayrollWorkbookSalarySplit(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		statements []repository.DriverPayDriver
+		want       [][]string
+	}{
+		{name: "empty"},
+		{
+			name: "reimbursement only",
+			statements: []repository.DriverPayDriver{{FullName: "Driver", Edits: repository.DriverPayEdits{
+				ExpenseDeductions: []repository.ExpenseDeduction{{Source: "reimburse", Amount: "25.25"}},
+			}}},
+			want: [][]string{{"Driver", "$0.00", "$25.25", "$25.25"}},
+		},
+		{
+			name: "negative salary with positive payout",
+			statements: []repository.DriverPayDriver{{FullName: "Driver", SalaryCarry: "10.00", Edits: repository.DriverPayEdits{
+				ExpenseDeductions: []repository.ExpenseDeduction{{Source: "reimburse", Amount: "25.25"}},
+			}}},
+			want: [][]string{{"Driver", "-$10.00", "$25.25", "$15.25"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := payrollStatementWorkbook("driver", tc.statements)
+			if err != nil {
+				t.Fatal(err)
+			}
+			book, err := excelize.OpenReader(bytes.NewReader(body.Bytes()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer book.Close()
+			rows, err := book.GetRows("Statements")
+			want := append([][]string{{"Driver Name", "Salary", "Reimbursed Amount", "Total Payable"}}, tc.want...)
+			if err != nil || !reflect.DeepEqual(rows, want) {
+				t.Fatalf("got %v, want %v: %v", rows, want, err)
+			}
+		})
 	}
 }
