@@ -34,6 +34,11 @@ func payPageFilters(r *http.Request, kind string) (repository.PayPageQuery, erro
 		default:
 			return result, errors.New("Invalid driver type")
 		}
+	} else if kind == "investor" {
+		result.InvestorID = strings.ToLower(strings.TrimSpace(q.Get("investorId")))
+		if result.InvestorID != "" && !isUUID(result.InvestorID) {
+			return result, errors.New("Invalid investor")
+		}
 	}
 	return result, nil
 }

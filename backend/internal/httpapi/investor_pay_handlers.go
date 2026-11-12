@@ -130,7 +130,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 				query.PageSize = 2147483647
 			}
 			v, err = pay.PreparedPayroll(r.Context(), "investor", week, query, r.URL.Query().Get("prepared") == "1")
-		} else if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") {
+		} else if r.URL.Query().Has("page") || r.URL.Query().Has("pageSize") || query.InvestorID != "" {
 			if target != "" {
 				query.ID = target
 			}

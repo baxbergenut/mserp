@@ -37,6 +37,27 @@ func TestPayPageDetailsStayOnPage(t *testing.T) {
 	}
 }
 
+func TestPayPageFiltersByInvestorIDBeforePaging(t *testing.T) {
+	report := DriverPayWeek{Revision: "complete-week", Drivers: []DriverPayDriver{
+		{ID: "truck-a", InvestorID: "owner-a", FullName: "Same Name", Loads: []DriverPayLoad{{Fee: "50.00"}}},
+		{ID: "truck-b", InvestorID: "owner-b", FullName: "Same Name", Loads: []DriverPayLoad{{Fee: "100.00"}}, Settlement: &PayrollSettlement{Finalized: true}},
+	}, SetupRequired: []InvestorTruckSetup{
+		{TruckID: "setup-a", OwnerID: "owner-a", OwnerName: "Same Name"},
+		{TruckID: "setup-b", OwnerID: "owner-b", OwnerName: "Same Name"},
+	}}
+	query := PayPageQuery{InvestorID: "owner-b", Pagination: Pagination{Page: 1, PageSize: 1}}
+	page := PaginatePay(report, query)
+	if len(page.SetupRequired) != 1 || page.SetupRequired[0].TruckID != "setup-b" || page.Pagination.Total != 2 ||
+		page.Pagination.Statements != 1 || page.Pagination.Finalized != 1 || page.Pagination.Payable != "100.00" || page.Revision != report.Revision {
+		t.Fatalf("filtered first page: %+v", page)
+	}
+	query.Page = 2
+	page = PaginatePay(report, query)
+	if len(page.Drivers) != 1 || page.Drivers[0].ID != "truck-b" {
+		t.Fatalf("filtered statement page: %+v", page)
+	}
+}
+
 func TestPaySummariesKeepTotalsAndOmitDetails(t *testing.T) {
 	d := DriverPayDriver{ID: "driver", PayType: "cpm", Loads: []DriverPayLoad{{Fee: "100.00"}, {Fee: "", Issues: []string{"missing"}}}, Edits: DriverPayEdits{DriverID: "driver", WeekStart: "2026-10-12", Version: 3, Adjustments: []DriverPayAdjustment{{Kind: "deduction", Amount: "5.00"}}, ExpenseDeductions: []ExpenseDeduction{{Amount: "10.00"}}}}
 	full := DriverPayWeek{Revision: "revision", Drivers: []DriverPayDriver{d}}

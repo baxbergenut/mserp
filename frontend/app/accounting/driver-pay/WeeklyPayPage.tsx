@@ -15,8 +15,8 @@ import { useViewState, useRestoringView } from "@/app/lib/viewMemory";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, ChevronDown, CloudCheck, Download, Ellipsis, UserRound } from "lucide-react";
-import { changeDriverPayMembership, APIError, fetchDriverPay, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
-import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
+import { changeDriverPayMembership, APIError, fetchDriverPay, fetchInvestorOptions, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
+import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, InvestorOption, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
 import { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } from "../payrollWeek";
 import { useLatestPayrollWeek } from "../components/useLatestPayrollWeek";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -59,6 +59,8 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const requested = params.get("weekStart");
   const targetId = params.get(investor ? "truckId" : "driverId") ?? params.get("driverId");
   const targetKey = investor && params.has("truckId") ? "truckId" : "driverId";
+  const targetInvestor = investor ? params.get("investorId") : null;
+  const hasTarget = !!(targetId || targetInvestor);
   const initialWeek = useMemo(() => {
     if (!requested || !/^\d{4}-\d{2}-\d{2}$/.test(requested) || requested < "2000-01-03" || requested > "2100-12-27" || new Date(`${requested}T12:00:00Z`).getUTCDay() !== 1) return undefined;
     // Clamp a deep link when it changes. Monday's availability update must not
@@ -71,7 +73,19 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const optionsFirst = payrollFirstWeek ?? week;
   const optionsLatest = payrollFirstWeek ? latestWeek : week;
   const weekOptions = useMemo(() => payrollWeekOptions(optionsFirst, optionsLatest), [optionsFirst, optionsLatest]);
-  const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) ? targetId ?? "" : undefined);
+  const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) || targetInvestor !== null ? targetId ?? "" : undefined);
+  const [investorFilter, setInvestorFilter] = useViewState("page:investorFilter", "", targetInvestor ?? (targetId ? "" : undefined));
+  const investorId = investor ? investorFilter : undefined;
+  const [investorOptions, setInvestorOptions] = useState<InvestorOption[]>([]);
+  const [investorOptionsError, setInvestorOptionsError] = useState(false);
+  useEffect(() => {
+    if (!investor) return;
+    let cancelled = false;
+    fetchInvestorOptions().then(options => {
+      if (!cancelled) setInvestorOptions(options.filter(option => !option.isCompany).sort((a, b) => a.fullName.localeCompare(b.fullName)));
+    }).catch(() => { if (!cancelled) setInvestorOptionsError(true); });
+    return () => { cancelled = true; };
+  }, [investor]);
   const actionsId = useId();
   const actionsPanel = useRef<HTMLDivElement>(null);
   const [addingDriver, setAddingDriver] = useState(false);
@@ -85,10 +99,11 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const finalizing = settling.size > 0;
   useEffect(() => {
     const timer = setTimeout(() => {
-    if (initialWeek) setWeek(initialWeek);
-    if (params.has(targetKey)) setDriverFilter(targetId ?? "");
+      if (initialWeek) setWeek(initialWeek);
+      if (params.has(targetKey) || targetInvestor !== null) setDriverFilter(targetId ?? "");
+      if (investor && (targetInvestor !== null || targetId)) setInvestorFilter(targetInvestor ?? "");
     }, 0); return () => clearTimeout(timer);
-  }, [setDriverFilter, setWeek, initialWeek, params, targetKey, targetId]);
+  }, [setDriverFilter, setInvestorFilter, setWeek, initialWeek, params, targetKey, targetId, investor, targetInvestor]);
   const activeReview = useRef(false);
   const queuedReviews = useRef<{ report: DriverPayWeek; review: SettlementReview }[]>([]);
   function showSettlement(report: DriverPayWeek, review: SettlementReview) {
@@ -101,7 +116,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     setSettlementReport(next?.report ?? null); setSettlement(next?.review ?? null);
   }
   const [settlementReport, setSettlementReport] = useState<DriverPayWeek | null>(null);
-  const [page, setPage] = useViewState("page:page", 1, targetId ? 1 : undefined);
+  const [page, setPage] = useViewState("page:page", 1, hasTarget ? 1 : undefined);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [report, setReport] = useState<DriverPayWeek | null>(null);
   const preparedReady = !report?.preparation || report.preparation.state === "ready";
@@ -119,9 +134,9 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     setEditingDraft(draftEditors.current.size > 0);
   }, []);
   const onDetails = useCallback((expected: DriverPayDriver, detail: DriverPayDriver, revision: string) => { setReport(current => current && applyPayDetails(current, expected, { ...detail, edits: { ...detail.edits, inputRevision: revision } })); }, []);
-  const [search, setSearch] = useViewState("page:search", "", targetId && !restoringView ? "" : undefined);
+  const [search, setSearch] = useViewState("page:search", "", hasTarget && !restoringView ? "" : undefined);
   const [headerPinned, setHeaderPinned] = useViewState("page:headerPinned", false);
-  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", targetId && !restoringView ? "all" : undefined);
+  const [dispatcher, setDispatcher] = useViewState("page:dispatcher", "all", hasTarget && !restoringView ? "all" : undefined);
   const [driverType, setDriverType] = useViewState<EmploymentType | "">("page:driverType", "", targetId && !restoringView ? "" : undefined);
   const debouncedSearch = useDebouncedValue(search, 16);
   const filters = useMemo<PayPageFilters>(() => ({
@@ -129,8 +144,9 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     dispatcherId: dispatcher === "all" ? "" : dispatcher,
     statementId: driverFilter,
     driverType: investor ? undefined : driverType,
-  }), [debouncedSearch, dispatcher, driverFilter, investor, driverType]);
-  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), targetId && !restoringView ? new Set([targetId]) : undefined);
+    investorId,
+  }), [debouncedSearch, dispatcher, driverFilter, investor, driverType, investorId]);
+  const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set(), hasTarget && !restoringView ? new Set(targetId ? [targetId] : []) : undefined);
   const openedRef = useRef(opened);
   useLayoutEffect(() => { openedRef.current = opened; }, [opened]);
   const fetchPay = useCallback(async (selectedWeek: string, signal?: AbortSignal) => {
@@ -493,6 +509,16 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       <div className="flex min-w-0 flex-[1_1_22rem] flex-wrap items-center gap-2">
         <div className="min-w-28 flex-1 [&_input]:h-8 [&_input]:py-0"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>
         <TableFilters>
+          {investor && <select aria-label="Investor" className={`${controlClass} !w-48`} value={investorFilter} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
+            setInvestorFilter(event.target.value);
+            setDriverFilter("");
+            setPage(1);
+            setOpened(new Set());
+          }}>
+            <option value="">All investors</option>
+            {investorFilter && !investorOptions.some(option => option.id === investorFilter) && <option value={investorFilter}>Selected investor</option>}
+            {investorOptions.map(option => <option key={option.id} value={option.id}>{option.fullName}{option.active ? "" : " (Inactive)"}</option>)}
+          </select>}
           {!investor && <div className="relative inline-block max-w-full"><select aria-label="Driver type" className={controlClass + " appearance-none !h-8 !max-w-36 !py-0 !pr-9"} value={driverType} disabled={finalizing || busy || dirty || saving || editingDraft} onChange={event => {
             setDriverType(driverTypes.find(type => type === event.target.value) ?? "");
             setPage(1);
@@ -533,6 +559,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     {report?.notices?.map((notice, i) => <p key={i} className="rounded border border-zinc-700 p-3 text-xs text-zinc-400">{notice}</p>)}
     {preparationError && <div role="alert" className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-200">{preparationError} Retrying automatically…</div>}
     {exportError && <p role="alert" className="text-sm text-red-300">{exportError}</p>}
+    {investorOptionsError && <p role="alert" className="text-sm text-red-300">Unable to load the investor filter. Reload the page to try again.</p>}
     {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still here."}<button className={`${payButtonClass} ml-3`} disabled={saving || busy} onClick={() => dirty ? void save() : void reload()}>{dirty ? "Retry save" : "Retry"}</button>{dirty && <button className={`${payButtonClass} ml-2`} disabled={saving || busy} onClick={() => void reload()}>Reload saved version</button>}</div>}
     {report?.managedInSheets&&<p className="rounded-lg border border-zinc-700 p-3 text-sm text-amber-200">Managed in Sheets · historical payroll is read-only. Unfinished statements are archived drafts.</p>}
     {sourceError && <p role="alert" className="text-sm text-red-300">{sourceError} This edit has not been saved.</p>}

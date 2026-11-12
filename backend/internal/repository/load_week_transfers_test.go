@@ -233,6 +233,14 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 					t.Fatalf("outgoing leaked to destination: %+v %v", out, err)
 				}
 			}
+			out, err := pay.OutgoingLoadTransfers(ctx, "investor", week, PayPageQuery{InvestorID: owner})
+			if err != nil || len(out) != 1 || out[0].StatementID != truck {
+				t.Fatalf("outgoing for owner: %+v %v", out, err)
+			}
+			out, err = pay.OutgoingLoadTransfers(ctx, "investor", week, PayPageQuery{InvestorID: CompanyOwnerID})
+			if err != nil || len(out) != 0 {
+				t.Fatalf("outgoing for a different owner: %+v %v", out, err)
+			}
 			for _, investor := range []bool{false, true} {
 				if l := find(read(investor, week), "MOVE-SUN"); l != nil {
 					t.Fatal("original settlement still contains transferred load", investor)
