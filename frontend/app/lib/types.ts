@@ -1485,6 +1485,9 @@ export interface DriverPayDriver {
   escrowCollectionChange?: boolean;
   manualAddition?: boolean;
   canRemoveAddition?: boolean;
+  investorCarry?: string;
+  investorCarryWeek?: string;
+  retainedPay?: string;
   salaryCarry?: string;
   salaryCarryWeek?: string;
 	expenseRevision?: string;
@@ -1694,7 +1697,7 @@ export interface ChargeBulk {
 export interface ChargeEvent { id: number; action: string; actor: string; details: unknown; createdAt: string }
 
 export interface PayrollSettlement { finalized: boolean; override?: boolean; version: number; finalizedAt: string; finalizedBy: string; reopenedAt: string | null; reason: string }
-export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; expenseRevision?: string; weekStart: string; revision: string; driverId?: string; reason?: string; override: boolean }
+export interface PayrollSettlementInput { requestId?: string; expectedStatementRevision?: string; expenseRevision?: string; weekStart: string; revision: string; driverId?: string; reason?: string; override: boolean; keepMoney?: boolean }
 export interface DriverPayHistoryRow { weekStart: string; driver: DriverPayDriver }
 
 export interface TruckTerm { truckId: string; ownerId: string; weekStart: string; sharePercent: string; version: number; endsBefore?: string }

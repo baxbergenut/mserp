@@ -8,7 +8,7 @@ import { LazyDriverCard } from "./LazyDriverCard";
 export type PayRowActions = {
   place: (input: PayLoadPlacementInput) => Promise<PayLoadPlacementResult | void>;
   transfer: (id: string, load: DriverPayLoad, mode: LoadWeekTransferMode) => Promise<void>;
-  settle: (id: string, reopen: boolean) => void;
+  settle: (id: string, reopen: boolean, keepMoney?: boolean) => void;
   accept: (id: string, load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => Promise<void>;
   reload: (id: string) => Promise<void>;
   openExpense: (id: string, expense: string) => void;
@@ -26,7 +26,7 @@ type Props = Omit<DriverCardProps, "onReload" | "onSettlement" | "onTransfer" | 
 export const StatementRow = memo(function StatementRow({ actions, canEdit, canSettle, ...props }: Props) {
   const id = props.driver.id;
   const transfer = useCallback((load: DriverPayLoad, mode: LoadWeekTransferMode) => actions.transfer(id, load, mode), [actions, id]);
-  const settle = useCallback((reopen: boolean) => actions.settle(id, reopen), [actions, id]);
+  const settle = useCallback((reopen: boolean, keepMoney?: boolean) => actions.settle(id, reopen, keepMoney), [actions, id]);
   const accept = useCallback((load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => actions.accept(id, load, field), [actions, id]);
   const reload = useCallback(() => actions.reload(id), [actions, id]);
   const openExpense = useCallback((expense: string) => actions.openExpense(id, expense), [actions, id]);

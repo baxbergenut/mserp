@@ -17,6 +17,8 @@ assert.equal(totals.missingFees, 1);
 assert.equal(totals.review, 1);
 assert.equal(totals.totalMiles, BigInt(84734));
 assert.deepEqual(driverTotals({loads: [load, missing], removedLoads: [{...load, fee: "99999.00", issues: ["removed"]}]}, edits), totals);
+assert.equal(driverTotals({ loads: [load], investorCarry: "100.00", retainedPay: "735.51" }, { ...edits, adjustments: [] }).payable, 0n);
+assert.equal(driverTotals({ loads: [load], investorCarry: "100.00" }, { ...edits, adjustments: [] }).payable, 73551n);
 const saved = { ...edits, version: 1 };
 assert.deepEqual(reconcilePaySave({ driver: edits }, edits, saved), {});
 const later = { ...edits, notes: "Typed during save" };

@@ -261,7 +261,9 @@ func (d DriverPayDriver) NetPayCents() int64 {
 		net -= n
 	}
 	carry, _ := chargeCents(d.SalaryCarry)
-	return net + payPageCosts(d) + driverLayoverTotal(d) - carry
+	investorCarry, _ := chargeCents(d.InvestorCarry)
+	retained, _ := chargeCents(d.RetainedPay)
+	return net + payPageCosts(d) + driverLayoverTotal(d) - carry + investorCarry - retained
 }
 
 func (d DriverPayDriver) ReimbursedCents() int64 {

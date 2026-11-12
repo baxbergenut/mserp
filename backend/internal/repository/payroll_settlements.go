@@ -31,6 +31,7 @@ type PayrollSettlementInput struct {
 	Revision                  string `json:"revision"`
 	Reason                    string `json:"reason"`
 	Override                  bool   `json:"override"`
+	KeepMoney                 bool   `json:"keepMoney,omitempty"`
 }
 
 // Only these review checks can be bypassed by an explicit finalization override.

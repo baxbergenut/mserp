@@ -146,6 +146,11 @@ compatible_release() {
     expense_drafts=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_pay_weeks' AND column_name='expense_choices')") || return 1
     if [[ $expense_drafts == t ]]; then
         [[ $("$1/backend/mserp-api" -payroll-expense-drafts-capability 2>/dev/null) == payroll-expense-drafts-v1 ]] || return 1
+        local investor_retained
+        investor_retained=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.investor_pay_weeks WHERE coalesce(report->>'retainedPay','')<>'' OR coalesce(report->>'investorCarry','')<>'')") || return 1
+        if [[ $investor_retained == t ]]; then
+            [[ $("$1/backend/mserp-api" -investor-retained-pay-capability 2>/dev/null) == investor-retained-pay-v1 ]] || return 1
+        elif [[ $investor_retained != f ]]; then return 1; fi
         local scale_carry
         scale_carry=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
             SELECT EXISTS(

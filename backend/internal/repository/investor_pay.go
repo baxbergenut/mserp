@@ -594,7 +594,7 @@ func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, t
 func investorPayView(report DriverPayWeek, target string) DriverPayWeek {
 	visible := []DriverPayDriver{}
 	for _, d := range report.Drivers {
-		if !d.TruckInactive || d.ID == target {
+		if !d.TruckInactive || d.ID == target || d.InvestorCarry != "" || d.RetainedPay != "" {
 			visible = append(visible, d)
 		}
 	}
@@ -667,6 +667,9 @@ func readInvestorPay(ctx context.Context, tx pgx.Tx, week time.Time) (DriverPayW
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
+		return result, err
+	}
+	if err = applyInvestorCarry(ctx, tx, &result); err != nil {
 		return result, err
 	}
 	selection, _ := ctx.Value(payrollPublicationSelectionKey{}).(*payrollSelection)
