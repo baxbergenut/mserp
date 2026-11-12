@@ -3,7 +3,6 @@ import type { DriverOption } from "@/app/lib/types";
 import { usePermissions } from "../lib/access";
 
 
-import { TableFilters } from "@/app/components/management/TableFilters";
 import { formatPhone } from "../lib/phone";
 
 import { useViewState } from "@/app/lib/viewMemory";
@@ -22,7 +21,6 @@ export default function InvestorsPage() {
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [search, setSearch] = useViewState("page:search", "");
-  const [showCompany, setShowCompany] = useViewState("page:showCompany", false);
   const [page, setPage] = useViewState("page:page", 1);
   const [pageSize, setPageSize] = useViewState("page:pageSize", 25);
   const [total, setTotal] = useState(0);
@@ -36,11 +34,11 @@ export default function InvestorsPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await fetchInvestorsPage({ page, pageSize, search: debouncedSearch, includeCompany: showCompany });
+      const result = await fetchInvestorsPage({ page, pageSize, search: debouncedSearch });
       setInvestors(result.items); setPage(result.page); setTotal(result.total); setTotalPages(result.totalPages); setError("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Failed to load investors"); }
     finally { setIsLoading(false); }
-  }, [setPage, page, pageSize, debouncedSearch, showCompany]);
+  }, [setPage, page, pageSize, debouncedSearch]);
   useEffect(() => { const timer = window.setTimeout(() => void loadData(), 0); return () => window.clearTimeout(timer); }, [loadData]);
 
   const open = async (investor: Investor | null) => {
@@ -67,13 +65,6 @@ export default function InvestorsPage() {
     {error && <ErrorBanner message={error} />}
     <div className="flex flex-wrap items-center gap-4">
       <ManagementSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search investors or truck units…" />
-        <TableFilters>
-          <label className="flex cursor-pointer items-center gap-2 text-[12px] text-zinc-400">
-        <input type="checkbox" checked={showCompany} onChange={(event) => { setShowCompany(event.target.checked); setPage(1); }} className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-blue-600" />
-        Show company
-      </label>
-        </TableFilters>
-
     <div className="ml-auto flex flex-wrap items-center gap-2"><ManagementHeader icon={Landmark} title="Investors"  count={total} actionLabel="Add investor" onAction={() => void open(null)} /></div></div>
     <TableShell>
       <table className="w-full min-w-[760px] text-left text-[13px]">

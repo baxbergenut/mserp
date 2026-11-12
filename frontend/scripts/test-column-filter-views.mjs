@@ -19,7 +19,6 @@ try {
   const views = [
     ['/expenses', null, ['Expense date from', 'Expense date to', 'Expense truck', 'Expense driver', 'Expense category'], ['Expense payment type', 'Expense paid by', 'Expense responsibility', 'Accountant verification']],
     ['/drivers', null, ['Show terminated drivers']],
-    ['/investors', null, ['Show company']],
     ['/fleet/trailers', null, ['Storage location', 'Trailer availability', 'Trailer condition', 'Record status']],
     ['/loads', null, ['Customer filter', 'Driver filter', 'Dispatcher filter', 'Status filter', 'Pickup from', 'Pickup to']],
     ['/fuel', ['button', 'Transactions'], ['Purchase date from', 'Purchase date to', 'Filter by driver', 'Filter by state', 'Filter by purchase category']],

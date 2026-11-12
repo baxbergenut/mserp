@@ -54,9 +54,26 @@ func scanInvestor(row rowScanner) (Investor, error) {
 	return v, err
 }
 func (r *FleetRepository) ListInvestors(ctx context.Context, search string) ([]Investor, error) {
+	return r.listInvestors(ctx, search, "")
+}
+
+func (r *FleetRepository) ListInvestorDirectory(ctx context.Context, search string, includeCompany bool) ([]Investor, error) {
+	filter := ` AND (i.driver_id IS NULL OR EXISTS (
+ SELECT 1 FROM trucks t
+ JOIN truck_driver_assignments a ON a.truck_id=t.id AND a.unassigned_at IS NULL
+ WHERE t.owner_id=i.id AND t.active
+ AND a.driver_id<>payroll_driver_at(i.driver_id,(now() AT TIME ZONE 'America/New_York')::date)
+ ))`
+	if !includeCompany {
+		filter += ` AND NOT i.is_company`
+	}
+	return r.listInvestors(ctx, search, filter)
+}
+
+func (r *FleetRepository) listInvestors(ctx context.Context, search, filter string) ([]Investor, error) {
 	search = phone.Search(search)
-	rows, err := r.pool.Query(ctx, selectInvestorsSQL+` WHERE $1='' OR concat_ws(' ',coalesce(d.full_name,i.full_name),coalesce(d.email,i.email),coalesce(d.phone,i.phone)) ILIKE '%'||$1||'%'
- OR EXISTS(SELECT 1 FROM trucks t WHERE t.owner_id=i.id AND t.unit_number ILIKE '%'||$1||'%')
+	rows, err := r.pool.Query(ctx, selectInvestorsSQL+` WHERE ($1='' OR concat_ws(' ',coalesce(d.full_name,i.full_name),coalesce(d.email,i.email),coalesce(d.phone,i.phone)) ILIKE '%'||$1||'%'
+ OR EXISTS(SELECT 1 FROM trucks t WHERE t.owner_id=i.id AND t.unit_number ILIKE '%'||$1||'%'))`+filter+`
  ORDER BY i.is_company DESC,coalesce(d.full_name,i.full_name),i.id`, search)
 	if err != nil {
 		return nil, err

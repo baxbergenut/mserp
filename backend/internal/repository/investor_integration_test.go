@@ -170,6 +170,37 @@ func TestInvestorsDatabase(t *testing.T) {
 			if _, e = repo.UpdateTruck(ctx, truck, input); e != nil {
 				t.Fatal(e)
 			}
+			assertDirectory := func(search string, want ...string) {
+				t.Helper()
+				rows, err := repo.ListInvestorDirectory(ctx, search, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(rows) != len(want) {
+					t.Fatalf("directory search %q: got %+v, want IDs %v", search, rows, want)
+				}
+				for i, id := range want {
+					if rows[i].ID != id {
+						t.Fatalf("directory search %q: got %+v, want IDs %v", search, rows, want)
+					}
+				}
+			}
+			assertDirectory("", independent.ID)
+			assertDirectory("OWNER-1")
+			extra, e := repo.CreateTruck(ctx, TruckInput{UnitNumber: "OWNER-2", OwnerID: &linked.ID, Status: "available", Active: true})
+			if e != nil {
+				t.Fatal(e)
+			}
+			assertDirectory("OWNER-2")
+			var hired string
+			if e = admin.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate)
+ VALUES('Hired Driver','hired driver','cpm',0.50) RETURNING id`).Scan(&hired); e != nil {
+				t.Fatal(e)
+			}
+			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id) VALUES($1,$2)`, extra.ID, hired)
+			assertDirectory("OWNER-2", linked.ID)
+			exec(`UPDATE truck_driver_assignments SET unassigned_at=now() WHERE truck_id=$1`, extra.ID)
+			assertDirectory("OWNER-2")
 			if _, e = pool.Exec(ctx, `UPDATE drivers SET full_name='Renamed Driver' WHERE id=$1`, driver); e != nil {
 				t.Fatal(e)
 			}
