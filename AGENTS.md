@@ -1893,7 +1893,11 @@ assignment lookup lists.
   Explicit load deep links override the remembered Gross Board week/filter/scroll
   on the first render, avoiding an initial request for the remembered week.
   Internal navigation after autosave uses the client router, preserving the app
-  shell. After initial authentication, route session rechecks run alongside page
+  shell. Gross Board and Status Board show when a save is holding a link click.
+  A failed save allows retrying the pending navigation or staying on the board.
+  Leaving after a failed save keeps the Gross Board draft in this tab. On Status
+  Board, leaving requires explicitly discarding the unsaved edits.
+  After initial authentication, route session rechecks run alongside page
   requests; every API request still enforces authentication and handles expiry.
   Entering login unmounts the authenticated shell and clears its session state.
   IntentLink prefetches route code on hover/focus without caching financial records.

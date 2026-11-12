@@ -4,6 +4,8 @@
 import { CurrentUserIDContext, GrossBoardManagementContext, usePermissions } from "@/app/lib/access";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
+import { BoardNavigationNotice } from "@/app/components/BoardNavigationNotice";
+import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
 
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 
@@ -88,9 +90,11 @@ export default function GrossBoardPage() {
   const [issues, setIssues] = useState<GrossBoardSaveIssue[]>([]);
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
-  const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const dirty = canEdit && Object.keys(changes).length > 0;
+  const cancelWeekChange = useCallback(() => setPendingWeek(null), []);
+  const { pendingLink, requestNavigation, cancelNavigation, leave } = useBoardNavigation(dirty || saving, cancelWeekChange);
   const payReturn = loadTarget?.fromPay ? (previousHref?.startsWith("/accounting/driver-pay") ? previousHref : `/accounting/driver-pay?weekStart=${loadTarget.week}`) : null;
-  const returnToPay = useCallback(() => { if (payReturn) { markBack(payReturn); setPendingLink(payReturn); } }, [payReturn, markBack]);
+  const returnToPay = useCallback(() => { if (payReturn) { markBack(payReturn); requestNavigation(payReturn); } }, [payReturn, markBack, requestNavigation]);
   const [balanceDriver, setBalanceDriver] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState("");
   const activityRef = useRef(0);
@@ -111,11 +115,11 @@ export default function GrossBoardPage() {
   const resumeLive = useRef<() => void>(() => {});
   const live = useGrossLive(week, useCallback((value?: GrossBoard) => receiveLive.current(value), []));
   useLayoutEffect(() => { connectedRef.current = live.connected; }, [live.connected]);
-  const dirty = canEdit && Object.keys(changes).length > 0;
   const hasReadyEdits = useMemo(() => {
     const blocked = new Set(issues.flatMap(issue => issue.pending.map(grossLocationKey)));
     return Object.keys(changes).some(key => !blocked.has(key));
   }, [changes, issues]);
+  const saveNeedsReview = issues.length > 0 && !hasReadyEdits;
   useLayoutEffect(() => { idleRef.current = !loading; resumeLive.current(); }, [dirty, saving, loading]);
   const dates = useMemo(() => weekdays.map((_, index) => addDays(week, index)), [week]);
 
@@ -190,20 +194,6 @@ export default function GrossBoardPage() {
     return () => { cancelled = true; receiveLive.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", blur); };
   }, [week, canEditLockedWeek]);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    const leave = (event: MouseEvent) => {
-      const link = (event.target as Element).closest?.("a[href]");
-      if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-        event.preventDefault(); event.stopPropagation(); setPendingLink(link.getAttribute("href"));
-      }
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    document.addEventListener("click", leave, true);
-    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leave, true); };
-  }, [dirty]);
-
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   const allEntries = useMemo(() => lockedForEditing ? saved : { ...saved, ...changes }, [saved, changes, lockedForEditing]);
@@ -251,23 +241,17 @@ export default function GrossBoardPage() {
     if (next === week || loading) return;
     activityRef.current += 1;
     setBalanceDriver(null); setLoadTarget(null);
+    cancelNavigation();
     setPendingWeek(next);
   }
 
   useEffect(() => {
-    if (dirty || saving || loading || (error && !lockedForEditing) || (!pendingWeek && !pendingLink)) return;
-    if (pendingLink) {
-      if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
-      else window.location.assign(pendingLink);
-      return;
-    }
-    if (pendingWeek) {
-      const timer = setTimeout(() => {
-        setBoard(null); setMessage(""); setError(""); setIssues([]); setLockError(null); setLoading(true); setWeek(pendingWeek); setPendingWeek(null);
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [pendingWeek, pendingLink, dirty, saving, loading, error, lockedForEditing, setWeek, router]);
+    if (!pendingWeek || pendingLink || dirty || saving || loading || (error && !lockedForEditing)) return;
+    const timer = setTimeout(() => {
+      setBoard(null); setMessage(""); setError(""); setIssues([]); setLockError(null); setLoading(true); setWeek(pendingWeek); setPendingWeek(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [pendingWeek, pendingLink, dirty, saving, loading, error, lockedForEditing]);
 
   const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     if (!canEdit) return;
@@ -352,7 +336,18 @@ export default function GrossBoardPage() {
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
     activityRef.current += 1;
     setIssues([]);
-    baselinesRef.current = {}; setDrafts({}); setMessage(""); setRefreshError(""); setPendingWeek(null); setPendingLink(null); await load();
+    baselinesRef.current = {}; setDrafts({}); setMessage(""); setRefreshError(""); cancelWeekChange(); cancelNavigation(); await load();
+  }
+
+  function leaveWithDraft() {
+    if (savingRef.current) return;
+    if (writeGrossDrafts(draftKey, changesRef.current, baselinesRef.current)) {
+      leave();
+    } else if (window.confirm("This browser could not keep a recovery copy. Discard unsaved edits and leave?")) {
+      baselinesRef.current = {};
+      setDrafts({});
+      leave();
+    }
   }
 
   async function toggleWeekLock() {
@@ -437,7 +432,12 @@ export default function GrossBoardPage() {
       {!lockedForEditing && !error && issues.length > 0 && <SaveIssues issues={issues} changes={changes} drivers={board?.drivers ?? []}
         saving={saving} onDiscard={discardIssue}
         actions={<><button className={buttonClass} onClick={save} disabled={saving || invalid}>Retry save</button><button className={buttonClass} onClick={reload} disabled={saving}>Discard unsaved changes</button></>} />}
-      {(pendingWeek || pendingLink) && dirty && <p role="status" className="text-xs text-amber-300">{invalid || error || issues.length ? "Resolve the unsaved edits before leaving this week." : "Saving edits before leaving this week…"}<button className="ml-2 underline" onClick={() => { setPendingWeek(null); setPendingLink(null); }}>Stay here</button></p>}
+      {(pendingWeek || pendingLink) && (dirty || saving) && <BoardNavigationNotice
+        message={invalid ? "Correct the highlighted fields to save your edits." : error ? "Your edits could not be saved." : saveNeedsReview ? "Some edits need review before they can be saved." : "Saving edits before leaving…"}
+        onStay={() => { cancelWeekChange(); cancelNavigation(); }}
+        onRetry={(error || saveNeedsReview) && !invalid && !saving ? () => void save() : undefined}
+        leave={pendingLink && !saving && (invalid || error || saveNeedsReview) ? { label: "Leave and keep draft", onClick: leaveWithDraft } : undefined}
+      />}
       {dirty && invalid && <p role="alert" className="text-xs text-red-300">Correct the highlighted fields before saving. Use numbers with at most two decimal places; miles cannot be negative.</p>}
 
       {targetReady && !targetMatches && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Load {loadTarget.loadNumber} is no longer in this driver’s {loadTarget.date} slot {loadTarget.slot + 1}. It may have been changed or removed since payroll was recorded.</p>}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
 import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
@@ -13,7 +13,6 @@ import { orderDriverRows, transferDriverRows } from "./driverOrder";
 
 export function useDriverBoard(lockedDriverId?: string) {
   const canEdit = usePermissions().includes("driver_board.write");
-  const router = useRouter();
   const [board, setBoard] = useState<DriverBoard | null>(null);
   const [changes, setChanges] = useState<Record<string, DriverBoardEntry>>({});
   const [loading, setLoading] = useState(true);
@@ -24,7 +23,6 @@ export function useDriverBoard(lockedDriverId?: string) {
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [eldRefreshing, setELDRefreshing] = useState(false);
-  const [pendingLink, setPendingLink] = useState<string | null>(null);
   const activity = useRef(0);
   const savingRef = useRef(false);
   const idle = useRef(false);
@@ -42,6 +40,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   const pendingUndo = useRef(false);
   const undoLatestRef = useRef<() => Promise<void>>(async () => {});
   const dirty = canEdit && Object.keys(changes).length > 0;
+  const { pendingLink, cancelNavigation, leave } = useBoardNavigation(dirty || saving || orderSaving);
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map(e => [e.driverId, e])), [board]);
   useLayoutEffect(() => { savedRef.current = saved; }, [saved]);
   useLayoutEffect(() => {
@@ -233,32 +232,11 @@ export function useDriverBoard(lockedDriverId?: string) {
     return () => { cancelled = true; };
   }, [dirty, saving, error, loading, save, pendingLink]);
 
-  useEffect(() => {
-    if (!dirty && !saving && !orderSaving) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
-    const leave = (event: MouseEvent) => {
-      const link = (event.target as Element).closest?.("a[href]");
-      if (link && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && link.getAttribute("target") !== "_blank") {
-        const href = link.getAttribute("href");
-        if (!href?.startsWith("/") && !href?.startsWith("http")) return;
-        event.preventDefault(); event.stopPropagation(); setPendingLink(href);
-      }
-    };
-    window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leave, true);
-    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leave, true); };
-  }, [dirty, saving, orderSaving]);
-
-  useEffect(() => {
-    if (!pendingLink || dirty || saving || orderSaving || error || loading) return;
-    if (pendingLink.startsWith("/") && !pendingLink.startsWith("//")) router.push(pendingLink, { scroll: false });
-    else window.location.assign(pendingLink);
-  }, [pendingLink, dirty, saving, orderSaving, error, loading, router]);
-
   async function reload() {
     if (savingRef.current) return;
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved Status Board?")) return;
     activity.current += 1; idle.current = false;
-    setLoading(true); setError(""); setPendingLink(null); changesRef.current = {}; setChanges({}); draftUndo.current = []; undoStack.current = [];
+    setLoading(true); setError(""); cancelNavigation(); changesRef.current = {}; setChanges({}); draftUndo.current = []; undoStack.current = [];
     try { setBoard(await fetchDriverBoard(currentChargeWeek())); setRefreshError(""); }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to load Status Board"); }
     finally { setLoading(false); }
@@ -371,5 +349,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   const entries = useMemo(() => Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [
     id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) },
   ])), [saved, changes, board?.statusSyncEnabled, board?.loads]);
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
 }

@@ -16,6 +16,7 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 let releaseDetails;
+let releaseSave;
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
@@ -25,11 +26,13 @@ try {
   let entry = { driverId: driver.id, currentLoad: '', trailerNumber: '', trailerNote: '', status: 'READY', destination: '', eta: '', notes: '', homeTime: '', version: 1 };
   const loads = { current: null, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: '2026-11-02', revision: 'fixture', customOrder: false };
   let writes = 0, detailReads = 0, conflict = false;
+  let saveGate;
   await page.route('**/api/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname.slice(4);
     if (path === '/driver-board' && req.method() === 'PUT') {
       const input = req.postDataJSON().entries[0];
       expect(input.fleetStatus).toBeUndefined();
+      if (saveGate) await saveGate;
       if (conflict || input.version !== entry.version) return route.fulfill({ status: 409, json: { error: 'Status board changed; your draft is retained.' } });
       writes++;
       entry = { ...input, statusEdited: false, version: entry.version + 1,
@@ -46,6 +49,7 @@ try {
       '/auth/session': { user: { id: 'save-test', username: 'Save Test', permissions: ['driver_board.read', 'driver_board.write'] }, csrfToken: 'fixture' },
       '/driver-board': { statusSyncEnabled: true, weekStart: '2026-11-02', drivers: [driver], entries: [entry], grossEntries: [], loads: { driver: loads }, eld: { configured: false } },
       '/tasks/count': { count: 0 }, '/sidebar-counts': {},
+      '/settings/theme-usage': { counts: {}, totalUsers: 0 },
     };
     return route.fulfill({ json: fixtures[path] ?? [] });
   });
@@ -71,10 +75,42 @@ try {
   await expect(page.getByRole('status').filter({ hasText: /^Not saved$/ })).toBeVisible();
   await expect(notes).toHaveValue('Keep my conflicting draft');
   expect(entry.notes).toBe('Second edit while details are pending');
+
+  const sidebar = page.getByRole('navigation', { name: 'Main navigation' });
+  const settings = sidebar.getByRole('link', { name: 'Settings', exact: true });
+  await sidebar.getByRole('link', { name: 'Status Board', exact: true }).click();
+  await expect(notes).toBeEnabled();
+  await settings.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Your edits could not be saved.' })).toBeVisible();
+  await expect(page).toHaveURL(/\/driver-board$/);
+  await page.getByRole('button', { name: 'Stay here' }).click();
+  await expect(notes).toBeEnabled();
+  await expect(notes).toHaveValue('Keep my conflicting draft');
+
+  conflict = false;
+  saveGate = new Promise(resolve => { releaseSave = resolve; });
+  await settings.click();
+  await page.getByRole('button', { name: 'Retry and continue' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saving changes before leaving' })).toBeVisible();
+  await expect(page).toHaveURL(/\/driver-board$/);
+  releaseSave();
+  saveGate = undefined;
+  await expect(page).toHaveURL(/\/settings$/);
+  expect(entry.notes).toBe('Keep my conflicting draft');
+
+  await sidebar.getByRole('link', { name: 'Status Board', exact: true }).click();
+  conflict = true;
+  await notes.fill('Discard this draft');
+  await expect(page.getByRole('status').filter({ hasText: /^Not saved$/ })).toBeVisible();
+  await settings.click();
+  await page.getByRole('button', { name: 'Discard edits and leave' }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  expect(entry.notes).toBe('Keep my conflicting draft');
   expect(errors).toEqual([]);
-  console.log('Status Board saves passed: committed status/badge, nonblocking detail refresh, immediate follow-up edit, retained conflict draft.');
+  console.log('Status Board saves passed, including sidebar navigation during delayed and failed saves.');
 } finally {
   releaseDetails?.();
+  releaseSave?.();
   await browser.close();
   await new Promise(resolve => server.close(resolve));
 }

@@ -11,6 +11,7 @@ import {useEffect} from "react";
 import { Banknote, CloudCheck, GripVertical, History, MapPin, Route, Truck } from "lucide-react";
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
+import { BoardNavigationNotice } from "@/app/components/BoardNavigationNotice";
 import { MetricCard } from "@/app/components/MetricCard";
 import { SkeletonBar } from "@/app/components/WeeklyTableSkeleton";
 import { controlClass, Modal, Field } from "@/app/components/management/ManagementUI";
@@ -307,6 +308,12 @@ export default function DriverBoardPage() {
     </PinnablePageHeader>
 
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
+    {leaving && (dirty || saving) && <BoardNavigationNotice
+      message={error && !saving ? "Your edits could not be saved." : "Saving changes before leaving…"}
+      onStay={state.cancelNavigation}
+      onRetry={error && !saving ? () => void save() : undefined}
+      leave={error && !saving ? { label: "Discard edits and leave", onClick: state.leave } : undefined}
+    />}
     {refreshError && <p role="status" className="text-xs text-amber-300">{refreshError}<button className={`${buttonClass} ml-2`} onClick={reload} disabled={loading || saving}>Retry</button></p>}
     {destinationError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{destinationError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setDestinationError(""); void reload(); }}>Reload board</button></div>}
     {orderError && <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{orderError}</span><button className={buttonClass} disabled={loading || saving} onClick={() => { setOrderError(""); void reload(); }}>Reload board</button></div>}

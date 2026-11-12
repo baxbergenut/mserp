@@ -10,7 +10,7 @@ const server = createServer(async (req, res) => {
     const path = new URL(req.url, 'http://localhost').pathname;
     const file = extname(path) ? path.slice(1) : `${path.slice(1)}.html`;
     const body = await readFile(new URL(`../out/${file}`, import.meta.url));
-    res.writeHead(200, { 'Content-Type': { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' }[extname(file)] ?? 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.txt': 'text/plain' }[extname(file)] ?? 'application/octet-stream' });
     res.end(body);
   } catch { res.writeHead(404); res.end(); }
 });
@@ -73,6 +73,7 @@ await context.route('**/api/**', async route => {
     '/auth/session': { user: { id: 'reliability-user', username: 'Reliable', permissions: ['board.read', 'board.write'],
       canResetGrossBoardBalance: managers.has(req.frame().page()) }, csrfToken: 'fixture' },
     '/tasks/count': { count: 0 }, '/sidebar-counts': {},
+    '/settings/theme-usage': { counts: {}, totalUsers: 0 },
   };
   return route.fulfill({ json: fixtures[path] ?? [] });
 });
@@ -248,6 +249,27 @@ try {
   await fill(rate, '1500');
   await saved(page);
   expect(stored().driverRate).toBe('1500');
+  // A failed save can hold a sidebar click, but the draft can be carried back.
+  fail = true;
+  await fill(field(page, 'driver rate'), '1550');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Temporary fixture outage');
+  const sidebar = page.getByRole('navigation', { name: 'Main navigation' });
+  await sidebar.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Your edits could not be saved.' })).toBeVisible();
+  await expect(page).toHaveURL(/\/gross-board$/);
+  await page.getByRole('button', { name: 'Leave and keep draft' }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  expect(stored().driverRate).toBe('1500');
+  await sidebar.getByRole('link', { name: 'Gross Board', exact: true }).click();
+  await expect(field(page, 'driver rate')).toHaveValue('$1,550.00');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Temporary fixture outage');
+  await sidebar.getByRole('link', { name: 'Settings', exact: true }).click();
+  fail = false;
+  await page.getByRole('button', { name: 'Retry and continue' }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  expect(stored().driverRate).toBe('1550');
+  await sidebar.getByRole('link', { name: 'Gross Board', exact: true }).click();
+  await expect(rate).toHaveValue('$1,550.00');
   await push({ ...board(), weekLock: { locked: true, version: weekLock.version + 1 } });
   await expect(unlock).toHaveAttribute('title', 'Locked by unknown');
   expect(errors).toEqual([]);
