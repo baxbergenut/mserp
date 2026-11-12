@@ -107,21 +107,23 @@ func TestTomTomRoutes(t *testing.T) {
 		name, body string
 		status     int
 		fail       bool
+		geometry   bool
 	}{
-		{"valid", `{"routes":[{"summary":{"travelTimeInSeconds":7200,"lengthInMeters":160934}}]}`, 200, false},
-		{"missing duration", `{"routes":[{"summary":{"lengthInMeters":1}}]}`, 200, true},
-		{"negative distance", `{"routes":[{"summary":{"travelTimeInSeconds":1,"lengthInMeters":-1}}]}`, 200, true},
-		{"overflow duration", `{"routes":[{"summary":{"travelTimeInSeconds":9223372036854775807,"lengthInMeters":1}}]}`, 200, true},
-		{"no route", `{"routes":[]}`, 200, true},
-		{"unauthorized", `{"secret":"do not log provider bodies"}`, 401, true},
-		{"rate limited", `{}`, 429, true},
+		{"valid with geometry", `{"routes":[{"summary":{"travelTimeInSeconds":7200,"lengthInMeters":160934},"legs":[{"encodedPolyline":"_p~iF~ps|U_ulLnnqC","encodedPolylinePrecision":5}]}]}`, 200, false, true},
+		{"missing geometry still yields ETA", `{"routes":[{"summary":{"travelTimeInSeconds":7200,"lengthInMeters":160934}}]}`, 200, false, false},
+		{"missing duration", `{"routes":[{"summary":{"lengthInMeters":1}}]}`, 200, true, false},
+		{"negative distance", `{"routes":[{"summary":{"travelTimeInSeconds":1,"lengthInMeters":-1}}]}`, 200, true, false},
+		{"overflow duration", `{"routes":[{"summary":{"travelTimeInSeconds":9223372036854775807,"lengthInMeters":1}}]}`, 200, true, false},
+		{"no route", `{"routes":[]}`, 200, true, false},
+		{"unauthorized", `{"secret":"do not log provider bodies"}`, 401, true, false},
+		{"rate limited", `{}`, 429, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reserved, calls := 0, 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++
 				q := r.URL.Query()
-				if reserved != 1 || r.Method != "GET" || !r.Close || q.Get("key") != "secret" || q.Get("traffic") != "true" || q.Get("departAt") != "now" || q.Get("travelMode") != "car" || q.Get("routeRepresentation") != "summaryOnly" || q.Get("maxAlternatives") != "0" {
+				if reserved != 1 || r.Method != "GET" || !r.Close || q.Get("key") != "secret" || q.Get("traffic") != "true" || q.Get("departAt") != "now" || q.Get("travelMode") != "car" || q.Get("routeRepresentation") != "encodedPolyline" || q.Get("maxAlternatives") != "0" {
 					t.Error("unexpected/unmetered TomTom request")
 				}
 				if r.URL.Path != "/40.0000000,-74.0000000:41.0000000,-73.0000000/json" {
@@ -143,6 +145,9 @@ func TestTomTomRoutes(t *testing.T) {
 			}
 			if !tc.fail && (got.Duration != 2*time.Hour || got.Meters != 160934 || !strings.Contains(got.Assumptions, "TomTom traffic-aware")) {
 				t.Fatal(got)
+			}
+			if (got.Geometry != nil) != tc.geometry || (tc.geometry && (got.Geometry.Polyline != "_p~iF~ps|U_ulLnnqC" || got.Geometry.Precision != 5)) {
+				t.Fatalf("unexpected route geometry: %+v", got.Geometry)
 			}
 		})
 	}

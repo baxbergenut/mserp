@@ -2377,6 +2377,15 @@ assignment lookup lists.
   test-investors-e2e.mjs --assignment-week-only). Migration 046
   is reserved for the separate Driver Board history work.
 
+- Map at /map follows Gross Board in the sidebar and uses driver_board.read.
+  It reuses Status Board GPS and status colors, with one unit-labelled pin per
+  located truck and driver selection for shared trucks or missing GPS.
+  Selecting a truck preserves the viewport and reads the TomTom route cached
+  by the existing ETA request for the current load stop. Route geometry stays
+  out of ordinary board payloads, and selection adds no TomTom requests.
+  The amber trail reads the selected truck's last 24 hours of Five ELD GPS
+  through the same board permission, sampling roughly every five minutes with
+  a short in-memory cache and breaks for tracking gaps.
 - Status Board is the visible name of /driver-board; route/permission identifiers
   stay compatible. Sidebar order begins Status Board, Gross Board, Loads.
 

@@ -21,6 +21,7 @@ import {
   Settings,
   Scale,
   LayoutDashboard,
+  Map,
   MessageSquare,
 } from "lucide-react";
 import { useMaintenanceAccess } from "@/app/lib/maintenanceAccess";
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
+  { href: "/map", label: "Map", icon: Map },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses settings", icon: Settings },

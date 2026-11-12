@@ -587,6 +587,20 @@ export interface BoardAutomation {
   travelRetryPending?: boolean; travelStale?: boolean; travelArrivalAt?: string; customDestination?: boolean;
   requiresConfirmation: boolean; routingEnabled: boolean; manualETAValid: boolean;
 }
+export interface BoardMapRoute {
+  context: string;
+  destination: string;
+  stopType: string;
+  calculatedAt: string;
+  reportedAt: string;
+  stale: boolean;
+  geometry: { polyline: string; precision: number };
+}
+export interface BoardMapHistoryPoint {
+  latitude: number;
+  longitude: number;
+  reportedAt: string;
+}
 export interface BoardStop { key: string; type: string; location: string; streetAddress?: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule; manualStopTime?: string }
 export interface BoardLoad {
   previouslyActive?: boolean;

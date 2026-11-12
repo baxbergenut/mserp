@@ -335,6 +335,12 @@ func main() {
 			return err
 		}})
 	}()
+	var fiveELDHistory func(context.Context, string, time.Time) ([]fiveeld.TrackingPoint, error)
+	if fiveELDTelemetry != nil {
+		fiveELDHistory = func(ctx context.Context, vin string, now time.Time) ([]fiveeld.TrackingPoint, error) {
+			return fiveELDTelemetry.TrackingHistory(ctx, cfg.FiveELDUSDOT, vin, now)
+		}
+	}
 	router := httpapi.NewRouter(
 		logger,
 		loadJob,
@@ -354,6 +360,7 @@ func main() {
 		aiExtractor,
 		aiExtractor,
 		locationRefresher,
+		fiveELDHistory,
 		wmtClient,
 		httpapi.AuthOptions{
 			CookieSecure: cfg.AuthCookieSecure,

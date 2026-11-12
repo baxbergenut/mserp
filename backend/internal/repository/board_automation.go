@@ -135,6 +135,7 @@ type BoardAutomation struct {
 	TelemetrySafe        bool            `json:"telemetrySafe"`
 	CustomDestination    bool            `json:"customDestination,omitempty"`
 	Evidence             ArrivalEvidence `json:"-"`
+	MapRoute             *BoardMapRoute  `json:"-"`
 
 	routeAddress   string
 	travelEvidence BoardTravel
@@ -240,18 +241,18 @@ func importedBoardLoad(ctx context.Context, tx pgx.Tx, number string) (*BoardLoa
 }
 
 // Read cached evidence only; displaying the board never advances the detector.
-func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]BoardLoads, states map[string]boardLoadState, entries map[string]DriverBoardEntry) error {
+func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]BoardLoads, states map[string]boardLoadState, entries map[string]DriverBoardEntry, includeRoute bool) error {
 	ids := make([]string, 0, len(views))
 	for id := range views {
 		ids = append(ids, id)
 	}
 	rows, err := tx.Query(ctx, `WITH vin_counts AS MATERIALIZED (
  SELECT upper(regexp_replace(vin,'[^A-Za-z0-9]','','g')) vin,count(*) matches FROM trucks WHERE vin IS NOT NULL GROUP BY 1
- ) SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(c.travel,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
+ ) SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(CASE WHEN $2 THEN c.travel ELSE c.travel-'geometry' END,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
  (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND coalesce(vc.matches,0)=1),coalesce(el.source,''),el.reported_at,coalesce(c.ready_location,'{}'::jsonb),c.ready_location_requested_at
  FROM drivers d LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN vin_counts vc ON vc.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
- LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+statusBoardELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids)
+ LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+statusBoardELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids, includeRoute)
 	if err != nil {
 		return err
 	}
@@ -328,6 +329,9 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 			}
 		}
 		if key != "" {
+			if includeRoute && stop != nil && address == "" && telemetrySafe && gpsAt != nil && sameTelemetrySource(travel.Source, telemetrySource) {
+				a.MapRoute = travel.mapRoute(key, *stop, time.Now(), *gpsAt)
+			}
 			if address == "" && evidence.Context == key && telemetrySafe && sameTelemetrySource(evidence.Source, telemetrySource) {
 				a.Arrived = evidence.Arrived
 				a.ObservedAt = evidence.LastAt

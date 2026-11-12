@@ -62,6 +62,7 @@ func NewRouter(
 	documentExtractor openai.CabCardExtractor,
 	expenseExtractor openai.ExpenseExtractor,
 	fiveELDJob jobs.LocationRefresher,
+	fiveELDHistory boardTrackingHistory,
 	wmtClient repository.WMTProvider,
 	authOptions AuthOptions,
 	fleetScopeOptions ...fleetscope.Options,
@@ -236,6 +237,7 @@ func NewRouter(
 	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
 	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo)
 	registerDriverBoardRoutes(protected, logger, boardRepo)
+	registerBoardMapHistory(protected, logger, boardRepo, fiveELDHistory)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
 	closePayrollLive := registerPayrollLive(protected, pool, logger, auth, payRepo)
 	registerDriverChargeRoutes(protected, logger, repository.NewDriverChargeRepository(pool))

@@ -109,6 +109,12 @@ type Estimate struct {
 	Duration    time.Duration
 	Meters      int
 	Assumptions string
+	Geometry    *RouteGeometry
+}
+
+type RouteGeometry struct {
+	Polyline  string `json:"polyline"`
+	Precision int    `json:"precision"`
 }
 
 var ErrRouteUnavailable = errors.New("route unavailable")
@@ -184,7 +190,7 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 			req.Header.Set("X-Goog-FieldMask", fields)
 		}
 	} else if provider == "tomtom" && address == "" {
-		q := url.Values{"key": {c.Options.TomTomAPIKey}, "traffic": {"true"}, "departAt": {"now"}, "travelMode": {"car"}, "routeType": {"fastest"}, "routeRepresentation": {"summaryOnly"}, "maxAlternatives": {"0"}}
+		q := url.Values{"key": {c.Options.TomTomAPIKey}, "traffic": {"true"}, "departAt": {"now"}, "travelMode": {"car"}, "routeType": {"fastest"}, "routeRepresentation": {"encodedPolyline"}, "maxAlternatives": {"0"}}
 		endpoint := fmt.Sprintf("%s/%.7f,%.7f:%.7f,%.7f/json?%s", c.TomTomURL, lat, lng, toLat, toLng, q.Encode())
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		// Avoid net/http's automatic GET replay on a failed reused connection.
@@ -234,16 +240,28 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 					Seconds *int64 `json:"travelTimeInSeconds"`
 					Meters  *int   `json:"lengthInMeters"`
 				} `json:"summary"`
+				Legs []struct {
+					Polyline  string `json:"encodedPolyline"`
+					Precision int    `json:"encodedPolylinePrecision"`
+				} `json:"legs"`
 			} `json:"routes"`
 		}
 		if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&response); err != nil || len(response.Routes) == 0 {
 			return Estimate{}, ErrRouteUnavailable
 		}
-		summary := response.Routes[0].Summary
+		route := response.Routes[0]
+		summary := route.Summary
 		if summary.Seconds == nil || *summary.Seconds < 0 || *summary.Seconds > 31536000 || summary.Meters == nil || *summary.Meters < 0 {
 			return Estimate{}, ErrRouteUnavailable
 		}
-		return Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: "TomTom traffic-aware " + EstimateAssumptions}, nil
+		estimate := Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: "TomTom traffic-aware " + EstimateAssumptions}
+		if len(route.Legs) == 1 {
+			leg := route.Legs[0]
+			if leg.Polyline != "" && (leg.Precision == 5 || leg.Precision == 7) {
+				estimate.Geometry = &RouteGeometry{Polyline: leg.Polyline, Precision: leg.Precision}
+			}
+		}
+		return estimate, nil
 	}
 	var response struct {
 		GeocodingResults struct {
