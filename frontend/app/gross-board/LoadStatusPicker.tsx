@@ -174,7 +174,6 @@ export function LoadStatusPicker({ entry, label, disabled, weekLocked = false, n
       {customError && <span role="alert" className="block text-[10px] text-red-300">{customError}</span>}
       {savingCustom && <span role="status" className="block text-[10px] text-zinc-400">Saving custom status...</span>}
       {recoveryError && <span role="alert" className="block text-[10px] text-amber-300">Keep this page open; draft recovery is unavailable.</span>}
-      {entry.sourceMissing && <span role="status" title="The linked DataTruck record is no longer available. Reconciliation reconnects a unique replacement; entered values and finalized statements are preserved." className="block px-1 text-[10px] text-amber-400">Not found in system</span>}
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
         <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}

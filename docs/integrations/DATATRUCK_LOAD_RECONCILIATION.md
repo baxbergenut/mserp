@@ -8,8 +8,9 @@ not authority to delete financial history or silently substitute an identity.
 Loads excludes confirmed missing records from rows, counts and filter options by
 default. The **Show missing from DataTruck** checkbox includes labelled historical
 records. Gross Board suggestions and new selections exclude missing IDs. Existing
-links show **Not found in system** until safely replaced or reviewed. Reappearance
-restores visibility. Payroll/frozen source calculations do not discard evidence.
+plans with missing links use the ordinary red unmatched style in both boards.
+Reappearance restores source details. Payroll/frozen source calculations retain
+historical evidence.
 
 Gross Board rejects a new claim for a load number already present in another
 active slot, even under another driver, date or DataTruck record ID. Matching is
@@ -61,7 +62,7 @@ multiple current IDs, trips, cross-driver/date usage, transfers, placements and
 finalized driver/investor statements hold the group for review. Dates or revenue
 may differ on the unique replacement; they are not copied into manual overrides.
 
-No replacement keeps the entered number and values with **Not found in system**.
+When a replacement is unavailable, the plan keeps the entered number and values.
 Focusing that field never silently changes its historical identity. Presence
 changes notify the board once; unchanged presence checks do not trigger a refresh.
 Old source records remain historical evidence, excluded from ordinary selection.

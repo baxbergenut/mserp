@@ -131,6 +131,23 @@ try {
   await expect(panel.getByText('Removed from queue (1)', { exact: true })).toBeVisible();
   await expect(panel.getByText('Unavailable loads (1)', { exact: true })).toBeVisible();
 
+  // Missing DataTruck details use the number-only color without changing queue order.
+  const missingWarning = 'DataTruck no longer returns this source record; pickup and delivery details are unavailable';
+  full = { ...full, next: [{ ...next, sourceMissing: true, stops: [], warning: missingWarning }, { ...later, loadId: null, stops: [] }], revision: 'missing-source' };
+  await push();
+  const nextCell = page.getByRole('button', { name: 'Loads Driver · Next load', exact: true });
+  await expect(nextCell.getByText('NEXT', { exact: true })).toHaveClass(/\btext-red-300\b/);
+  const queue = panel.locator('[data-queued-load]');
+  await expect(queue.last()).toHaveAttribute('data-queued-load', 'NEXT');
+  await expect(queue.last().getByText('NEXT', { exact: true })).toHaveClass(/\btext-red-300\b/);
+  await expect(queue.first().getByText('LATER', { exact: true })).toHaveClass(/\btext-red-300\b/);
+  const missingCard = queue.last().getByRole('button', { name: 'NEXT', exact: true });
+  await missingCard.click();
+  await expect(queue.last().getByText(/Unmatched plan/)).toBeVisible();
+  await expect(queue.last().getByText(missingWarning, { exact: true })).toHaveCount(0);
+  await expect(queue.last().getByText(/DataTruck #/)).toHaveCount(0);
+  await missingCard.click();
+
   // Overdue plans remain visible in both the table and live-updated queue.
   full = { ...full, next: [{ ...next, date: '2026-10-27', overdue: true }, later], revision: 'overdue' };
   await push();

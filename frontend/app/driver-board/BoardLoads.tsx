@@ -108,11 +108,12 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   }
   function choose(load: BoardLoad) { setSelect(load); setClear(false); }
   function detail(load: BoardLoad) {
-    return <><p className="mt-1 text-xs text-zinc-500">{load.manual ? "Manually added next load" : load.planId ? `Gross Board: ${load.date} · slot ${load.slot + 1}` : "Imported load · no Gross Board plan"}{load.loadId !== null ? ` · DataTruck #${load.loadId}` : load.manual ? " · Waiting for load details" : " · Unmatched plan"}</p>
+    const hasSourceDetails = load.loadId !== null && !load.sourceMissing;
+    return <><p className="mt-1 text-xs text-zinc-500">{load.manual ? "Manually added next load" : load.planId ? `Gross Board: ${load.date} · slot ${load.slot + 1}` : "Imported load · no Gross Board plan"}{hasSourceDetails ? ` · DataTruck #${load.loadId}` : load.manual ? " · Waiting for load details" : " · Unmatched plan"}</p>
       {load.previouslyActive && <p className="mt-2 text-xs text-zinc-400">Previously worked and replaced on this board. Completion has not been confirmed.</p>}
-      {load.warning && <p className="mt-2 text-xs text-amber-300">{load.warning}</p>}
+      {load.warning && !load.sourceMissing && <p className="mt-2 text-xs text-amber-300">{load.warning}</p>}
       {load.stops.map(s => s.schedule && <p key={`schedule-${s.key}`} className="mt-1 text-[11px] text-zinc-400">{s.type}: {s.schedule.detail || s.schedule.reason}</p>)}
-      {load.loadId !== null && <p className="mt-1 text-[11px] text-zinc-500">DataTruck: {load.sourceStatus || "No status"} · last synced {time(load.syncedAt)} NY</p>}
+      {hasSourceDetails && <p className="mt-1 text-[11px] text-zinc-500">DataTruck: {load.sourceStatus || "No status"} · last synced {time(load.syncedAt)} NY</p>}
       {load.stops.length > 0 && <ol className="mt-3 space-y-2">{load.stops.map((s, i) => <li key={`${s.key}-${i}`} className={`rounded-md px-2 py-1.5 text-xs ${view.current?.planId === load.planId && view.stopKey === s.key ? "bg-blue-500/15 text-blue-200" : "bg-zinc-900 text-zinc-400"}`}><span className="capitalize">{i + 1}. {s.type || "Stop"}</span> · {compactLoadLocation(s.location) || "Location unavailable"}{s.appointment && <span className="mt-1 block text-[11px] text-zinc-500">Appointment: {time(s.appointment)} NY</span>}</li>)}</ol>}
     </>;
   }
@@ -128,7 +129,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
       <div className="flex items-center">
         <button type="button" aria-label={`${load.number}${status ? ` · ${status} load` : ""}`} aria-expanded={open}
         className={`flex min-h-10 min-w-0 flex-1 items-center gap-2 px-3 text-left text-sm font-medium text-zinc-200 hover:bg-zinc-800/60 ${draggable ? "cursor-[inherit]" : ""}`}
-        onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null ? "text-red-300" : ""}`}>{load.number}</span>{status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${current ? "bg-blue-500/20 text-blue-200" : "bg-zinc-800 text-zinc-300"}`}>{status}</span>}</button><CopyLoadNumber number={load.number} /></div>
+        onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null || load.sourceMissing ? "text-red-300" : ""}`}>{load.number}</span>{status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${current ? "bg-blue-500/20 text-blue-200" : "bg-zinc-800 text-zinc-300"}`}>{status}</span>}</button><CopyLoadNumber number={load.number} /></div>
       {open && <div className="border-t border-zinc-800 px-3 pb-3">{detail(load)}
         {current && <><label className="mt-3 block text-xs text-zinc-400">Destination source<select aria-label="Current load destination source" disabled={locked} value={view.destinationSource ? view.stopKey : ""} onChange={e => void act(e.target.value ? { action: "source", stopKey: e.target.value } : { action: "manual" })} className={`${controlClass} mt-1`}><option value="">Manual destination</option>{load.stops.filter(s => s.location).map((s, i) => <option key={`${s.key}-${i}`} value={s.key}>{s.type} · {compactLoadLocation(s.location)}</option>)}</select></label>
           {canEdit && <button className={`${buttonClass} mt-3`} disabled={locked} onClick={() => { setClear(true); setSelect(null); }}>Clear current selection</button>}</>}
