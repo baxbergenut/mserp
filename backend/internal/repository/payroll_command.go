@@ -785,7 +785,10 @@ func finishPaySaveCommand(ctx context.Context, tx pgx.Tx, c *payrollCommand, kin
 	return c.store(ctx, tx, edits, edits.AffectedStatements)
 }
 
-type PayrollSettlementCommand struct{ RequestID, ExpectedStatementRevision, ExpenseRevision string }
+type PayrollSettlementCommand struct {
+	RequestID, ExpectedStatementRevision, ExpenseRevision string
+	KeepMoney                                             bool
+}
 
 func beginPayrollSettlement(ctx context.Context, tx pgx.Tx, kind string, week time.Time, id, revision, actor, reason string, reopen, override bool, options []PayrollSettlementCommand) (*payrollCommand, []byte, error) {
 	if len(options) == 0 {
@@ -796,7 +799,7 @@ func beginPayrollSettlement(ctx context.Context, tx pgx.Tx, kind string, week ti
 	if reopen {
 		name = kind + ".reopen"
 	}
-	input := PayrollSettlementInput{RequestID: opt.RequestID, ExpectedStatementRevision: opt.ExpectedStatementRevision, ExpenseRevision: opt.ExpenseRevision, WeekStart: week.Format(time.DateOnly), DriverID: id, Revision: revision, Reason: reason, Override: override}
+	input := PayrollSettlementInput{RequestID: opt.RequestID, ExpectedStatementRevision: opt.ExpectedStatementRevision, ExpenseRevision: opt.ExpenseRevision, WeekStart: week.Format(time.DateOnly), DriverID: id, Revision: revision, Reason: reason, Override: override, KeepMoney: opt.KeepMoney}
 	c, replay, err := beginPayrollCommand(ctx, tx, actor, opt.RequestID, name, opt.ExpectedStatementRevision, input)
 	if err != nil || replay != nil {
 		return c, replay, err

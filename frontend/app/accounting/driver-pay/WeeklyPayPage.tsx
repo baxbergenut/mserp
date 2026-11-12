@@ -35,7 +35,7 @@ import { restorePayEdit } from "./payUndo";
 import { isPayReplacementInput } from "./payGrid";
 import { usePayRefresh } from "./usePayRefresh";
 
-type SettlementReview = { driverId?: string; reopen: boolean; blockedIssue?: string };
+type SettlementReview = { driverId?: string; reopen: boolean; keepMoney?: boolean; blockedIssue?: string };
 
 const driverTypes: EmploymentType[] = ["company", "owner_operator", "investor_driver", "unassigned"];
 
@@ -260,7 +260,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const rowActions = useMemo<PayRowActions>(() => ({
     place: input => rowHandlers.current!.place(input),
     transfer: (id, load, mode) => rowHandlers.current!.transfer(id, load, mode),
-    settle: (id, reopen) => rowHandlers.current!.settle(id, reopen),
+    settle: (id, reopen, keepMoney) => rowHandlers.current!.settle(id, reopen, keepMoney),
     accept: (id, load, field) => rowHandlers.current!.accept(id, load, field),
     reload: id => rowHandlers.current!.reload(id),
     openExpense: (id, expense) => rowHandlers.current!.openExpense(id, expense),
@@ -282,7 +282,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
           undoStack.current = []; await refreshStatement(id); setMessage("Saved");
         } finally { setRefreshing(false); }
       },
-      settle: (id, reopen) => void prepareSettlement(reopen, id),
+      settle: (id, reopen, keepMoney) => void prepareSettlement(reopen, id, keepMoney),
       accept: (id, load, field) => acceptSource(load, id, field),
       reload: refreshStatement,
       openExpense: (id, expense) => { setExpenseStatement(id); setExpenseId(expense); },
@@ -424,7 +424,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       setError(err instanceof Error ? "Saved, but this statement could not be refreshed: " + err.message : "Saved, but this statement could not be refreshed.");
     } finally { setRefreshRequest(value => value + 1); }
   }
-  async function prepareSettlement(reopen: boolean, driverId?: string) {
+  async function prepareSettlement(reopen: boolean, driverId?: string, keepMoney = false) {
     if (reopen ? !canReopen : !canFinalize || !driverId) return;
     if (!driverId || !report || !payStatementReady(report, report.drivers.find(row => row.id === driverId)) || changesRef.current[driverId] || draftEditors.current.has(driverId) || pendingSaves.current[driverId] || loading || refreshing || settlementPending.current.has(driverId)) return;
     const row = report.drivers.find(value => value.id === driverId);
@@ -433,12 +433,12 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     settlementPending.current.add(driverId); setSettling(new Set(settlementPending.current)); setError(""); setMessage("");
     try {
       try {
-        const receipt = await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, false, true, driverId ? row?.statementRevision : report.preparation?.generation, row?.expenseRevision);
-        receiveSettlement(receipt); setMessage("Finalized");
+        const receipt = await (investor ? settleInvestorPay : settleDriverPay)(week, current.revision, driverId, false, false, true, driverId ? row?.statementRevision : report.preparation?.generation, row?.expenseRevision, keepMoney);
+        receiveSettlement(receipt); setMessage(keepMoney ? "Finalized — money kept for next week" : "Finalized");
       } catch (err) {
         if (err instanceof APIError && err.code === "finalization_blocked") {
           const reviewed = err.review ? { ...err.review, preparation: current.preparation, drivers: err.review.drivers.map(d => ({ ...d, statementRevision: current.drivers.find(row => row.id === d.id)?.statementRevision })) } : (driverId ? current : await fetchPaySettlementPreview(investor, week));
-          showSettlement(reviewed, { driverId, reopen: false, blockedIssue: err.message }); return;
+          showSettlement(reviewed, { driverId, reopen: false, keepMoney, blockedIssue: err.message }); return;
         }
         throw err;
       }

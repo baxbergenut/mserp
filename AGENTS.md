@@ -73,6 +73,19 @@ conversion used that faulty check and created duplicate slots.
 
 ## Pay-page actions
 
+Investor Pay offers Keep money and finalize on positive payables. It freezes the
+full net as retainedPay, making cash payable zero; the latest finalized truck
+statement carries that amount as investorCarry to later open weeks. A normal
+finalization consumes the credit; repeated retention rolls the combined net
+forward. Drafts neither consume nor originate carry. Source ledgers still post
+once through native finalization. Reopening restores the prior balance, guarded
+against later finalized statements and owner changes. Retained statements are
+excluded from payment exports. Install the matching deploy helper before release;
+once retained snapshots exist it rejects binaries without the retained-pay capability.
+Check TestInvestorRetainedPayDatabase and
+frontend/scripts/test-investors-e2e.mjs --investor-retained-only.
+
+
 Expanded open Driver Pay and Investor Pay load rows show a blue warning for
 dispatcher name differences. The read-only comparison uses the synced
 DataTruck name and the dated Clustie assignment on the original service day.

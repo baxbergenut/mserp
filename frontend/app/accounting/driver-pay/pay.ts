@@ -85,7 +85,8 @@ export function driverTotals(driver: DriverPayDriver, edits: DriverPayEdits) {
   const generated = [...(edits.generatedCharges ?? []), ...autoCharges, ...activeLayovers(driver, edits)].reduce((sum, row) => sum + hundredths(row.amount), BigInt(0));
   const expenses = (edits.expenseDeductions ?? []).reduce((sum, row) => sum + ((row.source === "reimburse" || row.source === "accessorial") ? -hundredths(row.amount) : hundredths(row.amount)), BigInt(0));
   const salaryCarry = hundredths(driver.salaryCarry ?? "0");
-  const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, salaryCarry, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses - salaryCarry };
+  const investorCarry = hundredths(driver.investorCarry ?? "0"), retainedPay = hundredths(driver.retainedPay ?? "0");
+  const totals = { ...values, review: values.review + (driver.issues?.length ?? 0), ...adjustments, costs, generated, expenses, salaryCarry, investorCarry, retainedPay, payable: values.fee + adjustments.addition + adjustments.reimbursement - adjustments.deduction + costs + generated - expenses - salaryCarry + investorCarry - retainedPay };
   if (driver.summary) return { ...totals, fee: hundredths(driver.summary.fee), payable: hundredths(driver.summary.payable), missingFees: driver.summary.missingFees, review: driver.summary.review };
   return totals;
 }

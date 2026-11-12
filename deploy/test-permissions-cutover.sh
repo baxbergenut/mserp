@@ -38,6 +38,7 @@ mock_accessorials=f
 mock_escrow_settlement=f
 mock_scale_carry=f
 mock_scale_partial=f
+mock_investor_retained=f
 runuser() {
     local result=$mock
     if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
@@ -67,6 +68,7 @@ runuser() {
     if [[ $* == *"JOIN public.weighmytruck_transactions"* ]]; then result=$mock_scale_carry; fi
     if [[ $* == *"scaleOriginalAmount"* ]]; then result=$mock_scale_partial; fi
     if [[ $* == *"constraint_name='escrow_balance_movement_check'"* ]]; then result=$mock_escrow_adjustment; fi
+    if [[ $* == *"retainedPay"* ]]; then result=$mock_investor_retained; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -278,6 +280,13 @@ compatible_release "$test_root/new"
 mock_scale_partial=error
 if compatible_release "$test_root/new"; then echo 'Partial CAT Scale query failure allowed rollback' >&2; exit 1; fi
 mock_scale_partial=f
+mock_investor_retained=t
+if compatible_release "$test_root/new"; then echo 'Retained investor money allowed incompatible rollback' >&2; exit 1; fi
+printf '#!/usr/bin/env bash\ncase "$1" in -investor-retained-pay-capability) echo investor-retained-pay-v1;; -payroll-expense-drafts-capability) echo payroll-expense-drafts-v1;; -board-routing-usage-capability) echo board-routing-usage-v1;; *) echo payroll-resources-v1;; esac\n' > "$test_root/new/backend/mserp-api"
+compatible_release "$test_root/new"
+mock_investor_retained=error
+if compatible_release "$test_root/new"; then echo 'Retained pay query failure allowed rollback' >&2; exit 1; fi
+mock_investor_retained=f
 mock_expense_drafts=error
 if compatible_release "$test_root/new"; then echo 'Expense draft schema query failure allowed rollback' >&2; exit 1; fi
 mock_expense_drafts=unexpected

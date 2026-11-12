@@ -212,7 +212,7 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			if r.URL.Query().Get("receipt") == "1" {
 				ctx = repository.WithPayrollReceipt(ctx)
 			}
-			result, err := pay.SettleInvestor(ctx, week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override, repository.PayrollSettlementCommand{RequestID: v.RequestID, ExpectedStatementRevision: v.ExpectedStatementRevision})
+			result, err := pay.SettleInvestor(ctx, week, v.DriverID, v.Revision, actor(r), v.Reason, action == "reopen", v.Override, repository.PayrollSettlementCommand{RequestID: v.RequestID, ExpectedStatementRevision: v.ExpectedStatementRevision, KeepMoney: v.KeepMoney})
 			if err != nil {
 				fail(w, err)
 				return

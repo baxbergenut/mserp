@@ -528,6 +528,12 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 				return nil, err
 			}
 		}
+		if !affectsOtherWeeks && strings.HasPrefix(c.name, "investor.") {
+			affectsOtherWeeks, err = investorCarryAffectsOtherWeeks(ctx, tx, keys(changedWeeks), impact.roots)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if !affectsOtherWeeks {
 			impact.weeks = changedWeeks
 			if strings.HasSuffix(c.name, ".finalize") || (payrollConcurrent(tx) && strings.HasSuffix(c.name, ".reopen")) {

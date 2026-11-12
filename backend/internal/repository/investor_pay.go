@@ -594,7 +594,7 @@ func (r *DriverPayRepository) InvestorPay(ctx context.Context, week time.Time, t
 func investorPayView(report DriverPayWeek, target string) DriverPayWeek {
 	visible := []DriverPayDriver{}
 	for _, d := range report.Drivers {
-		if !d.TruckInactive || d.ID == target {
+		if !d.TruckInactive || d.ID == target || d.InvestorCarry != "" || d.RetainedPay != "" {
 			visible = append(visible, d)
 		}
 	}

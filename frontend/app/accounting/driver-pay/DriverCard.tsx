@@ -66,7 +66,7 @@ export type DriverCardProps = {
   onAcceptSource?: (load: DriverPayLoad, field: "originalRate" | "totalMiles" | "driverGross") => Promise<void>;
   sourceActionDisabled?: boolean;
   returnToPay?: boolean;
- onSettlement?: (reopen: boolean) => void;
+ onSettlement?: (reopen: boolean, keepMoney?: boolean) => void;
  settlementDisabled?: boolean;
  settlementPending?: boolean;
   driver: DriverPayDriver;
@@ -123,7 +123,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
   const homeBadge = driver.homeWeek && loadCount === 0 ? <span title="Home every day of this week, with no loads" className="shrink-0 whitespace-nowrap rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-300">Home</span> : null;
   const allFeesMissing = loadCount > 0 && totals.missingFees === loadCount;
   const incomplete = totals.review > 0;
-  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses - totals.salaryCarry;
+  const netAdjustments = totals.addition + totals.reimbursement - totals.deduction + totals.costs + totals.generated - totals.expenses - totals.salaryCarry + totals.investorCarry - totals.retainedPay;
   const payable = allFeesMissing ? "Needs review" : decimalDisplay(totals.payable, true);
   const editAdjustment = (index: number, update: (item: DriverPayAdjustment) => DriverPayAdjustment) => {
     edit(current => {
@@ -150,11 +150,11 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
   const layovers = activeLayovers(driver, edits);
   const scaleCount = (driver.autoCharges ?? []).filter(isScaleTicket).length + (driver.deferredScaleCharges?.length ?? 0);
   const scaleRowAdjustment = scaleCount > 1 ? (scaleExpanded ? 1 : 1 - scaleCount) : 0;
-  const fixedChargeRows = scaleRowAdjustment + Number(!!driver.salaryCarry) + layovers.length + visibleCostRows.length + (driver.autoCharges?.length ?? 0) + (driver.deferredScaleCharges?.length ?? 0) + (edits.expenseDeductions?.length ?? 0) + (edits.generatedCharges?.length ?? 0);
+  const fixedChargeRows = scaleRowAdjustment + Number(!!driver.salaryCarry) + Number(!!driver.investorCarry) + Number(!!driver.retainedPay) + layovers.length + visibleCostRows.length + (driver.autoCharges?.length ?? 0) + (driver.deferredScaleCharges?.length ?? 0) + (edits.expenseDeductions?.length ?? 0) + (edits.generatedCharges?.length ?? 0);
   const adjustmentCells = open ? <td colSpan={2} rowSpan={weekRowCount} className="pay-adjustment-span relative border-r border-zinc-800/70 bg-zinc-950 p-0 align-top">
     <div data-payroll-scroll={`${driver.id}:adjustments`} className="absolute inset-0 overflow-y-auto overscroll-contain" role="region" aria-label={`${driver.fullName} reimbursements and charges`} tabIndex={0}>
       <table className="w-full table-fixed border-separate border-spacing-0 text-xs"><colgroup><col style={{ width: `${215 / 310 * 100}%` }} /><col style={{ width: `${95 / 310 * 100}%` }} /></colgroup>
-        <tbody>{driver.salaryCarry && <tr>
+        <tbody>{driver.investorCarry && <tr><td className={`${cell} text-zinc-300`}><span>Money kept from prior week</span>{driver.investorCarryWeek && <div className="text-[11px] text-zinc-400">{payrollWeekLabel(driver.investorCarryWeek).label}</div>}</td><td className={`${numeric} !border-r-0 text-emerald-300`}>{decimalDisplay(totals.investorCarry, true)}</td></tr>}{driver.retainedPay && <tr><td className={`${cell} text-zinc-300`}>Money kept for next week</td><td className={`${numeric} !border-r-0 text-zinc-300`}>{decimalDisplay(-totals.retainedPay, true)}</td></tr>}{driver.salaryCarry && <tr>
           <td className={`${cell} text-zinc-300`}>
             <span>Prior salary balance</span>
             {driver.salaryCarryWeek && <div className="text-[11px] text-zinc-400" title={driver.salaryCarryWeek}>{payrollWeekLabel(driver.salaryCarryWeek).label}</div>}
@@ -198,7 +198,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
           <button type="button" aria-label={investor ? `${statementName} ${driver.truckUnit}` : statementName} aria-expanded={open} aria-controls={`driver-${driver.id}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-blue-500">
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-zinc-500 ${open ? "rotate-180" : ""}`} />
           </button>
-          <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{(!investor || operatingDrivers.length === 0) && homeBadge}{!driver.settlement?.finalized && driver.preparationState && driver.preparationState !== "ready" && <span role="status" className="shrink-0 text-[10px] text-amber-300">{driver.preparationState === "failed" ? "Update failed" : "Updating…"}</span>}{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className="shrink-0 whitespace-nowrap text-[10px] text-emerald-400">{driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
+          <Link href={profileHref} onClick={event => event.stopPropagation()} className="truncate underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{statementName}</Link>{(!investor || operatingDrivers.length === 0) && homeBadge}{!driver.settlement?.finalized && driver.preparationState && driver.preparationState !== "ready" && <span role="status" className="shrink-0 text-[10px] text-amber-300">{driver.preparationState === "failed" ? "Update failed" : "Updating…"}</span>}{driver.settlement?.finalized && <span title={driver.settlement.override ? "Finalized with override" : "Finalized"} aria-label={driver.settlement.override ? "Finalized with override" : "Finalized"} className="shrink-0 whitespace-nowrap text-[10px] text-emerald-400">{driver.retainedPay ? "Money kept" : driver.settlement.override ? "Finalized*" : "Finalized"}</span>}
           {!investor && driver.teamDrivers?.map(person => <Link key={person.id} title={`Team driver: ${person.name}. This statement uses the main driver's tariff.`} href={`/drivers/detail?id=${person.id}`} onClick={event => event.stopPropagation()} className="truncate text-[10px] text-blue-400">+ {person.name}</Link>)}
           {!!driver.brokerReimbursements?.length && <span title="Broker reimbursement expected" className="shrink-0 text-[10px] text-amber-300">Broker reimbursement · {driver.brokerReimbursements.length}</span>}
           {incomplete && <span title={`${totals.review} loads need review`} className="inline-flex shrink-0 items-center gap-1 text-[10px] text-amber-300"><AlertTriangle className="h-3 w-3" />{totals.review}</span>}
@@ -211,7 +211,7 @@ export const DriverCard = memo(function DriverCard({ onManageEscrow, onRemoveAdd
       {investor && <td className="border-b border-zinc-800 px-3">{tariffLabel(driver)}</td>}
       <td className="border-b border-zinc-800 px-3 text-right font-mono">{loadCount}</td>
       <td title={incomplete ? "Provisional payable: highlighted loads need review" : "Total payable"} className={`border-b border-zinc-800 px-3 text-right font-mono font-medium ${incomplete ? "text-amber-200" : "text-zinc-100"}`}>{payable}</td>
-      <td className="border-b border-zinc-800 px-3 text-right text-zinc-400 break-words">{driver.settlement?.finalized ? driver.settlement.finalizedBy || "Unknown" : onSettlement ? <button type="button" className={`${payButtonClass} min-h-8 !py-1`} aria-label={`Finalize ${statementName}${investor ? ` ${driver.truckUnit}` : ""}`} disabled={settlementDisabled} onClick={event => { event.stopPropagation(); onSettlement(false); }}>{settlementPending ? "Finalizing…" : "Finalize"}</button> : "—"}</td>
+      <td className="border-b border-zinc-800 px-3 text-right text-zinc-400 break-words">{driver.settlement?.finalized ? driver.settlement.finalizedBy || "Unknown" : onSettlement ? <div className="flex flex-col items-end gap-1 py-1"><button type="button" className={`${payButtonClass} min-h-8 !py-1`} aria-label={`Finalize ${statementName}${investor ? ` ${driver.truckUnit}` : ""}`} disabled={settlementDisabled} onClick={event => { event.stopPropagation(); onSettlement(false); }}>{settlementPending ? "Finalizing…" : "Finalize"}</button>{investor && totals.payable > BigInt(0) && <button type="button" className={`${payButtonClass} min-h-8 !py-1 text-xs`} aria-label={`Keep money and finalize ${statementName} ${driver.truckUnit}`} title="Finalize with zero cash paid and add this payable to the next week" disabled={settlementDisabled} onClick={event => { event.stopPropagation(); onSettlement(false, true); }}>Keep money and finalize</button>}</div> : "—"}</td>
     </tr>
     {open && driver.summary && <tr><td colSpan={8} className="border-b border-zinc-800 px-4 py-5 text-xs text-zinc-500"><div id={`driver-${driver.id}`} role={detailError ? "alert" : "status"}>{detailError || "Loading statement…"}{detailError && <button type="button" className={`${payButtonClass} ml-3`} onClick={onRetryDetails}>Try again</button>}</div></td></tr>}
     {open && !driver.summary && <tr><td colSpan={8} className="border-b border-zinc-700 bg-zinc-950 p-0">

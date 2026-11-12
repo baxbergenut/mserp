@@ -20,6 +20,7 @@ func TestPayrollStatementWorkbook(t *testing.T) {
 			}},
 		{FullName: "alice", OperatingDrivers: []repository.PayPerson{{Name: "alice"}}, Loads: []repository.DriverPayLoad{{Fee: "81.99"}},
 			AutoCharges: []repository.PayAutoCharge{{Source: "expense-reimburse:old", Amount: "1.01"}}},
+		{FullName: "Kept money", Loads: []repository.DriverPayLoad{{Fee: "25.00"}}, InvestorCarry: "75.00", RetainedPay: "100.00"},
 		{FullName: "No payout", Loads: []repository.DriverPayLoad{{Fee: "25.00"}}, SalaryCarry: "25.00"},
 		{FullName: "Shortfall", Loads: []repository.DriverPayLoad{{Fee: "25.00"}}, SalaryCarry: "50.00"},
 	}

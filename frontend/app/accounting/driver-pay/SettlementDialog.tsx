@@ -6,8 +6,8 @@ import { Modal, ErrorBanner } from "@/app/components/management/ManagementUI";
 import { decimalDisplay } from "@/app/gross-board/board";
 import { driverTotals } from "./pay";
 
-export function SettlementDialog({ report, driverId, reopen, blockedIssue, onClose, onSaved, investor = false }: {
-  investor?: boolean; report: DriverPayWeek; driverId?: string; reopen: boolean; blockedIssue?: string; onClose: () => void; onSaved: (report: DriverPayWeek) => void;
+export function SettlementDialog({ report, driverId, reopen, keepMoney = false, blockedIssue, onClose, onSaved, investor = false }: {
+  investor?: boolean; report: DriverPayWeek; driverId?: string; reopen: boolean; keepMoney?: boolean; blockedIssue?: string; onClose: () => void; onSaved: (report: DriverPayWeek) => void;
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,13 +29,13 @@ export function SettlementDialog({ report, driverId, reopen, blockedIssue, onClo
     description={`Week of ${report.weekStart} · ${selected.length} ${investor ? "truck" : "driver"}${selected.length === 1 ? "" : "s"}`}
     isSaving={busy}
     submitDisabled={selected.length === 0 || (!reopen && !blockedIssue)}
-    submitLabel={reopen ? "Reopen settlement" : "Finalize anyway"}
+    submitLabel={reopen ? "Reopen settlement" : keepMoney ? "Keep money and finalize anyway" : "Finalize anyway"}
     onClose={onClose}
     onSubmit={event => {
       event.preventDefault();
       if (busy || (!reopen && !blockedIssue)) return;
       setBusy(true); setError("");
-      void (investor ? settleInvestorPay : settleDriverPay)(report.weekStart, report.revision, driverId, reopen, !reopen, true, driverId ? selected[0]?.statementRevision : report.preparation?.generation, selected[0]?.expenseRevision)
+      void (investor ? settleInvestorPay : settleDriverPay)(report.weekStart, report.revision, driverId, reopen, !reopen, true, driverId ? selected[0]?.statementRevision : report.preparation?.generation, selected[0]?.expenseRevision, keepMoney)
         .then(onSaved).catch(e => setError(e.message)).finally(() => setBusy(false));
     }}
   >

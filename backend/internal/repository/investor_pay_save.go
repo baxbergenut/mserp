@@ -153,6 +153,10 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 }
 func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time, truck, revision, actor, reason string, reopen, override bool, commands ...PayrollSettlementCommand) (DriverPayWeek, error) {
 	empty := DriverPayWeek{}
+	keepMoney := len(commands) > 0 && commands[0].KeepMoney
+	if keepMoney && (reopen || truck == "") {
+		return empty, chargeInvalid("Keep money requires one open investor statement")
+	}
 	override = override && !reopen
 	if !reopen && !override && week.Format(time.DateOnly) > ChargeCurrentWeek() {
 		return empty, finalizationBlocked("Future weeks cannot be finalized")
@@ -259,6 +263,13 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 		if err := validatePayrollScaleCollection(ctx, tx, d.AutoCharges); err != nil {
 			return d, err
 		}
+		if keepMoney {
+			amount := d.NetPayCents()
+			if amount <= 0 {
+				return d, chargeInvalid("Only a positive payable can be kept for next week")
+			}
+			d.RetainedPay = chargeMoney(amount)
+		}
 		d.Settlement = &PayrollSettlement{Finalized: true, Override: override, Reason: reason, Version: d.Edits.Version + 1, FinalizedAt: finalizedAt, FinalizedBy: username}
 		d.Edits.Version++
 		body, e := json.Marshal(d)
@@ -282,6 +293,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			continue
 		}
 		if err = guardInvestorSalaryCarryOrder(ctx, tx, d, report.WeekStart); err != nil {
+			return empty, err
+		}
+		if err = guardInvestorCarryOrder(ctx, tx, d, report.WeekStart, keepMoney); err != nil {
 			return empty, err
 		}
 		count++
