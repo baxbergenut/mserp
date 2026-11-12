@@ -140,7 +140,7 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, rout
     if (route) {
       L.polyline(route.points, { color: "#082f49", weight: 7, interactive: false }).addTo(layer);
       const line = L.polyline(route.points, {
-        color: "#38bdf8", weight: 4, interactive: false, dashArray: route.stale ? "7 7" : undefined,
+        color: "#38bdf8", weight: 4, interactive: false,
         className: "fleet-map-route",
       }).addTo(layer);
       if (routeLoadNumber) {
