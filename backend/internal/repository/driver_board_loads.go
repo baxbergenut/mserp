@@ -343,7 +343,7 @@ func terminalLoad(status string) bool {
 }
 func annotateLoad(p *BoardLoad, driver string) {
 	if p.SourceMissing {
-		p.Warning = "DataTruck no longer returns this source record; clear or replace the load"
+		p.Warning = "DataTruck no longer returns this source record; pickup and delivery details are unavailable"
 		p.Stops = []BoardStop{}
 		return
 	}
@@ -695,10 +695,12 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 				}
 				seen[*p.LoadID] = true
 			}
-			sourceUnavailable := p.SourceMissing || terminalLoad(p.SourceStatus)
+			// Gross Board owns the plan. Losing its DataTruck details does not
+			// remove an otherwise eligible upcoming load from the queue.
+			sourceUnavailable := terminalLoad(p.SourceStatus) || (p.Manual && p.SourceMissing)
 			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || completed["plan:"+aliases[p.PlanID]]
 			if sourceUnavailable || completedHere {
-				p.Completed = !p.SourceMissing && (providerCompletedLoad(p.SourceStatus) || completedHere && !sourceUnavailable)
+				p.Completed = providerCompletedLoad(p.SourceStatus) || (completedHere && !sourceUnavailable)
 				p.PreviouslyActive = false
 				if p.Completed && sourceUnavailable {
 					p.Warning = ""

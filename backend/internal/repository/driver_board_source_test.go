@@ -17,11 +17,13 @@ func testBoardSourceAvailability(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	defer pool.Exec(ctx, `DELETE FROM drivers WHERE id=$1`, d.ID)
-	defer pool.Exec(ctx, `DELETE FROM loads WHERE id BETWEEN 88120 AND 88122`)
+	defer pool.Exec(ctx, `DELETE FROM loads WHERE id BETWEEN 88120 AND 88124`)
 	_, err = pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES
  (88120,'SOURCE-DUPLICATE','dispatched',100,100,'{"stops":[{"id":1,"stop_type":"pickup","location":{"city":"Old","state":"TX"}}]}'),
  (88121,'SOURCE-DUPLICATE','in_transit',200,200,'{"stops":[{"id":2,"stop_type":"pickup","location":{"city":"New","state":"TX"}},{"id":3,"stop_type":"delivery","location":{"city":"Dallas","state":"TX"}}]}'),
- (88122,'SOURCE-GHOST','dispatched',300,300,'{}')`)
+ (88122,'SOURCE-GHOST','dispatched',300,300,'{}'),
+ (88123,'SOURCE-PINNED-PLAN','dispatched',100,100,'{"stops":[{"id":4,"stop_type":"pickup","location":{"city":"Old","state":"TX"}}]}'),
+ (88124,'SOURCE-NUMBER-PLAN','dispatched',100,100,'{}')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,20 +39,38 @@ func testBoardSourceAvailability(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
+	today, err := time.Parse(time.DateOnly, boardLoadToday(board.now()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES
+ ($1,$2,'SOURCE-PINNED-PLAN',88123),($1,$3,'SOURCE-NUMBER-PLAN',NULL)`, d.ID, today, today.AddDate(0, 0, 1)); err != nil {
+		t.Fatal(err)
+	}
 	var before string
 	if err = pool.QueryRow(ctx, `SELECT jsonb_agg(to_jsonb(l) ORDER BY id)::text FROM loads l WHERE id BETWEEN 88120 AND 88122`).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	source := NewLoadRepository(pool)
-	if err = source.RecordLoadSourceLookup(ctx, []int{88120, 88121, 88122}, []int{88121}); err != nil {
+	if err = source.RecordLoadSourceLookup(ctx, []int{88120, 88121, 88122, 88123, 88124}, []int{88121}); err != nil {
 		t.Fatal(err)
 	}
 	view, err = board.Loads(ctx, d.ID, "")
 	if err != nil || view.Current == nil || view.Current.LoadID == nil || *view.Current.LoadID != 88121 || len(view.Current.Stops) != 2 || view.SourceDestination != "New, TX" {
 		t.Fatal("remaining live source did not resolve", view, err)
 	}
-	if len(view.Next) != 0 || len(view.Unavailable) != 1 || !view.Unavailable[0].SourceMissing {
-		t.Fatal("missing source remained in active queue", view)
+	if len(view.Unavailable) != 1 || view.Unavailable[0].Number != "SOURCE-GHOST" || !view.Unavailable[0].SourceMissing {
+		t.Fatal("missing manual-only load must stay unavailable", view)
+	}
+	if len(view.Next) != 2 {
+		t.Fatal("both Gross Board plans must stay queued after their sources disappear", view)
+	}
+	pinned, numberOnly := view.Next[0], view.Next[1]
+	if pinned.Number != "SOURCE-PINNED-PLAN" || pinned.LoadID == nil || *pinned.LoadID != 88123 || !pinned.SourceMissing || len(pinned.Stops) != 0 {
+		t.Fatal("missing pinned plan must retain its identity and omit stale stops", pinned)
+	}
+	if numberOnly.Number != "SOURCE-NUMBER-PLAN" || numberOnly.LoadID != nil || len(numberOnly.Stops) != 0 {
+		t.Fatal("number-only plan must remain queued without resolving a missing source", numberOnly)
 	}
 	var after string
 	if err = pool.QueryRow(ctx, `SELECT jsonb_agg(to_jsonb(l) ORDER BY id)::text FROM loads l WHERE id BETWEEN 88120 AND 88122`).Scan(&after); err != nil || before != after {
