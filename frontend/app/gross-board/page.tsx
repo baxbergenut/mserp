@@ -5,6 +5,7 @@ import { CurrentUserIDContext, GrossBoardManagementContext, usePermissions } fro
 import { HeaderPinButton, PinnablePageHeader } from "@/app/components/PinnablePageHeader";
 import { PageHeader } from "@/app/components/PageHeader";
 import { BoardNavigationNotice } from "@/app/components/BoardNavigationNotice";
+import { ProgressiveBoardRow } from "@/app/components/boards/ProgressiveBoardRow";
 import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
 
 import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
@@ -475,7 +476,7 @@ export default function GrossBoardPage() {
                   <td className="border-b border-r border-zinc-700 px-2 py-2 text-zinc-200">{rpmDisplay(group.driver, group.miles)}</td>
                   <td className={`border-b border-zinc-700 px-2 py-2 ${group.balance < BigInt(0) ? "text-red-300" : group.balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`}>{signedMoney(group.balance)}</td>
                 </tr>}
-                <tr>
+                <ProgressiveBoardRow immediate={index < 6 || driver.id === loadTarget?.driverId || driver.id === driverTarget?.driverId} columns={16} height={153} label={driver.fullName}><tr>
                   <th data-gross-driver={driver.id} data-gross-field="driver" scope="row" className="sticky left-0 z-20 border-b border-r border-zinc-800 bg-zinc-950 px-3 font-medium text-zinc-200"><Link href={`/drivers/detail?id=${driver.id}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.fullName}</Link>{driver.driverType && <span className="ml-1 whitespace-nowrap font-mono text-[10px] text-zinc-400">({driver.driverType})</span>}{!driver.active && <div className="mt-1 text-[10px] text-zinc-500">Inactive</div>}</th>
                   <td data-gross-driver={driver.id} data-gross-field="truck" className="sticky z-20 border-b border-r border-zinc-800 bg-zinc-950 px-2 font-mono text-zinc-400" style={truckColumnStyle}>{driver.truckId && driver.truckUnit ? <Link href={`/trucks/detail?id=${driver.truckId}`} className="underline-offset-2 hover:text-blue-300 hover:underline focus-visible:outline-2 focus-visible:outline-blue-500">{driver.truckUnit}</Link> : driver.truckUnit || "—"}</td>
                   <td className="border-b border-r border-zinc-800 bg-zinc-900/60 p-0 align-top text-[10px] text-zinc-500"><div className="h-6 border-b border-zinc-800/70" />{["Load #", "Total gross", "Driver", "Miles"].map(field => <div key={field} className="flex h-8 items-center justify-center border-b border-zinc-800/70 px-2">{field}</div>)}</td>
@@ -492,7 +493,7 @@ export default function GrossBoardPage() {
                       {entries.some((entry) => entry.duplicate) && <span className="mt-1 block text-[10px] text-amber-300">Repeated load</span>}
                     </button>
                   </td>
-                </tr>
+                </tr></ProgressiveBoardRow>
               </Fragment>;
             })}
           </tbody>

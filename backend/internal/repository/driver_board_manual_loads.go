@@ -21,7 +21,7 @@ func readManualBoardLoads(ctx context.Context, tx pgx.Tx, states map[string]boar
 	if len(numbers) == 0 {
 		return result, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT id,load_id,status,synced_at::text,raw_payload,`+boardAvailableSourceSQL+`
+	rows, err := tx.Query(ctx, `SELECT id,load_id,status,synced_at::text,`+boardStopSourceSQL+`,`+boardAvailableSourceSQL+`
  FROM loads l WHERE lower(btrim(load_id))=ANY($1::text[]) ORDER BY id`, numbers)
 	if err != nil {
 		return nil, err

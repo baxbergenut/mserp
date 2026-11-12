@@ -51,7 +51,7 @@ const loadTripValidationSQL = `WITH trips AS (
       'startDate',coalesce(v->>'trip_begin_date',''),'endDate',coalesce(v->>'trip_end_date','')) ORDER BY id),'[]'::jsonb) options
    FROM trips
   ), decision AS (
-   SELECT nullif(to_jsonb(l)->'split_allocation','null'::jsonb) saved,
+   SELECT nullif(l.split_allocation,'null'::jsonb) saved,
     md5(jsonb_build_object('total',l.total_pay,'miles',l.total_miles,'trips',stats.options)::text) source_hash
    FROM stats
   ), checked AS (

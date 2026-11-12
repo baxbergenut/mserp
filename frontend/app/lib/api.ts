@@ -201,7 +201,7 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
   return () => stream.close();
 }
 export const fetchDriverBoard = (weekStart: string) =>
-  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1" })).then(expandBoard);
+  apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "1" })).then(expandBoard);
 export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
   apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }, (key, value) => key === "fleetStatus" ? undefined : value) });
 export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAction) =>

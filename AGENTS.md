@@ -3681,6 +3681,22 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 ## Page performance reads (162)
 
+- Board opening reads use direct load columns and stop-only provider payloads.
+  Explicit load IDs and unique-number fallback use separate indexed lookup paths;
+  ambiguous numbers never bind automatically. Migration 213 indexes exact
+  driver/source departures in Status Board history without changing audit rows.
+  Status Board requests compact overview responses, relies on live snapshots while
+  connected, and applies the latest retained snapshot on focusout without a GET.
+  An older in-flight refresh cannot overwrite a newer stream snapshot.
+  Board rows mount visible editors first and progressively mount off-screen
+  editors without unmounting them afterward. Scroll/deep-link targets load eagerly;
+  spreadsheet selection/navigation flushes remaining rows before using the DOM.
+  `frontend/scripts/benchmark-board-opening.mjs` measures a synthetic 160-driver
+  viewport with an explicit API-delay parameter; it is not a production latency claim.
+  Check
+  `frontend/scripts/test-status-board-refresh.mjs`, existing board save/load tests,
+  and fresh/migrated `TestDriverBoardDatabase` / `TestGrossBoardDatabase`.
+
 - Driver/Investor Pay compact rows retain display-only `homeWeek` badges when all
   seven selected-week days explicitly record HOME and the statement has no loads.
   Missing/conflicting days never qualify; dated team/truck routing and frozen

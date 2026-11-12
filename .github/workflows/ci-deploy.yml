@@ -265,6 +265,7 @@ jobs:
           node scripts/test-gross-board-planning.mjs
           node scripts/test-status-board-loads.mjs
           node scripts/test-status-board-saves.mjs
+          node scripts/test-status-board-refresh.mjs
           node scripts/test-gross-board-daily-loads.mjs
           node scripts/test-gross-board-reliability.mjs
           node scripts/test-investors-e2e.mjs --gross-partial-only

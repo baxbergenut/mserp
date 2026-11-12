@@ -134,7 +134,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	defer tx.Rollback(ctx)
 	// These interactive queries are too short to amortize PostgreSQL's JIT
 	// compilation. Keep this transaction-local; payroll jobs retain their policy.
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
+	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
 		return result, err
 	}
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
