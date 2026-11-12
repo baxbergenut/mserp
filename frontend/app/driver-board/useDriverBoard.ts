@@ -101,7 +101,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     };
     const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
     refreshWanted.current = value => { if (value) { revision++; accept(value); } else schedule(); };
-    resumeLive.current = () => { if (latest) accept(latest); };
+    resumeLive.current = () => { if (latest) accept(latest); if (pending) schedule(); };
     const fallback = setInterval(() => { if (!connectedRef.current) schedule(); }, 30000);
     const focus = () => schedule();
     window.addEventListener("focus", focus); document.addEventListener("visibilitychange", focus);

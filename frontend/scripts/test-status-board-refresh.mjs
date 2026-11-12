@@ -22,7 +22,7 @@ try {
   await page.addInitScript(() => {
     const streams = new Set();
     window.EventSource = class extends EventTarget {
-      constructor(url) { super(); this.url = url; streams.add(this); setTimeout(() => this.dispatchEvent(new Event('open')), 0); }
+      constructor(url) { super(); this.url = url; streams.add(this); if (url.includes('/driver-board/events') && !url.includes('initial=none')) throw Error('Board startup must skip duplicate snapshot'); setTimeout(() => this.dispatchEvent(new Event('open')), 0); }
       close() { streams.delete(this); }
     };
     window.boardEvent = (event, value) => { for (const stream of streams) if (stream.url.includes('/driver-board/events')) stream.dispatchEvent(value ? new MessageEvent(event, { data: JSON.stringify(value) }) : new Event(event)); };
@@ -68,6 +68,17 @@ try {
   await page.clock.fastForward(31000);
   await expect.poll(() => reads).toBe(3);
   await expect(notes).toHaveValue('Newest stream');
+  // Reconnecting after a fallback read reconciles the disconnected interval.
+  await page.evaluate(() => window.boardEvent('open'));
+  await expect.poll(() => reads).toBe(4);
+  await expect(notes).toHaveValue('Newest stream');
+  delayRead = true;
+  await page.reload();
+  await expect.poll(() => reads).toBe(5);
+  await page.evaluate(() => { window.boardEvent('error'); window.boardEvent('open'); });
+  releaseRead(); releaseRead = undefined;
+  await expect.poll(() => reads).toBe(6);
+  await expect(notes).toHaveValue('Initial');
   expect(errors).toEqual([]);
   console.log('Status Board refresh passed: compact initial read, no focus/poll amplification, stale GET protection and disconnected recovery.');
 } finally { releaseRead?.(); await browser.close(); await new Promise(resolve => server.close(resolve)); }
