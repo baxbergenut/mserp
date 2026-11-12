@@ -338,16 +338,6 @@ func TestDataTruckDriverGrossDatabase(t *testing.T) {
 					}
 				}
 			}
-			// Frozen display evidence refreshes without modifying any saved amounts.
-			loadID := 9501
-			frozenReport := DriverPayWeek{Drivers: []DriverPayDriver{{Settlement: &PayrollSettlement{Finalized: true}, Loads: []DriverPayLoad{{LoadRecordID: &loadID, OriginalRate: "2800.00", DriverGross: "2300.00", TotalMiles: "541.00"}}}}}
-			if err = decorateFrozenSourceComparisons(ctx, tx, &frozenReport); err != nil {
-				t.Fatal(err)
-			}
-			fl := frozenReport.Drivers[0].Loads[0]
-			if fl.SystemDriverGross != "2200" || fl.SystemOriginalRate != "2900.00" || fl.SystemMiles != "600.00" || fl.DriverGross != "2300.00" || fl.OriginalRate != "2800.00" || fl.TotalMiles != "541.00" {
-				t.Fatal("frozen comparison", fl)
-			}
 			_ = tx.Rollback(ctx)
 			if err != nil {
 				t.Fatal(err)

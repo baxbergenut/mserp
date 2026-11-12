@@ -131,6 +131,10 @@ func TestPreparedPayrollSourceActionsDatabase(t *testing.T) {
 func TestPayrollFrozenLoadImpactDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
 		seedPayrollProjectionTest(t, ctx, pool)
+		if _, err := pool.Exec(ctx, `UPDATE driver_dispatcher_assignments SET dispatcher_name='Clustie Dispatcher',assigned_at='2026-10-01'
+ WHERE driver_id=$1 AND unassigned_at IS NULL`, projectionDriver); err != nil {
+			t.Fatal(err)
+		}
 		var actor string
 		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Frozen source impact',crypt('test-only',gen_salt('bf'))) RETURNING id::text`).Scan(&actor); err != nil {
 			t.Fatal(err)
@@ -158,15 +162,22 @@ func TestPayrollFrozenLoadImpactDatabase(t *testing.T) {
 			return value
 		}
 		before := frozen()
-		// Provider changes are allowed after finalization. Their current warnings
-		// are published independently of the immutable financial statement.
+		// Finalized details retain the source values captured in the saved statement.
+		saved := map[string]DriverPayLoad{}
+		for _, kind := range []string{"driver", "investor"} {
+			page, err := repo.ReadPreparedPayrollPage(ctx, kind, week, PayPageQuery{})
+			if err != nil || len(page.Report.Drivers) != 1 || len(page.Report.Drivers[0].Loads) != 1 {
+				t.Fatalf("%s: expected one finalized load, got %v", kind, err)
+			}
+			saved[kind] = page.Report.Drivers[0].Loads[0]
+		}
 		write := WithPayrollPublication(ctx)
 		tx, err := beginPayrollMutation(write, pool)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer tx.Rollback(ctx)
-		if _, err = tx.Exec(ctx, `UPDATE loads SET total_pay=1300,total_miles=450 WHERE id=18201`); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE loads SET total_pay=1300,total_miles=450,dispatcher_name='Provider Dispatcher' WHERE id=18201`); err != nil {
 			t.Fatal(err)
 		}
 		impact, err := payrollMutationImpact(ctx, tx, &payrollCommand{name: "native", beforeSnapshot: tx.(*payrollMutationTransaction).beforeSnapshot}, "", "")
@@ -194,6 +205,11 @@ func TestPayrollFrozenLoadImpactDatabase(t *testing.T) {
 			b, _ := json.Marshal(page.Report)
 			if err != nil || page.State != "ready" || string(a) != string(b) {
 				t.Fatalf("frozen %s source parity: %s %v\n%s\n%s", kind, page.State, err, a, b)
+			}
+			got, want := page.Report.Drivers[0].Loads[0], saved[kind]
+			if got.SystemOriginalRate != want.SystemOriginalRate || got.SystemMiles != want.SystemMiles ||
+				got.SystemDriverGross != want.SystemDriverGross || got.DispatcherComparison != nil {
+				t.Fatalf("%s: finalized load received live comparison data", kind)
 			}
 		}
 	})

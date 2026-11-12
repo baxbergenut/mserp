@@ -784,8 +784,9 @@ new eligibility and broker reminder changes, with authoritative parity and uncha
 unrelated statement versions.
 
 Load corrections retain numeric source IDs and old/new display numbers. Impact
-includes every candidate for reused numbers, manual placements and frozen reports;
-financial identity remains the source ID and trip. Changed sources prepare their
+includes native candidates for reused numbers, transfers and manual placements.
+Frozen statements skip live DataTruck comparisons. Financial identity remains the
+source ID and trip. Changed sources prepare their
 new immutable facts before native publication. Placement and transfer audit images
 capture only their old/new routes and dates. Native acceptance/undo, weekend
 transfer/restoration, historical placement, gross edits, removal and later re-add

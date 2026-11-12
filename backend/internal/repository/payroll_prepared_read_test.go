@@ -182,3 +182,71 @@ func TestPreparedPayrollSharedFreshnessDatabase(t *testing.T) {
 		check("empty shared with current local", overridden, true)
 	})
 }
+
+func TestDriverPayrollExportDuringPreparationDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		const draft = "18200000-0000-0000-0000-000000006001"
+		_, err := pool.Exec(ctx, `INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date)
+ VALUES($1,'Export draft','export draft','cpm',0.50,'2026-01-01')`, draft)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = pool.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,driver_rate,entered_original_rate,entered_miles)
+ VALUES($1,'2026-10-05','EXPORT-DRAFT',200,200,100)`, draft)
+		if err != nil {
+			t.Fatal(err)
+		}
+		repo := NewDriverPayRepository(pool)
+		repo.ConfigurePreparedReads(true)
+		week, _ := chargeWeek("2026-10-05")
+		var actor string
+		if err = pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Export tester',crypt('test-only',gen_salt('bf'))) RETURNING id::text`).Scan(&actor); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := settlePayrollFixture(t, ctx, repo, "driver", week, projectionDriver, "", actor, "", false, true, true); err != nil {
+			t.Fatal(err)
+		}
+		rowsByID := func(report DriverPayWeek) map[string]DriverPayDriver {
+			t.Helper()
+			if len(report.Drivers) != 2 {
+				t.Fatalf("expected both statements, got %d", len(report.Drivers))
+			}
+			rows := make(map[string]DriverPayDriver, len(report.Drivers))
+			for _, row := range report.Drivers {
+				if len(row.Loads) != 1 {
+					t.Fatalf("expected an expanded statement for %s", row.ID)
+				}
+				rows[row.ID] = row
+			}
+			return rows
+		}
+		before, err := repo.PayrollExportPage(ctx, "driver", week, PayPageQuery{})
+		if err != nil || before.Preparation == nil || before.Preparation.State != "ready" {
+			t.Fatal("expected the prepared export before the update", err)
+		}
+		saved := rowsByID(before)
+		if _, err = pool.Exec(ctx, `UPDATE loads SET total_miles=total_miles+100 WHERE id=18201`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, `UPDATE gross_board_entries SET entered_miles=140 WHERE driver_id=$1`, draft); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = repo.PreparedPayroll(ctx, "driver", week, PayPageQuery{}, false); !errors.Is(err, ErrPayrollPreparing) {
+			t.Fatal("fixture must leave the prepared export stale", err)
+		}
+		after, err := repo.PayrollExportPage(ctx, "driver", week, PayPageQuery{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		current := rowsByID(after)
+		frozen := current[projectionDriver]
+		if frozen.Settlement == nil || !frozen.Settlement.Finalized || frozen.Loads[0].Fee != saved[projectionDriver].Loads[0].Fee ||
+			frozen.Loads[0].TotalMiles != saved[projectionDriver].Loads[0].TotalMiles {
+			t.Fatal("export replaced frozen financial values")
+		}
+		if current[draft].Loads[0].Fee != "70.00" || saved[draft].Loads[0].Fee != "50.00" {
+			t.Fatalf("export used stale draft pay: before=%q after=%q", saved[draft].Loads[0].Fee, current[draft].Loads[0].Fee)
+		}
+	})
+}

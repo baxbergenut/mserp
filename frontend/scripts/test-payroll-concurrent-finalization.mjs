@@ -114,6 +114,25 @@ try {
     await page.getByRole('button',{name:'Save comment',exact:true}).click();
     await expect.poll(()=>savedComment).toBe('Independent edit while another payroll updates');
     await expect(alpha).toBeDisabled();
+    if (kind === 'driver') {
+      rows[0].loads=[{ date:week, slot:0, loadNumber:'FROZEN-LOAD', loadRecordId:1, commentKey:'frozen', boardVersion:1,
+        originalRate:'400.00', systemOriginalRate:'401.00', driverGross:'350.00', systemDriverGross:'330.00',
+        totalMiles:'90.00', systemMiles:'91.00', fee:'67.50', issues:[],
+        dispatcherComparison:{dataTruck:'Provider Dispatcher',clustie:'Clustie Dispatcher',similar:false} }];
+      rows[0].settlement={finalized:true,version:1,finalizedBy:'Reviewer',finalizedAt:new Date().toISOString()};
+      await page.reload();
+      const finalizedRow=page.getByRole('row').filter({hasText:'Alpha'});
+      await expect(finalizedRow.getByText('Finalized',{exact:true})).toBeVisible();
+      await expect(finalizedRow.getByText('Updating…',{exact:true})).toHaveCount(0);
+      await expect(page.getByRole('button',{name:'Export statements',exact:true})).toBeEnabled();
+      await expect(page.getByRole('button',{name:'Add driver',exact:true})).toBeEnabled();
+      const expand=page.getByRole('button',{name:'Alpha',exact:true});
+      if (await expand.getAttribute('aria-expanded') === 'false') await expand.click();
+      const finalizedLoad=page.getByRole('region',{name:'Alpha weekly loads',exact:true}).getByRole('row',{name:/FROZEN-LOAD/});
+      await expect(finalizedLoad).toContainText('400.00');
+      await expect(finalizedLoad.locator('[title^="DataTruck:"]')).toHaveCount(0);
+      await expect(finalizedLoad.getByRole('img',{name:/Dispatcher mismatch/})).toHaveCount(0);
+    }
     expect(errors).toEqual([]);
     await page.close();
   }

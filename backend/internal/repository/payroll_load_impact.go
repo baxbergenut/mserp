@@ -8,9 +8,10 @@ import (
 
 // Include every native destination for both captured numbers and exact IDs.
 // Number-only board matches can change when another record acquires the same
-// number. Transfers, manual placements and frozen comparisons can use a week
-// different from the original board date.
-func payrollLoadImpact(ctx context.Context, tx pgx.Tx, ids []int64, numbers []string, roots map[string]bool) (map[string]bool, error) {
+// number. Transfers and manual placements can use a week
+// different from the original board date. Broker expenses also follow the saved
+// load numbers in frozen statements.
+func payrollLoadImpact(ctx context.Context, tx pgx.Tx, ids []int64, numbers, brokerNumbers []string, roots map[string]bool) (map[string]bool, error) {
 	rows, err := tx.Query(ctx, `WITH numbers AS (
  SELECT unnest($2::text[]) number UNION SELECT lower(btrim(load_id)) FROM loads WHERE id=ANY($1::bigint[])
  ), matching_placements AS (
@@ -33,11 +34,11 @@ func payrollLoadImpact(ctx context.Context, tx pgx.Tx, ids []int64, numbers []st
  OR (v.image->>'load_record_id')::bigint IN (SELECT load_record_id FROM matching_placements)
  UNION ALL
  SELECT s.root,s.week_start FROM (
- SELECT 'driver:'||driver_id root,week_start,report FROM payroll_settlements WHERE finalized
- UNION ALL SELECT 'truck:'||truck_id,week_start,report FROM investor_pay_weeks WHERE finalized
+ SELECT 'driver:'||driver_id root,week_start,report FROM payroll_settlements WHERE finalized AND cardinality($3::text[]) > 0
+ UNION ALL SELECT 'truck:'||truck_id,week_start,report FROM investor_pay_weeks WHERE finalized AND cardinality($3::text[]) > 0
  ) s CROSS JOIN LATERAL jsonb_array_elements(coalesce(s.report->'loads','[]'::jsonb)) l
- WHERE (l->>'loadRecordId')::bigint=ANY($1::bigint[]) OR lower(btrim(l->>'loadNumber')) IN (SELECT number FROM numbers)
- ) affected WHERE root IS NOT NULL AND day IS NOT NULL`, ids, numbers)
+ WHERE lower(btrim(l->>'loadNumber'))=ANY($3::text[])
+ ) affected WHERE root IS NOT NULL AND day IS NOT NULL`, ids, numbers, brokerNumbers)
 	if err != nil {
 		return nil, err
 	}
