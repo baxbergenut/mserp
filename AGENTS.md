@@ -40,7 +40,7 @@ Board selections exclude them. The slow 15-minute/daily reconciliation replaces
 open missing links only after complete ID lookups prove a unique same-number
 survivor. It preserves entered driver gross/manual corrections, holds ambiguous
 or protected groups, and leaves finalized driver/investor weeks untouched.
-Absent or held links show Not found in system; source history is retained.
+Plans with absent or held links use the ordinary red unmatched styling; source history is retained.
 `cmd/reconcile-loads`
 previews conservative, provider-verified replacements and applies only an exact
 digest under native financial/finalized guards. It preserves total driver gross,
@@ -693,8 +693,8 @@ positive Reimburse-method expense credits already included in net payable.
   Status Board number lookups exclude confirmed missing sources; pinned IDs never
   rebind to a recreated same-number order. Upcoming Gross Board plans stay queued
   when their source goes missing. Pinned plans and current selections retain
-  identity with a review warning and omit stale stops. Manual-only missing sources
-  become unavailable.
+  identity and use the ordinary red unmatched styling without stale stop details
+  or a separate missing-source warning. Manual-only missing sources become unavailable.
   Historical loads and all financial resolution remain unchanged. Presence evidence
   is explicitly unrelated to payroll, including its cache registry. Install the
   updated deploy helper before 187; it quiesces writers and rejects older binaries.

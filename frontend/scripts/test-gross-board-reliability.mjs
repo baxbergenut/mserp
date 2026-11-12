@@ -183,12 +183,17 @@ try {
   await saved(page);
   expect(stored(secondDay).loadNumber).toBe('DIFFERENT-LOAD-3');
   expect(stored().driverRate).toBe('1400');
-  // Missing source identity is explicit, and focusing the field cannot silently
-  // replace a pinned historical link or overwrite the entered driver gross.
+  // A missing source has the usual unmatched style. Focusing the field cannot
+  // silently replace a pinned historical link or overwrite the entered driver gross.
+  entries = entries.map(e => e.date === week ? { ...e, loadRecordId: 101, sourceStatus: 'dispatched', version: e.version + 1 } : e);
+  await push(board());
+  await expect(field(page)).toHaveAttribute('title', /^Confirmed system load/);
   entries = entries.map(e => e.date === week ? { ...e, loadRecordId: 101, sourceMissing: true, version: e.version + 1 } : e);
   loadChoices = [{ id: 102, loadNumber: 'PLAN-123456', originalRate: '1000.00', driverRate: '900.00', miles: '300.00', driverName: 'Reliable Driver', pickupDate: week }];
   await push(board());
-  await expect(page.getByText('Not found in system', { exact: true })).toBeVisible();
+  await expect(field(page)).toHaveClass(/\btext-red-300\b/);
+  await expect(field(page)).toHaveValue('PLAN-123456');
+  await expect(page.getByText('Not found in system', { exact: true })).toHaveCount(0);
   const writesBeforeMissingFocus = writes.length;
   await field(page).focus();
   await page.waitForTimeout(500);
