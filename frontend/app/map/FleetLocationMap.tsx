@@ -36,7 +36,7 @@ export interface FleetRouteLine {
 const routeStyle = {
   current: { color: "#38bdf8", border: "#082f49", label: "border-sky-400 bg-sky-950 text-white" },
   deadhead: { color: "#f43f5e", border: "#4c0519", label: "border-red-400 bg-neutral-950 text-[#fca5a5]" },
-  "next-load": { color: "#34d399", border: "#022c22", label: "border-emerald-400 bg-emerald-950 text-white" },
+  "next-load": { color: "#a855f7", border: "#2e1065", label: "border-violet-400 bg-violet-950 text-white" },
 };
 
 function stopFlagIcon(L: typeof Leaflet, stops: FleetStopFlag[], showAddress: (flag: HTMLButtonElement, stop: FleetStopFlag) => void) {
@@ -47,7 +47,7 @@ function stopFlagIcon(L: typeof Leaflet, stops: FleetStopFlag[], showAddress: (f
     const pickup = stop.kind === "pickup";
     const flag = document.createElement("button");
     flag.type = "button";
-    flag.className = `pointer-events-auto cursor-pointer py-1 pr-2 pl-1 font-mono text-[11px] font-bold leading-none text-neutral-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-950 [clip-path:polygon(0_0,100%_0,85%_50%,100%_100%,0_100%)] ${pickup ? "bg-yellow-300" : "bg-blue-300"}`;
+    flag.className = `pointer-events-auto cursor-pointer py-1 pr-3 pl-1 font-mono text-[11px] font-bold leading-none text-neutral-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-950 [clip-path:polygon(0_0,100%_0,calc(100%_-_8px)_50%,100%_100%,0_100%)] ${pickup ? "bg-yellow-300" : "bg-blue-300"}`;
     const abbreviation = pickup ? "PU" : "DEL";
     flag.textContent = stop.arrived ? `At ${abbreviation}${stop.loadNumber ? ` · ${stop.loadNumber}` : ""}` : abbreviation;
     flag.setAttribute("aria-label", pickup ? "Show pickup address" : "Show delivery address");

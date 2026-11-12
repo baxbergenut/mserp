@@ -182,7 +182,8 @@ export default function FleetMapPage() {
                 {route.stale && Number.isFinite(Date.parse(mapRoute.reportedAt)) && ` · From GPS at ${reportTime.format(new Date(mapRoute.reportedAt))}`}
               </> : !routeContext ? "No active load stop to route to" : matchingResult ? "TomTom route unavailable" : "Loading TomTom route…"}
             </span>}
-            {followingLines.map((leg, i) => <span key={i} className={leg.kind === "deadhead" ? "font-medium text-red-300" : leg.kind === "next-load" ? "text-emerald-300" : "text-sky-300"}>
+            {followingLines.map((leg, i) => <span key={i} className={leg.kind === "deadhead" ? "font-medium text-red-300" : leg.kind === "next-load" ? "text-violet-300" : "text-sky-300"}>
+              {leg.kind === "next-load" && "Next load · "}
               {leg.kind === "deadhead" ? "Empty miles" : leg.loadNumber} · {formatRouteMiles(leg.miles)}
             </span>)}
             {truckId && <span className={`xl:ml-auto ${trail.length ? "text-amber-300" : "text-zinc-400"}`}>
