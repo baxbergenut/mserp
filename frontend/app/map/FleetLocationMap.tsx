@@ -20,25 +20,23 @@ export interface FleetPin {
 export interface FleetStopFlag {
   point: Coordinates;
   kind: "pickup" | "delivery";
-  location: string;
+  address: string;
 }
 
-function stopFlagIcon(L: typeof Leaflet, stops: FleetStopFlag[]) {
+function stopFlagIcon(L: typeof Leaflet, stops: FleetStopFlag[], showAddress: (flag: HTMLButtonElement, stop: FleetStopFlag) => void) {
   const icon = document.createElement("div");
-  icon.className = "pointer-events-auto flex h-7 w-max cursor-default items-start gap-0.5 border-l-2 border-zinc-100 pl-0.5 drop-shadow-[0_1px_2px_#000]";
-  icon.setAttribute("role", "img");
-  const descriptions: string[] = [];
+  icon.className = "relative flex h-7 w-max items-start gap-0.5 border-l-2 border-zinc-100 pl-0.5 drop-shadow-[0_1px_2px_#000]";
+  L.DomEvent.disableClickPropagation(icon);
   for (const stop of stops) {
     const pickup = stop.kind === "pickup";
-    const label = pickup ? "Pickup" : "Delivery";
-    const flag = document.createElement("span");
-    flag.className = `py-1 pr-2 pl-1 font-mono text-[11px] font-bold leading-none text-zinc-950 [clip-path:polygon(0_0,100%_0,85%_50%,100%_100%,0_100%)] ${pickup ? "bg-yellow-300" : "bg-blue-300"}`;
+    const flag = document.createElement("button");
+    flag.type = "button";
+    flag.className = `pointer-events-auto cursor-pointer py-1 pr-2 pl-1 font-mono text-[11px] font-bold leading-none text-neutral-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-950 [clip-path:polygon(0_0,100%_0,85%_50%,100%_100%,0_100%)] ${pickup ? "bg-yellow-300" : "bg-blue-300"}`;
     flag.textContent = pickup ? "PU" : "DEL";
-    descriptions.push(stop.location ? `${label} · ${stop.location}` : label);
+    flag.setAttribute("aria-label", pickup ? "Show pickup address" : "Show delivery address");
+    flag.addEventListener("click", () => showAddress(flag, stop));
     icon.append(flag);
   }
-  icon.title = descriptions.join("\n");
-  icon.setAttribute("aria-label", descriptions.join(", "));
   return L.divIcon({ html: icon, className: "fleet-map-stop", iconSize: [0, 28], iconAnchor: [1, 28] });
 }
 
@@ -51,18 +49,19 @@ function truckIcon(L: typeof Leaflet, pin: FleetPin, selected: boolean) {
   if (selected) marker.classList.add("outline-2", "outline-offset-2", "outline-sky-300");
 
   const label = document.createElement("span");
-  label.className = "absolute bottom-full left-1/2 mb-1 w-max -translate-x-1/2 whitespace-nowrap rounded border border-white/60 bg-zinc-950 px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-white shadow-[0_1px_5px_#000b]";
+  label.className = "absolute bottom-full left-1/2 mb-1 w-max -translate-x-1/2 whitespace-nowrap rounded border border-white/60 bg-neutral-950 px-1.5 py-0.5 font-mono text-[11px] font-bold leading-none text-white shadow-[0_1px_5px_#000b]";
   label.setAttribute("aria-hidden", "true");
   label.textContent = pin.unit || "—";
   icon.append(marker, label);
   return L.divIcon({ html: icon, className: "fleet-map-pin group", iconSize: [truckHeadingPinSize, truckHeadingPinSize] });
 }
 
-export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, trail, stops }: {
+export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, routeLoadNumber, trail, stops }: {
   pins: FleetPin[];
   selectedDriverId: string;
   onSelect: (driverId: string) => void;
   route: ReturnType<typeof remainingRoute>;
+  routeLoadNumber: string;
   trail: Coordinates[][];
   stops: FleetStopFlag[];
 }) {
@@ -79,14 +78,11 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, trai
     let resize: ResizeObserver | undefined;
     void import("leaflet").then(L => {
       if (cancelled) return;
-      map = L.map(element, { fadeAnimation: false }).setView([39.5, -98.35], 4);
+      map = L.map(element, { fadeAnimation: false, attributionControl: false }).setView([39.5, -98.35], 4);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         referrerPolicy: "strict-origin",
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
-      const tiles = map.getPane("tilePane");
-      if (tiles) tiles.style.filter = "invert(1) hue-rotate(180deg) brightness(.75) contrast(.85)";
       resize = new ResizeObserver(() => map?.invalidateSize({ pan: false }));
       resize.observe(element);
       fittedFleet.current = false;
@@ -143,18 +139,43 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, trai
     }
     if (route) {
       L.polyline(route.points, { color: "#082f49", weight: 7, interactive: false }).addTo(layer);
-      L.polyline(route.points, {
+      const line = L.polyline(route.points, {
         color: "#38bdf8", weight: 4, interactive: false, dashArray: route.stale ? "7 7" : undefined,
         className: "fleet-map-route",
       }).addTo(layer);
+      if (routeLoadNumber) {
+        const label = document.createElement("span");
+        label.className = "absolute top-0 left-0 w-max -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-sky-400 bg-sky-950 px-1.5 py-0.5 font-mono text-xs font-semibold leading-none text-white shadow-[0_1px_5px_#000b]";
+        label.textContent = routeLoadNumber;
+        L.marker(line.getCenter(), {
+          icon: L.divIcon({ html: label, className: "fleet-map-route-label", iconSize: [0, 0] }),
+          interactive: false, keyboard: false, zIndexOffset: -1100,
+        }).addTo(layer);
+      }
     }
     return () => { layer.remove(); };
-  }, [runtime, route, trail]);
+  }, [runtime, route, routeLoadNumber, trail]);
 
   useEffect(() => {
     if (!runtime || !stops.length) return;
     const { L, map } = runtime;
     const layer = L.layerGroup().addTo(map);
+    const popup = L.popup({
+      autoPan: false,
+      maxWidth: 240,
+      className: "fleet-map-stop-address",
+    });
+    const showAddress = (flag: HTMLButtonElement, stop: FleetStopFlag) => {
+      const content = document.createElement("div");
+      const heading = document.createElement("div");
+      heading.className = "mb-1 font-semibold";
+      heading.textContent = stop.kind === "pickup" ? "Pickup address" : "Delivery address";
+      const address = document.createElement("div");
+      address.textContent = stop.address || "Address unavailable";
+      content.append(heading, address);
+      popup.options.offset = L.point(flag.offsetLeft + flag.offsetWidth / 2 - 1, -32);
+      popup.setLatLng(stop.point).setContent(content).openOn(map);
+    };
     const stopsByLocation = new Map<string, FleetStopFlag[]>();
     for (const stop of stops) {
       const key = stop.point.join(",");
@@ -164,14 +185,22 @@ export function FleetLocationMap({ pins, selectedDriverId, onSelect, route, trai
     }
     for (const group of stopsByLocation.values()) {
       L.marker(group[0].point, {
-        icon: stopFlagIcon(L, group), interactive: false, keyboard: false, zIndexOffset: -1000,
+        icon: stopFlagIcon(L, group, showAddress), interactive: false, keyboard: false, zIndexOffset: 2000,
       }).addTo(layer);
     }
-    return () => { layer.remove(); };
+    return () => {
+      popup.remove();
+      layer.remove();
+    };
   }, [runtime, stops]);
 
-  return <div className="relative isolate min-h-96 flex-1 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-    <div ref={container} aria-label="Fleet locations" className="absolute inset-0 bg-zinc-900" />
-    {failed && <p role="alert" className="absolute inset-x-4 top-4 rounded-lg bg-zinc-950 p-3 text-sm text-zinc-300">The map could not load.</p>}
+  return <div className="flex min-h-96 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+    <div className="relative isolate flex-1">
+      <div ref={container} aria-label="Fleet locations" className="fleet-tile-map absolute inset-0 bg-card" />
+      {failed && <p role="alert" className="absolute inset-x-4 top-4 rounded-lg bg-zinc-950 p-3 text-sm text-zinc-300">The map could not load.</p>}
+    </div>
+    <div className="border-t border-zinc-800 px-2 py-0.5 text-right text-xs text-zinc-400">
+      © <a className="underline hover:text-foreground" href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
+    </div>
   </div>;
 }
