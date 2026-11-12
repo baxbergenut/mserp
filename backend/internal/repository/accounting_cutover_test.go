@@ -316,6 +316,13 @@ func applyAccountingExpenseTestSchema(t *testing.T, ctx context.Context, conn *p
 	if _, err := conn.Exec(ctx, `ALTER TABLE IF EXISTS expense_payments ADD COLUMN IF NOT EXISTS escrow_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (escrow_amount BETWEEN 0 AND amount)`); err != nil {
 		t.Fatal(err)
 	}
+	efsMigration, err := os.ReadFile("../../sql/215_expense_efs_reference.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, string(efsMigration)); err != nil {
+		t.Fatal(err)
+	}
 	var brokerColumn bool
 	if err := conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='expenses'::regclass AND attname='broker_load_number' AND NOT attisdropped)`).Scan(&brokerColumn); err != nil {
 		t.Fatal(err)
