@@ -435,6 +435,7 @@ func (p *profilePlan) resolveTruckStatusCrewConflicts(source, receiver Snapshot)
 
 // Follow-up corrections use live evidence and leave the original batch receipts intact.
 func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, links Record) {
+	var reconciledTrucks []string
 	for i, row := range p.Rows {
 		if row.Kind != "truck" || len(row.Review) == 0 {
 			continue
@@ -478,6 +479,7 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 			case "Previously deferred":
 				if reconciled042 {
 					row.RemoteID = b["id"]
+					reconciledTrucks = append(reconciledTrucks, b["id"])
 				} else {
 					row.Deferred = reason
 				}
@@ -491,6 +493,14 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 		}
 		p.Rows[i] = row
 	}
+	p.Rows = slices.DeleteFunc(p.Rows, func(row profileRow) bool {
+		if row.Kind == "truck" && row.LocalID == "" && slices.Contains(reconciledTrucks, row.RemoteID) &&
+			len(row.Review) == 1 && row.Review[0] == "No verified Clustie match" {
+			p.Review--
+			return true
+		}
+		return false
+	})
 }
 
 func fleetScopeTruckStatus(a, b Record) string {
