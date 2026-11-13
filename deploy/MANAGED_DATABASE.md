@@ -64,6 +64,11 @@ pooling is not compatible with those clients.
    into a separate target database. Check extensions, object ownership, runtime
    and portal grants, schema ledger, constraints and sequences. Do not run
    background integrations against the rehearsal copy.
+   Preserve database ownership by `mserp_app` and the existing inherited
+   `mserp_app` membership of `fleet_review_portal`; table grants alone do not
+   reproduce the source database's effective schema privileges. Former
+   `postgres`-owned objects become managed-administrator-owned, while the
+   application-owned tables, sequences, views and functions keep their owners.
 2. Keep the original runtime/portal configuration and verified source backup in a
    root-only recovery directory. Inventory all writers. The portal has a separate
    `sourceUrl` in `/etc/fleet-review/config.json`; its FleetScope `receiverUrl`
