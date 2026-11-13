@@ -236,6 +236,14 @@ try{
  await dialog.getByLabel('Truck',{exact:true}).selectOption('__new__');
  await dialog.getByRole('button',{name:'Continue',exact:true}).click();
  await dialog.getByLabel('Unit number',{exact:true}).fill('INTAKE-TRUCK');
+ await dialog.getByLabel('VIN',{exact:true}).fill('1FUJGLDR0CLBP1237');
+ await dialog.getByLabel('Year',{exact:true}).fill('2022');
+ await dialog.getByLabel('Make',{exact:true}).fill('FRHT');
+ await dialog.getByLabel('Color',{exact:true}).fill('White');
+ await dialog.getByLabel('Truck class',{exact:true}).fill('8');
+ await dialog.getByLabel('GVWR (lb)',{exact:true}).fill('80000');
+ await dialog.getByLabel('License plate',{exact:true}).fill('E2E7');
+ await dialog.getByLabel('Plate state',{exact:true}).fill('OH');
  await driverOwner.check();
  await expect(dialog.getByRole('textbox',{name:'Truck owner',exact:true})).toHaveValue('Onboard Browser');
  await dialog.getByRole('button',{name:'Continue',exact:true}).click();

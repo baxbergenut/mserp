@@ -341,7 +341,9 @@ func (r *FleetSyncRepository) Process(ctx context.Context) error {
 		}
 		creationSnapshot, err := r.captureTruckCreationSnapshot(ctx, epoch)
 		if err != nil {
-			return r.recordSyncError(ctx, err)
+			if e = r.recordSyncError(ctx, err); e != nil {
+				return e
+			}
 		}
 		if e = r.project(ctx, epoch, creationSnapshot); e != nil {
 			return r.recordSyncError(ctx, e)
