@@ -5,6 +5,7 @@ import Link from "@/app/components/AccessLink";
 import { usePathname } from "next/navigation";
 import {
   Banknote,
+  ChartNoAxesCombined,
   ChevronDown,
   Users,
   PanelLeftClose,
@@ -31,6 +32,7 @@ import { BetaBadge, BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined },
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/map", label: "Map", icon: Map, isNew: true },

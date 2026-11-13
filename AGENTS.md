@@ -148,6 +148,10 @@ status while background source evidence refreshes.
 
 ## Repository map
 
+- Reports uses a read-only snapshot of confirmed Loads, dated assignments,
+  attributable source costs and finalized Driver Pay. Financial and performance
+  views and CSVs share their respective permissions. See docs/REPORTS.md.
+
 ### Backend
 
 - Migration 198 makes ordinary expense deductions statement-local draft choices

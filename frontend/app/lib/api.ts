@@ -838,3 +838,8 @@ export const fetchDriverPayEscrow = (weekStart: string, driverId: string, signal
   apiRequest<import("./types").DriverPayEscrowEditor>(withQuery("/driver-pay/escrow", { weekStart, driverId }), { signal });
 export const saveDriverPayEscrow = (weekStart: string, driverId: string, editVersion: number, expenseRevision: string, draft: import("./types").PayrollEscrowDraft) =>
   apiRequest<{ saved: boolean }>("/driver-pay/escrow", { method: "PUT", body: JSON.stringify({ weekStart, driverId, editVersion, expenseRevision, draft }) });
+export const fetchReport = (view: import("./types").ReportView, query: import("./types").ReportsQuery, signal: AbortSignal) =>
+  apiRequest<import("./types").ReportsResult>(withQuery(`/reports/${view}`, query), { signal });
+
+export const exportReport = (view: import("./types").ReportView, query: import("./types").ReportsQuery) =>
+  performRequest(withQuery(`/reports/${view}/export.csv`, query), undefined, response => response.blob());

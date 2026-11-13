@@ -1911,3 +1911,45 @@ export interface DriverPayEscrowEditor {
   expenseRevision: string;
   suggestStop: boolean;
 }
+export type ReportView = "company" | "owner-operator" | "dispatcher" | "driver";
+
+export type ReportsQuery = {
+  from?: string;
+  to?: string;
+  compareFrom?: string;
+  compareTo?: string;
+  truck?: string;
+  driver?: string;
+  dispatcher?: string;
+};
+
+export type ReportEvidence = {
+  kind: string;
+  id: string;
+  label: string;
+  date: string;
+  truck?: string;
+  driver?: string;
+  dispatcher?: string;
+  state?: string;
+  note?: string;
+  pickupActual?: string;
+  pickupScheduled?: string;
+  deliveryActual?: string;
+  deliveryScheduled?: string;
+  values?: Record<string, number>;
+};
+
+export type ReportRow = {
+  id: string;
+  name: string;
+  metrics: Record<string, number | undefined>;
+  sources: ReportEvidence[];
+};
+
+export type ReportsResult = {
+  period: { dateFrom: string; dateTo: string; compareFrom: string; compareTo: string };
+  current: ReportRow[];
+  comparison: ReportRow[];
+  options: Record<"trucks" | "drivers" | "dispatchers", { id: string; name: string }[]>;
+};
