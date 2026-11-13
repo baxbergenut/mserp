@@ -30,7 +30,7 @@ export function PermissionMatrix({ role, catalog, onChange }: { role: AccessRole
   const setupMissing = setup.filter(key => !role.permissions.includes(key));
   return <section className="mt-5 space-y-3">
     <input aria-label="Search permissions" placeholder="Find a page, action, or sensitive section…" className={controlClass} value={search} onChange={e => setSearch(e.target.value)} />
-    <p className="text-xs text-zinc-400">Actions require View. Select prerequisites explicitly. Private details, documents, and financial access are separate.</p>
+    <p className="text-xs text-zinc-400">Actions require View. Select prerequisites explicitly. Private details, documents, and financial access are separate. Investors View reveals truck owner names and is required for Investor Pay and agreements.</p>
     <div className="max-h-[50vh] overflow-auto rounded-lg border border-zinc-800"><table className="w-full min-w-[700px] text-left text-xs">
       <thead className="sticky top-0 bg-zinc-900"><tr>{["Page / section", "View", "Add", "Edit", "Delete", "Other actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
       <tbody>{groups.filter(group => catalog.some(p => p.group === group && `${p.group} ${p.label} ${p.key}`.toLowerCase().includes(search.toLowerCase()))).map(group => {

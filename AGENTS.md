@@ -71,6 +71,10 @@ conversion used that faulty check and created duplicate slots.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
+## Sensitive investor access
+
+Migration 217 makes Investors View (`investors.read`) sensitive and a prerequisite for Investor Pay and investor agreements. API JSON and board SSE project owner names to Investor without this grant, including operational lookups, expenses, maintenance, charges, escrow, Scale and FleetScope snapshots. Operational IDs/driver-owner relationships remain for expense routing; projections never modify caches or financial snapshots. Install the matching deploy helper before the quiesced cutover; it blocks rollback to releases without the privacy migration. The one-time migration grants investor visibility only to Administrator and Accountant/Accountants roles, audits changes and revokes sessions. Later explicit grants remain configurable. Validate `TestSensitiveInvestorAccessMigration` and `frontend/scripts/test-investor-access.mjs`; see `docs/ACCESS_CONTROL.md`.
+
 ## Pay-page actions
 
 Investor Pay offers Keep money and finalize on positive payables. It freezes the

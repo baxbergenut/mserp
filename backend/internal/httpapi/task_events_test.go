@@ -64,12 +64,15 @@ func TestLiveSnapshotProjectsEachSubscriber(t *testing.T) {
 	defer h.shutdown()
 	h.snapshotEvent = "board"
 	h.snapshot = func(context.Context) ([]byte, error) {
-		return []byte(`{"drivers":[{"fullName":"Example","payType":"cpm","payRate":0.5,"address":"Private","cdlFileId":"secret"}],"originalGross":1234.56}`), nil
+		return []byte(`{"drivers":[{"fullName":"Example","payType":"cpm","payRate":0.5,"address":"Private","cdlFileId":"secret"}],"originalGross":1234.56,"truck":{"ownerName":"Private Investor"}}`), nil
 	}
 	frame := func(permissions ...string) string {
 		return h.frame(context.WithValue(context.Background(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Permissions: permissions}}), "changed")
 	}
 	viewer := frame("driver_board.read")
+	if strings.Contains(viewer, "Private Investor") || !strings.Contains(frame("driver_board.read", "investors.read"), "Private Investor") || strings.Contains(frame("driver_board.read"), "Private Investor") {
+		t.Fatal("investor identity leaked or shared snapshot modified")
+	}
 	for _, field := range []string{"payType", "payRate", "address", "cdlFileId"} {
 		if strings.Contains(viewer, field) {
 			t.Fatalf("viewer received %s", field)

@@ -230,17 +230,17 @@ export function TruckForm({
         </Field>
         {setupDriverOwner && <Toggle checked={setupDriverOwner.checked} onChange={setupDriverOwner.onChange} label="Driver owns this truck" description={`${setupDriverOwner.name} will be the truck owner.`} />}
         <Field label="Owner">
-          {setupDriverOwner?.checked ? <input aria-label="Truck owner" readOnly value={setupDriverOwner.name} className={controlClass} /> : <select required aria-label="Truck owner" value={value.ownerDriverId ? `driver:${value.ownerDriverId}` : value.ownerId ?? ""}
+          {setupDriverOwner?.checked ? <input aria-label="Truck owner" readOnly value={setupDriverOwner.name} className={controlClass} /> : <select disabled={!permissions.includes("investors.read")} required aria-label="Truck owner" value={value.ownerDriverId ? `driver:${value.ownerDriverId}` : value.ownerId ?? ""}
             onChange={(event) => { const owner = event.target.value; onChange({ ...value, ownershipEffectiveDate: today, ownerDriverId: owner.startsWith("driver:") ? owner.slice(7) : null, ownerId: owner.startsWith("driver:") ? null : owner, isCompanyOwned: investors.find(i => i.id === owner)?.isCompany ?? false }); }}
             className={controlClass}>
             {investors.filter((i) => (i.active || i.id === value.ownerId) && (!i.driverId || !drivers.some(d => d.id === i.driverId) || i.id === value.ownerId)).map((i) => (
               <option key={i.id} value={i.id}>{i.fullName}{i.driverId ? " — Driver" : ""}{!i.active ? " (inactive)" : ""}</option>
             ))}
-            <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`} disabled={!investors.some(i=>i.driverId===d.id) && !permissions.includes("investors.create")}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>
+            {permissions.includes("investors.read") && <optgroup label="Drivers">{drivers.filter(d => !investors.some(i => i.driverId === d.id && i.id === value.ownerId)).map(d => <option key={d.id} value={`driver:${d.id}`} disabled={!investors.some(i=>i.driverId===d.id) && !permissions.includes("investors.create")}>{d.fullName}{!d.active ? " (terminated)" : ""}</option>)}</optgroup>}
           </select>}
         </Field>
         <Field label="Ownership effective date">
-          <input aria-label="Ownership effective date" type="date" min="1900-01-01" max={today} value={value.ownershipEffectiveDate ?? ""} onChange={event => set("ownershipEffectiveDate", event.target.value)} className={controlClass} />
+          <input disabled={!permissions.includes("investors.read")} aria-label="Ownership effective date" type="date" min="1900-01-01" max={today} value={value.ownershipEffectiveDate ?? ""} onChange={event => set("ownershipEffectiveDate", event.target.value)} className={controlClass} />
           <p className="mt-1 text-xs text-zinc-500">Recurring fees follow the owner for this week onward. Incorrect fees saved for the previous owner are cleared; earlier unpaid balances stay with that owner.</p>
         </Field>
       </FormSection>

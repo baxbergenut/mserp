@@ -23,8 +23,9 @@ func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	s, _ := authSessionFromContext(w.request.Context())
 	value = projectExpenseEditAccess(value, s.User)
 	path := w.request.URL.Path
-	// These endpoints deliberately return their own authorized financial data.
-	if strings.HasPrefix(path, "/driver-pay") || strings.HasPrefix(path, "/investor-pay") || strings.HasPrefix(path, "/dispatcher-pay") || path == "/financial-dashboard" || strings.HasSuffix(path, "/pay-history") {
+	// Financial fields have their own grants; embedded owner names still need Investors access.
+	financial := strings.HasPrefix(path, "/driver-pay") || strings.HasPrefix(path, "/investor-pay") || strings.HasPrefix(path, "/dispatcher-pay") || path == "/financial-dashboard" || strings.HasSuffix(path, "/pay-history")
+	if financial && repository.HasPermission(s.User, "investors.read") {
 		return value
 	}
 	raw, err := json.Marshal(value)
@@ -37,7 +38,12 @@ func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	if decoder.Decode(&result) != nil {
 		return nil
 	}
-	projectFields(result, s.User, path)
+	if !repository.HasPermission(s.User, "investors.read") {
+		projectInvestorNames(result, path == "/lookups/investors")
+	}
+	if !financial {
+		projectFields(result, s.User, path)
+	}
 	return result
 }
 

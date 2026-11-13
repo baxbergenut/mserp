@@ -3,6 +3,7 @@ set -euo pipefail
 helper=${1:-$(dirname "$0")/mserp-deploy}
 bash -n "$helper"
 permissions_migration=112_permissions_v2.sql
+investor_access_migration=217_sensitive_investor_access.sql
 manager_verification_migration=151_retire_expense_manager_verification.sql
 accounting_cutover_migration=160_accounting_cutover.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql
@@ -42,8 +43,10 @@ mock_scale_partial=f
 mock_investor_retained=f
 mock_investor_accounts=f
 mock_board_stop_geocoding=f
+mock_investor_access=f
 mserp_db() {
     local result=$mock
+    if [[ $* == *"public.investor_identity_access_v1()"* ]]; then result=$mock_investor_access; fi
     if [[ $* == *"to_regclass('public.board_stop_geocodes')"* ]]; then result=$mock_board_stop_geocoding; fi
     if [[ $* == *"table_name='driver_escrows'"* && $* == *"column_name='truck_id'"* ]]; then result=$mock_investor_accounts; fi
     if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
@@ -376,3 +379,15 @@ compatible_release "$test_root/new"
 mock_board_stop_geocoding=error
 if compatible_release "$test_root/new"; then echo 'Stop-city cache query failure allowed rollback' >&2; exit 1; fi
 echo 'Stop-city cache compatibility checks passed'
+
+mock_board_stop_geocoding=t
+# The privacy cutover cannot restore an older API that exposes owner names.
+mock_investor_access=t
+if compatible_release "$test_root/new"; then echo 'investor privacy rollback allowed' >&2; exit 1; fi
+touch "$test_root/new/migrations/$investor_access_migration"
+compatible_release "$test_root/new"
+for mock_investor_access in error unexpected; do
+    if compatible_release "$test_root/new"; then echo 'unknown investor privacy marker allowed rollback' >&2; exit 1; fi
+done
+mock_investor_access=t
+echo 'Investor privacy rollback fences passed'

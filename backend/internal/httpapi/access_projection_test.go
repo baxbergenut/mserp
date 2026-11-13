@@ -95,6 +95,17 @@ func TestEveryRouteRejectsMissingAction(t *testing.T) {
 			grants := []string{}
 			if allowed {
 				grants = append(grants, policy.permission)
+				for n := 0; n < len(repository.Permissions); n++ {
+					for _, permission := range repository.Permissions {
+						if slices.Contains(grants, permission.Key) {
+							for _, dependency := range permission.Requires {
+								if !slices.Contains(grants, dependency) {
+									grants = append(grants, dependency)
+								}
+							}
+						}
+					}
+				}
 			}
 			called := false
 			handler := requirePermission(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(204) }))
