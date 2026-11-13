@@ -148,8 +148,6 @@ status while background source evidence refreshes.
 
 ## Repository map
 
-- Reports is a disabled sidebar entry with a Coming soon badge. The page and report data/export routes are retired.
-
 ### Backend
 
 - Migration 198 makes ordinary expense deductions statement-local draft choices

@@ -32,7 +32,7 @@ import { BetaBadge, BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, comingSoon: true },
+  { label: "Reports", icon: ChartNoAxesCombined, comingSoon: true },
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
   { href: "/map", label: "Map", icon: Map },
@@ -113,13 +113,11 @@ export function Sidebar() {
       {/* ── Navigation ── */}
       <nav aria-label="Main navigation" className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-2 *:shrink-0">
         {NAV_ITEMS.map((item) => {
-		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
-          const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
-          if ("comingSoon" in item && item.comingSoon) {
+          if ("comingSoon" in item) {
             if (!administrator && !permissions.includes("reports.read")) return null;
             const Icon = item.icon;
             return (
-              <div key={item.href} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium text-zinc-400 ${collapsed ? "justify-center px-0" : ""}`}
+              <div key={item.label} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium text-zinc-400 ${collapsed ? "justify-center px-0" : ""}`}
                 title={collapsed ? item.label + " · Coming soon" : undefined}>
                 <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-500" />
                 {collapsed ? <span className="sr-only">{item.label} · Coming soon</span> : <>
@@ -129,6 +127,8 @@ export function Sidebar() {
               </div>
             );
           }
+		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
+          const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
           if ("children" in item ? children.length === 0 : !canVisitPage(permissions,item.href,administrator)) return null;
           const active = children.some(child => pathname === child.href || pathname.startsWith(child.href+"/")) ||
             pathname === item.href ||
