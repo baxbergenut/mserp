@@ -50,6 +50,13 @@ func (r *DriverBoardRepository) transferBoardDriver(ctx context.Context, tx pgx.
 	if boardOrderRevision(a.DispatcherID, versions[a.DispatcherID], source) != a.Revision || boardOrderRevision(destination, versions[destination], target) != a.TargetRevision || !slices.Contains(source, a.DriverID) || (a.TargetDriverID != "" && !slices.Contains(target, a.TargetDriverID)) {
 		return result, ErrDriverBoardOrderConflict
 	}
+	var active bool
+	if err := tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1`, a.DriverID).Scan(&active); err != nil {
+		return result, err
+	}
+	if !active {
+		return result, ErrDriverBoardOrderConflict
+	}
 	// Explicitly clear effective-week settings: this action is immediate.
 	if _, err := tx.Exec(ctx, `SELECT set_config('mserp.assignment_week','',true),set_config('mserp.assignment_source','Status Board drag',true)`); err != nil {
 		return result, err

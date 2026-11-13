@@ -300,6 +300,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 				t.Fatal("inactive driver save accepted", err)
 			}
 			testReadyLocationDatabase(t, ctx, pool, repo, fleet)
+			testDriverBoardDepartureWeek(t, ctx, pool, fleet)
 		})
 	}
 }

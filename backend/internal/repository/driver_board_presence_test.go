@@ -149,7 +149,7 @@ func testBoardPresence(t *testing.T, ctx context.Context, pool *pgxpool.Pool, re
 	if err = set(hash, "notes"); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("revoked session recreated cursor", err)
 	}
-	if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false WHERE id=$1`, driver.ID); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE drivers SET active=false,termination_date=(date_trunc('week',now() AT TIME ZONE 'America/New_York')::date-1) WHERE id=$1`, driver.ID); err != nil {
 		t.Fatal(err)
 	}
 }

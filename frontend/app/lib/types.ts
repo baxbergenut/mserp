@@ -490,6 +490,7 @@ export interface DriverBoardEntry {
 }
 
 export interface DriverBoardDriver {
+  departed?: boolean;
 	availabilityStatus?: DriverAvailability;
 	statusVersion?: number;
  truckOperatingStatus?: TruckOperatingStatus | "";

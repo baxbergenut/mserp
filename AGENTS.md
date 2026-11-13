@@ -1097,6 +1097,10 @@ status while background source evidence refreshes.
   inputs already being edited retain native paste and selection behavior.
   Gross Board marks stacked fields with data-grid-cell. Suggestions retain their
   own keyboard handling. Ordinary list/directory tables do not opt into this behavior.
+- Status Board retains departed drivers through Sunday of their New York termination
+  week, labelled Left under their last recorded dispatcher/truck. These read-only
+  rows retain weekly gross without restoring live fleet assignments; Monday removes
+  them even when historical gross remains. Ordering fences use this same roster.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
   Driver status choices/order/colors follow Driver Board > TODAY!J4 (gid 1851742271),

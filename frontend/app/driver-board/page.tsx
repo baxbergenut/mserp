@@ -235,7 +235,7 @@ export default function DriverBoardPage() {
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Dispatcher order could not be saved. Try again."); return false; }
   }
   function textCell(entry: DriverBoardEntry, name: string, field: Parameters<typeof TextCell>[0]["field"], label: string, limit: number) {
-    return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled} edit={edit} />;
+    return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled || !!board?.drivers.find(d => d.id === entry.driverId)?.departed} edit={edit} />;
   }
 
   function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
@@ -371,6 +371,8 @@ export default function DriverBoardPage() {
             })}
           </tr>) : []),
               ...members.map(d => {
+            const disabled = !canEdit || loading || leaving || state.actionBusy || !!d.departed;
+            const orderDisabled = disabled || saving || dirty;
             const i = renderedDrivers.indexOf(d);
             const entry = entries[d.id];
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
@@ -411,7 +413,7 @@ export default function DriverBoardPage() {
                       if (target && revision && !orderDisabled && (target.dispatcherId !== d.dispatcherId || !autoOrder?.[d.dispatcherId]) && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>,
-              truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,
+              truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck && !d.departed ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,
               trailerNumber: <TrailerCell key="trailerNumber" entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />,
               originalGross: <td key="originalGross" data-board-column="originalGross" className={grossCellClass}>{decimalDisplay(sum.original, true)}</td>,
               driverGross: <td key="driverGross" data-board-column="driverGross" className={grossCellClass}>{decimalDisplay(sum.driver, true)}</td>,
@@ -477,6 +479,6 @@ export default function DriverBoardPage() {
     {setupDriver && <DriverIntakeSetup key={setupDriver.intakeId} intakeId={setupDriver.intakeId} name={setupDriver.fullName} onClose={() => setSetupDriver(null)} onSaved={() => { setSetupDriver(null); setOrderNotice("Saved."); state.refresh(); }} />}
     {terminating&&<DriverStatusDialog driver={terminating} startTerminated onClose={()=>setTerminating(null)} onSaved={()=>{setTerminating(null);void reload();}}/>}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
-    {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
+    {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit && !board.drivers.find(d => d.id === loadDriver.id)?.departed} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
   </div>;
 }

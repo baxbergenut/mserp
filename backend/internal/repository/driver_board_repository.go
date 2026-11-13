@@ -37,6 +37,7 @@ type DriverBoardEntry struct {
 }
 
 type DriverBoardDriver struct {
+	Departed                   bool                 `json:"departed,omitempty"`
 	AvailabilityStatus         string               `json:"availabilityStatus"`
 	StatusVersion              int                  `json:"statusVersion"`
 	TruckOperatingStatus       string               `json:"truckOperatingStatus"`
@@ -149,8 +150,9 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 			result.GrossTierMinimumCents = append(result.GrossTierMinimumCents, tier.minGrossCents())
 		}
 	}
-	// Every joined truck already has this active direct operator. Preserve the
-	// canonical restriction precedence without re-scanning every driver per row.
+	// Retained departure rows are history, not live assignments.
+	location, _ := time.LoadLocation("America/New_York")
+	today := r.now().In(location).Format(time.DateOnly)
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,coalesce(i.driver_id=d.id,false),
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
@@ -161,18 +163,20 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
  CASE WHEN t.id IS NULL THEN '' WHEN t.status='terminated' THEN 'terminated'
  WHEN t.status='out_of_service' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='out_of_service') THEN 'out_of_service'
  WHEN t.status='maintenance' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='shop') THEN 'shop'
- ELSE 'in_use' END,d.availability_status,d.status_version,coalesce(d.city,''),coalesce(d.state,'')
- FROM drivers d LEFT JOIN dispatchers dp ON dp.id=d.dispatcher_id
+ ELSE 'in_use' END,d.availability_status,d.status_version,coalesce(d.city,''),coalesce(d.state,''),NOT d.active
+ FROM drivers d CROSS JOIN (SELECT $1::date AS today) board_day
+ `+driverBoardDispatcherJoinSQL+`
+ LEFT JOIN dispatchers dp ON dp.id=`+driverBoardDispatcherSQL+`
  LEFT JOIN dispatcher_updaters ma ON ma.dispatcher_id=dp.id AND ma.shift='main'
  LEFT JOIN updaters mu ON mu.id=ma.updater_id
  LEFT JOIN dispatcher_updaters aa ON aa.dispatcher_id=dp.id AND aa.shift='after_hours'
  LEFT JOIN updaters au ON au.id=aa.updater_id
- LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
+ `+driverBoardTruckJoinSQL+`
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN investors i ON i.id=t.owner_id
  LEFT JOIN driver_board b ON b.driver_id=d.id
  `+statusBoardELDLocationJoinSQL+`
- WHERE d.active AND payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date)=d.id
- ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`)
+ WHERE `+driverBoardRosterPredicateSQL+`
+ ORDER BY dp.full_name NULLS LAST,dp.id,d.full_name,d.id`, today)
 	if err != nil {
 		return result, err
 	}
@@ -187,7 +191,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion, &d.City, &d.State)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion, &d.City, &d.State, &d.Departed)
 		if err != nil {
 			rows.Close()
 			return result, err
@@ -196,6 +200,10 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		if latitude != nil && longitude != nil && reportedAt != nil && providerTruckNumber != nil {
 			d.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude, Heading: heading,
 				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber, Source: pmRecordID(locationSource)}
+		}
+		if d.Departed {
+			e.Status = "Left"
+			d.Location = nil
 		}
 		e.DriverID = d.ID
 		result.Drivers = append(result.Drivers, d)
@@ -206,10 +214,14 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	if err != nil {
 		return result, err
 	}
+	ids := []string{}
+	for _, d := range result.Drivers {
+		ids = append(ids, d.ID)
+	}
 	// Use the same exact load resolution and entered/source precedence as Gross Board.
 	rows, err = tx.Query(ctx, driverBoardCurrentEntries+"SELECT "+grossBoardEntryColumns+` FROM effective
- WHERE service_date >= $1::date AND driver_id IN (SELECT id FROM drivers WHERE active)
- ORDER BY driver_id,service_date,slot`, week)
+ WHERE service_date >= $1::date AND driver_id=ANY($2::uuid[])
+ ORDER BY driver_id,service_date,slot`, week, ids)
 	if err != nil {
 		return result, err
 	}
@@ -231,10 +243,6 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 		return result, err
 	}
 	result.ELD.Configured = r.fiveELDConfigured
-	ids := []string{}
-	for _, d := range result.Drivers {
-		ids = append(ids, d.ID)
-	}
 	result.Loads, err = readBoardLoads(ctx, tx, ids, r.loadStartDate(""), r.now())
 	if err != nil {
 		return result, err

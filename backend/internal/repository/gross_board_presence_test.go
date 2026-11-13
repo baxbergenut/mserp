@@ -18,7 +18,7 @@ func testGrossPresence(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		}
 	}
 	var driver, user, role string
-	if err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active) VALUES('Gross Presence','gross presence','cpm',0,false) RETURNING id`).Scan(&driver); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate,active,termination_date) VALUES('Gross Presence','gross presence','cpm',0,false,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date-1) RETURNING id`).Scan(&driver); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx, `INSERT INTO app_roles(name,permissions) VALUES('Gross Presence Viewer','{board.read}') RETURNING id`).Scan(&role); err != nil {

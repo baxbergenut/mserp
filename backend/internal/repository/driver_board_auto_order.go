@@ -17,9 +17,10 @@ func lockBoardOrder(ctx context.Context, tx pgx.Tx, dispatcher string) error {
 // Lock current members against termination and reassignment. New arrivals
 // absent from the saved order append on the next read.
 func readBoardOrderGroup(ctx context.Context, tx pgx.Tx, dispatcher string) ([]string, int64, bool, error) {
-	rows, err := tx.Query(ctx, `SELECT d.id FROM drivers d WHERE d.active
- AND payroll_driver_at(d.id,(now() AT TIME ZONE 'America/New_York')::date)=d.id
- AND coalesce(d.dispatcher_id::text,'')=$1 ORDER BY d.full_name,d.id FOR UPDATE OF d`, dispatcher)
+	rows, err := tx.Query(ctx, `SELECT d.id FROM drivers d
+ CROSS JOIN (SELECT (now() AT TIME ZONE 'America/New_York')::date AS today) board_day
+ `+driverBoardDispatcherJoinSQL+` WHERE `+driverBoardRosterPredicateSQL+`
+ AND coalesce((`+driverBoardDispatcherSQL+`)::text,'')=$1 ORDER BY d.full_name,d.id FOR UPDATE OF d`, dispatcher)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -108,7 +109,7 @@ func (r *DriverBoardRepository) SetDriverAutoOrder(ctx context.Context, dispatch
 }
 
 func (r *DriverBoardRepository) readBoardOrderStatuses(ctx context.Context, tx pgx.Tx, ids []string) (map[string]string, error) {
-	rows, err := tx.Query(ctx, `SELECT driver_id,status FROM driver_board WHERE driver_id=ANY($1::uuid[])`, ids)
+	rows, err := tx.Query(ctx, `SELECT d.id,CASE WHEN d.active THEN coalesce(b.status,'') ELSE 'Left' END FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		return nil, err
 	}
