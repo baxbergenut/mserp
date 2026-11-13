@@ -54,10 +54,7 @@ func desiredSyncCrews(local FleetSyncLocal, links []FleetSyncLink) ([]fleetscope
 		if c.ExpectedRevision == "" {
 			return nil, errors.New("waiting_for_assignment_revision")
 		}
-		if exists && t.PrimaryID != "" && !(t.Truck.OperationalStatus == "terminated" && !t.Truck.OperationalActive) {
-			if !t.Truck.OperationalActive || t.Truck.OperationalStatus == "maintenance" || t.Truck.OperationalStatus == "out_of_service" || t.Truck.OperationalStatus == "hold" {
-				return nil, errors.New("operational_truck_conflict")
-			}
+		if exists && t.PrimaryID != "" && truckAcceptsCrew(t.Truck) {
 			for i, id := range []string{t.PrimaryID, t.SecondaryID} {
 				if id == "" {
 					continue
@@ -87,6 +84,17 @@ func desiredSyncCrews(local FleetSyncLocal, links []FleetSyncLink) ([]fleetscope
 	sort.Slice(crews, func(i, j int) bool { return crews[i].MSERPTruckID < crews[j].MSERPTruckID })
 	return crews, nil
 }
+func truckAcceptsCrew(truck fleetscope.TruckProjection) bool {
+	if !truck.OperationalActive {
+		return false
+	}
+	switch truck.OperationalStatus {
+	case "maintenance", "out_of_service", "hold", "terminated":
+		return false
+	}
+	return true
+}
+
 func matchesTruckProjection(actual *fleetscope.TruckProjection, acknowledged fleetscope.TruckProjection) bool {
 	if actual == nil {
 		return false
@@ -151,8 +159,8 @@ func (r *FleetSyncRepository) PrepareAssignments(ctx context.Context, snapshotID
 			continue
 		}
 		t, ok := remote[l.RemoteID]
-		if !ok || t.MSERPID != l.LocalID || t.SafetyHold {
-			return errors.New("refresh the snapshot and resolve missing trucks or safety holds")
+		if !ok || t.MSERPID != l.LocalID {
+			return errors.New("refresh the snapshot and resolve missing truck links")
 		}
 		l.AssignmentRevision = t.AssignmentRevision
 	}
@@ -162,6 +170,11 @@ func (r *FleetSyncRepository) PrepareAssignments(ctx context.Context, snapshotID
 	}
 	if len(crews) == 0 {
 		return errors.New("link trucks before reviewing assignments")
+	}
+	for _, crew := range crews {
+		if crew.Primary != nil && remote[crew.FleetScopeVehicleID].SafetyHold {
+			return errors.New("synchronize Clustie truck restrictions before reviewing assignments")
+		}
 	}
 	op := r.operation("assignments.apply", epoch)
 	op.AssignmentSequence = sequence + 1
@@ -254,7 +267,7 @@ func (r *FleetSyncRepository) Activate(ctx context.Context, snapshotID string, r
 		if c.Secondary != nil {
 			secondary = c.Secondary.FleetScopeDriverID
 		}
-		if !ok || rt.MSERPID != c.MSERPTruckID || rt.PrimaryID != primary || rt.SecondaryID != secondary || rt.AssignmentRevision != c.ExpectedRevision || rt.SafetyHold {
+		if !ok || rt.MSERPID != c.MSERPTruckID || rt.PrimaryID != primary || rt.SecondaryID != secondary || rt.AssignmentRevision != c.ExpectedRevision || (c.Primary != nil && rt.SafetyHold) {
 			return errors.New("FleetScope readback does not match the reviewed crew baseline")
 		}
 		var owner fleetscope.Ownership
@@ -518,9 +531,13 @@ func (r *FleetSyncRepository) project(ctx context.Context, epoch string) error {
 			return e
 		}
 	}
+	truckChangesPending := false
 	for _, t := range local.Trucks {
 		key := "truck:" + t.Truck.MSERPTruckID
 		l := lm[key]
+		if l.RemoteID != "" && (pending[key] || l.AcknowledgedHash != syncHash(t.Truck)) {
+			truckChangesPending = true
+		}
 		if pending[key] || l.ExcludedReason != "" || l.AcknowledgedHash == syncHash(t.Truck) {
 			continue
 		}
@@ -549,7 +566,7 @@ func (r *FleetSyncRepository) project(ctx context.Context, epoch string) error {
 			return e
 		}
 	}
-	if !pending["assignments"] {
+	if !pending["assignments"] && !truckChangesPending {
 		crews, err := desiredSyncCrews(local, links)
 		if err != nil {
 			_, e = tx.Exec(ctx, `UPDATE fleetscope_sync_state SET last_error=$1`, err.Error())

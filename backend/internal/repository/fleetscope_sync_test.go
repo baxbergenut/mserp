@@ -363,6 +363,15 @@ func TestDesiredFleetScopeCrews(t *testing.T) {
 			t.Fatal("team lost")
 		}
 	}
+	local.Trucks[0].Truck.OperationalStatus = "maintenance"
+	if crews, err := desiredSyncCrews(local, links); err != nil || len(crews) != 2 || crews[0].Primary != nil || crews[0].Secondary != nil || crews[1].Primary != nil || crews[1].Secondary != nil {
+		t.Fatalf("Clustie maintenance truck blocked the fleet or carried a working crew: %v, %v", crews, err)
+	}
+	if local.Trucks[0].PrimaryID != d1 || local.Trucks[0].SecondaryID != d2 {
+		t.Fatal("Clustie maintenance crew changed")
+	}
+	local.Trucks[0].Truck.OperationalStatus = "assigned"
+
 	local.Drivers[1].Status = "terminated"
 	if _, e = desiredSyncCrews(local, links); e == nil {
 		t.Fatal("terminated team member accepted")
