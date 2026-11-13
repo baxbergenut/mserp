@@ -2,6 +2,36 @@
 
 The application uses one role per user. Grants apply to all records in the permitted area; task-assignee restrictions still apply. The built-in Administrator has the entire code-owned catalog and cannot be edited. Last-administrator protection, version checks and access audits remain mandatory.
 
+## Per-user overrides
+
+Settings > Users > Edit user shows User permissions after the account details. Each
+capability and expense-category action can inherit its role, explicitly Allow, or
+explicitly Deny. The editor previews effective access and can reset all exceptions
+to the role. Exceptions survive ordinary role changes; selecting Administrator
+clears them because Administrator accounts retain protected full access.
+
+`ManagedUser.permissionOverrides` maps catalog keys to `allow` or `deny`.
+`expenseCategoryOverrides` maps category UUIDs to action maps (`canView`,
+`canCreate`, `canEdit`, `canDelete`) using the same values. Missing fields preserve
+saved exceptions for existing API callers; empty objects clear them. Unknown keys,
+values and categories are rejected. Only existing `access.manage` holders may
+save exceptions, with that effective permission rechecked under the access lock.
+
+Apply exceptions to current role grants, then remove permissions with missing
+prerequisites until stable. Denying View therefore disables dependent actions,
+including explicitly allowed ones; it never adds prerequisite grants. Category
+actions likewise require effective category View. Administrator-only operations,
+task assignment and record-specific rules remain unchanged. SaveUser atomically
+persists account details and overrides, versions/audits the save, and revokes every
+session. Sessions and board presence evaluate current effective access.
+
+Migration 217 adds the two JSON objects with empty defaults, preserving existing
+access. Install the matching deployment helper before release: it quiesces writers
+and rejects releases without migration 217 once the new columns exist, since older
+applications would ignore explicit denials. Deploy migration, API and frontend
+together. Validate `TestUserPermissionOverridesDatabase` on a disposable local
+database and `frontend/scripts/test-user-permissions.mjs` against review-local.
+
 ## Contract
 
 `backend/internal/repository/access_permissions.go` owns capability keys, groups, labels, supported actions, prerequisites and sensitive flags. Both the session and Settings expose this catalog. Settings renders a searchable matrix; frontend capability helpers validate its prerequisites. An action requires its area's View grant. The API rejects unknown, obsolete, duplicate or inconsistent permissions. Expense-category actions likewise require category View.
