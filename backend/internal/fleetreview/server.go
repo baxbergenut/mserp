@@ -258,7 +258,28 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		view.Profile = nil
 		response := map[string]any{"state": view, "applyBlocker": ready, "applying": s.applying}
 		if s.state.Batch != nil && s.state.Profile != nil {
-			response["profile"] = map[string]any{"plan": s.state.Profile.Plan, "capturedAt": s.state.Batch.Started}
+			profile := s.state.Profile
+			ids := make([]string, 0, len(profile.Source.Drivers)+len(profile.Source.Trucks))
+			for _, kind := range [][]Record{profile.Source.Drivers, profile.Source.Trucks} {
+				for _, record := range kind {
+					ids = append(ids, record["id"])
+				}
+			}
+			response["profile"] = map[string]any{"plan": profile.Plan, "capturedAt": s.state.Batch.Started, "sourceIds": ids}
+			if s.state.Batch.State == "complete" {
+				// Include records added after the manual review snapshot.
+				existing := make(map[string]bool, len(view.Rows))
+				for _, row := range view.Rows {
+					existing[row.ID] = true
+				}
+				view.Rows = append([]Row(nil), view.Rows...)
+				for _, row := range initial(profile.Source, profile.Receiver, s.state.Policy).Rows {
+					if !existing[row.ID] {
+						view.Rows = append(view.Rows, row)
+					}
+				}
+				response["state"] = view
+			}
 		}
 		if s.state.Batch != nil && s.state.Batch.State == "complete" {
 			a, b, err := s.db.Snapshot(ctx)
