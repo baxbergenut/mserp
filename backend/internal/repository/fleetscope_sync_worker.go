@@ -38,7 +38,10 @@ func desiredSyncCrews(local FleetSyncLocal, links []FleetSyncLink) ([]fleetscope
 	used := map[string]bool{}
 	for _, t := range local.Trucks {
 		l := m["truck:"+t.Truck.MSERPTruckID]
-		if t.PrimaryID != "" && (l.RemoteID == "" || l.ExcludedReason != "") {
+		if l.ExcludedReason != "" && l.RemoteID == "" && t.canExclude() {
+			continue
+		}
+		if (t.PrimaryID != "" || t.SecondaryID != "") && (l.RemoteID == "" || l.ExcludedReason != "") {
 			return nil, errors.New("waiting_for_truck_link")
 		}
 	}
@@ -224,7 +227,7 @@ func (r *FleetSyncRepository) Activate(ctx context.Context, snapshotID string, r
 	lm := syncLinkMap(links)
 	for _, t := range local.Trucks {
 		l := lm["truck:"+t.Truck.MSERPTruckID]
-		if l.ExcludedReason != "" && t.PrimaryID == "" {
+		if l.ExcludedReason != "" && l.RemoteID == "" && t.canExclude() {
 			continue
 		}
 		if l.RemoteID == "" || l.AcknowledgedHash != syncHash(t.Truck) {
