@@ -50,10 +50,12 @@ func boardAutoOrderRank(status string) int {
 		return 3
 	case "REST":
 		return 4
-	case "HOME":
+	case "DEADHEAD":
 		return 5
-	default:
+	case "HOME":
 		return 6
+	default:
+		return 7
 	}
 }
 

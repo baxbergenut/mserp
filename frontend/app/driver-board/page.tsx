@@ -246,7 +246,7 @@ export default function DriverBoardPage() {
     const label = `${d.dispatcherName}${d.dispatcherExtension == null ? "" : ` (${d.dispatcherExtension})`} - ${count}`;
     const autoOrderToggle = <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-order for ${d.dispatcherName}`} data-grid-ignore
         disabled={orderDisabled || rowDrag.active || !board}
-        title="Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses"
+        title="Ready, Dispatched, Enroute, Reserved, Rest, Deadhead, Home, then other statuses"
         onClick={() => void toggleAutoOrder(d.dispatcherId, d.dispatcherName)}
         className="inline-flex h-7 items-center gap-1.5 rounded-full px-1.5 text-[10px] focus-visible:outline-2 focus-visible:outline-blue-400 disabled:cursor-default">
         Auto-order
