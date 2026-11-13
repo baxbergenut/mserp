@@ -926,10 +926,10 @@ status while background source evidence refreshes.
   schedule. Advancing the stop/load/truck resets it; later outside positions do not.
   Exact context-fenced cached route origins recover markers cleared by older releases.
   Fresh automatic markers are red; stale last-known markers are amber.
-  A typed Destination uses a budgeted Google Routes address waypoint. It keeps
-  the selected stop's PU/DEL schedule and suspends that stop's arrival marker.
-  Clearing the address restores source-stop routing. Paid custom routing requires
-  BOARD_ROUTES_PAID_PROVIDER=google.
+  A typed Destination uses separately budgeted TomTom point-address geocoding,
+  then the same truck route profile. Cache verified coordinates by route context.
+  The override keeps the selected stop appointment and suspends arrival detection.
+  Clearing the address restores source-stop routing.
   ETA is automatic while its entry is blank; a typed
   time or mileage overrides it until cleared. The ETA popup has a blank optional
   manual PU/DEL time for the selected load stop, overriding only the displayed
@@ -939,23 +939,22 @@ status while background source evidence refreshes.
   even when DataTruck lists a different driver, without an extra confirmation.
   A startup/minute cache-only GPS evaluator never advances progress. Provider
   routing is default off and requires explicit access/operations/speed verification.
-  Routing uses TomTom traffic-aware car estimates first (20,000/month), then
-  Google DRIVE/TRAFFIC_UNAWARE Essentials (10,000/month). Migration 197 records
-  durable pre-HTTP attempt reservations in board_route_usage, unrelated to payroll.
-  BOARD_ROUTES_PAID_PROVIDER defaults off; production explicitly uses tomtom after
-  both allowances, the cheaper provider at November 4 verified rates.
-  TOMTOM_ROUTING_API_KEY supplies its key. BOARD_ROUTES_TOMTOM_MONTHLY_FREE and
-  BOARD_ROUTES_GOOGLE_MONTHLY_FREE can reduce the allowances. Google months use
-  Pacific time; BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE defaults UTC. Reconcile existing
-  same-SKU account usage before activation. No truck restrictions or toll prices.
-  Legacy `BOARD_ROUTES_STANDARD_SEMI`/`BOARD_ROUTES_PROFILES_FILE` are ignored.
+  Routing uses TomTom traffic-aware commercial truck estimates with the VRC 791
+  five-axle, 53 ft trailer profile for ETAs, mileage and cached map geometry.
+  An unroutable itinerary retries only the active stop with the same profile.
+  Migration 197 records each attempt in board_route_usage, unrelated to payroll.
+  Migration 217 adds the custom address geocoding counter and retains prior counts.
+  TOMTOM_ROUTING_API_KEY supplies the key. BOARD_ROUTES_PAID_PROVIDER accepts
+  off or tomtom. BOARD_ROUTES_TOMTOM_MONTHLY_FREE can reduce the 20,000 routing
+  allowance. BOARD_ADDRESS_GEOCODE_MONTHLY_LIMIT caps new address lookups at
+  1,000/month by default. BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE defaults to UTC.
   Each truck context refreshes after 90 minutes AND one straight-line mile from
   the last successful route origin. Skipped polls never reset either baseline.
   Cached GPS gates tracking calls; the tracking origin is checked again before
   routing. Load/stop/destination-coordinate/truck-context changes bypass both gates
   on the next minute pass and take queue priority. Failed attempts back off five
-  minutes. Old truck-route caches establish a DRIVE baseline once.
-  `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
+  minutes. Car-route estimates and geometry expire on read. The next eligible pass
+  calculates truck routes even for unchanged positions.
   Stale GPS displays yellow last-known miles without diagnostic hover notes, including
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
@@ -4041,7 +4040,7 @@ Status Board database tests verify the production payroll coverage check.
 
 Status Board missing automatic ETA offers an editor-only retry button. The context-fenced POST /driver-board/eta-retry/{driverId} runs a targeted calculation immediately, preserves provider budgets/backoff and uses a five-second manual double-click guard. Busy calculations return an error rather than queueing. See docs/integrations/STATUS_BOARD_AUTOMATION.md and frontend/scripts/test-board-eta-retry.mjs.
 
-TomTom HTTP400 NO_ROUTE_FOUND permits one separately budgeted Google coordinate fallback. Other errors do not switch providers, and paid TomTom never enables paid Google. Provider error bodies remain private; boardroutes tests cover fallback eligibility and counting.
+When TomTom cannot route a truck through an itinerary, Status Board makes one separately counted attempt for the active stop with the same VRC 791 profile. Provider error bodies remain private. The boardroutes tests cover retry eligibility and request accounting.
 
 READY location uses migration 207's separate TomTom reverse-geocoded Five ELD
 address cache, with existing manual destinations taking precedence. READY hides

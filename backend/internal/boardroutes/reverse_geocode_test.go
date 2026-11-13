@@ -16,8 +16,8 @@ type reverseBudget struct {
 	err   error
 }
 
-func (b *reverseBudget) Reserve(context.Context, Options) (string, error) {
-	return "", errors.New("must not reserve routing")
+func (b *reverseBudget) Reserve(context.Context, Options) error {
+	return errors.New("must not reserve routing")
 }
 func (b *reverseBudget) ReserveReverseGeocode(context.Context, Options) error {
 	b.calls++

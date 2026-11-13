@@ -136,79 +136,62 @@ load-state JSON and keyed by load and stop; switching stops does not copy a time
 to another stop. The input accepts up to 80 characters on one line so dispatchers
 can enter the local time and day in their own shorthand (for example, `14:00 MON`).
 
-## Budgeted TomTom and Google car-route estimates
+## Budgeted TomTom truck routes
 
-Default off. No routing or speed-tracking calls are made until enabled.
-The November 4 policy uses TomTom first up to 20,000 monthly attempts, then
-Google Essentials up to 10,000. After both allowances, the explicitly configured
-paid provider continues routing. Production selects TomTom: verified standard
-overage pricing is $1/1,000 versus Google's $5/1,000. Prices are operator-verified,
-not scraped at runtime; recheck account rates before changing the paid provider.
-Sources: https://docs.tomtom.com/pricing and
-https://developers.google.com/maps/billing-and-pricing/pricing.
+Routing is off by default. When enabled, the board uses TomTom Calculate Route
+with live traffic and the commercial truck profile for Vehicle Reference Code
+791. The NYS Thruway class specifies five axles and a single trailer over 48 ft
+and up to 53 ft. The routing profile models a 53 ft WB-67 semitrailer and uses
+73 ft 6 in overall length, 8 ft 6 in width, 13 ft 6 in height and 80,000 lb gross
+weight. Height and gross weight are profile assumptions. TomTom receives the
+whole combination's dimensions in meters and gross weight in kilograms
+(22.4028 m long, 2.5908 m wide, 4.1148 m high and 36,287 kg).
 
-Google uses DRIVE with TRAFFIC_UNAWARE and duration/distance only. TomTom uses
-Calculate Route with car, traffic=true, departAt=now, fastest, summaryOnly and no
-alternatives. Neither requests truck restrictions or toll prices. Stored travel
-assumptions identify the provider and traffic mode. Never put keys in browser variables.
+Sources include the [NYS Thruway VRC chart](https://www.thruway.ny.gov/sites/default/files/2025-07/ta-w68162.pdf),
+[FHWA WB-67 dimensions](https://ops.fhwa.dot.gov/freight/infrastructure/truck_parking/docs/Truck_Parking_Development_Handbook.pdf),
+[NYSDOT vehicle size and weight limits](https://www.dot.ny.gov/main/business-center/contractors/construction-division/construction-repository/MURK1A_CAM.pdf)
+and the [TomTom Calculate Route reference](https://docs.tomtom.com/routing-api/documentation/tomtom-maps/v1/calculate-route).
+
+TomTom uses the fastest route with departure set to now. The active stop
+supplies ETA and mileage, while later legs supply map geometry. If TomTom
+returns `NO_ROUTE_FOUND` for an itinerary or marks part of it unavailable
+for trucks, the client can make one separately counted request for the active
+stop alone using the same profile. If the active stop is unreachable, the
+board shows the estimate as unavailable. Provider response bodies stay private.
 
 Server environment:
 
 ```dotenv
 BOARD_ROUTES_ENABLED=false
-BOARD_ROUTES_API_KEY=...
 TOMTOM_ROUTING_API_KEY=...
 BOARD_ROUTES_ACCESS_VERIFIED=true
 BOARD_ROUTES_OPERATIONS_VERIFIED=true
 BOARD_ROUTES_REQUESTS_PER_MINUTE=30
 BOARD_ROUTES_TOMTOM_MONTHLY_FREE=20000
-BOARD_ROUTES_GOOGLE_MONTHLY_FREE=10000
 BOARD_ROUTES_PAID_PROVIDER=tomtom
 BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE=UTC
+BOARD_ADDRESS_GEOCODE_MONTHLY_LIMIT=1000
 FIVE_ELD_SPEED_VERIFIED=true
 FIVE_ELD_SPEED_UNIT=mph
 ```
 
-GOOGLE_ROUTING_API_TOKEN is also accepted when BOARD_ROUTES_API_KEY is empty.
-Adding either key alone does not activate the worker; verification flags, existing
-Five ELD configuration and verified mph/kph speed semantics remain required.
-Flags are operator attestations, not an API-access test. Legacy
-BOARD_ROUTES_STANDARD_SEMI and BOARD_ROUTES_PROFILES_FILE settings are ignored;
-car estimates do not require truck profiles. Keep real keys out of commits,
-including tracked development environment files.
+Verify the TomTom key has truck routing and Geocoding API access before enabling
+automatic ETA. Keep credentials in the service environment. Five ELD and the
+access, operations and speed verification flags remain required. Routing uses
+the TomTom allowance. The paid provider setting accepts `off` (default) or
+`tomtom`. The previous Google key and monthly allowance settings are retired.
 
-Migration 197 adds board_route_usage, keyed by provider and billing month, with
-requests, paid_requests and last_attempt_at. It is unrelated to payroll. A separate
-transaction advisory lock serializes provider selection and commits each attempt
-before HTTP. Restarts, multiple workers, changed destinations and failed/unknown
-responses cannot bypass counting. No failed attempts are refunded. Only an explicit
-TomTom HTTP 400
-`NO_ROUTE_FOUND` response permits one Google coordinate fallback, with a separate
-budget reservation and the same pacing. Other errors do not switch providers.
-Database failure stops routing. Redirects are disabled; TomTom GETs use
-fresh connections to prevent automatic replay after a reused connection fails.
-
-A TomTom no-route fallback uses the existing Google allowance, or paid Google
-only when Google is already the configured paid provider. Paid TomTom never
-authorizes paid Google. If no Google key or allowance is available, the board
-reports that no route was found rather than making an unmetered request. Provider
-error bodies are not exposed: recognized codes map to fixed safe messages.
-The original GPS freshness, movement and selected-context checks still apply.
-
-
-Google months use America/Los_Angeles. TomTom defaults to UTC; configure its actual
-account billing timezone if different. New month rows start at zero, retaining
-earlier counters. Counters cover this worker only. Before activation, reconcile
-existing same-SKU account usage into the current month rows, or lower the free
-thresholds to reserve that usage. Previous Google traffic-aware Pro calls use a
-different SKU from the new Essentials requests. Failed attempts are conservatively
-counted even when the provider does not bill them.
-
-Free thresholds can be lowered, including zero, but not raised above the published
-allowances. A missing key excludes that provider; a configured paid provider must
-have a key. BOARD_ROUTES_PAID_PROVIDER defaults to off (hard stop after free usage);
-tomtom or google explicitly permits paid continuation. Production uses tomtom per
-operator instruction. Provider-side billing/prepaid balance must permit overage.
+Migration 197 records every request attempt in `board_route_usage` before HTTP.
+Migration 217 enables a separate `tomtom_geocode` counter for custom addresses.
+The counters use TomTom's account billing timezone (UTC by default). Existing
+routing usage stays on the same monthly counter. Reconcile other same-SKU
+account usage against the configured routing allowance before activation.
+Destination geocoding has a hard cap of 1,000 attempts per month by default.
+Lower the cap with `BOARD_ADDRESS_GEOCODE_MONTHLY_LIMIT`, or set it to zero to
+disable new destination lookups. Geocoding and routing have separate counters
+and share the client request pacing. A failed accounting transaction stops the
+request. Failed HTTP calls still consume their reservation. TomTom requests
+disable redirects and automatic GET replay.
 
 Read-only operator usage query:
 
@@ -239,15 +222,15 @@ stop's DataTruck appointment and manual pickup/delivery time. The source-stop
 arrival marker is suspended during the override. Clearing the address restores
 the selected stop as the routing destination.
 
-Custom addresses use a Google Routes address waypoint under the existing Google
-allowance. Once that allowance is exhausted, paid custom routes require
-`BOARD_ROUTES_PAID_PROVIDER=google`. Partial or unmatched addresses produce
-an address correction message and wait for a changed routing context before
-retrying. Custom address ETA is shown in New York time. Fresh movement of at
-least one mile can immediately replace a
-bootstrapped stale-position distance. Failed attempts retain a five-minute
-retry fence. Migration from old truck-route caches establishes a new DRIVE
-baseline once; no database migration is needed.
+Custom addresses use [TomTom Geocoding](https://docs.tomtom.com/geocoding-api/documentation/tomtom-maps/v1/geocode)
+to resolve a complete, unambiguous point address before calculating a truck
+route. The coordinates are cached for the current selection and reused on
+refresh. Partial or unmatched addresses show an address correction message and
+wait for an edit or manual retry. Custom address ETA is shown in New York time.
+Fresh movement of at least one mile can immediately replace a bootstrapped
+stale-position distance. Failed attempts retain a five-minute retry fence.
+Cached car ETA, distance and geometry expire immediately on read and the next
+eligible worker pass establishes the truck profile without waiting for movement.
 
 The worker has a forty-second run budget. Requests remain serial and globally
 paced per active worker (default 30/minute, configurable 1-120), with fifteen-second
@@ -300,11 +283,10 @@ node scripts/test-investors-e2e.mjs --board-only
 ```
 
 Monitor board-automation worker errors, last observation/sync times, profile
-expirations, Google quota/billing dashboards and a representative sample of
+expirations, TomTom quota and billing dashboards and a representative sample of
 driver-confirmed arrivals. Do not exercise mutations against production for tests.
 Provider references: https://fiveeld.com/api-docs/,
-https://apidocs.datatruck.io/api-reference/endpoint/get_loads_list,
-https://developers.google.com/maps/documentation/routes/lvr.
+https://apidocs.datatruck.io/api-reference/endpoint/get_loads_list.
 
 Migration 197 requires the matching deploy helper before installation. It stops
 writers for the routing usage classification and rejects rollback to binaries
