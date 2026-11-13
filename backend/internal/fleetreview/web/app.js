@@ -35,15 +35,16 @@ function differences(r){const a=local(r),b=remote(r),v=r.values,d=[];
  return [...new Set(d)];
 }
 function profileResult(r){return state.batch?.state==='complete'?profileRows.get(r.localId):null}
-function status(r){const result=profileResult(r);if(result)return result.review?.length?'red':'green';if(r.action==='defer')return 'amber';if(!r.reviewed)return 'red';if(!differences(r).length)return 'green';return state.batch?'red':'amber'}
-function reviewLabel(r){const result=profileResult(r);if(result)return result.review?.length?'Needs review':result.changes?.length?'Applied':'Verified matching';if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
+function status(r){const result=profileResult(r);if(result)return result.deferred?'amber':result.review?.length?'red':'green';if(r.action==='defer')return 'amber';if(!r.reviewed)return 'red';if(!differences(r).length)return 'green';return state.batch?'red':'amber'}
+function reviewLabel(r){const result=profileResult(r);if(result)return result.deferred?'Deferred':result.review?.length?'Needs review':result.changes?.length?'Applied':'Verified matching';if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
 function reviewProgress(rows){const total=rows.length,deferred=rows.filter(r=>r.action==='defer').length,reviewed=rows.filter(r=>r.reviewed&&r.action!=='defer').length,done=reviewed+deferred;return {total,deferred,reviewed,done,remaining:total-done,percent:total?Math.floor(done*100/total):0}}
 function profileProgress(rows){
  const results=rows.map(profileResult);
  const done=results.filter(result=>result&&!result.review?.length).length;
+ const deferred=results.filter(result=>result?.deferred).length;
  const partial=results.filter(result=>result?.changes?.length&&result.review?.length).length;
  const total=rows.length;
- return {total,done,partial,remaining:total-done,percent:total?Math.floor(done*100/total):0};
+ return {total,done,deferred,partial,remaining:total-done,percent:total?Math.floor(done*100/total):0};
 }
 function fieldDifferent(r,key,av,bv){
  if(['coverageDecision','coverageEvidence','reconcileCrew'].includes(key))return false;
@@ -100,7 +101,7 @@ function render(){
   const fleetRows=state.rows.filter(row=>row.kind===kind);
   const progress=completedProfile?profileProgress(fleetRows):reviewProgress(fleetRows);
   const description=completedProfile
-   ? progress.done+' of '+progress.total+' profiles complete ('+progress.percent+'%). '+progress.remaining+' need review, including '+progress.partial+' with some changes applied.'
+   ? progress.done+' of '+progress.total+' profiles handled ('+progress.percent+'%). '+progress.deferred+' deferred. '+progress.remaining+' need review, including '+progress.partial+' with some changes applied.'
    : progress.done+' of '+progress.total+' reviewed or deferred ('+progress.percent+'%). '+progress.reviewed+' reviewed, '+progress.deferred+' deferred, '+progress.remaining+' remaining.';
   const bar=$('#'+kind+'-progress');
   bar.max=progress.total||1;
@@ -114,10 +115,10 @@ function render(){
  const rows=page==='review'?state.rows:state.rows.filter(r=>r.kind===page);$('#stat-total').textContent=rows.length;for(const color of ['red','amber','green'])$('#stat-'+color).textContent=rows.filter(r=>status(r)===color).length;
  $('#list-view').hidden=page==='review';$('#final-view').hidden=page!=='review';$('#record-heading').textContent=page==='truck'?'Truck':'Driver';$('#refresh').disabled=!!state.batch;
  const batch=state.batch;$('#batch-notice').hidden=!batch;if(batch)$('#batch-notice').textContent=batch.state==='complete'?'Batch confirmed in both databases. Review remaining coverage, safety and deferred records below. Live synchronization is still off.':batch.state==='applying'?'Applying the saved batch. You can leave this page; the server keeps the batch and receipts.':'Batch needs attention: '+batch.error;
- const q=norm($('#search').value),f=$('#filter').value,visible=rows.filter(r=>{const a=local(r),b=remote(r);return (!q||norm([a.name,a.unit,a.vin,b.name,b.unit,b.vin,r.note].join(' ')).includes(q))&&(f==='all'||f==='defer'&&r.action==='defer'||f===status(r))});$('#list-count').textContent=visible.length+' records';const body=$('#rows');body.replaceChildren();
+ const q=norm($('#search').value),f=$('#filter').value,visible=rows.filter(r=>{const a=local(r),b=remote(r);return (!q||norm([a.name,a.unit,a.vin,b.name,b.unit,b.vin,r.note].join(' ')).includes(q))&&(f==='all'||f==='defer'&&reviewLabel(r)==='Deferred'||f===status(r))});$('#list-count').textContent=visible.length+' records';const body=$('#rows');body.replaceChildren();
  for(const r of visible){const a=local(r),b=remote(r),color=status(r),tr=el('tr',undefined,'row-'+color);const name=el('td',a.name||a.unit||r.localId);name.append(el('small',r.kind==='truck'?(a.vin||'VIN missing'):(a.status||'Unknown status')));tr.append(name);
   const matched=el('td',b.name||b.unit||(r.action==='create'?'Create new record':'No match selected'));if(b.id)matched.append(el('small',r.kind==='truck'?b.vin:b.status));tr.append(matched);
-  const result=profileResult(r),diff=result?(result.review||[]):differences(r);tr.append(el('td',diff.length?diff.slice(0,3).join(' Â· ')+(diff.length>3?' +'+(diff.length-3):''):(result?.changes?.length?'Batch changes applied':'Values agree')));
+  const result=profileResult(r),diff=result?(result.deferred?[result.deferred]:(result.review||[])):differences(r);tr.append(el('td',diff.length?diff.slice(0,3).join(' Â· ')+(diff.length>3?' +'+(diff.length-3):''):(result?.changes?.length?'Batch changes applied':'Values agree')));
   const badge=el('td');badge.append(el('span',reviewLabel(r),'badge '+color));tr.append(badge);const action=el('td'),button=el('button',state.batch?'View':'Review','quiet');button.addEventListener('click',()=>openEditor(r));action.append(button);tr.append(action);body.append(tr)
  }
  if(!visible.length){const tr=el('tr'),td=el('td','No records match this filter.');td.colSpan=5;tr.append(td);body.append(tr)}
@@ -144,6 +145,9 @@ function renderProfile(){
  $('#profile-before').textContent=complete?'Before':'Current';
  $('#profile-after').textContent=complete?'Applied value':'Proposed';
  const versionMatches=profilePreview.version===state.version;
+ const deferred=plan.rows.filter(row=>row.deferred).length;
+ $('#profile-deferred-summary').hidden=deferred===0;
+ $('#profile-deferred-summary').textContent=deferred+' historical drivers deferred.';
  $('#profile-summary').textContent=complete
   ? 'Applied changes to '+plan.drivers+' drivers and '+plan.trucks+' trucks. '+plan.rows.filter(row=>row.review?.length).length+' records have items left for review. Completed '+new Date(state.batch.finished).toLocaleString()+'.'
   : plan.drivers+' drivers and '+plan.trucks+' trucks with proposed changes. '+plan.review+' records have items to review. '+plan.matching+' already match. Previewed '+new Date(profilePreview.capturedAt).toLocaleString()+'.'+(profilePreview.hash&&!versionMatches?' Generate a fresh preview before applying.':'');
@@ -153,7 +157,7 @@ function renderProfile(){
   const trucks=profileProgress(state.rows.filter(row=>row.kind==='truck'));
   const drivers=profileProgress(state.rows.filter(row=>row.kind==='driver'));
   const coverage=plan.rows.filter(row=>row.changes?.some(change=>change.field==='coverageHold'&&change.after==='true')).length;
-  progress.textContent='Profiles complete in this batch: '+trucks.done+'/'+trucks.total+' trucks and '+drivers.done+'/'+drivers.total+' drivers. Of the profiles still flagged, '+trucks.partial+' trucks and '+drivers.partial+' drivers received some updates. '+coverage+' trucks were flagged separately for FleetScope coverage review.';
+  progress.textContent='Profiles handled in this batch: '+trucks.done+'/'+trucks.total+' trucks and '+drivers.done+'/'+drivers.total+' drivers. Of the profiles still flagged, '+trucks.partial+' trucks and '+drivers.partial+' drivers received some updates. '+coverage+' trucks were flagged separately for FleetScope coverage review.';
  }
  const rows=$('#profile-rows');
  rows.replaceChildren();
@@ -161,11 +165,17 @@ function renderProfile(){
  for(const row of plan.rows){
   const changes=row.changes||[],review=[...(row.review||[])];
   if(complete&&changes.some(change=>change.field==='coverageHold'&&change.after==='true'))review.push('FleetScope coverage review');
-  if(filter==='changes'&&!changes.length||filter==='review'&&!review.length)continue;
+  if(filter==='changes'&&!changes.length||filter==='review'&&!review.length||filter==='deferred'&&!row.deferred)continue;
   const label=(row.kind==='driver'?'Driver · ':'Truck · ')+row.label;
-  for(const change of filter==='review' ? [] : changes){
+  for(const change of filter==='review'||filter==='deferred' ? [] : changes){
    const tr=el('tr');
    for(const value of [label,change.system,profileLabels[change.field]||change.field,profileValue(change.field,change.before),profileValue(change.field,change.after)])tr.append(el('td',value));
+   rows.append(tr);
+  }
+  if(row.deferred){
+   const tr=el('tr'),detail=el('td',row.deferred);
+   detail.colSpan=3;
+   tr.append(el('td',label),el('td','Deferred'),detail);
    rows.append(tr);
   }
   if(review.length){

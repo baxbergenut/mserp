@@ -265,7 +265,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 					ids = append(ids, record["id"])
 				}
 			}
-			response["profile"] = map[string]any{"plan": profile.Plan, "capturedAt": s.state.Batch.Started, "sourceIds": ids}
+			response["profile"] = map[string]any{"plan": profile.Plan.forDisplay(), "capturedAt": s.state.Batch.Started, "sourceIds": ids}
 			if s.state.Batch.State == "complete" {
 				// Include records added after the manual review snapshot.
 				existing := make(map[string]bool, len(view.Rows))
@@ -414,7 +414,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/profile-preview":
 		if s.state.Batch != nil {
 			if s.state.Profile != nil {
-				jsonOut(w, 200, map[string]any{"plan": s.state.Profile.Plan, "capturedAt": s.state.Batch.Started})
+				jsonOut(w, 200, map[string]any{"plan": s.state.Profile.Plan.forDisplay(), "capturedAt": s.state.Batch.Started})
 			} else {
 				fail(w, 409, "Finish or recover the frozen batch before previewing another")
 			}

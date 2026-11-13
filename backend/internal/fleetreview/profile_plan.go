@@ -18,6 +18,7 @@ type profileChange struct {
 }
 
 type profileRow struct {
+	Deferred string          `json:"deferred,omitempty"`
 	Kind     string          `json:"kind"`
 	Label    string          `json:"label"`
 	LocalID  string          `json:"localId,omitempty"`
@@ -25,6 +26,8 @@ type profileRow struct {
 	Changes  []profileChange `json:"changes,omitempty"`
 	Review   []string        `json:"review,omitempty"`
 }
+
+const historicalDriverWithoutMatch = "Historical driver has no verified FleetScope match"
 
 type profilePlan struct {
 	Rows     []profileRow `json:"rows"`
@@ -166,7 +169,7 @@ func buildProfilePlan(saved State, source, receiver Snapshot) profilePlan {
 			case draft.Reviewed && draft.Action == "create":
 				r.Review = append(r.Review, "Review creation separately")
 			case kind == "driver" && a["status"] == "terminated" && b == nil:
-				r.Review = append(r.Review, "Historical driver has no verified FleetScope match")
+				r.Deferred = historicalDriverWithoutMatch
 			case b == nil || claims[b["id"]] != 1 || (draft.Reviewed && draft.Action == "update" && draft.RemoteID != b["id"]):
 				r.Review = append(r.Review, "Confirm a unique FleetScope identity")
 			default:
@@ -214,11 +217,27 @@ func (p *profilePlan) add(r profileRow) {
 			p.Trucks++
 		}
 	}
-	if len(r.Changes)+len(r.Review) == 0 {
+	if r.Deferred == "" && len(r.Changes)+len(r.Review) == 0 {
 		p.Matching++
 		return
 	}
 	p.Rows = append(p.Rows, r)
+}
+
+// Display historical deferrals in older batches while preserving the stored
+// plan and its receipt hash.
+func (p profilePlan) forDisplay() profilePlan {
+	p.Rows = slices.Clone(p.Rows)
+	for i, row := range p.Rows {
+		if row.Kind == "driver" && row.LocalID != "" && row.RemoteID == "" && len(row.Changes) == 0 &&
+			len(row.Review) == 1 && row.Review[0] == historicalDriverWithoutMatch {
+			row.Deferred = row.Review[0]
+			row.Review = nil
+			p.Rows[i] = row
+			p.Review--
+		}
+	}
+	return p
 }
 
 func validDriverField(field, value string) bool {
