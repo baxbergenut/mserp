@@ -86,7 +86,11 @@ async function load(){
  if(data.live){
   state.source=data.live.source;
   state.receiver=data.live.receiver;
-  for(const r of state.rows)r.remoteId=data.live.links[r.id]||profileRows.get(r.localId)?.remoteId||r.remoteId;
+  for(const r of state.rows){
+   const result=profileRows.get(r.localId);
+   r.remoteId=data.live.links[r.id]||result?.remoteId||r.remoteId;
+   if(r.action==='defer'&&result?.remoteId&&!result.deferred)r.action='update';
+  }
  }
  $('#workspace').hidden=false;
  $('#login').hidden=true;
@@ -147,7 +151,7 @@ function renderProfile(){
  const versionMatches=profilePreview.version===state.version;
  const deferred=plan.rows.filter(row=>row.deferred).length;
  $('#profile-deferred-summary').hidden=deferred===0;
- $('#profile-deferred-summary').textContent=deferred+' historical drivers deferred.';
+ $('#profile-deferred-summary').textContent=deferred+' records deferred.';
  $('#profile-summary').textContent=complete
   ? 'Applied changes to '+plan.drivers+' drivers and '+plan.trucks+' trucks. '+plan.rows.filter(row=>row.review?.length).length+' records have items left for review. Completed '+new Date(state.batch.finished).toLocaleString()+'.'
   : plan.drivers+' drivers and '+plan.trucks+' trucks with proposed changes. '+plan.review+' records have items to review. '+plan.matching+' already match. Previewed '+new Date(profilePreview.capturedAt).toLocaleString()+'.'+(profilePreview.hash&&!versionMatches?' Generate a fresh preview before applying.':'');

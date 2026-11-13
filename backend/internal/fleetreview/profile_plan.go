@@ -433,6 +433,66 @@ func (p *profilePlan) resolveTruckStatusCrewConflicts(source, receiver Snapshot)
 	}
 }
 
+// Follow-up corrections use live evidence and leave the original batch receipts intact.
+func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, links Record) {
+	for i, row := range p.Rows {
+		if row.Kind != "truck" || len(row.Review) == 0 {
+			continue
+		}
+		a := find(source.Trucks, row.LocalID)
+		b := find(receiver.Trucks, row.RemoteID)
+		if row.RemoteID == "" && a["unit"] == "042" && validVIN(a["vin"]) {
+			matches := 0
+			for _, candidate := range receiver.Trucks {
+				if candidate["unit"] == a["unit"] && strings.EqualFold(candidate["vin"], a["vin"]) {
+					b = candidate
+					matches++
+				}
+			}
+			if matches != 1 {
+				b = nil
+			}
+		}
+		var owner map[string]any
+		_ = json.Unmarshal([]byte(b["ownerSnapshot"]), &owner)
+		exactTruck := validVIN(a["vin"]) && strings.EqualFold(a["vin"], b["vin"])
+		ownerMatches := exactTruck && a["ownerId"] != "" && a["ownerId"] == owner["mserpOwnerId"] &&
+			a["ownerKind"] == b["ownerKind"] && a["ownerKind"] == owner["kind"] &&
+			nullable(a["ownerDriverRef"]) == owner["mserpOwnerDriverId"] && nullable(a["ownerDate"]) == owner["effectiveDate"]
+		registrationMatches := exactTruck && a["plate"] != "" && a["plate"] == b["plate"] && a["plateState"] == b["plateState"]
+		reconciled042 := ownerMatches && a["unit"] == "042" && a["unit"] == b["unit"] &&
+			a["status"] == b["operationalStatus"] && a["active"] == b["operationalActive"] && registrationMatches
+		retain088Crew := ownerMatches && a["unit"] == "088" && a["status"] == "maintenance" &&
+			b["status"] == "active" && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
+			a["primaryId"] != "" && b["primaryId"] != "" && links["driver:"+a["primaryId"]] == b["primaryId"] &&
+			((a["secondaryId"] == "" && b["secondaryId"] == "") ||
+				(a["secondaryId"] != "" && b["secondaryId"] != "" && links["driver:"+a["secondaryId"]] == b["secondaryId"]))
+		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
+			switch reason {
+			case truckStatusCrewConflict:
+				return retain088Crew
+			case "Confirm the FleetScope driver-owner identity", "Review existing FleetScope lease against Clustie ownership":
+				return ownerMatches
+			case "Conflicting truck plate", "Verify truck registration":
+				return registrationMatches
+			case "Previously deferred":
+				if reconciled042 {
+					row.RemoteID = b["id"]
+				} else {
+					row.Deferred = reason
+				}
+				return true
+			default:
+				return false
+			}
+		})
+		if len(row.Review) == 0 {
+			p.Review--
+		}
+		p.Rows[i] = row
+	}
+}
+
 func fleetScopeTruckStatus(a, b Record) string {
 	switch {
 	case b["status"] == "out_of_service":

@@ -231,6 +231,24 @@ func (s *Server) displayProfilePlan() profilePlan {
 	return plan
 }
 
+func (s *Server) readBatchIdentityLinks(ctx context.Context) (Record, error) {
+	var raw []byte
+	if err := s.db.Source.QueryRow(ctx, "SELECT identity_links FROM fleet_review.receipts WHERE batch_id=$1 AND company_id=$2", s.state.Batch.ID, s.db.CompanyID).Scan(&raw); err != nil {
+		return nil, err
+	}
+	links := Record{}
+	if err := json.Unmarshal(raw, &links); err != nil {
+		return nil, err
+	}
+	for localID, remoteID := range s.cfg.ConfirmedDriverIdentities[s.state.Batch.ID] {
+		key := "driver:" + localID
+		if links[key] == "" {
+			links[key] = remoteID
+		}
+	}
+	return links, nil
+}
+
 func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -297,13 +315,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		}
 		if s.state.Batch != nil && s.state.Batch.State == "complete" {
 			a, b, err := s.db.Snapshot(ctx)
-			var links map[string]string
-			var raw []byte
+			var links Record
 			if err == nil {
-				err = s.db.Source.QueryRow(ctx, `SELECT identity_links FROM fleet_review.receipts WHERE batch_id=$1 AND company_id=$2`, s.state.Batch.ID, s.db.CompanyID).Scan(&raw)
-			}
-			if err == nil {
-				err = json.Unmarshal(raw, &links)
+				links, err = s.readBatchIdentityLinks(ctx)
 			}
 			if err != nil {
 				fail(w, 503, "Batch receipts are saved, but current readback is unavailable. Retry before treating records as matching.")
@@ -312,6 +326,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			if profileResponse != nil {
 				displayPlan.resolveTruckMakeConflicts(a, b)
 				displayPlan.resolveTruckModelAndUnitConflicts(a, b)
+				displayPlan.resolveTruckReviewDecisions(a, b, links)
 				displayPlan.resolveTruckStatusCrewConflicts(a, b)
 				profileResponse["plan"] = displayPlan
 			}
@@ -443,6 +458,12 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 					}
 					plan.resolveTruckMakeConflicts(a, b)
 					plan.resolveTruckModelAndUnitConflicts(a, b)
+					links, err := s.readBatchIdentityLinks(ctx)
+					if err != nil {
+						fail(w, 503, "Batch receipts are saved, but current readback is unavailable")
+						return
+					}
+					plan.resolveTruckReviewDecisions(a, b, links)
 					plan.resolveTruckStatusCrewConflicts(a, b)
 				}
 				jsonOut(w, 200, map[string]any{"plan": plan, "capturedAt": s.state.Batch.Started})
