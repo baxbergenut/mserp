@@ -76,6 +76,9 @@ class RoutingTests(unittest.TestCase):
     def test_connection_overrides_are_rejected(self):
         for option in ['--dbname=other', '--host=other', '-h', '-hother', '-U', '-Uother', '--username=postgres', 'otherdb', 'postgres://other/db']:
             with self.assertRaises(ValueError): routing.command(['psql', option], '/admin')
+        # pg_dump -c/-v are flags, unlike psql's command/variable options.
+        for flag in ['-c', '-v']:
+            with self.assertRaises(ValueError): routing.command(['pg_dump', flag, '--dbname=other'], '/admin')
 
 
 if __name__ == '__main__':
