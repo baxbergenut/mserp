@@ -304,6 +304,7 @@ try {
   await expect(page.getByLabel('Scroll Driver 1 · Driver address', { exact: true })).toHaveText('—');
   const sheetStatuses = ['READY', 'REST', 'COVERED', 'DISPATCHED', 'ENROUTE', 'RESERVED', 'VACATION', 'DEADHEAD', 'HOME', 'SHOP', 'STOP', 'In the YARD', 'Hold for Load', 'Left', 'Family issue', 'Issue with PU/Del', 'At PU', 'Health issue', 'At DEL', 'HOME (YARD)', 'NEW DRIVER', '34 RESET', 'ACCIDENT'];
   const status = page.getByLabel('Scroll Driver 0 · Status', { exact: true });
+  const destination = page.getByLabel('Scroll Driver 0 · Destination', { exact: true });
   expect(await status.locator('option').allTextContents()).toEqual(['—', ...sheetStatuses.map(s => s.toLowerCase().replace(/[a-z]/, c => c.toUpperCase()))]);
   const colors = { READY: [0, 0, 0], REST: [217, 217, 217], COVERED: [255, 255, 0], DISPATCHED: [251, 188, 4], ENROUTE: [61, 133, 198], RESERVED: [183, 225, 205], VACATION: [224, 102, 102], HOME: [255, 0, 0], SHOP: [255, 153, 0], STOP: [153, 0, 0], 'HOME (YARD)': [255, 0, 0] };
   for (const value of sheetStatuses) {
@@ -318,11 +319,10 @@ try {
     if (["SHOP","STOP","ACCIDENT"].includes(value)) { await page.getByLabel("Truck status reason",{exact:true}).fill("Reported equipment problem"); await page.getByRole("button",{name:"Apply status",exact:true}).click(); }
     await expect.poll(() => entries[0].status).toBe(value);
     await expect.poll(() => page.getByLabel('Scroll Driver 0 · Advance load', { exact: true }).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await expect(destination).toBeEditable();
     if (['HOME', 'HOME (YARD)', 'VACATION'].includes(value)) {
-      await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Louisville, KY');
+      await expect(destination).toHaveValue('Louisville, KY');
       expect(entries[0].destination).toBe(''); // Displaying home never writes the dispatch destination.
-    } else {
-      await expect(page.getByLabel('Scroll Driver 0 · Destination', { exact: true })).toBeVisible();
     }
     const cell = status.locator('xpath=ancestor::td');
     await expect(cell).toHaveCSS('background-color', `rgb(${(colors[value] ?? [255, 255, 255]).join(', ')})`);
@@ -335,7 +335,7 @@ try {
   loads.sourceDestination = 'Dallas, Texas, 75236';
   entries[0].status = 'VACATION';
   await page.reload();
-  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Louisville, KY');
+  await expect(destination).toHaveValue('Louisville, KY');
   await page.locator('[data-scroll-key="driver-board"]').evaluate(area => { area.scrollLeft = area.scrollWidth; });
   await page.getByLabel('Scroll Driver 0 · Driver address', { exact: true }).click();
   await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-home-address.png') });
@@ -343,27 +343,28 @@ try {
   drivers[0].city = '';
   drivers[0].state = '';
   await page.reload();
-  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('—');
+  await expect(destination).toHaveValue('');
+  await expect(destination).toHaveAttribute('title', 'Home address not set');
   drivers[0].state = 'KY';
   await page.reload();
   await expect(page.getByLabel('Scroll Driver 0 · Driver address', { exact: true })).toHaveText('KY');
-  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('KY');
+  await expect(destination).toHaveValue('KY');
   drivers[0].city = 'Lexington';
   await page.reload();
-  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Lexington, KY');
+  await expect(destination).toHaveValue('Lexington, KY');
   await status.selectOption('ACCIDENT');
   await page.getByLabel('Truck status reason', { exact: true }).fill('Reported equipment problem');
   await page.getByRole('button', { name: 'Apply status', exact: true }).click();
   await expect.poll(() => entries[0].status).toBe('ACCIDENT');
-  await expect(page.getByLabel('Scroll Driver 0 · Destination', { exact: true })).toHaveValue('Dallas, TX');
+  await expect(destination).toHaveValue('Dallas, TX');
   loads.destinationSource = false;
   entries[0].destination = 'Manual dispatch destination';
   entries[0].status = 'HOME';
   await page.reload();
-  await expect(page.getByLabel('Scroll Driver 0 · Destination from home address', { exact: true })).toHaveText('Lexington, KY');
+  await expect(destination).toHaveValue('Manual dispatch destination');
   await status.selectOption('READY');
   await expect.poll(() => entries[0].status).toBe('READY');
-  await expect(page.getByLabel('Scroll Driver 0 · Destination', { exact: true })).toHaveValue('Manual dispatch destination');
+  await expect(destination).toHaveValue('Manual dispatch destination');
   entries[0].status = 'ACCIDENT';
   await page.reload();
   await page.getByRole('button', { name: 'Status filter', exact: true }).click();
