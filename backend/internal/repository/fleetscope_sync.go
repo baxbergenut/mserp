@@ -35,11 +35,17 @@ type FleetSyncDriver struct {
 	HireEventID  string `json:"hireEventId"`
 }
 type FleetSyncTruck struct {
+	Status      string                     `json:"-"`
 	Truck       fleetscope.TruckProjection `json:"truck"`
 	PrimaryID   string                     `json:"primaryId"`
 	SecondaryID string                     `json:"secondaryId"`
 	Issues      []string                   `json:"issues"`
 }
+
+func (t FleetSyncTruck) canExclude() bool {
+	return (t.PrimaryID == "" && t.SecondaryID == "") || (t.Status == "terminated" && !t.Truck.OperationalActive)
+}
+
 type FleetSyncLocal struct {
 	SourceRevision int64             `json:"sourceRevision"`
 	Week           string            `json:"week"`
@@ -120,7 +126,7 @@ func readSyncLocal(ctx context.Context, q syncQuery, company string) (FleetSyncL
 	if e != nil {
 		return v, e
 	}
-	rows, e = q.Query(ctx, `SELECT t.id::text,t.unit_number,t.vin,t.year,t.make,t.model,t.license_plate,t.license_state,t.active,CASE WHEN t.status='terminated' THEN 'available' ELSE t.status END,
+	rows, e = q.Query(ctx, `SELECT t.id::text,t.unit_number,t.vin,t.year,t.make,t.model,t.license_plate,t.license_state,t.active,t.status,CASE WHEN t.status='terminated' THEN 'available' ELSE t.status END,
  coalesce(i.id::text,''),coalesce(d.full_name,i.full_name,''),CASE WHEN i.is_company THEN 'company' WHEN i.driver_id IS NOT NULL THEN 'driver' ELSE 'investor' END,i.driver_id::text,
  (SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
  coalesce(a.driver_id::text,''),coalesce((SELECT dt.team_driver_id::text FROM driver_teams dt JOIN drivers td ON td.id=dt.team_driver_id AND td.active WHERE dt.main_driver_id=a.driver_id AND dt.start_week<=$1::date AND (dt.end_week IS NULL OR dt.end_week>$1::date) ORDER BY dt.start_week DESC LIMIT 1),'')
@@ -132,10 +138,13 @@ func readSyncLocal(ctx context.Context, q syncQuery, company string) (FleetSyncL
 	for rows.Next() {
 		var t FleetSyncTruck
 		p := &t.Truck
-		e = rows.Scan(&p.MSERPTruckID, &p.UnitNumber, &p.VIN, &p.Year, &p.Make, &p.Model, &p.LicensePlate, &p.LicenseState, &p.OperationalActive, &p.OperationalStatus, &p.Ownership.MSERPOwnerID, &p.Ownership.DisplayName, &p.Ownership.Kind, &p.Ownership.MSERPOwnerDriverID, &p.Ownership.EffectiveDate, &t.PrimaryID, &t.SecondaryID)
+		e = rows.Scan(&p.MSERPTruckID, &p.UnitNumber, &p.VIN, &p.Year, &p.Make, &p.Model, &p.LicensePlate, &p.LicenseState, &p.OperationalActive, &t.Status, &p.OperationalStatus, &p.Ownership.MSERPOwnerID, &p.Ownership.DisplayName, &p.Ownership.Kind, &p.Ownership.MSERPOwnerDriverID, &p.Ownership.EffectiveDate, &t.PrimaryID, &t.SecondaryID)
 		if e != nil {
 			rows.Close()
 			return v, e
+		}
+		if p.Model != nil && strings.TrimSpace(*p.Model) == "" {
+			p.Model = nil
 		}
 		t.Issues = truckSyncIssues(*p)
 		v.Trucks = append(v.Trucks, t)
@@ -176,7 +185,7 @@ func truckSyncIssues(t fleetscope.TruckProjection) []string {
 	if t.Year == nil || *t.Year < 1900 || *t.Year > time.Now().Year()+2 {
 		r = append(r, "Valid year required")
 	}
-	for label, p := range map[string]*string{"Make": t.Make, "Model": t.Model, "Plate": t.LicensePlate, "Plate state": t.LicenseState} {
+	for label, p := range map[string]*string{"Make": t.Make, "Plate": t.LicensePlate, "Plate state": t.LicenseState} {
 		if p == nil || strings.TrimSpace(*p) == "" {
 			r = append(r, label+" required")
 		}
@@ -403,7 +412,7 @@ func (r *FleetSyncRepository) Review(ctx context.Context, in FleetSyncReviewInpu
 		if existingRemote != "" {
 			return errors.New("a linked record cannot be excluded; retire or reconcile it explicitly")
 		}
-		if truck != nil && truck.PrimaryID != "" {
+		if truck != nil && !truck.canExclude() {
 			return errors.New("an assigned truck cannot be excluded")
 		}
 		if driver != nil {

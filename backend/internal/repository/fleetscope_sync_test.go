@@ -373,3 +373,27 @@ func TestDesiredFleetScopeCrews(t *testing.T) {
 		t.Fatal("nonexistent truck accepted")
 	}
 }
+
+func TestDeferredTerminatedFleetScopeTruckRetainsClustieCrew(t *testing.T) {
+	retired := FleetSyncTruck{
+		Truck:  fleetscope.TruckProjection{MSERPTruckID: "retired"},
+		Status: "terminated", PrimaryID: "driver", SecondaryID: "co-driver",
+	}
+	local := FleetSyncLocal{Trucks: []FleetSyncTruck{retired}}
+	links := []FleetSyncLink{{Kind: "truck", LocalID: "retired", ExcludedReason: "Owner deferred"}}
+	if crews, err := desiredSyncCrews(local, links); err != nil || len(crews) != 0 {
+		t.Fatalf("deferred truck entered crew baseline: %v, %v", crews, err)
+	}
+	if local.Trucks[0].PrimaryID != "driver" || local.Trucks[0].SecondaryID != "co-driver" {
+		t.Fatal("retained Clustie crew changed")
+	}
+	local.Trucks[0].Status = "maintenance"
+	if _, err := desiredSyncCrews(local, links); err == nil {
+		t.Fatal("maintenance truck with retained crew was excluded")
+	}
+	local.Trucks[0].Status = "terminated"
+	local.Trucks[0].Truck.OperationalActive = true
+	if _, err := desiredSyncCrews(local, links); err == nil {
+		t.Fatal("reactivated truck with retained crew was excluded")
+	}
+}
