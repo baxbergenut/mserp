@@ -121,6 +121,8 @@ try{
  await expect(driverOwner).toBeChecked();
  await expect(dialog.getByRole('textbox',{name:'Truck owner',exact:true})).toHaveValue('Browser Driver');
  await dialog.getByLabel('Color',{exact:true}).fill('White');
+ await dialog.getByLabel('Truck class',{exact:true}).fill('8');
+ await dialog.getByLabel('GVWR (lb)',{exact:true}).fill('80000');
  const cabCard={name:'cab-card.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64')};
  releaseExtraction=true;
  await dialog.locator('input[type=file]').setInputFiles(cabCard);
