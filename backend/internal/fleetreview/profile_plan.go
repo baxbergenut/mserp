@@ -350,19 +350,22 @@ func planDriver(r *profileRow, a, b Record, locals, remotes, trucks []Record) {
 		}
 	case want != b["status"]:
 		if want != "active" && slices.ContainsFunc(trucks, func(t Record) bool { return t["primaryId"] == b["id"] || t["secondaryId"] == b["id"] }) {
-			r.Review = append(r.Review, "Clustie status differs and the FleetScope driver is assigned")
+			r.Review = append(r.Review, driverAssignedStatusConflict)
 		} else {
 			r.change(fleetScope, "status", b["status"], want)
 		}
 	}
 }
 
-const driverEmploymentConflict = "Review termination or rehire in the employment workflow"
+const (
+	driverEmploymentConflict     = "Review termination or rehire in the employment workflow"
+	driverAssignedStatusConflict = "Clustie status differs and the FleetScope driver is assigned"
+)
 
 func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot, links Record) {
 	for i, row := range p.Rows {
 		if row.Kind != "driver" || row.RemoteID == "" || links["driver:"+row.LocalID] != row.RemoteID ||
-			!slices.Contains(row.Review, driverEmploymentConflict) {
+			(!slices.Contains(row.Review, driverEmploymentConflict) && !slices.Contains(row.Review, driverAssignedStatusConflict)) {
 			continue
 		}
 		a, b := find(source.Drivers, row.LocalID), find(receiver.Drivers, row.RemoteID)
@@ -375,7 +378,7 @@ func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot
 			continue
 		}
 		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
-			return reason == driverEmploymentConflict
+			return reason == driverEmploymentConflict || (reason == driverAssignedStatusConflict && matchedActive)
 		})
 		if len(row.Review) == 0 {
 			p.Review--
@@ -469,7 +472,8 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 		}
 		a := find(source.Trucks, row.LocalID)
 		b := find(receiver.Trucks, row.RemoteID)
-		if slices.Contains([]string{"01 JACKISON", "7510", "2192", "9412"}, a["unit"]) &&
+		deferred101 := row.Label == "101" && row.LocalID == "2453e890-9103-43f7-80ce-0e6471c0644e"
+		if (deferred101 || slices.Contains([]string{"01 JACKISON", "7510", "2192", "9412"}, a["unit"])) &&
 			row.RemoteID == "" && len(row.Changes) == 0 && len(row.Review) == 1 && row.Review[0] == uniqueFleetScopeIdentity {
 			row.Deferred = "Deferred by owner"
 			row.Review = nil
