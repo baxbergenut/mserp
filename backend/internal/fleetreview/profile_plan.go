@@ -450,8 +450,16 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 			p.Rows[i] = row
 			continue
 		}
+		if slices.Contains([]string{"446", "7455", "54075", "103", "9580"}, a["unit"]) {
+			row.Deferred = "Deferred by owner"
+			row.Review = nil
+			p.Review--
+			p.Rows[i] = row
+			continue
+		}
+		created4243 := a["unit"] == "4243" && row.RemoteID == "" && validVIN(a["vin"])
 		approvedTruck := slices.Contains([]string{"042", "045", "097", "1027"}, a["unit"])
-		if row.RemoteID == "" && approvedTruck && validVIN(a["vin"]) {
+		if row.RemoteID == "" && (approvedTruck || created4243) && validVIN(a["vin"]) {
 			matches := 0
 			for _, candidate := range receiver.Trucks {
 				if candidate["unit"] == a["unit"] && strings.EqualFold(candidate["vin"], a["vin"]) {
@@ -484,7 +492,14 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 				reconciledTruck = reconciledTruck && b[field] != "" && links["driver:"+a[field]] == b[field]
 			}
 		}
-		retain088Crew := ownerMatches && a["unit"] == "088" && a["status"] == "maintenance" &&
+		if created4243 && ownerMatches && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
+			b["year"] == "2022" && norm(b["make"]) == "frht" && norm(b["model"]) == "cascadia" {
+			row.RemoteID = b["id"]
+			row.Review = []string{"FleetScope coverage review required before assigning crew"}
+			p.Rows[i] = row
+			continue
+		}
+		retainMaintenanceCrew := ownerMatches && slices.Contains([]string{"088", "5062", "2906", "1146"}, a["unit"]) && a["status"] == "maintenance" &&
 			b["status"] == "active" && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
 			a["primaryId"] != "" && b["primaryId"] != "" && links["driver:"+a["primaryId"]] == b["primaryId"] &&
 			((a["secondaryId"] == "" && b["secondaryId"] == "") ||
@@ -492,9 +507,13 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
 			switch reason {
 			case truckStatusCrewConflict:
-				return retain088Crew
+				return retainMaintenanceCrew
 			case "Confirm the FleetScope driver-owner identity", "Review existing FleetScope lease against Clustie ownership":
 				return ownerMatches
+			case conflictingTruckMake:
+				return exactTruck && a["unit"] == "1146" && norm(a["make"]) == norm(b["make"])
+			case "Conflicting truck color":
+				return exactTruck && a["unit"] == "1146" && norm(a["color"]) == norm(b["color"])
 			case "Conflicting truck plate", "Verify truck registration":
 				return registrationMatches
 			case "Check truck plateState":
