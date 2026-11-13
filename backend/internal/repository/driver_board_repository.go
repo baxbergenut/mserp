@@ -127,6 +127,10 @@ func driverBoardType(payType string, ownerOperator, investorTruck, ownTruck bool
 }
 
 func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (DriverBoard, error) {
+	return r.get(ctx, week, true)
+}
+
+func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, displayStopCities bool) (DriverBoard, error) {
 	result := DriverBoard{WeekStart: week.Format("2006-01-02"), Drivers: []DriverBoardDriver{}, Entries: []DriverBoardEntry{}, GrossEntries: []GrossBoardEntry{}}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -246,6 +250,11 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	result.Loads, err = readBoardLoads(ctx, tx, ids, r.loadStartDate(""), r.now())
 	if err != nil {
 		return result, err
+	}
+	if displayStopCities {
+		if err := applyBoardStopCities(ctx, tx, result.Loads); err != nil {
+			return result, err
+		}
 	}
 	for i := range result.Entries {
 		e := &result.Entries[i]

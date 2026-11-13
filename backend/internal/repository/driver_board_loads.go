@@ -24,6 +24,7 @@ var ErrBoardLoadCompleted = errors.New("a load completed in DataTruck cannot be 
 var ErrBoardGrossPlanRemoval = errors.New("remove this load from Gross Board; Gross Board plans cannot be removed from the Status Board queue")
 
 type BoardStop struct {
+	geocode        *boardStopGeocode
 	ManualStopTime string         `json:"manualStopTime,omitempty"`
 	ProviderID     int            `json:"providerId,omitempty"`
 	Latitude       *float64       `json:"latitude,omitempty"`
@@ -351,6 +352,12 @@ func boardStops(raw []byte) []BoardStop {
 		stop.ProviderID = s.ID
 		stop.Schedule = boardSchedule(s)
 		stop.Latitude, stop.Longitude = boardStopCoordinates(s)
+		if strings.TrimSpace(s.Location.City) == "" && stop.Latitude != nil && stop.Longitude != nil {
+			stop.geocode = &boardStopGeocode{state: state, postalCode: zip}
+			if stop.Location == "" {
+				stop.Location = stop.geocodeCoordinate()
+			}
+		}
 		// Only load-level appointments are known: never assign them to intermediate stops.
 		if i == firstPickup && load.PickupAppointmentTime != nil {
 			stop.Appointment = load.PickupAppointmentTime.Format(time.RFC3339)
@@ -813,6 +820,9 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 	if err != nil {
 		return BoardLoads{}, err
 	}
+	if err := applyBoardStopCities(ctx, tx, views); err != nil {
+		return BoardLoads{}, err
+	}
 	return views[id], tx.Commit(ctx)
 }
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
@@ -1158,8 +1168,12 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		s.DestinationSource = true
 		s.DestinationManual = false
 	case "manual":
+		// Seed manual mode from the same label the dispatcher saw.
 		if view.DestinationSource && view.SourceDestination != "" {
-			e.Destination = view.SourceDestination
+			if err := applyBoardStopCities(ctx, tx, views); err != nil {
+				return result, err
+			}
+			e.Destination = views[a.DriverID].SourceDestination
 		}
 		s.Current = view.Current
 		s.DestinationSource = false
@@ -1228,6 +1242,9 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	}
 	views, err = readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate, r.now())
 	if err != nil {
+		return result, err
+	}
+	if err := applyBoardStopCities(ctx, tx, views); err != nil {
 		return result, err
 	}
 	result = BoardLoadResult{Entry: saved[0], Loads: views[a.DriverID]}

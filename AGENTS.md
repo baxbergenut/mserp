@@ -4056,6 +4056,10 @@ Automatic READY locations display city and state from TomTom structured fields.
 Status Board stop labels can recover a missing DataTruck city from a trailing
 street-address locality with a matching ZIP. This display fallback preserves the
 original stop key used for saved selections, completion and manual stop times.
+Migration 216 adds the Status Board TomTom stop-locality cache. The minute worker
+checks current and queued stops with missing DataTruck cities and valid source
+coordinates under the shared reverse-geocode budget. Board snapshots display
+matching cached localities without changing source stop keys or command revisions.
 The ready-city-state-v1 context refreshes legacy full-address caches once under
 the existing budget/backoff; manual destination text stays untouched.
 
