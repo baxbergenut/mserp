@@ -209,7 +209,8 @@ Driver matches use a completed hire link, a still-valid saved identity review,
 or an exact name and unique shared contact. Trucks require an unambiguous VIN.
 The preview prefers FleetScope driver profile fields, fills missing truck
 details in either direction, and treats model as optional. Clustie supplies
-dated ownership and status. FleetScope safety restrictions, employment
+dated ownership and status. Home and Vacation represent active employment in
+FleetScope. FleetScope safety restrictions, employment
 transitions, leases and status changes that would release a crew require
 separate review. The profile submission checks the preview hash against both
 live systems, then uses the existing receipts. Its Clustie writes are limited

@@ -90,10 +90,8 @@ func validateBatch(s State) error {
 }
 func fsDriverStatus(s string) string {
 	switch s {
-	case "vacation":
-		return "on_vacation"
-	case "home":
-		return "inactive"
+	case "home", "vacation":
+		return "active"
 	}
 	return s
 }

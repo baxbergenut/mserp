@@ -11,7 +11,7 @@ const phone=v=>{const n=String(v??'').replace(/\D/g,'');return n.length===11&&n[
 const lookup=(rows,id)=>(rows||[]).find(x=>x.id===id)||{};
 const local=r=>lookup(r.kind==='driver'?state.source.drivers:state.source.trucks,r.localId);
 const remote=r=>lookup(r.kind==='driver'?state.receiver.drivers:state.receiver.trucks,r.remoteId);
-const fsStatus=s=>s==='vacation'?'on_vacation':s==='home'?'inactive':s;
+const fsStatus=s=>['home','vacation'].includes(s)?'active':s;
 function differences(r){const a=local(r),b=remote(r),v=r.values,d=[];
  if(r.action==='defer')return ['Deferred: '+(r.note||'reason required')];if(!b.id)d.push('Missing FleetScope record');
  if(r.kind==='driver'){
@@ -47,8 +47,9 @@ function profileProgress(rows){
 }
 function fieldDifferent(r,key,av,bv){
  if(['coverageDecision','coverageEvidence','reconcileCrew'].includes(key))return false;
- const compare=key==='truckClass'?v=>norm(truckClass(v)):key==='phone'?phone:key==='status'&&r.kind==='driver'?v=>norm(fsStatus(v)):norm;
+ const compare=key==='truckClass'?v=>norm(truckClass(v)):key==='phone'?phone:norm;
  const desired=r.values[key]||'';
+ if(key==='status'&&r.kind==='driver')return av!==desired||bv!==fsStatus(desired);
  const required=(r.kind==='driver'?['firstName','lastName','email','phone','status']:['unit','vin','year','make','plate','plateState','active','status','color','truckClass','gvwr']).includes(key)||(key==='terminationDate'&&r.values.status==='terminated');
  if(required&&!desired)return true;
  if(r.kind==='truck'&&['truckClass','gvwr'].includes(key))return compare(bv)!==compare(desired);
@@ -63,6 +64,17 @@ async function load(){
  if(data.profile){
   profilePreview=data.profile;
   profileRows=new Map((data.profile.sourceIds||[]).map(id=>[id,{}]));
+  if(data.live){
+   const localDrivers=new Map(data.live.source.drivers.map(driver=>[driver.id,driver]));
+   const remoteDrivers=new Map(data.live.receiver.drivers.map(driver=>[driver.id,driver]));
+   for(const row of data.profile.plan.rows){
+    const source=localDrivers.get(row.localId);
+    const target=remoteDrivers.get(row.remoteId);
+    if(row.kind==='driver'&&row.review&&['home','vacation'].includes(source?.status)&&target?.status==='active'){
+     row.review=row.review.filter(item=>item!=='Clustie status differs and the FleetScope driver is assigned');
+    }
+   }
+  }
   for(const row of data.profile.plan.rows){
    if(row.localId)profileRows.set(row.localId,row);
   }
@@ -133,7 +145,7 @@ function renderProfile(){
  $('#profile-after').textContent=complete?'Applied value':'Proposed';
  const versionMatches=profilePreview.version===state.version;
  $('#profile-summary').textContent=complete
-  ? 'Applied changes to '+plan.drivers+' drivers and '+plan.trucks+' trucks. '+plan.review+' records have items left for review. Completed '+new Date(state.batch.finished).toLocaleString()+'.'
+  ? 'Applied changes to '+plan.drivers+' drivers and '+plan.trucks+' trucks. '+plan.rows.filter(row=>row.review?.length).length+' records have items left for review. Completed '+new Date(state.batch.finished).toLocaleString()+'.'
   : plan.drivers+' drivers and '+plan.trucks+' trucks with proposed changes. '+plan.review+' records have items to review. '+plan.matching+' already match. Previewed '+new Date(profilePreview.capturedAt).toLocaleString()+'.'+(profilePreview.hash&&!versionMatches?' Generate a fresh preview before applying.':'');
  const progress=$('#profile-progress-summary');
  progress.hidden=!complete;
@@ -174,7 +186,7 @@ function option(value,text){const o=el('option',text);o.value=value;return o}
 function openEditor(row){editing=structuredClone(row);dirty=false;$('#edit-title').textContent=local(row).name||local(row).unit;$('#edit-kind').textContent='REVIEW '+row.kind.toUpperCase();$('#evidence').textContent=row.reviewed&&!state.batch?(row.action==='defer'?'Deferral saved.':status(row)==='green'?'Review saved. Both systems already match.':'Review saved — ready to apply in Final review. Saving this review has not updated either system.'):row.evidence;$('#action').value=row.action;$('#note').value=row.note||'';$('#edit-error').textContent='';const select=$('#remote-id');select.replaceChildren(option('','Select a FleetScope record'));const list=row.kind==='driver'?state.receiver.drivers:state.receiver.trucks;for(const r of [...list].sort((a,b)=>(a.name||a.unit).localeCompare(b.name||b.unit)))select.append(option(r.id,(r.name||r.unit)+' · '+(r.vin||r.status)+' · '+r.id.slice(0,8)));select.value=row.remoteId;renderFields();$('#editor').showModal()}
 function renderFields(){const r=editing,a=local(r),b=remote(r),root=$('#fields');root.replaceChildren();let owner={};try{owner=JSON.parse(b.ownerSnapshot||'{}')}catch{} const compared=r.kind==='truck'?{...b,active:b.operationalActive,status:b.operationalStatus,ownerId:owner.mserpOwnerId,ownerDriverId:owner.mserpOwnerDriverId,ownerDate:owner.effectiveDate}:b;const list=r.kind==='driver'?driverFields:truckFields;
  for(const key of list){const row=el('div',undefined,'compare-row');const av=(key==='ownerDriverId'?a.ownerDriverRef:a[key])||'',bv=key==='truckClass'?truckClass(compared[key]):compared[key]||'';if(fieldDifferent(r,key,av,bv)){row.classList.add('different');if(r.reviewed&&!state.batch)row.classList.add('reviewed')}row.append(el('span',labels[key]));
-  for(const [side,value] of [['MSERP',av],['FleetScope',bv]]){const cell=el('span',undefined,'value');let text=value||'—';if(key==='ownerId')text=side==='FleetScope'?(owner.displayName||(b.ownerKind==='driver'?lookup(state.receiver.drivers,b.ownerDriverRef).name:b.leasedFrom)||b.ownerKind||'—'):(lookup(state.source.owners,value).name||text);if(key==='ownerDriverId')text=lookup(state.source.drivers,value).name||text;if((key==='firstName'||key==='lastName')&&side==='MSERP'&&!a.firstName&&!a.lastName)text=a.name+' (full name)';cell.append(el('span',text));if(value&&key!=='ownerId'&&key!=='ownerDriverId'&&!state.batch){const copy=el('button','Use '+side,'copy');copy.type='button';copy.addEventListener('click',()=>{r.values[key]=key==='status'&&side==='FleetScope'?(value==='on_vacation'?'vacation':value==='inactive'?'home':value):value;dirty=true;renderFields()});cell.append(copy)}row.append(cell)}
+  for(const [side,value] of [['MSERP',av],['FleetScope',bv]]){const cell=el('span',undefined,'value');let text=value||'—';if(key==='ownerId')text=side==='FleetScope'?(owner.displayName||(b.ownerKind==='driver'?lookup(state.receiver.drivers,b.ownerDriverRef).name:b.leasedFrom)||b.ownerKind||'—'):(lookup(state.source.owners,value).name||text);if(key==='ownerDriverId')text=lookup(state.source.drivers,value).name||text;if((key==='firstName'||key==='lastName')&&side==='MSERP'&&!a.firstName&&!a.lastName)text=a.name+' (full name)';cell.append(el('span',text));if(value&&key!=='ownerId'&&key!=='ownerDriverId'&&!state.batch&&!(key==='status'&&r.kind==='driver'&&side==='FleetScope')){const copy=el('button','Use '+side,'copy');copy.type='button';copy.addEventListener('click',()=>{r.values[key]=value;dirty=true;renderFields()});cell.append(copy)}row.append(cell)}
   let input;if(key==='status'){input=el('select');const opts=r.kind==='driver'?['active','home','vacation','terminated']:['available','assigned','maintenance','out_of_service'];for(const o of opts)input.append(option(o,o.replaceAll('_',' ')))}
   else if(['active','reconcileCrew'].includes(key)){input=el('select');input.append(option(key==='active'?'true':'false',key==='active'?'Active':'Preserve existing crew for now'),option(key==='active'?'false':'true',key==='active'?'Inactive':'Reconcile crew to MSERP (requires coverage)'))}
   else if(key==='ownerId'){input=el('select');input.append(option('','Choose owner, or select a driver below'));for(const o of state.source.owners)input.append(option(o.id,o.name+' · '+o.kind))}

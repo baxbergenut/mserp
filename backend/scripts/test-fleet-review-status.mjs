@@ -16,7 +16,11 @@ assert.equal(run("fieldDifferent(row,'terminationDate','','')"), false, 'active 
 assert.equal(run("fieldDifferent(row,'email','current@example.test','old@example.test')"), true);
 assert.equal(run("fieldDifferent(row,'phone','5555550100','+1 (555) 555-0100')"), false);
 run("row.values.status='vacation'");
-assert.equal(run("fieldDifferent(row,'status','vacation','on_vacation')"), false);
+assert.equal(run("fieldDifferent(row,'status','vacation','active')"), false);
+assert.equal(run("fieldDifferent(row,'status','vacation','on_vacation')"), true);
+run("row.values.status='home'");
+assert.equal(run("fieldDifferent(row,'status','home','active')"), false);
+assert.equal(run("fieldDifferent(row,'status','home','inactive')"), true);
 run("row.values.status='terminated'");
 assert.equal(run("fieldDifferent(row,'terminationDate','','')"), true, 'terminated driver still requires a date');
 run("row.values.status='active';row.reviewed=false");
