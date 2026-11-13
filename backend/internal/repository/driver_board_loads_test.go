@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -9,6 +10,37 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestBoardStopsMissingCity(t *testing.T) {
+	for _, tc := range []struct {
+		name, city, state, zip, address, want string
+	}{
+		{"city in address", "", "Michigan", "48166", "8857 SWAN CREEK RD, NEWPORT, MI 48166-9275", "Newport, Michigan, 48166"},
+		{"multiword city", "", "MO", "63301-1234", "1 Main St, ST. CHARLES MO 63301", "St. Charles, MO, 63301-1234"},
+		{"structured city", "Monroe", "Michigan", "48166", "1 Main St, Newport, MI 48166", "Monroe, Michigan, 48166"},
+		{"conflicting ZIP", "", "Michigan", "48166", "1 Main St, Newport, MI 48167", "Michigan, 48166"},
+		{"conflicting state code", "", "MI", "48166", "1 Main St, Newport, OH 48166", "MI, 48166"},
+		{"street only", "", "Michigan", "48166", "8857 SWAN CREEK RD", "Michigan, 48166"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{"stops": []any{map[string]any{
+				"ordering": 2, "stop_type": "delivery", "location": map[string]string{
+					"city": tc.city, "state": tc.state, "zip_code": tc.zip, "address1": tc.address,
+				},
+			}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			stops := boardStops(raw)
+			if len(stops) != 1 || stops[0].Location != tc.want || stops[0].StreetAddress != tc.address {
+				t.Fatalf("boardStops() = %+v, want location %q and original address", stops, tc.want)
+			}
+			if tc.name == "city in address" && stops[0].Key != "229c978b48044ea4f1cba920" {
+				t.Fatalf("saved delivery stop key changed to %q", stops[0].Key)
+			}
+		})
+	}
+}
 
 func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *DriverBoardRepository, fleet *FleetRepository) {
 	t.Helper()

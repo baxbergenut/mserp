@@ -7,12 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"mserp/internal/datatruck"
 )
 
@@ -285,6 +288,23 @@ const boardStopSourceSQL = `jsonb_build_object('stops',l.raw_payload->'stops',
  'pickup_appointment_time',l.raw_payload->'pickup_appointment_time',
  'delivery_appointment_time',l.raw_payload->'delivery_appointment_time')`
 
+var boardAddressLocality = regexp.MustCompile(`(?i),\s*([\p{L}][\p{L}\p{M} .'’\-]*?)\s*,?\s+([a-z]{2})\s+([0-9]{5})(?:-[0-9]{4})?$`)
+
+func boardAddressCity(address, state, zip string) string {
+	match := boardAddressLocality.FindStringSubmatch(address)
+	if match == nil || (len(state) == 2 && !strings.EqualFold(state, match[2])) {
+		return ""
+	}
+	if baseZip, _, _ := strings.Cut(zip, "-"); baseZip != match[3] {
+		return ""
+	}
+	city := match[1]
+	if city == strings.ToUpper(city) || city == strings.ToLower(city) {
+		return cases.Title(language.English).String(city)
+	}
+	return city
+}
+
 func boardStops(raw []byte) []BoardStop {
 	result := []BoardStop{}
 	var load datatruck.Load
@@ -303,10 +323,13 @@ func boardStops(raw []byte) []BoardStop {
 		}
 	}
 	for i, s := range load.Stops {
+		city := strings.TrimSpace(s.Location.City)
+		state := strings.TrimSpace(s.Location.State)
+		zip := strings.TrimSpace(s.Location.ZipCode)
 		parts := []string{}
-		for _, v := range []string{s.Location.City, s.Location.State, s.Location.ZipCode} {
-			if strings.TrimSpace(v) != "" {
-				parts = append(parts, strings.TrimSpace(v))
+		for _, v := range []string{city, state, zip} {
+			if v != "" {
+				parts = append(parts, v)
 			}
 		}
 		location := strings.Join(parts, ", ")
@@ -315,6 +338,12 @@ func boardStops(raw []byte) []BoardStop {
 			location = streetAddress
 		}
 		hash := sha256.Sum256([]byte(fmt.Sprintf("%d/%s/%s/%s", s.Ordering, s.StopType, location, s.Location.Address)))
+		// Saved stop selections, completion and manual times reference the original key.
+		if city == "" && state != "" && zip != "" {
+			if city = boardAddressCity(streetAddress, state, zip); city != "" {
+				location = city + ", " + location
+			}
+		}
 		stop := BoardStop{Key: hex.EncodeToString(hash[:12]), Type: s.StopType, Location: location}
 		if streetAddress != location {
 			stop.StreetAddress = streetAddress
