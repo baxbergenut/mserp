@@ -374,3 +374,17 @@ Automatic READY locations use structured municipality and state fields, never
 street-address parsing. Missing locality stays unavailable. The city/state cache
 context version triggers one budgeted refresh of legacy full-address caches;
 manual overrides are neither shortened nor rewritten.
+
+## DataTruck stop cities
+
+Migration 216 adds a coordinate cache for the current and queued Status Board
+loads. The minute worker looks up DataTruck stops with valid coordinates and a
+blank city. TomTom's address locality takes precedence over its municipality.
+Any state or postal code supplied by DataTruck must match the lookup. The
+existing stop label is used while the lookup is pending or the result conflicts.
+
+The worker claims up to four due coordinates per sweep under the same monthly
+reverse-search cap as READY. Successful lookups refresh after 30 days and failed
+attempts retry after an hour. Board reads use the cache, and new results notify
+open boards after commit. The city label leaves the source payload, selected
+stop key, and command revision intact.

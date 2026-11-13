@@ -516,6 +516,16 @@ func main() {
 			return repo.ReconcileAutomation(bounded, routes, fiveELDTelemetry, cfg.FiveELDUSDOT)
 		}})
 	}()
+	boardStopCitiesDone := make(chan struct{})
+	go func() {
+		defer close(boardStopCitiesDone)
+		repo := repository.NewDriverBoardRepository(pool)
+		jobs.RunIntervalJob(ctx, logger, jobs.IntervalJob{Name: "board-stop-cities", Interval: time.Minute, Run: func(runCtx context.Context) error {
+			bounded, cancel := context.WithTimeout(runCtx, 35*time.Second)
+			defer cancel()
+			return repo.ReconcileStopCities(bounded, boardRoutes)
+		}})
+	}()
 	fleetSyncDone := make(chan struct{})
 	go func() {
 		defer close(fleetSyncDone)
@@ -683,6 +693,10 @@ func main() {
 	}
 	select {
 	case <-boardAutomationDone:
+	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-boardStopCitiesDone:
 	case <-shutdownCtx.Done():
 	}
 	select {

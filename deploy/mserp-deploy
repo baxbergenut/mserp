@@ -65,6 +65,7 @@ gross_planning_migration=206_gross_board_planning_entries.sql
 escrow_balance_migration=209_escrow_balance_reductions.sql
 escrow_adjustment_migration=210_escrow_balance_adjustments.sql
 gross_week_lock_migration=211_gross_board_week_lock.sql
+board_stop_geocoding_migration=216_status_board_stop_geocoding.sql
 
 # BEGIN BACKUP POLICY
 mserp_db() { /usr/local/sbin/mserp-db "$@"; }
@@ -114,6 +115,9 @@ prepare_release_backup() {
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
+    local board_stop_geocoding
+    board_stop_geocoding=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.board_stop_geocodes') IS NOT NULL") || return 1
+    [[ $board_stop_geocoding == f ]] || { [[ $board_stop_geocoding == t ]] && [[ -f $1/migrations/$board_stop_geocoding_migration ]]; } || return 1
     local investor_accounts
     investor_accounts=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_escrows' AND column_name='truck_id')") || return 1
     if [[ $investor_accounts == t ]]; then
@@ -377,6 +381,19 @@ for migration_name in "${pending_migrations[@]}"; do
 		mserp_db psql -X -At -v migration="$migration_name" --dbname=mserp)
     if [[ $applied == 1 ]]; then
         continue
+    fi
+    if [[ $migration_name == "$board_stop_geocoding_migration" ]]; then
+        # Older writers do not recognize the cache table in the payroll source inventory.
+        cutover_started=true
+        systemctl stop mserp-api.service
+        if systemctl is-active --quiet mserp-expense-sheet.service; then
+            expense_exporter_stopped=true
+            systemctl stop mserp-expense-sheet.service
+        fi
+        if systemctl is-active --quiet fleet-review.service; then
+            fleet_review_stopped=true
+            systemctl stop fleet-review.service
+        fi
     fi
     if [[ $migration_name == "$permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" || $migration_name == "$expense_archive_migration" || $migration_name == "$pti_operational_migration" || $migration_name == "$unrelated_payroll_migration" || $migration_name == "$company_expense_migration" || $migration_name == "$driver_gross_migration" || $migration_name == "$modified_sync_migration" || $migration_name == "$routing_usage_migration" || $migration_name == "$expense_drafts_migration" || $migration_name == "$accessorial_expenses_migration" || $migration_name == "$escrow_settlement_migration" || $migration_name == "$gross_planning_migration" || $migration_name == "$escrow_balance_migration" || $migration_name == "$escrow_adjustment_migration" || $migration_name == "$gross_week_lock_migration" || $migration_name == "$investor_accounts_migration" ]]; then
         # No old application may write between a contract cutover and activation.
