@@ -53,6 +53,21 @@ const grossTierColors = ["bg-[#f4cccc]", "bg-[#ffff00]", "bg-[#00ff00]", "bg-[#0
 const twoTierGrossColors = [grossTierColors[0], grossTierColors[2], grossTierColors[3]];
 const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+function getDestination(entry: DriverBoardEntry, driver: DriverBoardDriver, loads?: BoardLoadsView) {
+  if (["HOME", "HOME (YARD)", "VACATION"].includes(entry.status)) {
+    const value = entry.destination.trim() ? entry.destination : compactLoadLocation([driver.city, driver.state].filter(Boolean).join(", "));
+    return { value, title: value || "Home address not set", showStop: false, color: "text-zinc-200" };
+  }
+  if (entry.status === "READY") {
+    const value = readyDestination(entry, loads);
+    return { value, title: value, showStop: false, color: !entry.destination.trim() && loads?.automation?.readyLocationStale ? "text-yellow-400" : "text-zinc-200" };
+  }
+  if (loads?.destinationSource) {
+    return { value: compactLoadLocation(loads.sourceDestination), title: loads.sourceDestination, showStop: true, color: "text-blue-200" };
+  }
+  return { value: entry.destination, title: entry.destination, showStop: true, color: "text-zinc-200" };
+}
+
 const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, edit }: {
   entry: DriverBoardEntry; field: "currentLoad" | "trailerNumber" | "destination" | "notes" | "homeTime";
   label: string; limit: number; disabled: boolean;
@@ -150,7 +165,7 @@ export default function DriverBoardPage() {
     const pickup = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
     return {
       currentLoad: entry.currentLoad, truck: driver.truckUnit, status: statusLabel(entry.status),
-      destination: ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status) ? compactLoadLocation([driver.city, driver.state].filter(Boolean).join(", ")) : entry.status === "READY" ? readyDestination(entry, loads) : loads?.destinationSource ? compactLoadLocation(loads.sourceDestination) : entry.destination,
+      destination: getDestination(entry, driver, loads).value,
       eta: entry.status === "READY" ? "" : appointmentCellText(entry.eta, loads?.automation).full,
       loadPlan: [next?.number, next?.overdue ? "Overdue" : "", pickup?.schedule?.label || (pickup ? "PU —" : "")].filter(Boolean).join("  "),
     };
@@ -376,7 +391,6 @@ export default function DriverBoardPage() {
             const i = renderedDrivers.indexOf(d);
             const entry = entries[d.id];
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
-            const atHome = ["HOME", "HOME (YARD)", "VACATION"].includes(entry.status);
             const sum = totals(index.byDriver.get(d.id) ?? []);
             const grossTier = board?.grossTierMinimumCents?.reduce(
               (tier, minimum, i) => sum.original >= BigInt(minimum) ? i + 1 : tier, 0,
@@ -385,6 +399,7 @@ export default function DriverBoardPage() {
             const grossTierColor = palette[grossTier];
             const grossCellClass = `${cellClass} px-1 text-center font-mono ${grossTierColor ? `${grossTierColor} text-black` : "text-zinc-200"}`;
             const loads = previewCurrentLoad(board?.loads[d.id], entry, savedEntries.get(d.id));
+            const destination = getDestination(entry, d, loads);
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();
             const stopLabel = stopType === "pickup" ? "PU" : stopType === "delivery" ? "DEL" : "";
@@ -430,14 +445,13 @@ export default function DriverBoardPage() {
                     try { await state.changeLoads(d.id, loads, { action: "advance" }); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>,
-              destination: <td key="destination" data-board-column="destination" className={cellClass}>{atHome ? <span aria-label={`${d.fullName} · Destination from home address`} title={homeAddress || "Home address not set"} className="block truncate px-1.5 text-zinc-200">{homeAddress || "—"}</span> : <div className="flex h-8 items-center">
+              destination: <td key="destination" data-board-column="destination" className={cellClass}><div className="flex h-8 items-center">
                   <input type="text" aria-label={d.fullName + " · Destination"} maxLength={500} disabled={disabled}
-                    title={entry.status === "READY" ? readyDestination(entry, loads) : loads?.destinationSource ? loads.sourceDestination : entry.destination}
-                    value={entry.status === "READY" ? readyDestination(entry, loads) : loads?.destinationSource ? compactLoadLocation(loads.sourceDestination) : entry.destination}
+                    title={destination.title} value={destination.value}
                     placeholder={entry.status === "READY" ? "Current location unavailable" : "Destination"} onChange={event => edit(d.id, "destination", event.target.value)}
-                    className={"h-8 w-full min-w-0 text-ellipsis bg-transparent px-1.5 text-[11px] outline-none focus:text-clip focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + (entry.status === "READY" ? !entry.destination.trim() && loads?.automation?.readyLocationStale ? "text-yellow-400" : "text-zinc-200" : loads?.destinationSource ? "text-blue-200" : "text-zinc-200")} />
-                  {entry.status !== "READY" && stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
-                </div>}</td>,
+                    className={"h-8 w-full min-w-0 text-ellipsis bg-transparent px-1.5 text-[11px] outline-none focus:text-clip focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + destination.color} />
+                  {destination.showStop && stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
+                </div></td>,
               eta: <td key="eta" data-board-column="eta" className={cellClass}>{entry.status === "READY" ? <span aria-label={`${d.fullName} - No ETA while ready`} className="block h-8" /> : <ETACell name={d.fullName} canRetry={canEdit} retryDisabled={disabled || saving || dirty} retrying={!!etaRetrying[d.id]} onRetry={() => void retryETA(d.id, d.fullName, loads?.automation?.context ?? "")} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} />}</td>,
               loadPlan: <td key="loadPlan" data-board-column="loadPlan" className={cellClass}><div className="flex h-8 w-full items-center gap-2"><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, next.overdue ? (next.loadId === null ? `Overdue · Gross Board ${next.date}` : "Overdue · Pickup end time has passed") : "", nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group h-full shrink-0 px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <span className={next.loadId === null || next.sourceMissing ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}{next.overdue && <span className="ml-1.5 text-[10px] font-medium text-amber-300">Overdue</span>}</span> : "—"}</button>{next && nextStop && <button type="button" data-grid-action aria-label={`${d.fullName} · Next pickup time`} title={canEdit ? "Edit next pickup time" : nextPickup?.detail} disabled={!canEdit || disabled || next.loadId === null} aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id} className="mr-1 shrink-0 rounded px-1 py-1 text-left text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500" onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}</div></td>,
               notes: <td key="notes" data-board-column="notes" className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>,
