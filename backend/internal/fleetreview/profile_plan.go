@@ -442,6 +442,14 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 		}
 		a := find(source.Trucks, row.LocalID)
 		b := find(receiver.Trucks, row.RemoteID)
+		if slices.Contains([]string{"01 JACKISON", "7510", "2192", "9412"}, a["unit"]) &&
+			row.RemoteID == "" && len(row.Changes) == 0 && len(row.Review) == 1 && row.Review[0] == uniqueFleetScopeIdentity {
+			row.Deferred = "Deferred by owner"
+			row.Review = nil
+			p.Review--
+			p.Rows[i] = row
+			continue
+		}
 		approvedTruck := slices.Contains([]string{"042", "045", "097", "1027"}, a["unit"])
 		if row.RemoteID == "" && approvedTruck && validVIN(a["vin"]) {
 			matches := 0
@@ -489,6 +497,11 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 				return ownerMatches
 			case "Conflicting truck plate", "Verify truck registration":
 				return registrationMatches
+			case "Check truck plateState":
+				return registrationMatches && validTruckField("plateState", a["plateState"])
+			case "FleetScope out-of-service hold stays in effect":
+				return exactTruck && a["unit"] == "079" && a["status"] == "available" && a["active"] == "true" &&
+					b["status"] == "active" && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"]
 			case "Previously deferred":
 				if reconciledTruck {
 					row.RemoteID = b["id"]
