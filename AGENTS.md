@@ -4060,6 +4060,8 @@ Migration 216 adds the Status Board TomTom stop-locality cache. The minute worke
 checks current and queued stops with missing DataTruck cities and valid source
 coordinates under the shared reverse-geocode budget. Board snapshots display
 matching cached localities without changing source stop keys or command revisions.
+Install the matching deploy helper first so older payroll writers stay stopped
+after the new cache table enters the source inventory.
 The ready-city-state-v1 context refreshes legacy full-address caches once under
 the existing budget/backoff; manual destination text stays untouched.
 

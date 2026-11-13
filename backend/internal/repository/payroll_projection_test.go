@@ -92,6 +92,10 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	stopGeocodeMigration, err := os.ReadFile("../../sql/216_status_board_stop_geocoding.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	readyLocationMigration, err := os.ReadFile("../../sql/207_ready_location.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +151,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				prior = strings.Replace(prior, strings.ReplaceAll(string(accessorialMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(escrowMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(planningMigration), "\r\n", "\n"), "", 1)
+				prior = strings.Replace(prior, strings.ReplaceAll(string(stopGeocodeMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(readyLocationMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(escrowBalanceMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(escrowAdjustmentMigration), "\r\n", "\n"), "", 1)
@@ -173,6 +178,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(escrowAdjustmentMigration))
 				exec(string(weekLockMigration))
 				exec(string(weekLockActorMigration))
+				exec(string(stopGeocodeMigration))
 			} else {
 				exec(body)
 			}

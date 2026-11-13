@@ -16,6 +16,7 @@ load_availability_migration=187_load_source_availability.sql
 board_operational_migration=188_status_board_operational.sql
 pti_operational_migration=191_payroll_pti_classification.sql
 unrelated_payroll_migration=192_payroll_unrelated_sources.sql
+board_stop_geocoding_migration=216_status_board_stop_geocoding.sql
 temp_root=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$temp_root/mserp-compat.XXXXXX")
 trap 'case "$test_root" in "$temp_root"/mserp-compat.*) rm -rf -- "$test_root" ;; esac' EXIT
@@ -40,8 +41,10 @@ mock_scale_carry=f
 mock_scale_partial=f
 mock_investor_retained=f
 mock_investor_accounts=f
+mock_board_stop_geocoding=f
 mserp_db() {
     local result=$mock
+    if [[ $* == *"to_regclass('public.board_stop_geocodes')"* ]]; then result=$mock_board_stop_geocoding; fi
     if [[ $* == *"table_name='driver_escrows'"* && $* == *"column_name='truck_id'"* ]]; then result=$mock_investor_accounts; fi
     if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
     if [[ $* == *manager_verified* ]]; then result=$mock_manager; fi
@@ -364,3 +367,12 @@ if compatible_release "$test_root/new"; then echo 'Investor account query failur
 mock_investor_accounts=unexpected
 if compatible_release "$test_root/new"; then echo 'Unknown investor account schema allowed rollback' >&2; exit 1; fi
 echo 'Investor truck account compatibility checks passed'
+
+mock_investor_accounts=t
+mock_board_stop_geocoding=t
+if compatible_release "$test_root/new"; then echo 'Stop-city cache allowed an incompatible rollback' >&2; exit 1; fi
+touch "$test_root/new/migrations/$board_stop_geocoding_migration"
+compatible_release "$test_root/new"
+mock_board_stop_geocoding=error
+if compatible_release "$test_root/new"; then echo 'Stop-city cache query failure allowed rollback' >&2; exit 1; fi
+echo 'Stop-city cache compatibility checks passed'

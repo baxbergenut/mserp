@@ -98,6 +98,10 @@ Install the script, units, verified baseline and enabled timer **before** instal
 the matching deploy helper. Install helpers under the deployment lock so an active
 release cannot observe a partially changed deployment script.
 
+Install the matching deploy helper before migration 216. It pauses writers
+while adding the Status Board stop-city cache and requires a release that
+recognizes the new table in the payroll source inventory.
+
 Migration 185 requires the matching helper before release. It pauses all payroll
 writers while installing shared dependency maps and the optional retired-week
 boundary, and rejects rollback to binaries lacking migration 185. Installation
