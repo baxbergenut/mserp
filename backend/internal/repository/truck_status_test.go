@@ -60,6 +60,11 @@ func TestTruckStatusesDatabase(t *testing.T) {
 				execAdmin(prefix)
 				execAdmin(`INSERT INTO trucks(unit_number,active,status,notes) VALUES ('OLD-INACTIVE',false,'available','Keep historical note'),('OLD-HOLD',true,'hold','Waiting for parts'),('OLD-OOS',true,'out_of_service','Engine damaged');`)
 				execAdmin(string(migration))
+				provisioningMigration, err := os.ReadFile("../../sql/217_truck_provisioning.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				execAdmin(string(provisioningMigration))
 				readMigration, e := os.ReadFile("../../sql/162_fleet_read_performance.sql")
 				if e != nil {
 					t.Fatal(e)

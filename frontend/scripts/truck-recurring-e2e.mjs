@@ -13,6 +13,14 @@ export async function runTruckRecurringE2E({page,base,temp}) {
   await page.goto(base+'/trucks');
   await page.getByRole('button',{name:'Add truck',exact:true}).click();
   await page.getByLabel('Unit number',{exact:true}).fill('OWNER-AUTO');
+  await page.getByLabel('VIN', { exact: true }).fill('1FUJGLDR0CLBP1238');
+  await page.getByLabel('Year', { exact: true }).fill('2022');
+  await page.getByLabel('Make', { exact: true }).fill('FRHT');
+  await page.getByLabel('Color', { exact: true }).fill('White');
+  await page.getByLabel('Truck class', { exact: true }).fill('8');
+  await page.getByLabel('GVWR (lb)', { exact: true }).fill('80000');
+  await page.getByLabel('License plate', { exact: true }).fill('E2E8');
+  await page.getByLabel('Plate state', { exact: true }).fill('OH');
   await page.getByLabel('Truck owner').selectOption(`driver:${driver.id}`);
   await page.getByLabel('Ownership effective date').fill('2026-09-27');
   const dialog=page.getByRole('dialog');

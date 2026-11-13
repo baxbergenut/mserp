@@ -8,9 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -271,6 +273,9 @@ func (request driverRequest) validate() (repository.DriverInput, error) {
 		if request.NewTruckOwnedByDriver {
 			truckRequest.OwnerID = nil
 		}
+		if err := truckRequest.validateSyncFields(nil); err != nil {
+			return repository.DriverInput{}, err
+		}
 		truck, err := truckRequest.validate()
 		if err != nil {
 			return repository.DriverInput{}, err
@@ -319,6 +324,8 @@ type truckRequest struct {
 	Make                     string  `json:"make"`
 	Model                    string  `json:"model"`
 	Color                    *string `json:"color"`
+	TruckClass               *string `json:"truckClass"`
+	GVWRLbs                  *int    `json:"gvwrLbs"`
 	LicensePlate             string  `json:"licensePlate"`
 	LicenseState             string  `json:"licenseState"`
 	IsCompanyOwned           bool    `json:"isCompanyOwned"`
@@ -332,6 +339,91 @@ type truckRequest struct {
 	Active                   bool    `json:"active"`
 	Notes                    string  `json:"notes"`
 	IRPFileID                *string `json:"irpFileId"`
+}
+
+var syncTruckVINPattern = regexp.MustCompile("^[A-HJ-NPR-Z0-9]{17}$")
+var syncTruckStatePattern = regexp.MustCompile("^[A-Z]{2}$")
+
+func (request *truckRequest) validateSyncFields(existing *repository.Truck) error {
+	normalize := func(value string) string { return strings.TrimSpace(value) }
+	upper := func(value string) string { return strings.ToUpper(normalize(value)) }
+	text := func(value string, min, max int) bool {
+		return len(value) >= min && len(value) <= max && strings.IndexFunc(value, unicode.IsControl) < 0
+	}
+	value := func(field *string) string {
+		if field == nil {
+			return ""
+		}
+		return *field
+	}
+	var previous repository.Truck
+	if existing != nil {
+		previous = *existing
+	}
+	fields := []struct {
+		next          *string
+		before, label string
+		normalize     func(string) string
+		valid         func(string) bool
+	}{
+		{&request.UnitNumber, previous.UnitNumber, "Unit number must be 1–20 characters", normalize, func(v string) bool { return text(v, 1, 20) }},
+		{&request.VIN, value(previous.VIN), "VIN must have 17 letters or digits and cannot contain I, O, or Q", upper, syncTruckVINPattern.MatchString},
+		{&request.Make, value(previous.Make), "Make must be 2–50 characters", normalize, func(v string) bool { return text(v, 2, 50) }},
+		{&request.Model, value(previous.Model), "Model must be at most 50 characters on one line", normalize, func(v string) bool { return text(v, 0, 50) }},
+		{&request.LicensePlate, value(previous.LicensePlate), "Plate number must be 2–15 characters", upper, func(v string) bool { return text(v, 2, 15) }},
+		{&request.LicenseState, value(previous.LicenseState), "Plate state must be a two-letter code", upper, syncTruckStatePattern.MatchString},
+	}
+	for _, field := range fields {
+		next := field.normalize(*field.next)
+		if existing != nil && next == field.normalize(field.before) {
+			*field.next = field.before
+			continue
+		}
+		if !field.valid(next) {
+			return errors.New(field.label)
+		}
+		*field.next = next
+	}
+	for _, field := range []struct {
+		next     *string
+		before   string
+		min, max int
+		label    string
+	}{
+		{request.Color, value(previous.Color), 1, 30, "Color must be 1–30 characters"},
+		{request.TruckClass, value(previous.TruckClass), 1, 20, "Truck class must be 1–20 characters"},
+	} {
+		if field.next == nil && existing != nil {
+			continue
+		}
+		next := normalize(value(field.next))
+		if existing != nil && next == normalize(field.before) {
+			continue
+		}
+		if !text(next, field.min, field.max) {
+			return errors.New(field.label)
+		}
+		*field.next = next
+	}
+	maxYear := time.Now().Year() + 2
+	if existing == nil || !sameTruckNumber(request.Year, previous.Year) {
+		if request.Year == nil || *request.Year < 1900 || *request.Year > maxYear {
+			return fmt.Errorf("Year must be between 1900 and %d", maxYear)
+		}
+	}
+	if existing == nil || (request.GVWRLbs != nil && !sameTruckNumber(request.GVWRLbs, previous.GVWRLbs)) {
+		if request.GVWRLbs == nil || *request.GVWRLbs < 1 || *request.GVWRLbs > 200000 {
+			return errors.New("GVWR must be between 1 and 200,000 lb")
+		}
+	}
+	return nil
+}
+
+func sameTruckNumber(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func (request truckRequest) validate() (repository.TruckInput, error) {
@@ -397,7 +489,7 @@ func (request truckRequest) validate() (repository.TruckInput, error) {
 		ExpectedOwnershipVersion: request.ExpectedOwnershipVersion,
 		AssignmentWeek:           request.AssignmentWeek,
 		OwnerDriverID:            request.OwnerDriverID, OwnerID: request.OwnerID, UnitNumber: request.UnitNumber, VIN: optionalString(request.VIN), Year: request.Year,
-		Make: optionalString(request.Make), Model: optionalString(request.Model), Color: request.Color,
+		Make: optionalString(request.Make), Model: optionalString(request.Model), Color: request.Color, TruckClass: request.TruckClass, GVWRLbs: request.GVWRLbs,
 		LicensePlate: optionalString(request.LicensePlate), LicenseState: optionalString(request.LicenseState),
 		IsCompanyOwned: request.IsCompanyOwned, Status: request.Status, Mileage: request.Mileage,
 		RegistrationExpires: registrationExpires, InsuranceExpires: insuranceExpires,
@@ -653,6 +745,10 @@ func (handler fleetHandler) createTruck(w http.ResponseWriter, r *http.Request) 
 	if !slices.Contains(request.preserveFields, "irpFileId") && !handler.authorizeAttachment(w, r, request.IRPFileID, "trucks") {
 		return
 	}
+	if err := request.validateSyncFields(nil); err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	input, err := request.validate()
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
@@ -686,6 +782,10 @@ func (handler fleetHandler) updateTruck(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !slices.Contains(request.preserveFields, "irpFileId") && !handler.authorizeAttachment(w, r, request.IRPFileID, "trucks") {
+		return
+	}
+	if err := request.validateSyncFields(&currentProfile); err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	input, err := request.validate()

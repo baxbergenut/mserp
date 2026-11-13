@@ -202,6 +202,20 @@ func decodeProtectedProfile(w http.ResponseWriter, r *http.Request, destination 
 			}
 		}
 	}
+	if area == "trucks" && saved != nil {
+		for _, field := range []string{"vin", "year", "make", "model", "color", "truckClass", "gvwrLbs", "licensePlate", "licenseState"} {
+			present := false
+			for key := range incoming {
+				if strings.EqualFold(field, key) {
+					present = true
+					break
+				}
+			}
+			if !present {
+				incoming[field] = saved[field]
+			}
+		}
+	}
 	raw, err := json.Marshal(incoming)
 	if err != nil {
 		writeAPIError(w, 400, "invalid profile")

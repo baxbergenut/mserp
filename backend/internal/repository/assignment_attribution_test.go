@@ -40,6 +40,10 @@ func TestAssignmentAttributionDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	provisioning, err := os.ReadFile("../../sql/217_truck_provisioning.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	source := strings.ReplaceAll(string(init), "\r\n", "\n")
 	change := strings.ReplaceAll(string(migration), "\r\n", "\n")
 	boundary := strings.LastIndex(source, change)
@@ -79,6 +83,7 @@ func TestAssignmentAttributionDatabase(t *testing.T) {
 			if mode == "migration" {
 				exec(change)
 				exec(string(assignmentView))
+				exec(string(provisioning))
 			}
 			if got := scalar(`SELECT truck_id::text FROM clustie_loads WHERE id=9166`); got != legacyTruck {
 				t.Fatal("upgrade ignored existing native assignments", got)

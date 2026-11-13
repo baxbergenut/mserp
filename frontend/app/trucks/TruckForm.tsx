@@ -24,6 +24,8 @@ export const emptyTruckInput: TruckInput = {
   make: "",
   model: "",
   color: "",
+  truckClass: "",
+  gvwrLbs: null,
   licensePlate: "",
   licenseState: "",
   isCompanyOwned: true,
@@ -51,6 +53,8 @@ export function truckToInput(truck: Truck): TruckInput {
     make: truck.make ?? "",
     model: truck.model ?? "",
     color: truck.color ?? "",
+    truckClass: truck.truckClass ?? "",
+    gvwrLbs: truck.gvwrLbs ?? null,
     licensePlate: truck.licensePlate ?? "",
     licenseState: truck.licenseState ?? "",
     isCompanyOwned: truck.isCompanyOwned,
@@ -97,6 +101,7 @@ export function TruckForm({
   const numberOrNull = (raw: string) => (raw === "" ? null : Number(raw));
   const today = new Intl.DateTimeFormat("en-CA", {timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
 
+  const requireFleetFields = creating || setup;
   const permissions=usePermissions();
   return (
     <div className="space-y-6">
@@ -187,17 +192,20 @@ export function TruckForm({
         </Field>
         <Field label="VIN">
           <input
+            required={requireFleetFields}
             value={value.vin}
             onChange={(event) => set("vin", event.target.value.toUpperCase())}
             className={controlClass}
             maxLength={17}
+            pattern={requireFleetFields ? "[A-HJ-NPR-Z0-9]{17}" : undefined}
           />
         </Field>
         <Field label="Year">
           <input
             type="number"
             min="1900"
-            max="2200"
+            max={requireFleetFields ? new Date().getFullYear() + 2 : undefined}
+            required={requireFleetFields}
             value={value.year ?? ""}
             onChange={(event) => set("year", numberOrNull(event.target.value))}
             className={controlClass}
@@ -205,6 +213,7 @@ export function TruckForm({
         </Field>
         <Field label="Make">
           <input
+            required={requireFleetFields}
             value={value.make}
             onChange={(event) => set("make", event.target.value)}
             className={controlClass}
@@ -221,12 +230,21 @@ export function TruckForm({
         </Field>
         <Field label="Color">
           <input
+            required={requireFleetFields}
             value={value.color}
             onChange={(event) => set("color", event.target.value)}
             className={controlClass}
             maxLength={30}
             placeholder="e.g. White"
           />
+        </Field>
+        <Field label="Truck class">
+          <input required={requireFleetFields} className={controlClass} maxLength={20}
+            value={value.truckClass ?? ""} onChange={event => set("truckClass", event.target.value)} />
+        </Field>
+        <Field label="GVWR (lb)">
+          <input required={requireFleetFields} className={controlClass} type="number" min={1} max={200000}
+            value={value.gvwrLbs ?? ""} onChange={event => set("gvwrLbs", numberOrNull(event.target.value))} />
         </Field>
         {setupDriverOwner && <Toggle checked={setupDriverOwner.checked} onChange={setupDriverOwner.onChange} label="Driver owns this truck" description={`${setupDriverOwner.name} will be the truck owner.`} />}
         <Field label="Owner">
@@ -248,15 +266,18 @@ export function TruckForm({
       <FormSection title="Registration and insurance">
         <Field label="License plate">
           <input
+            required={requireFleetFields}
             value={value.licensePlate}
-            onChange={(event) => set("licensePlate", event.target.value)}
+            onChange={(event) => set("licensePlate", event.target.value.toUpperCase())}
             className={controlClass}
           />
         </Field>
         <Field label="Plate state">
           <input
+            required={requireFleetFields}
+            pattern={requireFleetFields ? "[A-Za-z]{2}" : undefined}
             value={value.licenseState}
-            onChange={(event) => set("licenseState", event.target.value)}
+            onChange={(event) => set("licenseState", event.target.value.toUpperCase())}
             className={controlClass}
             maxLength={2}
             placeholder="IL"

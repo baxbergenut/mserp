@@ -225,6 +225,13 @@ try {
   await expect(review.getByLabel('Unit number', { exact: true })).toHaveValue('0012');
   await review.getByLabel('VIN', { exact: true }).fill('1FUJGLDR0CLBP1236');
   await review.getByLabel('Unit number', { exact: true }).fill('0013');
+  await review.getByLabel('Year', { exact: true }).fill('2022');
+  await review.getByLabel('Make', { exact: true }).fill('FRHT');
+  await review.getByLabel('Color', { exact: true }).fill('White');
+  await review.getByLabel('Truck class', { exact: true }).fill('8');
+  await review.getByLabel('GVWR (lb)', { exact: true }).fill('80000');
+  await review.getByLabel('License plate', { exact: true }).fill('E2E6');
+  await review.getByLabel('Plate state', { exact: true }).fill('OH');
   await page.clock.runFor(300);
   await page.screenshot({ animations: 'disabled', path: join(tmpdir(), 'mserp-five-eld-review.png') });
   await review.getByRole('button', { name: 'Add truck to Clustie', exact: true }).click();

@@ -66,6 +66,13 @@ func TestFleetScopeSyncDatabase(t *testing.T) {
 				if _, e = pool.Exec(ctx, string(migration)); e != nil {
 					t.Fatal(e)
 				}
+				provisioningMigration, err := os.ReadFile("../../sql/217_truck_provisioning.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = pool.Exec(ctx, string(provisioningMigration)); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if _, e = pool.Exec(ctx, "GRANT USAGE ON SCHEMA "+quoted+" TO mserp_app"); e != nil {
 				t.Fatal(e)
@@ -309,7 +316,7 @@ func testSyncLifecycle(t *testing.T, pool, admin *pgxpool.Pool) {
 	// path, without turning the whole live stream back on prematurely.
 	_, e = admin.Exec(ctx, `UPDATE trucks SET unit_number='0001' WHERE id=$1`, truck)
 	must(e)
-	must(repo.project(ctx, epoch))
+	must(repo.project(ctx, epoch, ""))
 	view, e = repo.View(ctx)
 	must(e)
 	var pendingID string
@@ -330,6 +337,31 @@ func testSyncLifecycle(t *testing.T, pool, admin *pgxpool.Pool) {
 	view, e = repo.View(ctx)
 	must(e)
 	must(repo.Activate(ctx, view.SnapshotID, view.Local.SourceRevision, view.Version, actor))
+	// A complete Clustie truck can be queued for creation before it has a crew.
+	var newTruck string
+	must(admin.QueryRow(ctx, `INSERT INTO trucks(unit_number,vin,year,make,color,truck_class,gvwr_lbs,license_plate,license_state,owner_id) VALUES('NEW','1FUJGLDR9CSBP0002',2022,'FRHT','White','8',80000,'ABC2','OH',$1) RETURNING id::text`, companyOwner).Scan(&newTruck))
+	must(repo.project(ctx, epoch, ""))
+	creationSnapshot, e := repo.captureTruckCreationSnapshot(ctx, epoch)
+	must(e)
+	if creationSnapshot == "" {
+		t.Fatal("complete new truck did not request a receiver snapshot")
+	}
+	must(repo.project(ctx, epoch, creationSnapshot))
+	var raw []byte
+	var bootstrap bool
+	must(pool.QueryRow(ctx, `SELECT payload,bootstrap FROM fleetscope_sync_operations WHERE entity_key=$1 AND kind='truck.upsert'`, "truck:"+newTruck).Scan(&raw, &bootstrap))
+	var creation fleetscope.Operation
+	must(json.Unmarshal(raw, &creation))
+	if !bootstrap || creation.SnapshotID != creationSnapshot || creation.Provisioning == nil || creation.Provisioning.GVWRLbs != 80000 || len(creation.Crews) != 0 {
+		t.Fatalf("invalid unassigned truck creation: %+v", creation)
+	}
+	// This fixture only applies existing truck operations; remove the synthetic pending creation before testing drift.
+	_, e = admin.Exec(ctx, `DELETE FROM fleetscope_sync_operations WHERE entity_key=$1`, "truck:"+newTruck)
+	must(e)
+	_, e = admin.Exec(ctx, `DELETE FROM fleetscope_sync_links WHERE local_id=$1;`, newTruck)
+	must(e)
+	_, e = admin.Exec(ctx, `DELETE FROM trucks WHERE id=$1`, newTruck)
+	must(e)
 	// External edits are quarantined, never automatically overwritten.
 	remoteRevision = "unexpected"
 	_, e = admin.Exec(ctx, `UPDATE fleetscope_sync_state SET last_verified_at=NULL`)

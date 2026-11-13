@@ -57,6 +57,11 @@ func TestFiveELDTruckTasksDatabase(t *testing.T) {
 				}
 				exec(before)
 				exec(string(migration))
+				provisioningMigration, err := os.ReadFile("../../sql/217_truck_provisioning.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				exec(string(provisioningMigration))
 				later, err := os.ReadFile("../../sql/101_maintenance_tasks_roles.sql")
 				if err != nil {
 					t.Fatal(err)

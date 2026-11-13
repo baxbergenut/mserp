@@ -339,7 +339,13 @@ func (r *FleetSyncRepository) Process(ctx context.Context) error {
 		if mode != "live" {
 			return nil
 		}
-		if e = r.project(ctx, epoch); e != nil {
+		creationSnapshot, err := r.captureTruckCreationSnapshot(ctx, epoch)
+		if err != nil {
+			if e = r.recordSyncError(ctx, err); e != nil {
+				return e
+			}
+		}
+		if e = r.project(ctx, epoch, creationSnapshot); e != nil {
 			return r.recordSyncError(ctx, e)
 		}
 	}
@@ -472,7 +478,34 @@ func (r *FleetSyncRepository) recordSyncError(ctx context.Context, cause error) 
 	return e
 }
 
-func (r *FleetSyncRepository) project(ctx context.Context, epoch string) error {
+// New truck creation uses a receiver snapshot and the bootstrap key.
+func (r *FleetSyncRepository) captureTruckCreationSnapshot(ctx context.Context, epoch string) (string, error) {
+	if r.client.Options.BootstrapKeyID == "" {
+		return "", nil
+	}
+	var needed bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(
+  SELECT FROM trucks t JOIN fleetscope_sync_links l ON l.kind='truck' AND l.local_id=t.id
+  WHERE l.remote_id IS NULL AND l.excluded_reason='' AND t.vin ~ '^[A-HJ-NPR-Z0-9]{17}$'
+    AND t.year BETWEEN 1900 AND extract(year FROM current_date)+2 AND nullif(btrim(t.make),'') IS NOT NULL
+    AND nullif(btrim(t.license_plate),'') IS NOT NULL AND nullif(btrim(t.license_state),'') IS NOT NULL
+    AND ((nullif(btrim(t.color),'') IS NOT NULL AND nullif(btrim(t.truck_class),'') IS NOT NULL AND t.gvwr_lbs BETWEEN 1 AND 200000) OR l.provisioning IS NOT NULL)
+    AND NOT EXISTS(SELECT FROM fleetscope_sync_operations o WHERE o.entity_key='truck:'||t.id::text AND o.state IN ('pending','processing','blocked'))
+ )`).Scan(&needed)
+	if err != nil || !needed {
+		return "", err
+	}
+	snapshot, err := r.client.Snapshot(ctx)
+	if err != nil {
+		return "", err
+	}
+	if snapshot.Epoch != epoch {
+		return "", ErrFleetSyncConflict
+	}
+	return snapshot.ID, nil
+}
+
+func (r *FleetSyncRepository) project(ctx context.Context, epoch, creationSnapshot string) error {
 	tx, e := r.pool.Begin(ctx)
 	if e != nil {
 		return e
@@ -547,7 +580,12 @@ func (r *FleetSyncRepository) project(ctx context.Context, epoch string) error {
 			}
 			continue
 		}
-		if len(t.Issues) > 0 || (l.RemoteID == "" && !validProvisioning(l.Provisioning)) {
+		provisioning := t.Provisioning
+		if provisioning == nil {
+			provisioning = l.Provisioning
+		}
+		create := l.RemoteID == ""
+		if len(t.Issues) > 0 || (create && (creationSnapshot == "" || !validProvisioning(provisioning))) {
 			if _, e = tx.Exec(ctx, `UPDATE fleetscope_sync_links SET last_error='waiting_for_truck_setup' WHERE kind='truck' AND local_id=$1`, l.LocalID); e != nil {
 				return e
 			}
@@ -559,10 +597,11 @@ func (r *FleetSyncRepository) project(ctx context.Context, epoch string) error {
 		op.FleetScopeID = l.RemoteID
 		op.ExpectedRevision = l.RemoteRevision
 		op.SourceRevision = l.SourceRevision + 1
-		if l.RemoteID == "" {
-			op.Provisioning = l.Provisioning
+		if create {
+			op.Provisioning = provisioning
+			op.SnapshotID = creationSnapshot
 		}
-		if e = enqueueSync(ctx, tx, op, key, syncHash(t.Truck), "", false); e != nil {
+		if e = enqueueSync(ctx, tx, op, key, syncHash(t.Truck), "", create); e != nil {
 			return e
 		}
 	}
