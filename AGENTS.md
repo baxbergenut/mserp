@@ -1766,7 +1766,7 @@ assignment lookup lists.
   One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in
   Administrator role is immutable and has the complete catalog. The API checks
-  current role permissions on every request and denies unmapped resources;
+  current effective permissions on every request and denies unmapped resources;
   hiding navigation is supplementary. Settings creates/edits roles, provisions
   and disables users, resets passwords, and revokes all sessions. There is no
   email verification, SMTP requirement, invitation token or public registration.
@@ -1792,7 +1792,14 @@ assignment lookup lists.
   Users refreshes every 30 visible seconds and on focus. Activity does not change
   account versions or invalidate financial caches.
   Session issuance locks/rechecks the user version to prevent stale login races.
-  Current role permissions are loaded for every request. Account and role writes
+  Migration 217 adds per-user allow/deny overrides for catalog and expense-category
+  permissions below account details in the user modal. Missing keys inherit the role;
+  denied prerequisites disable dependent actions. Administrator retains full access.
+  Saves are versioned, audited and revoke sessions; transactional access checks and
+  board presence use effective grants. Install the matching deploy helper before 217
+  to quiesce writers and block rollback to binaries that ignore denials. See
+  docs/ACCESS_CONTROL.md and TestUserPermissionOverridesDatabase.
+  Current effective permissions are loaded for every request. Account and role writes
   are versioned and audited without password material; serialized updates retain
   at least one active Administrator. Drivers, Trucks, Dispatchers, Updaters and
   Investors are independent. Private details, documents, compensation and each

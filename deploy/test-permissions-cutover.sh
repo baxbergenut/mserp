@@ -3,6 +3,7 @@ set -euo pipefail
 helper=${1:-$(dirname "$0")/mserp-deploy}
 bash -n "$helper"
 permissions_migration=112_permissions_v2.sql
+user_permissions_migration=217_user_permission_overrides.sql
 manager_verification_migration=151_retire_expense_manager_verification.sql
 accounting_cutover_migration=160_accounting_cutover.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql
@@ -42,8 +43,10 @@ mock_scale_partial=f
 mock_investor_retained=f
 mock_investor_accounts=f
 mock_board_stop_geocoding=f
+mock_user_permissions=f
 mserp_db() {
     local result=$mock
+    if [[ $* == *"column_name='permission_overrides'"* ]]; then result=$mock_user_permissions; fi
     if [[ $* == *"to_regclass('public.board_stop_geocodes')"* ]]; then result=$mock_board_stop_geocoding; fi
     if [[ $* == *"table_name='driver_escrows'"* && $* == *"column_name='truck_id'"* ]]; then result=$mock_investor_accounts; fi
     if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
@@ -376,3 +379,14 @@ compatible_release "$test_root/new"
 mock_board_stop_geocoding=error
 if compatible_release "$test_root/new"; then echo 'Stop-city cache query failure allowed rollback' >&2; exit 1; fi
 echo 'Stop-city cache compatibility checks passed'
+
+mock_board_stop_geocoding=t
+mock_user_permissions=t
+if compatible_release "$test_root/new"; then echo 'User overrides allowed an incompatible rollback' >&2; exit 1; fi
+touch "$test_root/new/migrations/$user_permissions_migration"
+compatible_release "$test_root/new"
+mock_user_permissions=error
+if compatible_release "$test_root/new"; then echo 'User override query failure allowed rollback' >&2; exit 1; fi
+mock_user_permissions=unexpected
+if compatible_release "$test_root/new"; then echo 'Unknown user override schema allowed rollback' >&2; exit 1; fi
+echo 'User permission override compatibility checks passed'

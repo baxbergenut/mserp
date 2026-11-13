@@ -1118,7 +1118,10 @@ export interface AuthUser {
   expenseCategoryAccess: ExpenseCategoryAccess[];
 }
 
+export type PermissionOverride = "allow" | "deny";
 export interface ManagedUser {
+  permissionOverrides?: Record<string, PermissionOverride>;
+  expenseCategoryOverrides?: Record<string, Record<string, PermissionOverride>>;
   firstName?: string; lastName?: string; dateOfBirth?: string; phone?: string;
   id: string; username: string; email: string; roleId: string;
   active: boolean; version: number; password?: string;
