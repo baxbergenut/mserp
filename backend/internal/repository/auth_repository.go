@@ -113,6 +113,13 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 		s.User.Administrator = true
 		s.User.Permissions = PermissionKeys()
 	}
+	effective := make([]string, 0, len(s.User.Permissions))
+	for _, key := range s.User.Permissions {
+		if HasPermission(s.User, key) {
+			effective = append(effective, key)
+		}
+	}
+	s.User.Permissions = effective
 	s.User.ExpenseCategoryAccess = []ExpenseCategoryAccess{}
 	query := `SELECT s.id::text,true,true,true,true,(s.active AND coalesce((to_jsonb(s)->>'accessorials')::boolean,false)) FROM expense_settings s WHERE s.kind='category' ORDER BY s.id`
 	args := []any{}

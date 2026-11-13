@@ -8,6 +8,7 @@ const { base } = access;
 if (!['localhost','127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Local review only');
 const browser = await chromium.launch();
 const contexts = [];
+const releaseGates = [];
 const token = randomBytes(5).toString('hex');
 async function login(email,password) {
  const context=await browser.newContext();contexts.push(context);
@@ -28,7 +29,7 @@ try {
   await change('POST','/settings/roles',{name:roleName,permissions,expenseCategoryAccess:[]});
   const role=(await roles()).find(r=>r.name===roleName);
   const email=`${name}-${token}@example.test`,password=randomBytes(18).toString('hex');
-  await change('POST','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
+  await change('POST','/settings/users',{username:roleName,firstName:"Permissions",lastName:`${name} ${token}`,email,password,roleId:role.id,active:true});
   return {...await login(email,password),role};
  }
  const drivers=await (await admin.context.request.get(`${base}/api/drivers`)).json();
@@ -70,7 +71,7 @@ try {
  expect(dispatcherFailures).toEqual([]);
  const board=await user('board-viewer',['board.read','drivers.read']);
  const mutations=[],dialogs=[];
- board.page.on('request',r=>{if(r.url().includes('/api/')&&!['GET','HEAD'].includes(r.method()))mutations.push(r.url())});
+ board.page.on('request',r=>{if(r.url().includes('/api/')&&!r.url().includes('/api/gross-board/presence')&&!r.url().endsWith('/api/auth/birthday')&&!['GET','HEAD'].includes(r.method()))mutations.push(r.url())});
  board.page.on('dialog',async d=>{dialogs.push(d.type());await d.dismiss()});
  await board.page.goto(`${base}/gross-board`);
  await expect(board.page.getByText('Read only',{exact:true})).toBeVisible();
@@ -79,7 +80,7 @@ try {
  for(const key of ['F2','9','Delete','Control+v','Control+z','ArrowRight'])await board.page.keyboard.press(key);
  await cell.dblclick();
  await expect(board.page.locator('[data-grid-cell] input:not([disabled]):not([readonly])')).toHaveCount(0);
- await board.page.locator('aside').getByRole('link',{name:'Drivers',exact:true}).click();
+ await board.page.locator('aside').getByRole('button',{name:'HR',exact:true}).click();await board.page.locator('aside').getByRole('link',{name:'Drivers',exact:true}).click();
  await expect(board.page).toHaveURL(`${base}/drivers`);
  expect(mutations).toEqual([]);expect(dialogs).toEqual([]);
  const editor=await user('profile-editor',['drivers.read','drivers.edit']);
@@ -95,11 +96,11 @@ try {
  const adder=await user('driver-add-only',['drivers.read','drivers.create']);
  expect((await adder.context.request.post(`${base}/api/drivers`,{data:profileInput,headers:{'X-CSRF-Token':adder.session.csrfToken}})).status()).toBe(403);
  for(const area of ['driver_pay','investor_pay','dispatcher_pay']){
-  const finance=await user(area,[`${area}.read`]);
+  const finance=await user(area,[`${area}.read`,...(area === "investor_pay" ? ["investors.read"] : [])]);
   for(const endpoint of ['driver-pay','investor-pay','dispatcher-pay']){
    const response=await finance.context.request.get(`${base}/api/${endpoint}?weekStart=2026-10-12`);
    expect(response.status(),`${area} -> ${endpoint}: ${await response.text()}`).toBe(endpoint===area.replace('_','-')?200:403);
-   if(area==='dispatcher_pay'&&endpoint==='dispatcher-pay'){const data=await response.json();expect(Object.keys(data).sort()).toEqual(['availableWeeks','dispatchers','period']);}
+   if(area==='dispatcher_pay'&&endpoint==='dispatcher-pay'){const data=await response.json();expect(Object.keys(data).sort()).toEqual(['availableWeeks','rule','statements','weekStart']);}
   }
  }
  // Revoke access while a profile editor is open. The capability refresh unmounts it.
@@ -113,7 +114,7 @@ try {
  await expect(editor.page.getByRole('button',{name:'Edit driver',exact:true})).toHaveCount(0);
  const liveBoard=await user('live-board',['board.read','board.write','drivers.read']);
  let releaseSave, pendingSave=false, saveRequests=0;
- const gate=new Promise(resolve=>{releaseSave=resolve});
+ const gate=new Promise(resolve=>{releaseSave=resolve;releaseGates.push(resolve)});
  const liveDialogs=[];
  liveBoard.page.on('dialog',async d=>{liveDialogs.push(d.type());await d.dismiss()});
  await liveBoard.page.route('**/api/gross-board',async route=>{
@@ -128,7 +129,7 @@ try {
  await liveBoard.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect(liveBoard.page.getByText('Read only',{exact:true})).toBeVisible();
  releaseSave();
- await liveBoard.page.locator('aside').getByRole('link',{name:'Drivers',exact:true}).click();
+ await liveBoard.page.locator('aside').getByRole('button',{name:'HR',exact:true}).click();await liveBoard.page.locator('aside').getByRole('link',{name:'Drivers',exact:true}).click();
  await expect(liveBoard.page).toHaveURL(`${base}/drivers`);
  expect(saveRequests).toBe(1);expect(liveDialogs).toEqual([]);
  const tabViewer=await user('financial-tab',['drivers.read','driver_pay.read']);
@@ -140,12 +141,19 @@ try {
  await expect(tabViewer.page.getByRole('tab',{name:'Pay history',exact:true})).toHaveCount(0);
  await expect(tabViewer.page.getByRole('tab',{name:'Overview',exact:true})).toHaveAttribute('aria-selected','true');
  await admin.page.goto(`${base}/settings`);
- await admin.page.getByRole('button',{name:'Roles & permissions',exact:true}).click();
+ await admin.page.getByRole('tab',{name:'Roles & permissions',exact:true}).click();
  await admin.page.getByRole('button',{name:'Create role',exact:true}).click();
  for(const label of ['View Drivers','View Trucks','View Driver private details','View Driver Pay','View Investor Pay'])await expect(admin.page.getByLabel(label,{exact:true})).toBeVisible();
  await expect(admin.page.getByLabel('Edit Drivers',{exact:true})).toBeDisabled();
  await admin.page.getByLabel('View Drivers',{exact:true}).check();
  await expect(admin.page.getByLabel('Edit Drivers',{exact:true})).toBeEnabled();
  await expect(admin.page.getByLabel('View Driver private details',{exact:true})).not.toBeChecked();
+ await expect(admin.page.getByLabel('View Investor Pay',{exact:true})).toBeDisabled();
+ await expect(admin.page.getByRole('row').filter({has:admin.page.getByLabel('View Investors',{exact:true})})).toContainText('Sensitive');
+ await admin.page.getByLabel('View Investors',{exact:true}).check();
+ await admin.page.getByLabel('View Investor Pay',{exact:true}).check();
+ await admin.page.getByLabel('View Investors',{exact:true}).uncheck();
+ await expect(admin.page.getByLabel('View Investor Pay',{exact:true})).not.toBeChecked();
+ await expect(admin.page.getByLabel('View Investor Pay',{exact:true})).toBeDisabled();
  console.log('Permissions v2 passed: independent profiles, raw JSON privacy, read-only board, safe edits, onboarding boundary, separate payroll, live access loss and Settings dependencies.');
-} finally {for(const context of contexts)await context.close();await browser.close();}
+} finally {for(const release of releaseGates)release();for(const context of contexts)await context.close();await browser.close();}
