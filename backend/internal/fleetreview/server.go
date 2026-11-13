@@ -254,7 +254,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		} else if e := s.db.CheckApplyReady(ctx); e != nil {
 			ready = publicError(e)
 		}
-		response := map[string]any{"state": s.state, "applyBlocker": ready, "applying": s.applying}
+		view := s.state
+		view.Profile = nil
+		response := map[string]any{"state": view, "applyBlocker": ready, "applying": s.applying}
 		if s.state.Batch != nil && s.state.Batch.State == "complete" {
 			a, b, err := s.db.Snapshot(ctx)
 			var links map[string]string
@@ -385,6 +387,54 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jsonOut(w, 200, map[string]bool{"ok": true})
+	case "GET /api/profile-preview":
+		if s.state.Batch != nil {
+			if s.state.Profile != nil {
+				jsonOut(w, 200, map[string]any{"plan": s.state.Profile.Plan, "capturedAt": s.state.Batch.Started})
+			} else {
+				fail(w, 409, "Finish or recover the frozen batch before previewing another")
+			}
+			return
+		}
+		preview, err := s.db.profilePreview(ctx, s.state)
+		if err != nil {
+			fail(w, 503, "Could not read current records from both systems")
+			return
+		}
+		jsonOut(w, 200, map[string]any{"plan": preview.Plan, "hash": digest(preview), "version": s.state.Version, "capturedAt": now()})
+	case "POST /api/profile-submit":
+		var in struct {
+			Version            int
+			Hash, Confirmation string
+		}
+		if decode(r, &in) != nil || in.Version != s.state.Version || in.Confirmation != "APPLY REVIEWED CHANGES" || s.state.Batch != nil {
+			fail(w, 409, "Preview confirmation is missing or stale")
+			return
+		}
+		if !s.cfg.AllowApply {
+			fail(w, 409, "Final application is disabled")
+			return
+		}
+		if e = s.db.CheckApplyReady(ctx); e != nil {
+			fail(w, 409, publicError(e))
+			return
+		}
+		preview, err := s.db.profilePreview(ctx, s.state)
+		if err != nil {
+			fail(w, 503, "Could not verify current records from both systems")
+			return
+		}
+		if digest(preview) != in.Hash {
+			fail(w, 409, "Live records changed. Generate and inspect a fresh batch preview.")
+			return
+		}
+		next := s.state
+		next.Profile = preview
+		if err = validateBatch(next); err != nil {
+			fail(w, 422, err.Error())
+			return
+		}
+		s.submit(w, next, in.Hash)
 	case "POST /api/preflight":
 		var in struct {
 			Version int `json:"version"`
@@ -441,16 +491,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			fail(w, 422, e.Error())
 			return
 		}
-		s.state.Batch = &Batch{ID: id(), Hash: in.Hash, State: "applying", Started: now()}
-		s.state.Version++
-		if e = s.save(); e != nil {
-			s.state.Batch = nil
-			s.state.Version--
-			fail(w, 500, "Batch could not be saved; nothing was applied")
-			return
-		}
-		s.startApply()
-		jsonOut(w, 202, s.state.Batch)
+		s.submit(w, s.state, in.Hash)
 	case "POST /api/retry":
 		if !s.cfg.AllowApply || s.state.Batch == nil || s.applying || s.state.Batch.State == "complete" {
 			fail(w, 409, "No recoverable batch")
@@ -480,6 +521,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		}
 		old := s.state
 		s.state.Batch = nil
+		s.state.Profile = nil
 		s.state.Version++
 		if e = s.save(); e != nil {
 			s.state = old
@@ -491,6 +533,20 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "Not found")
 	}
 }
+func (s *Server) submit(w http.ResponseWriter, next State, hash string) {
+	old := s.state
+	next.Batch = &Batch{ID: id(), Hash: hash, State: "applying", Started: now()}
+	next.Version++
+	s.state = next
+	if err := s.save(); err != nil {
+		s.state = old
+		fail(w, 500, "Batch could not be saved")
+		return
+	}
+	s.startApply()
+	jsonOut(w, 202, s.state.Batch)
+}
+
 func publicError(e error) string {
 	var pe *pgconn.PgError
 	if errors.As(e, &pe) {

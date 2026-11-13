@@ -454,6 +454,10 @@ status while background source evidence refreshes.
   Approved mappings remain in receipts for later integration enrollment; portal
   submission does not activate ongoing sync. Driver creation excludes missing
   terminated drivers; ownership and crew/insurance review remain separate.
+  Final review can preview current matched profiles before submission. Clustie
+  supplies ownership and statuses, FleetScope supplies driver details, and truck
+  model is optional. Profile batches preserve Clustie lifecycle and accounting
+  fields and suppress DataTruck delivery.
   See `deploy/README.md` for installation, recovery and retirement. Local database
   tests use `MSERP_PORTAL_TEST_DATABASE_URL` and
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.

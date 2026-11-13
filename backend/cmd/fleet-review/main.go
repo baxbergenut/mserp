@@ -36,6 +36,7 @@ func main() {
 	file := flag.String("config", "", "private JSON configuration file")
 	provision := flag.Bool("provision-receipts", false, "explicitly install receipt storage in both configured databases")
 	credentials := flag.String("generate-credentials", "", "write generated credentials to a private file, then exit")
+	preview := flag.Bool("preview-summary", false, "read both live systems and print reconciliation counts")
 	capability := flag.Bool("payroll-protocol-capability", false, "print the supported payroll lock protocol without reading private configuration")
 	flag.Parse()
 	if *capability {
@@ -92,6 +93,13 @@ func main() {
 			}
 		}
 		fmt.Println("Receipt storage installed in both databases")
+		return
+	}
+	if *preview {
+		if err := fleetreview.PrintPreviewSummary(ctx, db, c.Directory, os.Stdout); err != nil {
+			slog.Error("could not preview live records", "error", err)
+			os.Exit(1)
+		}
 		return
 	}
 	if c.Listen == "" {
