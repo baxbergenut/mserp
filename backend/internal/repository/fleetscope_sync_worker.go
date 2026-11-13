@@ -54,7 +54,7 @@ func desiredSyncCrews(local FleetSyncLocal, links []FleetSyncLink) ([]fleetscope
 		if c.ExpectedRevision == "" {
 			return nil, errors.New("waiting_for_assignment_revision")
 		}
-		if exists && t.PrimaryID != "" {
+		if exists && t.PrimaryID != "" && !(t.Truck.OperationalStatus == "terminated" && !t.Truck.OperationalActive) {
 			if !t.Truck.OperationalActive || t.Truck.OperationalStatus == "maintenance" || t.Truck.OperationalStatus == "out_of_service" || t.Truck.OperationalStatus == "hold" {
 				return nil, errors.New("operational_truck_conflict")
 			}

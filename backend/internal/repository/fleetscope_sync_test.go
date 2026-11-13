@@ -376,8 +376,8 @@ func TestDesiredFleetScopeCrews(t *testing.T) {
 
 func TestDeferredTerminatedFleetScopeTruckRetainsClustieCrew(t *testing.T) {
 	retired := FleetSyncTruck{
-		Truck:  fleetscope.TruckProjection{MSERPTruckID: "retired"},
-		Status: "terminated", PrimaryID: "driver", SecondaryID: "co-driver",
+		Truck:     fleetscope.TruckProjection{MSERPTruckID: "retired", OperationalStatus: "terminated"},
+		PrimaryID: "driver", SecondaryID: "co-driver",
 	}
 	local := FleetSyncLocal{Trucks: []FleetSyncTruck{retired}}
 	links := []FleetSyncLink{{Kind: "truck", LocalID: "retired", ExcludedReason: "Owner deferred"}}
@@ -387,11 +387,16 @@ func TestDeferredTerminatedFleetScopeTruckRetainsClustieCrew(t *testing.T) {
 	if local.Trucks[0].PrimaryID != "driver" || local.Trucks[0].SecondaryID != "co-driver" {
 		t.Fatal("retained Clustie crew changed")
 	}
-	local.Trucks[0].Status = "maintenance"
+	links[0].RemoteID, links[0].AssignmentRevision, links[0].ExcludedReason = "remote-truck", "reviewed", ""
+	if crews, err := desiredSyncCrews(local, links); err != nil || len(crews) != 1 || crews[0].Primary != nil || crews[0].Secondary != nil {
+		t.Fatalf("enrolled terminated truck emitted a crew: %v, %v", crews, err)
+	}
+	links[0].RemoteID, links[0].ExcludedReason = "", "Owner deferred"
+	local.Trucks[0].Truck.OperationalStatus = "maintenance"
 	if _, err := desiredSyncCrews(local, links); err == nil {
 		t.Fatal("maintenance truck with retained crew was excluded")
 	}
-	local.Trucks[0].Status = "terminated"
+	local.Trucks[0].Truck.OperationalStatus = "terminated"
 	local.Trucks[0].Truck.OperationalActive = true
 	if _, err := desiredSyncCrews(local, links); err == nil {
 		t.Fatal("reactivated truck with retained crew was excluded")
