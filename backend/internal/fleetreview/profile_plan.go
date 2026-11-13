@@ -346,7 +346,7 @@ func planDriver(r *profileRow, a, b Record, locals, remotes, trucks []Record) {
 		r.Review = append(r.Review, "Review FleetScope employment or pending termination")
 	case a["status"] == "terminated" || b["status"] == "terminated":
 		if want != b["status"] || a["terminationDate"] != b["terminationDate"] {
-			r.Review = append(r.Review, "Review termination or rehire in the employment workflow")
+			r.Review = append(r.Review, driverEmploymentConflict)
 		}
 	case want != b["status"]:
 		if want != "active" && slices.ContainsFunc(trucks, func(t Record) bool { return t["primaryId"] == b["id"] || t["secondaryId"] == b["id"] }) {
@@ -354,6 +354,33 @@ func planDriver(r *profileRow, a, b Record, locals, remotes, trucks []Record) {
 		} else {
 			r.change(fleetScope, "status", b["status"], want)
 		}
+	}
+}
+
+const driverEmploymentConflict = "Review termination or rehire in the employment workflow"
+
+func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot, links Record) {
+	for i, row := range p.Rows {
+		if row.Kind != "driver" || row.RemoteID == "" || links["driver:"+row.LocalID] != row.RemoteID ||
+			!slices.Contains(row.Review, driverEmploymentConflict) {
+			continue
+		}
+		a, b := find(source.Drivers, row.LocalID), find(receiver.Drivers, row.RemoteID)
+		if b["terminationPending"] != "false" || a["terminationDate"] != b["terminationDate"] {
+			continue
+		}
+		matchedTermination := a["status"] == "terminated" && b["status"] == "terminated" && a["terminationDate"] != ""
+		matchedActive := a["status"] == "active" && b["status"] == "active" && a["terminationDate"] == ""
+		if !matchedTermination && !matchedActive {
+			continue
+		}
+		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
+			return reason == driverEmploymentConflict
+		})
+		if len(row.Review) == 0 {
+			p.Review--
+		}
+		p.Rows[i] = row
 	}
 }
 

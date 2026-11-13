@@ -64,3 +64,32 @@ func TestTruckMakeAbbreviations(t *testing.T) {
 		t.Fatalf("unexpected live review flags: %+v", display)
 	}
 }
+
+func TestCompletedEmploymentReviewUsesLiveVerifiedPair(t *testing.T) {
+	const date = "2026-10-27"
+	const historical = "Keep the historical Clustie driver profile and escrow record"
+	plan := profilePlan{Review: 3, Rows: []profileRow{
+		{Kind: "driver", LocalID: "a", RemoteID: "1", Review: []string{driverEmploymentConflict}},
+		{Kind: "driver", LocalID: "b", RemoteID: "2", Review: []string{driverEmploymentConflict, historical}},
+		{Kind: "driver", LocalID: "c", RemoteID: "3", Review: []string{driverEmploymentConflict}},
+	}}
+	source := Snapshot{Drivers: []Record{
+		{"id": "a", "status": "terminated", "terminationDate": date},
+		{"id": "b", "status": "terminated", "terminationDate": date},
+		{"id": "c", "status": "terminated", "terminationDate": date},
+	}}
+	receiver := Snapshot{Drivers: []Record{
+		{"id": "1", "status": "terminated", "terminationDate": date, "terminationPending": "false"},
+		{"id": "2", "status": "terminated", "terminationDate": date, "terminationPending": "false"},
+		{"id": "3", "status": "inactive", "terminationPending": "false"},
+	}}
+	hash := digest(plan)
+	display := plan.forDisplay()
+	display.resolveDriverEmploymentConflicts(source, receiver, Record{"driver:a": "1", "driver:b": "2", "driver:c": "3"})
+	if display.Review != 2 || len(display.Rows[0].Review) != 0 ||
+		len(display.Rows[1].Review) != 1 || display.Rows[1].Review[0] != historical ||
+		len(display.Rows[2].Review) != 1 || display.Rows[2].Review[0] != driverEmploymentConflict ||
+		digest(plan) != hash {
+		t.Fatalf("unexpected employment review flags: %+v", display)
+	}
+}

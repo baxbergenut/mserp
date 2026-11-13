@@ -314,7 +314,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if s.state.Batch != nil && s.state.Batch.State == "complete" {
-			a, b, err := s.db.Snapshot(ctx)
+			a, b, err := s.db.snapshot(ctx, true)
 			var links Record
 			if err == nil {
 				links, err = s.readBatchIdentityLinks(ctx)
@@ -328,6 +328,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 				displayPlan.resolveTruckModelAndUnitConflicts(a, b)
 				displayPlan.resolveTruckReviewDecisions(a, b, links)
 				displayPlan.resolveTruckStatusCrewConflicts(a, b)
+				displayPlan.resolveDriverEmploymentConflicts(a, b, links)
 				profileResponse["plan"] = displayPlan
 			}
 			response["live"] = map[string]any{"source": a, "receiver": b, "links": links}
@@ -451,7 +452,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			if s.state.Profile != nil {
 				plan := s.displayProfilePlan()
 				if s.state.Batch.State == "complete" {
-					a, b, err := s.db.Snapshot(ctx)
+					a, b, err := s.db.snapshot(ctx, true)
 					if err != nil {
 						fail(w, 503, "Could not read current records from both systems")
 						return
@@ -465,6 +466,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 					}
 					plan.resolveTruckReviewDecisions(a, b, links)
 					plan.resolveTruckStatusCrewConflicts(a, b)
+					plan.resolveDriverEmploymentConflicts(a, b, links)
 				}
 				jsonOut(w, 200, map[string]any{"plan": plan, "capturedAt": s.state.Batch.Started})
 			} else {
