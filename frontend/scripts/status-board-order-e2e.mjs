@@ -13,7 +13,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
     ('${ids[1]}','Order Bravo','order bravo','cpm',0,'${dispatcher}'),
     ('${ids[2]}','Order Charlie','order charlie','cpm',0,'${dispatcher}'),
     ('${ids[3]}','Order Other','order other','cpm',0,'${other}');
-    INSERT INTO driver_board(driver_id,status,notes) VALUES('${ids[0]}','ENROUTE','Keep dispatch notes'),('${ids[1]}','HOME',''),('${ids[2]}','ENROUTE','');`);
+    INSERT INTO driver_board(driver_id,status,notes) VALUES('${ids[0]}','ENROUTE','Keep dispatch notes'),('${ids[1]}','HOME',''),('${ids[2]}','ENROUTE',''),('${ids[3]}','DEADHEAD','');`);
   const read = async () => (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
   const group = (board, key=dispatcher) => board.drivers.filter(d => d.dispatcherId === key && ids.includes(d.id)).map(d => d.id);
   const order = p => p.locator('tr[data-driver-id]').evaluateAll(rows => rows.map(r => r.dataset.driverId));
@@ -155,6 +155,8 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await expect(otherHandle).toBeEnabled();
   await drag(row(ids[1]),3,otherHandle);
   await expect.poll(async()=>group(await read(),other)).toEqual([]);
+  await expect.poll(()=>order(page)).toEqual([ids[0],ids[2],ids[3],ids[1]]);
+  await expect.poll(()=>order(viewer)).toEqual([ids[0],ids[2],ids[3],ids[1]]);
   await expect(otherHandle).toBeEnabled();
   await expect(otherAutoOrder).toBeVisible();
   await drag(page.locator(`tr[data-dispatcher-id="${other}"]`),16,otherHandle);
