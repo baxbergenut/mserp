@@ -54,7 +54,7 @@ type WMTBilling struct {
 var wmtChargeFrom = ` FROM weighmytruck_transactions t
  LEFT JOIN drivers d ON d.id=t.driver_id` + wmtChargeJoins + wmtFrozenJoinSQL
 
-var wmtPayerJoins = `
+var wmtChargeJoins = `
  LEFT JOIN LATERAL(SELECT payroll_driver_at(t.driver_id,t.transaction_date) driver_id) pd ON true
  LEFT JOIN LATERAL(SELECT (array_agg(DISTINCT h.owner_id))[1] owner_id FROM truck_ownership_history h
  WHERE h.truck_id=t.truck_id AND (NOT h.start_known OR (h.assigned_at AT TIME ZONE 'America/New_York')::date<=t.transaction_date)
@@ -63,9 +63,6 @@ var wmtPayerJoins = `
  LEFT JOIN investors i ON i.id=ownership.owner_id
  CROSS JOIN LATERAL(SELECT CASE WHEN t.driver_id IS NULL OR i.id IS NULL OR t.match_warning LIKE '%conflicts%' THEN 'review'
  WHEN i.is_company THEN 'company' WHEN i.driver_id=pd.driver_id THEN 'driver' ELSE 'investor' END payer) b
-`
-
-var wmtChargeJoins = wmtPayerJoins + `
  LEFT JOIN LATERAL(SELECT * FROM truck_settlement_terms s WHERE s.truck_id=t.truck_id AND s.week_start<=date_trunc('week',t.transaction_date)::date ORDER BY s.week_start DESC LIMIT 1) s
  ON ` + truckTermCoversWeekSQL("date_trunc('week',t.transaction_date)::date") + `
 `

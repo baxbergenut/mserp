@@ -60,7 +60,6 @@ var Permissions = []Permission{
 	{Key: "investor_pay.edit", Label: "Edit Investor Pay", Group: "Investor Pay", Action: "edit", Requires: []string{"investor_pay.read"}, Sensitive: true},
 	{Key: "investor_pay.finalize", Label: "Finalize Investor Pay", Group: "Investor Pay", Action: "finalize", Requires: []string{"investor_pay.read"}, Sensitive: true},
 	{Key: "investor_pay.reopen", Label: "Reopen Investor Pay", Group: "Investor Pay", Action: "reopen", Requires: []string{"investor_pay.read"}, Sensitive: true},
-	{Key: "reports.performance", Label: "View dispatcher and driver performance", Group: "Reports", Action: "read", Requires: []string{}, Sensitive: true},
 	{Key: "dispatcher_pay.read", Label: "View Dispatcher Pay", Group: "Dispatcher Pay", Action: "read", Requires: []string{}, Sensitive: true},
 	{Key: "dispatcher_pay.edit", Label: "Edit Dispatcher home days", Group: "Dispatcher Pay", Action: "edit", Requires: []string{"dispatcher_pay.read"}, Sensitive: true},
 	{Key: "dispatcher_pay.rules", Label: "Manage Dispatcher commission rules", Group: "Dispatcher Pay", Action: "rules", Requires: []string{"dispatcher_pay.read"}, Sensitive: true},

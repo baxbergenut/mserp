@@ -32,10 +32,10 @@ import { BetaBadge, BrandLogo } from "./BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined },
+  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, comingSoon: true },
   { href: "/driver-board", label: "Status Board", icon: Truck },
   { href: "/gross-board", label: "Gross Board", icon: CalendarRange },
-  { href: "/map", label: "Map", icon: Map, isNew: true },
+  { href: "/map", label: "Map", icon: Map },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/expenses", label: "Expenses", icon: WalletCards },
   { href: "/expenses/settings", label: "Expenses settings", icon: Settings },
@@ -115,6 +115,20 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => {
 		  if (item.href === "/expenses/settings" && permissions.includes("expenses.read")) return null;
           const children = "children" in item ? item.children.filter(child => canVisitPage(permissions,child.href) && (child.href === "/fleet/service-programs" ? maintenanceAccess?.canView : true)) : [];
+          if ("comingSoon" in item && item.comingSoon) {
+            if (!administrator && !permissions.includes("reports.read")) return null;
+            const Icon = item.icon;
+            return (
+              <div key={item.href} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium text-zinc-400 ${collapsed ? "justify-center px-0" : ""}`}
+                title={collapsed ? item.label + " · Coming soon" : undefined}>
+                <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-500" />
+                {collapsed ? <span className="sr-only">{item.label} · Coming soon</span> : <>
+                  <span>{item.label}</span>
+                  <span className="ml-auto whitespace-nowrap rounded-full bg-zinc-500/15 px-1.5 text-[11px] font-medium">Coming soon</span>
+                </>}
+              </div>
+            );
+          }
           if ("children" in item ? children.length === 0 : !canVisitPage(permissions,item.href,administrator)) return null;
           const active = children.some(child => pathname === child.href || pathname.startsWith(child.href+"/")) ||
             pathname === item.href ||
@@ -222,9 +236,6 @@ export function Sidebar() {
                 }`}
               />
               {!collapsed && <span>{item.label}</span>}
-              {!collapsed && "isNew" in item && item.isNew && (
-                <span className="ml-auto rounded-full bg-blue-500/15 px-1.5 text-[11px] font-semibold text-blue-300">New</span>
-              )}
               <NavBadge badge={badge} collapsed={collapsed} />
             </Link>
           );
