@@ -36,7 +36,7 @@ function differences(r){const a=local(r),b=remote(r),v=r.values,d=[];
 }
 function profileResult(r){return state.batch?.state==='complete'?profileRows.get(r.localId):null}
 function status(r){const result=profileResult(r);if(result)return result.deferred?'amber':result.review?.length?'red':'green';if(r.action==='defer')return 'amber';if(!r.reviewed)return 'red';if(!differences(r).length)return 'green';return state.batch?'red':'amber'}
-function reviewLabel(r){const result=profileResult(r);if(result)return result.deferred?'Deferred':result.review?.length?'Needs review':result.identityConfirmed?'Identity confirmed':result.changes?.length?'Applied':'Verified matching';if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
+function reviewLabel(r){const result=profileResult(r);if(result)return result.deferred?'Deferred':result.review?.length?'Needs review':result.completion?'Complete':result.identityConfirmed?'Identity confirmed':result.changes?.length?'Applied':'Verified matching';if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
 function reviewProgress(rows){const total=rows.length,deferred=rows.filter(r=>r.action==='defer').length,reviewed=rows.filter(r=>r.reviewed&&r.action!=='defer').length,done=reviewed+deferred;return {total,deferred,reviewed,done,remaining:total-done,percent:total?Math.floor(done*100/total):0}}
 function profileProgress(rows){
  const results=rows.map(profileResult);
@@ -122,7 +122,7 @@ function render(){
  const q=norm($('#search').value),f=$('#filter').value,visible=rows.filter(r=>{const a=local(r),b=remote(r);return (!q||norm([a.name,a.unit,a.vin,b.name,b.unit,b.vin,r.note].join(' ')).includes(q))&&(f==='all'||f==='defer'&&reviewLabel(r)==='Deferred'||f===status(r))});$('#list-count').textContent=visible.length+' records';const body=$('#rows');body.replaceChildren();
  for(const r of visible){const a=local(r),b=remote(r),color=status(r),tr=el('tr',undefined,'row-'+color);const name=el('td',a.name||a.unit||r.localId);name.append(el('small',r.kind==='truck'?(a.vin||'VIN missing'):(a.status||'Unknown status')));tr.append(name);
   const matched=el('td',b.name||b.unit||(r.action==='create'?'Create new record':'No match selected'));if(b.id)matched.append(el('small',r.kind==='truck'?b.vin:b.status));tr.append(matched);
-  const result=profileResult(r),diff=result?(result.deferred?[result.deferred]:(result.review||[])):differences(r);tr.append(el('td',diff.length?diff.slice(0,3).join(' · ')+(diff.length>3?' +'+(diff.length-3):''):(result?.identityConfirmed?'FleetScope identity confirmed':result?.changes?.length?'Batch changes applied':'Values agree')));
+  const result=profileResult(r),diff=result?(result.deferred?[result.deferred]:(result.review||[])):differences(r);tr.append(el('td',diff.length?diff.slice(0,3).join(' · ')+(diff.length>3?' +'+(diff.length-3):''):(result?.completion||(result?.identityConfirmed?'FleetScope identity confirmed':result?.changes?.length?'Batch changes applied':'Values agree'))));
   const badge=el('td');badge.append(el('span',reviewLabel(r),'badge '+color));tr.append(badge);const action=el('td'),button=el('button',state.batch?'View':'Review','quiet');button.addEventListener('click',()=>openEditor(r));action.append(button);tr.append(action);body.append(tr)
  }
  if(!visible.length){const tr=el('tr'),td=el('td','No records match this filter.');td.colSpan=5;tr.append(td);body.append(tr)}
@@ -180,6 +180,12 @@ function renderProfile(){
    const tr=el('tr'),detail=el('td','FleetScope identity confirmed');
    detail.colSpan=3;
    tr.append(el('td',label),el('td','Identity confirmed'),detail);
+   rows.append(tr);
+  }
+  if(row.completion&&filter==='all'){
+   const tr=el('tr'),detail=el('td',row.completion);
+   detail.colSpan=3;
+   tr.append(el('td',label),el('td','Complete'),detail);
    rows.append(tr);
   }
   if(row.deferred){

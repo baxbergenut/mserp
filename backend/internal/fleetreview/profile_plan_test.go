@@ -93,3 +93,33 @@ func TestCompletedEmploymentReviewUsesLiveVerifiedPair(t *testing.T) {
 		t.Fatalf("unexpected employment review flags: %+v", display)
 	}
 }
+
+func TestApprovedHistoricalDriverAndTruckCompletion(t *testing.T) {
+	const driver = "282defcb-aac7-4a94-8214-0f6ac54cf1f6"
+	const date = "2026-10-29"
+	const vin = "3AKJHHDRXNSNC4243"
+	plan := profilePlan{Review: 2, Rows: []profileRow{
+		{Kind: "driver", LocalID: driver, RemoteID: "remote-driver", Review: []string{driverEmploymentConflict, preserveHistoricalDriverProfile}},
+		{Kind: "truck", Label: "4243", LocalID: "local-truck", Review: []string{uniqueFleetScopeIdentity}},
+	}}
+	source := Snapshot{
+		Drivers: []Record{{"id": driver, "status": "terminated", "terminationDate": date}},
+		Trucks: []Record{{"id": "local-truck", "unit": "4243", "vin": vin, "plate": "017531A", "plateState": "KY",
+			"ownerId": "owner", "ownerKind": "company", "status": "assigned", "active": "true", "primaryId": driver}},
+	}
+	receiver := Snapshot{
+		Drivers: []Record{{"id": "remote-driver", "status": "terminated", "terminationDate": date, "terminationPending": "false"}},
+		Trucks: []Record{{"id": "remote-truck", "unit": "4243", "vin": vin, "plate": "017531A", "plateState": "KY",
+			"ownerKind": "company", "ownerSnapshot": `{"kind":"company","mserpOwnerId":"owner"}`,
+			"operationalStatus": "assigned", "operationalActive": "true", "year": "2022", "make": "FRHT", "model": "Cascadia", "coverageHold": "true"}},
+	}
+	links := Record{"driver:" + driver: "remote-driver"}
+	hash := digest(plan)
+	display := plan.forDisplay()
+	display.resolveDriverEmploymentConflicts(source, receiver, links)
+	display.resolveTruckReviewDecisions(source, receiver, links)
+	if display.Review != 0 || display.Rows[0].Completion == "" || display.Rows[1].Completion == "" ||
+		display.Rows[1].RemoteID != "remote-truck" || digest(plan) != hash {
+		t.Fatalf("unexpected completed rows: %+v", display)
+	}
+}

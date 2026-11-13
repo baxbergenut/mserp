@@ -18,6 +18,7 @@ type profileChange struct {
 }
 
 type profileRow struct {
+	Completion        string          `json:"completion,omitempty"`
 	IdentityConfirmed bool            `json:"identityConfirmed,omitempty"`
 	Deferred          string          `json:"deferred,omitempty"`
 	Kind              string          `json:"kind"`
@@ -38,6 +39,7 @@ const conflictingTruckMake = "Conflicting truck make"
 const uniqueFleetScopeIdentity = "Confirm a unique FleetScope identity"
 
 const historicalDriverWithoutMatch = "Historical driver has no verified FleetScope match"
+const preserveHistoricalDriverProfile = "Keep the historical Clustie driver profile and escrow record"
 
 type profilePlan struct {
 	Rows     []profileRow `json:"rows"`
@@ -334,7 +336,7 @@ func planDriver(r *profileRow, a, b Record, locals, remotes, trucks []Record) {
 			r.change(clustie, field, a[field], local)
 		}
 		if a["status"] == "terminated" && a[field] != value && (field != "phone" || phone(a[field]) != phone(value)) {
-			r.Review = append(r.Review, "Keep the historical Clustie driver profile and escrow record")
+			r.Review = append(r.Review, preserveHistoricalDriverProfile)
 		}
 		if field != "phone" || phone(b[field]) != phone(value) {
 			r.change(fleetScope, field, b[field], value)
@@ -365,7 +367,7 @@ const (
 func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot, links Record) {
 	for i, row := range p.Rows {
 		if row.Kind != "driver" || row.RemoteID == "" || links["driver:"+row.LocalID] != row.RemoteID ||
-			(!slices.Contains(row.Review, driverEmploymentConflict) && !slices.Contains(row.Review, driverAssignedStatusConflict)) {
+			(!slices.Contains(row.Review, driverEmploymentConflict) && !slices.Contains(row.Review, driverAssignedStatusConflict) && !slices.Contains(row.Review, preserveHistoricalDriverProfile)) {
 			continue
 		}
 		a, b := find(source.Drivers, row.LocalID), find(receiver.Drivers, row.RemoteID)
@@ -377,9 +379,22 @@ func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot
 		if !matchedTermination && !matchedActive {
 			continue
 		}
+		// The owner accepted the historical differences for these six verified drivers.
+		closeHistorical := matchedTermination && slices.Contains(row.Review, preserveHistoricalDriverProfile) && slices.Contains([]string{
+			"282defcb-aac7-4a94-8214-0f6ac54cf1f6", // Darriel Turro
+			"82be49a2-6ada-47d9-9282-1a658cf3c082", // Jerry Anteys
+			"99737308-2795-4cb1-af40-73900faa1632", // Maurique Kerley
+			"b2240bcf-98fe-4746-bb7f-94b80381f948", // Patrick Cyuzuzo
+			"ef2c6b0f-5a17-454d-bdc7-ab0025a425d6", // Francois Nshizirungu Gasasira
+			"fd77bb1c-d81d-4fe4-a263-d22f7b7a32ca", // Solomon Mazima
+		}, row.LocalID)
 		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
-			return reason == driverEmploymentConflict || (reason == driverAssignedStatusConflict && matchedActive)
+			return reason == driverEmploymentConflict || (reason == driverAssignedStatusConflict && matchedActive) ||
+				(reason == preserveHistoricalDriverProfile && closeHistorical)
 		})
+		if closeHistorical {
+			row.Completion = "Termination verified. Historical Clustie profile and escrow record preserved."
+		}
 		if len(row.Review) == 0 {
 			p.Review--
 		}
@@ -524,10 +539,16 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 				reconciledTruck = reconciledTruck && b[field] != "" && links["driver:"+a[field]] == b[field]
 			}
 		}
-		if created4243 && ownerMatches && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
+		if created4243 && len(row.Review) == 1 && row.Review[0] == uniqueFleetScopeIdentity && ownerMatches && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
 			b["year"] == "2022" && norm(b["make"]) == "frht" && norm(b["model"]) == "cascadia" {
 			row.RemoteID = b["id"]
-			row.Review = []string{"FleetScope coverage review required before assigning crew"}
+			if registrationMatches && a["plate"] == "017531A" && a["plateState"] == "KY" {
+				row.Review = nil
+				row.Completion = "Truck added to FleetScope. FleetScope handles insurance and crew assignment."
+				p.Review--
+			} else {
+				row.Review = []string{"Verify truck registration"}
+			}
 			p.Rows[i] = row
 			continue
 		}
