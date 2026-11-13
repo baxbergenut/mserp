@@ -74,7 +74,7 @@ class RoutingTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.destination()
 
     def test_connection_overrides_are_rejected(self):
-        for option in ['--dbname=other', '--host=other', '-h', '-U', '--username=postgres']:
+        for option in ['--dbname=other', '--host=other', '-h', '-hother', '-U', '-Uother', '--username=postgres', 'otherdb', 'postgres://other/db']:
             with self.assertRaises(ValueError): routing.command(['psql', option], '/admin')
 
 

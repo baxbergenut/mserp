@@ -68,12 +68,20 @@ def command(argv, service_file):
     # These root-owned callers always name mserp explicitly. Never permit a
     # connection URL or alternate host/user/database to override validation.
     args = [argv[0]]
+    needs_value = False
     for arg in argv[1:]:
+        if needs_value:
+            args.append(arg)
+            needs_value = False
+            continue
         if arg == '--dbname=mserp':
             continue
-        if arg in ('-h', '-p', '-U', '-d') or arg.startswith(('--host', '--port', '--username', '--dbname')):
+        if not arg.startswith('-') or arg.startswith(('-h', '-p', '-U', '-d', '--host', '--port', '--username', '--dbname')):
             raise ValueError('Connection overrides are forbidden')
         args.append(arg)
+        needs_value = arg in ('-c', '--command', '-f', '--file', '-v', '--set', '-o', '--output', '-P', '--pset', '-F', '--field-separator')
+    if needs_value:
+        raise ValueError('Missing database command option value')
     environment = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
     if service_file:
         environment.update(PGSERVICEFILE=service_file, PGSERVICE='mserp', PGCONNECT_TIMEOUT='10')
