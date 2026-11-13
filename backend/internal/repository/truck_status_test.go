@@ -232,8 +232,8 @@ func verifyTruckStatuses(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	snapshot, e := readSyncLocal(ctx, pool, "")
 	must(e)
 	for _, row := range snapshot.Trucks {
-		if row.Truck.MSERPTruckID == truck.ID && (row.Truck.OperationalActive || row.Truck.OperationalStatus != "available") {
-			t.Fatal("new status leaked into provider contract", row.Truck)
+		if row.Truck.MSERPTruckID == truck.ID && (row.Truck.OperationalActive || row.Truck.OperationalStatus != "terminated") {
+			t.Fatal("terminated status was not preserved in FleetScope projection", row.Truck)
 		}
 	}
 	change("ready", "Truck returned to company")
