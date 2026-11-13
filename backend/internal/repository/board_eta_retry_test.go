@@ -9,7 +9,7 @@ import (
 func TestBoardTravelManualRetry(t *testing.T) {
 	now := time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
 	location := &DriverBoardLocation{Source: "five_eld", Latitude: 40, Longitude: -74, ReportedAt: now}
-	travel := BoardTravel{Enabled: true, Context: "selected", Mode: boardroutes.TravelMode, Source: "five_eld", CalculatedAt: now, AttemptedAt: now, Position: &boardRoutePosition{Latitude: 40, Longitude: -74}, RetryRequestedAt: now}
+	travel := BoardTravel{Enabled: true, Context: "selected", Mode: boardroutes.RouteProfile, Source: "five_eld", CalculatedAt: now, AttemptedAt: now, Position: &boardRoutePosition{Latitude: 40, Longitude: -74}, RetryRequestedAt: now}
 	if !travel.due("selected", location, now) {
 		t.Fatal("explicit retry must bypass fresh timer and stationary origin")
 	}

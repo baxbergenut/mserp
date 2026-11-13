@@ -40,7 +40,7 @@ func TestReverseGeocodeUsageDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Exec(context.Background(), `DROP SCHEMA `+q+` CASCADE`)
-	for _, path := range []string{"../../sql/197_board_route_usage.sql", "../../sql/207_ready_location.sql"} {
+	for _, path := range []string{"../../sql/197_board_route_usage.sql", "../../sql/207_ready_location.sql", "../../sql/217_board_destination_geocode_usage.sql"} {
 		migration, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -87,8 +87,19 @@ func TestReverseGeocodeUsageDatabase(t *testing.T) {
 	if err = NewPostgresBudget(pool).reserveReverseGeocode(ctx, o, december); err != nil {
 		t.Fatal("monthly reset", err)
 	}
+	o.AddressGeocodeMonthlyLimit = 1
+	budget := NewPostgresBudget(pool)
+	if err = budget.ReserveAddressGeocode(ctx, o); err != nil {
+		t.Fatal("address geocoding should have its own allowance", err)
+	}
+	if err = budget.ReserveAddressGeocode(ctx, o); !errors.Is(err, ErrAddressGeocodeBudgetExhausted) {
+		t.Fatal("address geocoding exceeded its independent cap", err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT requests FROM board_route_usage WHERE provider='tomtom_geocode'`).Scan(&requests); err != nil || requests != 1 {
+		t.Fatal("address geocoding usage", requests, err)
+	}
 	o.TomTomMonthlyFree = 1
-	if provider, err := NewPostgresBudget(pool).reserve(ctx, o, now); err != nil || provider != "tomtom" {
-		t.Fatal("reverse usage consumed routing allowance", provider, err)
+	if err := NewPostgresBudget(pool).reserve(ctx, o, now); err != nil {
+		t.Fatal("reverse usage consumed routing allowance", err)
 	}
 }
