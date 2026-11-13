@@ -84,6 +84,17 @@ func desiredSyncCrews(local FleetSyncLocal, links []FleetSyncLink) ([]fleetscope
 	sort.Slice(crews, func(i, j int) bool { return crews[i].MSERPTruckID < crews[j].MSERPTruckID })
 	return crews, nil
 }
+func matchesTruckProjection(actual *fleetscope.TruckProjection, acknowledged fleetscope.TruckProjection) bool {
+	if actual == nil {
+		return false
+	}
+	projection := *actual
+	if acknowledged.Model == nil {
+		projection.Model = nil
+	}
+	return syncHash(projection) == syncHash(acknowledged)
+}
+
 func crewStateHash(crews []fleetscope.Crew) string {
 	copyCrews := append([]fleetscope.Crew{}, crews...)
 	for i := range copyCrews {
@@ -251,7 +262,7 @@ func (r *FleetSyncRepository) Activate(ctx context.Context, snapshotID string, r
 		if e = json.Unmarshal(lm["truck:"+c.MSERPTruckID].Acknowledged, &acknowledged); e != nil || syncHash(owner) != syncHash(acknowledged.Ownership) {
 			return errors.New("FleetScope owner readback does not match")
 		}
-		if lm["truck:"+c.MSERPTruckID].AcknowledgedHash != "retired" && (rt.Projection == nil || syncHash(rt.Projection) != syncHash(acknowledged)) {
+		if lm["truck:"+c.MSERPTruckID].AcknowledgedHash != "retired" && !matchesTruckProjection(rt.Projection, acknowledged) {
 			return errors.New("FleetScope truck readback does not match")
 		}
 	}
@@ -402,7 +413,7 @@ func (r *FleetSyncRepository) checkDrift(ctx context.Context, epoch string) erro
 		if l.AcknowledgedHash != "retired" {
 			var ack fleetscope.TruckProjection
 			var owner fleetscope.Ownership
-			if json.Unmarshal(l.Acknowledged, &ack) != nil || json.Unmarshal(t.Ownership, &owner) != nil || t.Projection == nil || syncHash(t.Projection) != syncHash(ack) || syncHash(owner) != syncHash(ack.Ownership) {
+			if json.Unmarshal(l.Acknowledged, &ack) != nil || json.Unmarshal(t.Ownership, &owner) != nil || !matchesTruckProjection(t.Projection, ack) || syncHash(owner) != syncHash(ack.Ownership) {
 				drift = true
 			}
 		}

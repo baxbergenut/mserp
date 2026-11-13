@@ -137,6 +137,9 @@ func readSyncLocal(ctx context.Context, q syncQuery, company string) (FleetSyncL
 			rows.Close()
 			return v, e
 		}
+		if p.Model != nil && strings.TrimSpace(*p.Model) == "" {
+			p.Model = nil
+		}
 		t.Issues = truckSyncIssues(*p)
 		v.Trucks = append(v.Trucks, t)
 	}
@@ -176,7 +179,7 @@ func truckSyncIssues(t fleetscope.TruckProjection) []string {
 	if t.Year == nil || *t.Year < 1900 || *t.Year > time.Now().Year()+2 {
 		r = append(r, "Valid year required")
 	}
-	for label, p := range map[string]*string{"Make": t.Make, "Model": t.Model, "Plate": t.LicensePlate, "Plate state": t.LicenseState} {
+	for label, p := range map[string]*string{"Make": t.Make, "Plate": t.LicensePlate, "Plate state": t.LicenseState} {
 		if p == nil || strings.TrimSpace(*p) == "" {
 			r = append(r, label+" required")
 		}
