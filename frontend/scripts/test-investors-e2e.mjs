@@ -200,6 +200,14 @@ try {
   await page.goto(`${base}/trucks`);
   await page.getByRole('button', { name: 'Add truck', exact: true }).click();
   await page.getByLabel('Unit number', { exact: true }).fill('INV-E2E');
+  await page.getByLabel('VIN', { exact: true }).fill('1FUJGLDR0CLBP1239');
+  await page.getByLabel('Year', { exact: true }).fill('2022');
+  await page.getByLabel('Make', { exact: true }).fill('FRHT');
+  await page.getByLabel('Color', { exact: true }).fill('White');
+  await page.getByLabel('Truck class', { exact: true }).fill('8');
+  await page.getByLabel('GVWR (lb)', { exact: true }).fill('80000');
+  await page.getByLabel('License plate', { exact: true }).fill('E2E9');
+  await page.getByLabel('Plate state', { exact: true }).fill('OH');
   await expect(page.getByRole('combobox', { name: 'Truck owner', exact: true }).locator('option', { hasText: 'MS Express Inc.' })).toHaveCount(1);
   await page.getByRole('combobox', { name: 'Truck owner', exact: true }).selectOption({ label: 'E2e Investor' });
   await page.getByRole('button', { name: 'Create truck', exact: true }).click();

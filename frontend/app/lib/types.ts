@@ -741,6 +741,8 @@ export interface Truck {
   make: string | null;
   model: string | null;
   color: string | null;
+  truckClass?: string | null;
+  gvwrLbs?: number | null;
   licensePlate: string | null;
   licenseState: string | null;
   isCompanyOwned: boolean;
@@ -779,6 +781,8 @@ export interface TruckInput {
   make: string;
   model: string;
   color: string;
+  truckClass?: string;
+  gvwrLbs?: number | null;
   licensePlate: string;
   licenseState: string;
   isCompanyOwned: boolean;
@@ -1809,7 +1813,7 @@ export type FleetScopeTruckProjection = { mserpTruckId: string; unitNumber: stri
 export type FleetScopeProvisioning = { color: string; truckClass: string; gvwrLbs: number };
 export type FleetScopeSyncView = {
  pendingCount: number; canReview: boolean; canManage: boolean; configured: boolean; configuredMode: string; companyId: string; environment: string; contractHash: string; mode: string; version: number; epoch: string; lastError: string; lastCheckedAt: string | null;
- local: { sourceRevision: number; week: string; trucks: { truck: FleetScopeTruckProjection; primaryId: string; secondaryId: string; issues: string[] }[]; drivers: { id: string; name: string; status: string; fleetScopeId: string; hireEventId: string }[] };
+ local: { sourceRevision: number; week: string; trucks: { truck: FleetScopeTruckProjection; primaryId: string; secondaryId: string; issues: string[]; provisioning?: FleetScopeProvisioning }[]; drivers: { id: string; name: string; status: string; fleetScopeId: string; hireEventId: string }[] };
  links: { kind: string; localId: string; remoteId: string; remoteRevision: string; assignmentRevision: string; sourceRevision: number; acknowledged: FleetScopeTruckProjection | null; acknowledgedHash: string; provisioning: FleetScopeProvisioning | null; excludedReason: string; lastError: string; lastSyncedAt: string | null; version: number }[];
  operations: { id: string; entityKey: string; kind: string; state: string; attempts: number; lastError: string; createdAt: string; appliedAt: string | null }[];
  snapshotId: string; snapshotSourceRevision: number; snapshotCreatedAt: string | null;

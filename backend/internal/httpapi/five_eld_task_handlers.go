@@ -45,6 +45,10 @@ func (h fleetHandler) fiveELDTruckTask(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeTruckEffects(w, r, request.Truck) {
 		return
 	}
+	if err := request.Truck.validateSyncFields(nil); err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	input, err := request.Truck.validate()
 	if err != nil {
 		writeAPIError(w, 400, err.Error())

@@ -35,10 +35,11 @@ type FleetSyncDriver struct {
 	HireEventID  string `json:"hireEventId"`
 }
 type FleetSyncTruck struct {
-	Truck       fleetscope.TruckProjection `json:"truck"`
-	PrimaryID   string                     `json:"primaryId"`
-	SecondaryID string                     `json:"secondaryId"`
-	Issues      []string                   `json:"issues"`
+	Truck        fleetscope.TruckProjection `json:"truck"`
+	PrimaryID    string                     `json:"primaryId"`
+	SecondaryID  string                     `json:"secondaryId"`
+	Issues       []string                   `json:"issues"`
+	Provisioning *fleetscope.Provisioning   `json:"provisioning,omitempty"`
 }
 
 func (t FleetSyncTruck) canExclude() bool {
@@ -128,7 +129,7 @@ func readSyncLocal(ctx context.Context, q syncQuery, company string) (FleetSyncL
 	if e != nil {
 		return v, e
 	}
-	rows, e = q.Query(ctx, `SELECT t.id::text,t.unit_number,t.vin,t.year,t.make,t.model,t.license_plate,t.license_state,t.active,t.status,
+	rows, e = q.Query(ctx, `SELECT t.id::text,t.unit_number,t.vin,t.year,t.make,t.model,t.color,t.truck_class,t.gvwr_lbs,t.license_plate,t.license_state,t.active,t.status,
  coalesce(i.id::text,''),coalesce(d.full_name,i.full_name,''),CASE WHEN i.is_company THEN 'company' WHEN i.driver_id IS NOT NULL THEN 'driver' ELSE 'investor' END,i.driver_id::text,
  (SELECT CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date::text END FROM truck_ownership_history h WHERE h.truck_id=t.id AND h.unassigned_at IS NULL),
  coalesce(a.driver_id::text,''),coalesce((SELECT dt.team_driver_id::text FROM driver_teams dt JOIN drivers td ON td.id=dt.team_driver_id AND td.active WHERE dt.main_driver_id=a.driver_id AND dt.start_week<=$1::date AND (dt.end_week IS NULL OR dt.end_week>$1::date) ORDER BY dt.start_week DESC LIMIT 1),'')
@@ -140,13 +141,21 @@ func readSyncLocal(ctx context.Context, q syncQuery, company string) (FleetSyncL
 	for rows.Next() {
 		var t FleetSyncTruck
 		p := &t.Truck
-		e = rows.Scan(&p.MSERPTruckID, &p.UnitNumber, &p.VIN, &p.Year, &p.Make, &p.Model, &p.LicensePlate, &p.LicenseState, &p.OperationalActive, &p.OperationalStatus, &p.Ownership.MSERPOwnerID, &p.Ownership.DisplayName, &p.Ownership.Kind, &p.Ownership.MSERPOwnerDriverID, &p.Ownership.EffectiveDate, &t.PrimaryID, &t.SecondaryID)
+		var color, class *string
+		var gvwr *int
+		e = rows.Scan(&p.MSERPTruckID, &p.UnitNumber, &p.VIN, &p.Year, &p.Make, &p.Model, &color, &class, &gvwr, &p.LicensePlate, &p.LicenseState, &p.OperationalActive, &p.OperationalStatus, &p.Ownership.MSERPOwnerID, &p.Ownership.DisplayName, &p.Ownership.Kind, &p.Ownership.MSERPOwnerDriverID, &p.Ownership.EffectiveDate, &t.PrimaryID, &t.SecondaryID)
 		if e != nil {
 			rows.Close()
 			return v, e
 		}
 		if p.Model != nil && strings.TrimSpace(*p.Model) == "" {
 			p.Model = nil
+		}
+		if color != nil && class != nil && gvwr != nil {
+			provisioning := &fleetscope.Provisioning{Color: *color, TruckClass: *class, GVWRLbs: *gvwr}
+			if validProvisioning(provisioning) {
+				t.Provisioning = provisioning
+			}
 		}
 		t.Issues = truckSyncIssues(*p)
 		v.Trucks = append(v.Trucks, t)
@@ -514,6 +523,9 @@ func (r *FleetSyncRepository) Review(ctx context.Context, in FleetSyncReviewInpu
 					}
 				}
 				op.Kind = "truck.upsert"
+				if in.Provisioning == nil {
+					in.Provisioning = truck.Provisioning
+				}
 				op.Provisioning = in.Provisioning
 				if !validProvisioning(in.Provisioning) {
 					return errors.New("color, truck class and positive GVWR are required for a new FleetScope truck")

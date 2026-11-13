@@ -30,10 +30,11 @@ func TestDriverSetupSelfOwnershipPermissions(t *testing.T) {
 
 func TestDriverSetupTruckValidation(t *testing.T) {
 	good := func() driverRequest {
-		return driverRequest{FullName: "New Driver", PayType: "cpm", PayRate: .65, Active: true, NewTruck: &truckRequest{UnitNumber: "001", Status: "available", Active: true}}
+		year, gvwr := 2022, 80000
+		return driverRequest{FullName: "New Driver", PayType: "cpm", PayRate: .65, Active: true, NewTruck: &truckRequest{UnitNumber: "001", Status: "available", Active: true, VIN: " 3akjhhdr7nsna7173 ", Make: "FRHT", Year: &year, LicensePlate: "ab123", LicenseState: "oh", Color: stringPtr("White"), TruckClass: stringPtr("8"), GVWRLbs: &gvwr}}
 	}
 	input, err := good().validate()
-	if err != nil || input.NewTruck == nil || input.NewTruck.UnitNumber != "001" {
+	if err != nil || input.NewTruck == nil || input.NewTruck.UnitNumber != "001" || input.NewTruck.VIN == nil || *input.NewTruck.VIN != "3AKJHHDR7NSNA7173" || *input.NewTruck.LicenseState != "OH" {
 		t.Fatal("nested truck rejected", err)
 	}
 	selfOwned := good()
@@ -46,6 +47,9 @@ func TestDriverSetupTruckValidation(t *testing.T) {
 	}
 	for _, mutate := range []func(*driverRequest){
 		func(r *driverRequest) { r.NewTruck.UnitNumber = "" },
+		func(r *driverRequest) { r.NewTruck.VIN = "3AKJHHDR7NSNA717I" },
+		func(r *driverRequest) { r.NewTruck.LicenseState = "123" },
+		func(r *driverRequest) { r.NewTruck.GVWRLbs = nil },
 		func(r *driverRequest) { n := 1800; r.NewTruck.Year = &n },
 		func(r *driverRequest) { n := -1; r.NewTruck.Mileage = &n },
 		func(r *driverRequest) { r.NewTruck.OwnerID = stringPtr("invalid") },
