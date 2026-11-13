@@ -28,6 +28,11 @@ Deployment SSH sends keepalives during the otherwise quiet database backup.
 
 ## Database backup policy
 
+Database administration follows the application's active `DATABASE_URL` through
+the root-owned `/usr/local/sbin/mserp-db` helper. Install `deploy/mserp-db` (0755)
+before updating the backup and deploy helpers. See [Managed PostgreSQL](MANAGED_DATABASE.md)
+for the private connection configuration, connection budget and cutover procedure.
+
 `deploy/mserp-backup` creates PostgreSQL custom-format zstd level 1 snapshots in
 `/var/backups/mserp`. Install it as root-owned `/usr/local/sbin/mserp-backup`
 (0755), and install `mserp-backup.service` and `mserp-backup.timer` under
@@ -44,7 +49,7 @@ atomic `latest-verified.json` receipt. Freshness uses the snapshot's start time,
 not its verification time. Receipts also fence the file's size, timestamp and
 identity, so normal deployment checks do not reread a multi-gigabyte checksum.
 
-Retention keeps **one completed verified snapshot**, retaining the previous one
+Retention keeps **one completed verified snapshot per database destination**, retaining the previous one
 until the replacement is verified and published. Unknown legacy dumps and changed
 files are retained for explicit review. A shared lock prevents simultaneous backup
 writers. Preflight checks budget 110% of the previous size plus 512 MiB; a runtime

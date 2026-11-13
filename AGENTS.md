@@ -2900,6 +2900,14 @@ Prefer these targeted searches over recursively reading the repository.
   releases.
 - PostgreSQL 16 is the existing `postgresql@16-main` service. MSERP uses database
   `mserp` and application role `mserp_app`; never record its password here.
+- Database administration routes through root-owned `/usr/local/sbin/mserp-db`,
+  which validates the active runtime `DATABASE_URL` against the root-only managed
+  admin service file `/etc/mserp/database-admin.conf`. Local loopback URLs retain
+  the postgres OS-user path; remote targets require verified TLS and never fall
+  back to the local database. Install this helper before updated backup/deploy
+  scripts. Backup receipts bind to the destination and retain the old database's
+  verified snapshot after migration. See `deploy/MANAGED_DATABASE.md`; validate
+  `deploy/test-db.py`, backup tests and deployment compatibility tests.
 - `fuelbot.service` on port 5000 is an unrelated production service. Do not
   restart, reconfigure, move, or reuse its port. Do not alter other VPS services
   unless the user explicitly expands the task.

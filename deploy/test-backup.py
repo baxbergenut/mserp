@@ -30,6 +30,9 @@ class BackupTests(unittest.TestCase):
         self.catalog = patch.object(backup.subprocess, 'run')
         self.catalog_mock = self.catalog.start()
         self.addCleanup(self.catalog.stop)
+        self.target_mock = patch.object(backup.subprocess, 'check_output', return_value='local:mserp\n')
+        self.target_mock.start()
+        self.addCleanup(self.target_mock.stop)
 
     def file(self, stamp='20261102T110000Z', label='test'):
         path = self.root / f'mserp-{stamp}-{label}.dump'
@@ -49,6 +52,18 @@ class BackupTests(unittest.TestCase):
         self.now += 1
         with self.assertRaises(backup.BackupError):
             self.store.recent()
+
+    def test_migration_requires_new_backup_and_retains_old_database_snapshot(self):
+        old, previous = self.seed()
+        self.store.target = 'remote:' + 'a' * 64
+        with self.assertRaises(backup.BackupError): self.store.recent()
+        new = self.file('20261102T120000Z')
+        current = self.store.verify(new)
+        self.store.prune(current)
+        self.assertTrue(old.exists())
+        self.assertEqual(self.store.recent()['database_target'], self.store.target)
+        self.store.target = 'remote:' + 'b' * 64
+        with self.assertRaises(backup.BackupError): self.store.recent()
 
     def test_changed_missing_and_insecure_files_fail_closed(self):
         path, record = self.seed()

@@ -40,7 +40,7 @@ mock_scale_carry=f
 mock_scale_partial=f
 mock_investor_retained=f
 mock_investor_accounts=f
-runuser() {
+mserp_db() {
     local result=$mock
     if [[ $* == *"table_name='driver_escrows'"* && $* == *"column_name='truck_id'"* ]]; then result=$mock_investor_accounts; fi
     if [[ $* == *"to_regclass('public.expense_accessorial_payments')"* ]]; then result=$mock_accessorials; fi
