@@ -4053,6 +4053,9 @@ hard cap (BOARD_REVERSE_GEOCODE_MONTHLY_LIMIT, reducible to zero); routing paid
 settings never bypass it. See docs/integrations/STATUS_BOARD_AUTOMATION.md.
 
 Automatic READY locations display city and state from TomTom structured fields.
+Status Board stop labels can recover a missing DataTruck city from a trailing
+street-address locality with a matching ZIP. This display fallback preserves the
+original stop key used for saved selections, completion and manual stop times.
 The ready-city-state-v1 context refreshes legacy full-address caches once under
 the existing budget/backoff; manual destination text stays untouched.
 
