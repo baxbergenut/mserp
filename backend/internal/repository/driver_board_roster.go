@@ -6,7 +6,7 @@ package repository
 // that boundary, but never resurrect older assignments or zero-length edits.
 const driverBoardDispatcherJoinSQL = `
  LEFT JOIN LATERAL (
-  SELECT h.dispatcher_id FROM driver_dispatcher_assignments h
+  SELECT h.dispatcher_id,h.unassigned_at FROM driver_dispatcher_assignments h
   WHERE NOT d.active AND h.driver_id=d.id AND h.dispatcher_id IS NOT NULL
    AND h.assigned_at < ((d.termination_date+1)::timestamp AT TIME ZONE 'America/New_York')
    AND (h.unassigned_at IS NULL OR (h.unassigned_at>h.assigned_at

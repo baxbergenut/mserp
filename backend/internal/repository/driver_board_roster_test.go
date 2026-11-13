@@ -71,6 +71,40 @@ func testDriverBoardDepartureWeek(t *testing.T, ctx context.Context, pool *pgxpo
 	if !foundGross {
 		t.Fatal("departure gross disappeared")
 	}
+	grossBoard, err := NewGrossBoardRepository(pool).Get(ctx, week)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range grossBoard.Drivers {
+		if row.ID == d.ID {
+			if len(row.Assignments) != 7 {
+				t.Fatal("missing departure-week days", row.Assignments)
+			}
+			for _, a := range row.Assignments {
+				if a.DispatcherID != dispatcher || a.TruckID != truck.ID {
+					t.Fatal("departure week split into duplicate rows", a)
+				}
+			}
+		}
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	financial, err := readGrossBoard(ctx, tx, week)
+	_ = tx.Rollback(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range financial.Drivers {
+		if row.ID == d.ID {
+			for _, a := range row.Assignments {
+				if a.Date >= today.Format(time.DateOnly) && (a.DispatcherID != "" || a.TruckID != "") {
+					t.Fatal("display retention changed financial assignment", a)
+				}
+			}
+		}
+	}
 	// The visible roster and mutation revision must agree, including Left rows.
 	if err = repo.SetDriverAutoOrder(ctx, dispatcher, true, ""); err != nil {
 		t.Fatal(err)

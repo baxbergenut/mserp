@@ -364,6 +364,9 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 		return board, err
 	}
 	if includeDispatchDetails {
+		if err = decorateGrossBoardDepartureAssignments(ctx, tx, &board); err != nil {
+			return board, err
+		}
 		board.NextDayDestinations, err = readGrossBoardNextDayDestinations(ctx, tx, week, board)
 		if err != nil {
 			return board, err

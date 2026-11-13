@@ -1101,6 +1101,9 @@ status while background source evidence refreshes.
   week, labelled Left under their last recorded dispatcher/truck. These read-only
   rows retain weekly gross without restoring live fleet assignments; Monday removes
   them even when historical gross remains. Ordering fences use this same roster.
+  Gross Board also keeps the termination week's unassigned tail under the last
+  dispatcher/truck, avoiding a duplicate Unassigned row for LEFT days. This display
+  projection never changes dated financial assignments or explicit transfer credits.
 - `frontend/app/driver-board/`: live active-driver dispatch grid, dispatcher/status
   filters, current New York week Gross Board totals and versioned autosaves.
   Driver status choices/order/colors follow Driver Board > TODAY!J4 (gid 1851742271),
