@@ -417,6 +417,9 @@ status while background source evidence refreshes.
 - `backend/internal/fleetscope/`, `backend/internal/httpapi/fleetscope_handlers.go`,
   and `backend/internal/repository/fleetscope_repository.go`: signed new-hire
   intake and setup tasks. See `docs/FLEETSCOPE_WEBHOOK.md` for configuration.
+  Driver setup and identity edits reject a matching name plus the same phone
+  or email, including matches on terminated profiles. Reactivation checks for
+  an active match. FleetScope linking leaves the existing profile intact.
 - Outbound FleetScope fleet sync uses migration 103, `fleetscope/sync.go`,
   repository `fleetscope_sync*.go`, `httpapi/fleetscope_sync_handlers.go`, and
   Settings > FleetScope. Default off; no receiver writes on deployment alone.

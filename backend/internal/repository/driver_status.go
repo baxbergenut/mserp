@@ -38,6 +38,11 @@ func (r *FleetRepository) ChangeDriverStatus(ctx context.Context, id, actor stri
 	if !updated.Equal(input.UpdatedAt) {
 		return Driver{}, ErrDriverBoardConflict
 	}
+	if !active && input.Status != "terminated" {
+		if err = checkDriverIdentity(ctx, tx, id, true); err != nil {
+			return Driver{}, err
+		}
+	}
 	if input.Status == "terminated" && active {
 		if err = pauseDriverCharges(ctx, tx, id, input.ChargePauseWeek, actor); err != nil {
 			return Driver{}, err

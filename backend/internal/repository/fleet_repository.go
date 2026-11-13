@@ -381,6 +381,9 @@ func createDriverTx(ctx context.Context, tx pgx.Tx, input DriverInput) (string, 
 	if err != nil {
 		return "", err
 	}
+	if err = checkDriverIdentity(ctx, tx, id, false); err != nil {
+		return "", err
+	}
 	if input.NewTruck != nil {
 		if !input.Active || input.TruckID != nil || teamTruck != nil || (input.IsTeamDriver != nil && *input.IsTeamDriver) {
 			return "", chargeInvalid("New trucks require an active solo driver without an existing truck selection")
@@ -452,7 +455,10 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	}
 	var oldStatus string
 	var statusVersion int
-	if err = tx.QueryRow(ctx, `SELECT status,status_version FROM drivers WHERE id=$1 FOR UPDATE`, id).Scan(&oldStatus, &statusVersion); err != nil {
+	var wasActive bool
+	var previous driverIdentity
+	if err = tx.QueryRow(ctx, `SELECT status,status_version,active,`+driverIdentityFields+` FROM drivers WHERE id=$1 FOR UPDATE`, id).
+		Scan(&oldStatus, &statusVersion, &wasActive, &previous.name, &previous.phone, &previous.email); err != nil {
 		return Driver{}, mapNotFound(err)
 	}
 	if input.ChargeActor != "" && input.Status != "" && input.Status != oldStatus && (input.StatusVersion == nil || *input.StatusVersion != statusVersion) {
@@ -468,10 +474,6 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 	if err = syncDriverHireStart(ctx, tx, id, input.HireDate, input.ChargeActor); err != nil {
 		return Driver{}, err
 	}
-	var wasActive bool
-	if err = tx.QueryRow(ctx, "SELECT active FROM drivers WHERE id=$1", id).Scan(&wasActive); err != nil {
-		return Driver{}, err
-	}
 	if wasActive && !input.Active {
 		if err = pauseDriverCharges(ctx, tx, id, input.ChargePauseWeek, input.ChargeActor); err != nil {
 			return Driver{}, err
@@ -481,7 +483,8 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 		return Driver{}, err
 	}
 	displayName := formatPersonName(input.FullName)
-	command, err := tx.Exec(ctx, `
+	var saved driverIdentity
+	err = tx.QueryRow(ctx, `
 		UPDATE drivers SET
 			full_name = $2, normalized_name = $3, is_owner_operator = $4,
 			pay_type = CASE WHEN 'payType'=ANY($26::text[]) THEN pay_type ELSE $5 END, pay_rate = CASE WHEN 'payRate'=ANY($26::text[]) THEN pay_rate ELSE $6 END, phone = $7, email = $8,
@@ -492,18 +495,21 @@ func (r *FleetRepository) UpdateDriver(ctx context.Context, id string, input Dri
 			status = coalesce(nullif($22,''),status), termination_date = coalesce($23,termination_date),
 			first_name = coalesce($24,first_name), last_name = coalesce($25,last_name),
 			date_of_birth = CASE WHEN 'dateOfBirth'=ANY($26::text[]) OR NOT $28::boolean THEN date_of_birth ELSE $27 END
-		WHERE id = $1`,
+		WHERE id = $1 RETURNING `+driverIdentityFields,
 		id, displayName, normalizeName(displayName), false,
 		input.PayType, input.PayRate, input.Phone, input.Email, input.LicenseNumber,
 		input.LicenseState, input.LicenseExpires, input.HireDate, input.Address,
 		input.City, input.State, input.PostalCode, input.EmergencyContact,
 		input.DispatcherID, input.Active, input.Notes, input.CDLFileID, input.Status, input.TerminationDate, input.FirstName, input.LastName, input.PreserveFields, input.DateOfBirth, input.DateOfBirthSet,
-	)
+	).Scan(&saved.name, &saved.phone, &saved.email)
 	if err != nil {
-		return Driver{}, err
+		return Driver{}, mapNotFound(err)
 	}
-	if command.RowsAffected() == 0 {
-		return Driver{}, ErrNotFound
+	identityChanged := saved != previous
+	if identityChanged || (!wasActive && input.Active) {
+		if err = checkDriverIdentity(ctx, tx, id, !identityChanged); err != nil {
+			return Driver{}, err
+		}
 	}
 	if !input.Active {
 		err = offboardDriverAssignments(ctx, tx, id, input.ChargeActor, "profile")

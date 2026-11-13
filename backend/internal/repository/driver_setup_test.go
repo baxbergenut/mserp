@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -155,6 +156,62 @@ func TestDriverSetupDatabase(t *testing.T) {
 				t.Fatalf("intake truck: %+v %v", completed, err)
 			}
 			checkStart(completed.ID)
+
+			// Production permits distinct drivers with the same normalized name.
+			exec(`DROP INDEX drivers_normalized_name_idx;
+ CREATE INDEX drivers_normalized_name_idx ON drivers(normalized_name)`)
+
+			// A profile save or an edited intake must not reuse another driver's
+			// identity, even when that driver is terminated.
+			phone := "2025550102"
+			melanoInput := DriverInput{FullName: "Returning Driver", Phone: &phone, PayType: "cpm", Active: false}
+			returning, err := fleet.CreateDriver(ctx, melanoInput)
+			if err != nil {
+				t.Fatal(err)
+			}
+			otherInput := DriverInput{FullName: "Different Driver", PayType: "cpm", Active: true}
+			other, err := fleet.CreateDriver(ctx, otherInput)
+			if err != nil {
+				t.Fatal(err)
+			}
+			melanoInput.Active = true
+			if _, err = fleet.UpdateDriver(ctx, other.ID, melanoInput); !errors.Is(err, ErrDriverIdentityConflict) {
+				t.Fatalf("profile overwrite: %v", err)
+			}
+			if saved, err := fleet.GetDriver(ctx, other.ID); err != nil || saved.FullName != other.FullName || saved.Phone != nil {
+				t.Fatalf("failed edit changed the profile: %+v %v", saved, err)
+			}
+			hire.EventID = "08000000-0000-0000-0000-000000000004"
+			hire.Driver.ID = "08000000-0000-0000-0000-000000000005"
+			hire.Driver.FullName = "Different Intake Name"
+			intake, err = fleet.AcceptFleetScopeHire(ctx, hire, "identity-guard-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = fleet.CompleteDriverIntake(WithTaskViewer(ctx, actor, true), intake.IntakeID, actor, "", &melanoInput, true); !errors.Is(err, ErrDriverIdentityConflict) {
+				t.Fatalf("edited intake duplicate: %v", err)
+			}
+			if _, err = fleet.GetDriverIntake(WithTaskViewer(ctx, actor, true), intake.IntakeID); err != nil {
+				t.Fatalf("failed setup must leave intake pending: %v", err)
+			}
+
+			// An existing duplicate from before the guard cannot be reactivated.
+			exec(`UPDATE drivers SET full_name='Returning Driver', normalized_name='returning driver', phone=$2 WHERE id=$1`, other.ID, phone)
+			if _, err = fleet.ChangeDriverStatus(ctx, returning.ID, actor, DriverStatusChange{Status: "active", UpdatedAt: returning.UpdatedAt}); !errors.Is(err, ErrDriverIdentityConflict) {
+				t.Fatalf("reactivating while a matching profile is active: %v", err)
+			}
+			if _, err = fleet.UpdateDriver(ctx, returning.ID, melanoInput); !errors.Is(err, ErrDriverIdentityConflict) {
+				t.Fatalf("reactivating from profile form: %v", err)
+			}
+			exec(`UPDATE drivers SET active=false WHERE id=$1`, other.ID)
+			if _, err = fleet.ChangeDriverStatus(ctx, returning.ID, actor, DriverStatusChange{Status: "active", UpdatedAt: returning.UpdatedAt}); err != nil {
+				t.Fatalf("reactivating with no matching active profile: %v", err)
+			}
+			differentPhone := "2025550103"
+			melanoInput.Phone = &differentPhone
+			if _, err = fleet.CreateDriver(ctx, melanoInput); err != nil {
+				t.Fatalf("creating a different person with the same name: %v", err)
+			}
 		})
 	}
 }

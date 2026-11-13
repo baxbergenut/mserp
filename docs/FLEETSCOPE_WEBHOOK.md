@@ -115,6 +115,9 @@ completion/deletion. HTTP 200 includes `status` (`accepted` or `duplicate`) and
 3. For a new person, choose Complete setup. Review the prefilled details, enter
    a positive pay rate, and choose dispatcher/truck/active status as appropriate.
    If possible matches exist, explicitly confirm this is a different person.
+   Setup checks the saved name and contact details, including any edits to the
+   form. A matching name plus the same phone or email requires using or
+   reviewing the existing Clustie profile.
 4. For an existing person, use **Already in MSERP?**, select and verify that driver's
    contact details, and confirm. Existing profile, pay, assignments, and active
    status are preserved; any needed edits happen through the normal driver form.
