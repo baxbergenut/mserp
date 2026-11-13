@@ -28,6 +28,8 @@ type profileRow struct {
 	Review            []string        `json:"review,omitempty"`
 }
 
+const conflictingTruckMake = "Conflicting truck make"
+
 const uniqueFleetScopeIdentity = "Confirm a unique FleetScope identity"
 
 const historicalDriverWithoutMatch = "Historical driver has no verified FleetScope match"
@@ -350,6 +352,44 @@ func planDriver(r *profileRow, a, b Record, locals, remotes, trucks []Record) {
 	}
 }
 
+// Use an abbreviation that is already present on one side of a verified pair.
+func preferredTruckMake(a, b string) string {
+	fullName := map[string]string{
+		"frht": "freightliner",
+		"intl": "international",
+	}
+	if fullName[norm(a)] != "" && fullName[norm(a)] == norm(b) {
+		return a
+	}
+	if fullName[norm(b)] != "" && fullName[norm(b)] == norm(a) {
+		return b
+	}
+	return ""
+}
+
+// Recheck make conflicts against live data in completed batches. The receipt
+// still describes the original batch and omits the follow-up make changes.
+func (p *profilePlan) resolveTruckMakeConflicts(source, receiver Snapshot) {
+	for i, row := range p.Rows {
+		if row.Kind != "truck" || !slices.Contains(row.Review, conflictingTruckMake) {
+			continue
+		}
+		a, b := find(source.Trucks, row.LocalID), find(receiver.Trucks, row.RemoteID)
+		makeName := norm(a["make"])
+		if !validVIN(a["vin"]) || !strings.EqualFold(a["vin"], b["vin"]) ||
+			!validTruckField("make", makeName) || makeName != norm(b["make"]) {
+			continue
+		}
+		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
+			return reason == conflictingTruckMake
+		})
+		if len(row.Review) == 0 {
+			p.Review--
+		}
+		p.Rows[i] = row
+	}
+}
+
 func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks, driverNames Record) {
 	for _, field := range []string{"year", "make", "model", "color", "plate", "plateState"} {
 		av, bv := strings.TrimSpace(a[field]), strings.TrimSpace(b[field])
@@ -362,6 +402,13 @@ func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks
 		}
 		if norm(av) == norm(bv) {
 			continue
+		}
+		if field == "make" {
+			if makeAbbreviation := preferredTruckMake(av, bv); makeAbbreviation != "" {
+				r.change(clustie, field, a[field], makeAbbreviation)
+				r.change(fleetScope, field, b[field], makeAbbreviation)
+				continue
+			}
 		}
 		if av != "" && bv != "" {
 			r.Review = append(r.Review, "Conflicting truck "+field)

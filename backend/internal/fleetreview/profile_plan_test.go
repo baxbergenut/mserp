@@ -40,3 +40,27 @@ func TestConfirmedDriverIdentityKeepsOtherReviewReasons(t *testing.T) {
 		t.Fatalf("unexpected plan display: %+v", display)
 	}
 }
+
+func TestTruckMakeAbbreviations(t *testing.T) {
+	for _, tc := range []struct{ local, remote, want string }{
+		{"FRHT", "Freightliner", "FRHT"},
+		{"International", "INTL", "INTL"},
+		{"FRHT", "International", ""},
+	} {
+		if got := preferredTruckMake(tc.local, tc.remote); got != tc.want {
+			t.Errorf("%q vs %q: got %q, want %q", tc.local, tc.remote, got, tc.want)
+		}
+	}
+
+	plan := profilePlan{Review: 1, Rows: []profileRow{{
+		Kind: "truck", LocalID: "local", RemoteID: "remote",
+		Review: []string{conflictingTruckMake, "Review truck unit number"},
+	}}}
+	source := Snapshot{Trucks: []Record{{"id": "local", "vin": "1FUJGLDR9CS000001", "make": "FRHT"}}}
+	receiver := Snapshot{Trucks: []Record{{"id": "remote", "vin": "1FUJGLDR9CS000001", "make": "FRHT"}}}
+	display := plan.forDisplay()
+	display.resolveTruckMakeConflicts(source, receiver)
+	if display.Review != 1 || len(display.Rows[0].Review) != 1 || display.Rows[0].Review[0] != "Review truck unit number" || len(plan.Rows[0].Review) != 2 {
+		t.Fatalf("unexpected live review flags: %+v", display)
+	}
+}

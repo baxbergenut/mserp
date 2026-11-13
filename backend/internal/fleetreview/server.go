@@ -267,6 +267,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		view := s.state
 		view.Profile = nil
 		response := map[string]any{"state": view, "applyBlocker": ready, "applying": s.applying}
+		var profileResponse map[string]any
+		var displayPlan profilePlan
 		if s.state.Batch != nil && s.state.Profile != nil {
 			profile := s.state.Profile
 			ids := make([]string, 0, len(profile.Source.Drivers)+len(profile.Source.Trucks))
@@ -275,7 +277,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 					ids = append(ids, record["id"])
 				}
 			}
-			response["profile"] = map[string]any{"plan": s.displayProfilePlan(), "capturedAt": s.state.Batch.Started, "sourceIds": ids}
+			displayPlan = s.displayProfilePlan()
+			profileResponse = map[string]any{"plan": displayPlan, "capturedAt": s.state.Batch.Started, "sourceIds": ids}
+			response["profile"] = profileResponse
 			if s.state.Batch.State == "complete" {
 				// Include records added after the manual review snapshot.
 				existing := make(map[string]bool, len(view.Rows))
@@ -304,6 +308,10 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				fail(w, 503, "Batch receipts are saved, but current readback is unavailable. Retry before treating records as matching.")
 				return
+			}
+			if profileResponse != nil {
+				displayPlan.resolveTruckMakeConflicts(a, b)
+				profileResponse["plan"] = displayPlan
 			}
 			response["live"] = map[string]any{"source": a, "receiver": b, "links": links}
 		}
@@ -424,7 +432,16 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/profile-preview":
 		if s.state.Batch != nil {
 			if s.state.Profile != nil {
-				jsonOut(w, 200, map[string]any{"plan": s.displayProfilePlan(), "capturedAt": s.state.Batch.Started})
+				plan := s.displayProfilePlan()
+				if s.state.Batch.State == "complete" {
+					a, b, err := s.db.Snapshot(ctx)
+					if err != nil {
+						fail(w, 503, "Could not read current records from both systems")
+						return
+					}
+					plan.resolveTruckMakeConflicts(a, b)
+				}
+				jsonOut(w, 200, map[string]any{"plan": plan, "capturedAt": s.state.Batch.Started})
 			} else {
 				fail(w, 409, "Finish or recover the frozen batch before previewing another")
 			}
