@@ -68,6 +68,11 @@ class RoutingTests(unittest.TestCase):
         self.write(self.admin, self.admin.read_text().replace('secret%123', 'new-password'))
         self.assertEqual(target, self.destination()[0])
 
+    def test_libpq_incompatible_service_spacing_is_rejected_before_cutover(self):
+        self.remote()
+        self.write(self.admin, self.admin.read_text().replace('host=', 'host = '))
+        with self.assertRaises(ValueError): self.destination()
+
     def test_connection_overrides_are_rejected(self):
         for option in ['--dbname=other', '--host=other', '-h', '-U', '--username=postgres']:
             with self.assertRaises(ValueError): routing.command(['psql', option], '/admin')

@@ -29,6 +29,10 @@ and database against the runtime URL, clears inherited libpq environment options
 and passes the service-file path without credentials in process arguments.
 Missing/mismatched managed configuration fails closed. Credentials may be staged
 before cutover: a local runtime URL still selects the local database.
+Service keys must immediately precede `=`. If generating this file with Python's
+ConfigParser, use `write(file, space_around_delimiters=False)`. Preflight must run
+actual `psql` and `pg_dump` commands with the staged service file, in addition to
+checking the application's destination.
 
 Use `/usr/local/sbin/mserp-db psql -X --dbname=mserp ...` for operator SQL. The
 deploy helper uses the same route for migration discovery, compatibility checks
@@ -57,6 +61,33 @@ maintenance. Monitor actual concurrency and memory before increasing pools.
 Direct connections preserve LISTEN and session advisory locks; transaction
 pooling is not compatible with those clients.
 
+Set `max_locks_per_transaction=256` through DigitalOcean Advanced configurations
+before activation. The 1 GiB node has 25 server connections including reserved
+ones; its default 64 locks therefore allocates only a quarter of the former
+100-connection server's shared lock capacity. Payroll resource claims exhausted
+that default during startup. The 256 setting restores equivalent capacity
+without a plan upgrade and requires a database restart. Verify the live setting
+with SQL and confirm payroll preparation completes without shared-memory errors.
+
+The separate `fleetreview` OS user cannot traverse `/etc/mserp` (0750). Give its
+source URL a CA file under `/etc/fleet-review/database-ca.crt` (root-owned 0644),
+and verify readability as `fleetreview`. Its receiver URL remains unchanged.
+
+## Verified production cutover
+
+On 2026-11-13 the active Clustie database moved to `clustie-pg-prod` using the
+private endpoint. All 204 public table counts and content digests, sequence
+values, canonical schema definitions and effective application/portal table
+permissions matched before activation. The active database retains UTF8 and
+`C.UTF-8` collation/ctype. Source snapshots and comparison receipts are retained
+in the root-only `/root/clustie-managed-migration` directory. The managed backup
+passed catalog, checksum and receipt verification before writers started.
+
+The old local `mserp` has `default_transaction_read_only=on` and no remaining
+application connections. It is a recovery snapshot, not a current replica.
+Returning to it requires a verified reverse migration of subsequent managed
+writes. Other local PostgreSQL databases and services remain in place.
+
 ## Cutover and recovery
 
 1. Verify the target cluster, region, VPC, trusted source and CA. Restrict network
@@ -64,6 +95,9 @@ pooling is not compatible with those clients.
    into a separate target database. Check extensions, object ownership, runtime
    and portal grants, schema ledger, constraints and sequences. Do not run
    background integrations against the rehearsal copy.
+   Create the target from `template0` with UTF8 encoding and the source database's
+   `C.UTF-8` LC_COLLATE/LC_CTYPE. The provider's default `en_US.UTF-8` sorts text
+   differently. Compare data manifests by table name independent of result order.
    Preserve database ownership by `mserp_app` and the existing inherited
    `mserp_app` membership of `fleet_review_portal`; table grants alone do not
    reproduce the source database's effective schema privileges. Former

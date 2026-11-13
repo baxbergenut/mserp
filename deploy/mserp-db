@@ -39,8 +39,16 @@ def destination(env_file=ENV_FILE, admin_file=ADMIN_FILE, owner=0):
     target = (url.hostname.lower(), url.port or 5432, 'mserp')
     if target[0] in ('localhost', '127.0.0.1', '::1') and target[1] == 5432:
         return LOCAL_ID, None
+    raw = secure_read(admin_file, owner, private=True)
+    # libpq does not accept ConfigParser's default "key = value" output.
+    # Reject it during preflight, before a migration changes runtime routing.
+    for line in raw.splitlines():
+        if '=' in line and not line.lstrip().startswith(('#', ';')):
+            key = line.split('=', 1)[0]
+            if key != key.rstrip():
+                raise ValueError('libpq service keys must directly precede equals')
     config = configparser.ConfigParser(interpolation=None)
-    config.read_string(secure_read(admin_file, owner, private=True))
+    config.read_string(raw)
     section = config['mserp']
     if (section['host'].lower(), int(section['port']), section['dbname']) != target:
         raise ValueError('Administrator and application database destinations differ')

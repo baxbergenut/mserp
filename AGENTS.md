@@ -2898,8 +2898,13 @@ Prefer these targeted searches over recursively reading the repository.
 - The Go API is `mserp-api.service`, bound only to `127.0.0.1:18080`. Its
   working directory is `/etc/mserp` so runtime environment files stay outside
   releases.
-- PostgreSQL 16 is the existing `postgresql@16-main` service. MSERP uses database
-  `mserp` and application role `mserp_app`; never record its password here.
+- MSERP uses managed PostgreSQL 16 (`clustie-pg-prod`, NYC1), database `mserp`
+  and role `mserp_app`, over its private VPC endpoint with verified TLS. The
+  original `postgresql@16-main` service still hosts unrelated databases; its old
+  `mserp` database is a read-only recovery copy. Never stop the shared service
+  or switch back to that stale copy after managed writes. Never record passwords.
+  The 1 GiB plan uses `max_locks_per_transaction=256` with 25 server connections
+  to retain the former 100-connection server's shared lock capacity for payroll.
 - Database administration routes through root-owned `/usr/local/sbin/mserp-db`,
   which validates the active runtime `DATABASE_URL` against the root-only managed
   admin service file `/etc/mserp/database-admin.conf`. Local loopback URLs retain
@@ -2938,7 +2943,8 @@ Prefer these targeted searches over recursively reading the repository.
   deploy helper applies only unrecorded numbered migrations. New schema changes
   must update `init.sql`, add the next numbered migration, and remain compatible
   with the previous app release because app rollback does not undo migrations.
-- Migrations execute as `postgres`, while the API runs as `mserp_app`. Every
+- Managed migrations execute as `doadmin` (local installations use `postgres`),
+  while the API runs as `mserp_app`. Every
   newly created runtime table must transfer ownership to `mserp_app` when that
   role exists, following migration 025. Verify queries as the application role;
   an administrator-only database test cannot detect missing runtime permissions.
