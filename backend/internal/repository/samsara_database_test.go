@@ -94,7 +94,9 @@ func TestSamsaraDatabase(t *testing.T) {
 			if e = admin.QueryRow(ctx, `INSERT INTO trucks(unit_number,vin,active) VALUES('SAMSARA-TEST',$1,true) RETURNING id::text`, vin).Scan(&truck); e != nil {
 				t.Fatal(e)
 			}
-			exec(`INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,(now() AT TIME ZONE 'America/New_York')::date,1950,'manual','Fixture')`, truck)
+			// Keep the lower manual baseline on the older provider sample's day.
+			// Just after midnight, today's baseline would correctly reject yesterday's higher reading.
+			exec(`INSERT INTO maintenance_odometer_readings(truck_id,reading_date,mileage,source,actor_name) VALUES($1,($2::timestamptz AT TIME ZONE 'America/New_York')::date,1950,'manual','Fixture')`, truck, old)
 			m := NewMaintenanceRepository(pool)
 			if e = m.StoreMaintenanceTelemetry(ctx, MaintenanceTelemetryTruck{TruckID: truck, VIN: vin}, &MaintenanceTelemetry{Mileage: 2050, ReportedAt: now}); e != nil {
 				t.Fatal(e)

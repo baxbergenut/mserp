@@ -139,6 +139,7 @@ jobs:
           python3 deploy/test-payroll-protocol-config.py
           bash deploy/test-backup-policy.sh
           python3 deploy/test-backup.py
+          python3 deploy/test-db.py
 
       - name: Vet backend
         working-directory: backend

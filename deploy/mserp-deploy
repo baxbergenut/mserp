@@ -67,12 +67,13 @@ escrow_adjustment_migration=210_escrow_balance_adjustments.sql
 gross_week_lock_migration=211_gross_board_week_lock.sql
 
 # BEGIN BACKUP POLICY
+mserp_db() { /usr/local/sbin/mserp-db "$@"; }
 collect_pending_migrations() {
     local directory=$1 ledger_exists applied migration name
     pending_migrations=()
-    ledger_exists=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.schema_migrations') IS NOT NULL") || return 1
+    ledger_exists=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.schema_migrations') IS NOT NULL") || return 1
     case $ledger_exists in
-        t) applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c 'SELECT version FROM public.schema_migrations ORDER BY version') || return 1 ;;
+        t) applied=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c 'SELECT version FROM public.schema_migrations ORDER BY version') || return 1 ;;
         f) applied= ;;
         *) echo 'could not determine migration ledger state' >&2; return 1 ;;
     esac
@@ -114,51 +115,51 @@ prepare_release_backup() {
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
     local investor_accounts
-    investor_accounts=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_escrows' AND column_name='truck_id')") || return 1
+    investor_accounts=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_escrows' AND column_name='truck_id')") || return 1
     if [[ $investor_accounts == t ]]; then
         [[ $("$1/backend/mserp-api" -investor-truck-accounts-capability 2>/dev/null) == investor-truck-accounts-v1 ]] || return 1
     elif [[ $investor_accounts != f ]]; then return 1; fi
     local gross_week_lock
-    gross_week_lock=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.gross_board_week_locks') IS NOT NULL") || return 1
+    gross_week_lock=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.gross_board_week_locks') IS NOT NULL") || return 1
     if [[ $gross_week_lock == t ]]; then
         [[ $("$1/backend/mserp-api" -gross-board-week-lock-capability 2>/dev/null) == gross-board-week-lock-v1 ]] || return 1
     elif [[ $gross_week_lock != f ]]; then return 1; fi
     local escrow_adjustment
-    escrow_adjustment=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.table_constraints WHERE table_schema='public' AND table_name='driver_escrow_releases' AND constraint_name='escrow_balance_movement_check')") || return 1
+    escrow_adjustment=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.table_constraints WHERE table_schema='public' AND table_name='driver_escrow_releases' AND constraint_name='escrow_balance_movement_check')") || return 1
     if [[ $escrow_adjustment == t ]]; then
         [[ $("$1/backend/mserp-api" -escrow-balance-adjustments-capability 2>/dev/null) == escrow-balance-adjustments-v1 ]] || return 1
     elif [[ $escrow_adjustment != f ]]; then return 1; fi
     local escrow_balance
-    escrow_balance=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_escrow_releases' AND column_name='correction_reason')") || return 1
+    escrow_balance=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_escrow_releases' AND column_name='correction_reason')") || return 1
     if [[ $escrow_balance == t ]]; then
         [[ $("$1/backend/mserp-api" -escrow-balance-reductions-capability 2>/dev/null) == escrow-balance-reductions-v1 ]] || return 1
     elif [[ $escrow_balance != f ]]; then return 1; fi
     local gross_planning
-    gross_planning=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.gross_board_planning_entries') IS NOT NULL") || return 1
+    gross_planning=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.gross_board_planning_entries') IS NOT NULL") || return 1
     if [[ $gross_planning == t ]]; then
         [[ $("$1/backend/mserp-api" -gross-board-planning-capability 2>/dev/null) == gross-board-planning-v1 ]] || return 1
     elif [[ $gross_planning != f ]]; then return 1; fi
     local accessorial_expenses
-    accessorial_expenses=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.expense_accessorial_payments') IS NOT NULL") || return 1
+    accessorial_expenses=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.expense_accessorial_payments') IS NOT NULL") || return 1
     if [[ $accessorial_expenses == t ]]; then
         [[ $("$1/backend/mserp-api" -accessorial-expenses-capability 2>/dev/null) == accessorial-expenses-v1 ]] || return 1
     elif [[ $accessorial_expenses != f ]]; then return 1; fi
     local escrow_settlement
-    escrow_settlement=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_pay_weeks' AND column_name='escrow_draft')") || return 1
+    escrow_settlement=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_pay_weeks' AND column_name='escrow_draft')") || return 1
     if [[ $escrow_settlement == t ]]; then
         [[ $("$1/backend/mserp-api" -driver-pay-escrow-capability 2>/dev/null) == driver-pay-escrow-v1 ]] || return 1
     elif [[ $escrow_settlement != f ]]; then return 1; fi
     local expense_drafts
-    expense_drafts=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_pay_weeks' AND column_name='expense_choices')") || return 1
+    expense_drafts=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='driver_pay_weeks' AND column_name='expense_choices')") || return 1
     if [[ $expense_drafts == t ]]; then
         [[ $("$1/backend/mserp-api" -payroll-expense-drafts-capability 2>/dev/null) == payroll-expense-drafts-v1 ]] || return 1
         local investor_retained
-        investor_retained=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.investor_pay_weeks WHERE coalesce(report->>'retainedPay','')<>'' OR coalesce(report->>'investorCarry','')<>'')") || return 1
+        investor_retained=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.investor_pay_weeks WHERE coalesce(report->>'retainedPay','')<>'' OR coalesce(report->>'investorCarry','')<>'')") || return 1
         if [[ $investor_retained == t ]]; then
             [[ $("$1/backend/mserp-api" -investor-retained-pay-capability 2>/dev/null) == investor-retained-pay-v1 ]] || return 1
         elif [[ $investor_retained != f ]]; then return 1; fi
         local scale_carry
-        scale_carry=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
+        scale_carry=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
             SELECT EXISTS(
                 SELECT 1 FROM (
                     SELECT week_start,report FROM public.payroll_settlements WHERE finalized
@@ -172,7 +173,7 @@ compatible_release() {
             [[ $("$1/backend/mserp-api" -payroll-scale-carry-capability 2>/dev/null) == payroll-scale-carry-v1 ]] || return 1
         elif [[ $scale_carry != f ]]; then return 1; fi
         local scale_partial
-        scale_partial=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
+        scale_partial=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
             SELECT EXISTS(
                 SELECT 1 FROM (
                     SELECT report FROM public.payroll_settlements WHERE finalized
@@ -192,56 +193,56 @@ compatible_release() {
     elif [[ $expense_drafts != f ]]; then return 1; fi
     local applied manager_removed accounting_installed cost_start_installed cost_start_active balance_installed balance_active projection_installed projection_active telemetry_excluded operational_excluded shared_dependencies verification_metadata load_availability board_operational pti_operational unrelated_payroll payroll_current
     local routing_usage
-    routing_usage=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.board_route_usage') IS NOT NULL") || return 1
+    routing_usage=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.board_route_usage') IS NOT NULL") || return 1
     if [[ $routing_usage == t ]]; then
         [[ $("$1/backend/mserp-api" -board-routing-usage-capability 2>/dev/null) == board-routing-usage-v1 ]] || return 1
     elif [[ $routing_usage != f ]]; then return 1; fi
     # Detect the committed schema even if recording the migration ledger failed.
-    applied=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
+    applied=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='files' AND column_name='uploaded_by')") || return 1
     [[ $applied == f ]] || { [[ $applied == t ]] && [[ -f $1/migrations/$permissions_migration ]]; } || return 1
-    manager_removed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='expenses' AND column_name='manager_verified')") || return 1
+    manager_removed=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='expenses' AND column_name='manager_verified')") || return 1
     [[ $manager_removed == f ]] || { [[ $manager_removed == t ]] && [[ -f $1/migrations/$manager_verification_migration ]]; } || return 1
-    accounting_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.accounting_cutover') IS NOT NULL") || return 1
+    accounting_installed=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.accounting_cutover') IS NOT NULL") || return 1
     [[ $accounting_installed == f ]] || { [[ $accounting_installed == t ]] && [[ -f $1/migrations/$accounting_cutover_migration ]]; } || return 1
-    balance_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.expense_balance_corrections') IS NOT NULL") || return 1
+    balance_installed=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.expense_balance_corrections') IS NOT NULL") || return 1
     if [[ $balance_installed == t ]]; then
-        balance_active=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.expense_balance_corrections)") || return 1
+        balance_active=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.expense_balance_corrections)") || return 1
         [[ $balance_active == f ]] || { [[ $balance_active == t ]] && [[ -f $1/migrations/$expense_balance_migration ]]; } || return 1
     elif [[ $balance_installed != f ]]; then
         return 1
     fi
-    projection_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_projection_control') IS NOT NULL") || return 1
+    projection_installed=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_projection_control') IS NOT NULL") || return 1
     if [[ $projection_installed == t ]]; then
-        projection_active=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT capture_enabled OR protocol_mode<>'global' FROM public.payroll_projection_control WHERE singleton") || return 1
+        projection_active=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT capture_enabled OR protocol_mode<>'global' FROM public.payroll_projection_control WHERE singleton") || return 1
         if [[ $projection_active == t ]]; then
             [[ -f $1/migrations/$payroll_projection_migration ]] || return 1
             [[ $("$1/backend/mserp-api" -payroll-protocol-capability) == payroll-resources-v1 ]] || return 1
         elif [[ $projection_active != f ]]; then return 1; fi
-        telemetry_excluded=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='maintenance_telemetry' AND classification='unrelated')") || return 1
+        telemetry_excluded=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='maintenance_telemetry' AND classification='unrelated')") || return 1
         [[ $telemetry_excluded == f ]] || { [[ $telemetry_excluded == t ]] && [[ -f $1/migrations/$payroll_telemetry_migration ]]; } || return 1
-        operational_excluded=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='relay_driver_links' AND classification='unrelated')") || return 1
+        operational_excluded=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='relay_driver_links' AND classification='unrelated')") || return 1
         [[ $operational_excluded == f ]] || { [[ $operational_excluded == t ]] && [[ -f $1/migrations/$payroll_operational_migration ]]; } || return 1
-        shared_dependencies=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_resource_dependency_sets') IS NOT NULL") || return 1
+        shared_dependencies=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_resource_dependency_sets') IS NOT NULL") || return 1
         [[ $shared_dependencies == f ]] || { [[ $shared_dependencies == t ]] && [[ -f $1/migrations/$payroll_shared_migration ]]; } || return 1
-        verification_metadata=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regprocedure('public.payroll_expense_verification_change(jsonb,jsonb)') IS NOT NULL") || return 1
+        verification_metadata=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regprocedure('public.payroll_expense_verification_change(jsonb,jsonb)') IS NOT NULL") || return 1
         [[ $verification_metadata == f ]] || { [[ $verification_metadata == t ]] && [[ -f $1/migrations/$expense_verification_migration ]]; } || return 1
     elif [[ $projection_installed != f ]]; then return 1; fi
     if [[ $projection_installed == t ]]; then
-        board_operational=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='driver_board' AND classification='unrelated')") || return 1
+        board_operational=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='driver_board' AND classification='unrelated')") || return 1
         [[ $board_operational == f ]] || { [[ $board_operational == t ]] && [[ -f $1/migrations/$board_operational_migration ]]; } || return 1
-        pti_operational=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='weekly_pti_rows' AND classification='unrelated')") || return 1
+        pti_operational=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='weekly_pti_rows' AND classification='unrelated')") || return 1
         [[ $pti_operational == f ]] || { [[ $pti_operational == t ]] && [[ -f $1/migrations/$pti_operational_migration ]]; } || return 1
-        unrelated_payroll=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='feedback_posts' AND classification='unrelated')") || return 1
+        unrelated_payroll=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_projection_sources WHERE table_name='feedback_posts' AND classification='unrelated')") || return 1
         [[ $unrelated_payroll == f ]] || { [[ $unrelated_payroll == t ]] && [[ -f $1/migrations/$unrelated_payroll_migration ]]; } || return 1
     fi
-    load_availability=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.load_source_availability') IS NOT NULL") || return 1
+    load_availability=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.load_source_availability') IS NOT NULL") || return 1
     [[ $load_availability == f ]] || { [[ $load_availability == t ]] && [[ -f $1/migrations/$load_availability_migration ]]; } || return 1
-    payroll_current=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_statement_current') IS NOT NULL") || return 1
+    payroll_current=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_statement_current') IS NOT NULL") || return 1
     [[ $payroll_current == f ]] || { [[ $payroll_current == t ]] && [[ -f $1/migrations/$payroll_storage_migration ]]; } || return 1
-    cost_start_installed=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_cost_start') IS NOT NULL") || return 1
+    cost_start_installed=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.payroll_cost_start') IS NOT NULL") || return 1
     [[ $cost_start_installed == f ]] && return 0
     [[ $cost_start_installed == t ]] || return 1
-    cost_start_active=$(runuser -u postgres -- psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_cost_start)") || return 1
+    cost_start_active=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.payroll_cost_start)") || return 1
     [[ $cost_start_active == f ]] || { [[ $cost_start_active == t ]] && [[ -f $1/migrations/$payroll_cost_start_migration ]]; }
 }
 activate_release() {
@@ -358,7 +359,7 @@ mv "$extract_dir" "$release_dir"
 extract_dir=
 
 if (( ${#pending_migrations[@]} > 0 )); then
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 --dbname=mserp <<'SQL'
+mserp_db psql -X -v ON_ERROR_STOP=1 --dbname=mserp <<'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -373,7 +374,7 @@ for migration_name in "${pending_migrations[@]}"; do
 		exit 1
 	fi
 	applied=$(printf "SELECT 1 FROM schema_migrations WHERE version = :'migration';\n" | \
-		runuser -u postgres -- psql -X -At -v migration="$migration_name" --dbname=mserp)
+		mserp_db psql -X -At -v migration="$migration_name" --dbname=mserp)
     if [[ $applied == 1 ]]; then
         continue
     fi
@@ -391,9 +392,9 @@ for migration_name in "${pending_migrations[@]}"; do
         systemctl stop fleet-review.service
     fi
     echo "applying migration $migration_name"
-    runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 --dbname=mserp --file="$migration"
+    mserp_db psql -X -v ON_ERROR_STOP=1 --dbname=mserp --file="$migration"
 	printf "INSERT INTO schema_migrations (version) VALUES (:'migration');\n" | \
-		runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -v migration="$migration_name" --dbname=mserp
+		mserp_db psql -X -v ON_ERROR_STOP=1 -v migration="$migration_name" --dbname=mserp
 done
 
 cutover_started=true

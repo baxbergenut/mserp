@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Root-owned, local PostgreSQL backups with atomic verification receipts."""
+"""Root-owned PostgreSQL backups with destination-bound verification receipts."""
 import argparse
 import datetime as dt
 import fcntl
@@ -29,8 +29,9 @@ class BackupError(Exception):
 
 
 class Store:
-    def __init__(self, root=ROOT, owner=0, clock=time.time):
+    def __init__(self, root=ROOT, owner=0, clock=time.time, target='local:mserp'):
         self.root, self.owner, self.clock = Path(root), owner, clock
+        self.target = target
 
     def secure(self, path, directory=False):
         info = path.lstat()
@@ -66,6 +67,8 @@ class Store:
         for attempt in range(2):
             try:
                 record = self.checked(self.read(self.root / 'latest-verified.json'))
+                if record.get('database_target', 'local:mserp') != self.target:
+                    raise BackupError('Verified backup belongs to a different database destination')
                 if self.clock() - record['snapshot_at'] > max_age:
                     raise BackupError('Latest verified database backup is too old')
                 return record
@@ -120,7 +123,7 @@ class Store:
         if self.identity(path) != before:
             raise BackupError('Backup changed during verification')
         snapshot = dt.datetime.strptime(NAME.fullmatch(path.name)[1], '%Y%m%dT%H%M%SZ').replace(tzinfo=dt.timezone.utc).timestamp()
-        record = dict(version=1, file=path.name, identity=before, sha256=digest.hexdigest(), snapshot_at=snapshot, verified_at=self.clock())
+        record = dict(version=1, file=path.name, identity=before, sha256=digest.hexdigest(), snapshot_at=snapshot, verified_at=self.clock(), database_target=self.target)
         self.checked(record)
         try:
             previous = self.checked(self.read(self.root / 'latest-verified.json'))
@@ -138,6 +141,8 @@ class Store:
             record = self.read(receipt)
             if record.get('file') == current['file']:
                 continue
+            if record.get('database_target', 'local:mserp') != self.target:
+                continue  # Retain the pre-migration database's last verified backup.
             try:
                 self.checked(record)
             except (BackupError, FileNotFoundError):
@@ -168,7 +173,7 @@ class Store:
         try:
             with partial.open('xb') as output, tempfile.TemporaryFile() as errors:
                 os.fchmod(output.fileno(), 0o600)
-                process = subprocess.Popen(['runuser', '-u', 'postgres', '--', 'pg_dump', '--format=custom', '--compress=zstd:level=1', '--no-owner', '--no-acl', '--dbname=mserp'], stdout=output, stderr=errors, start_new_session=True)
+                process = subprocess.Popen(['/usr/local/sbin/mserp-db', 'pg_dump', '--format=custom', '--compress=zstd:level=1', '--no-owner', '--no-acl', '--dbname=mserp'], stdout=output, stderr=errors, start_new_session=True)
                 while process.poll() is None:
                     if shutil.disk_usage(self.root).free < RESERVE:
                         raise BackupError('Backup stopped before exhausting disk space; existing backup retained')
@@ -208,7 +213,10 @@ def main():
     signal.signal(signal.SIGTERM, interrupted)
     os.umask(0o077)
     ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    store = Store()
+    target = subprocess.check_output(['/usr/local/sbin/mserp-db', 'identity'], text=True).strip()
+    if target != 'local:mserp' and not re.fullmatch(r'remote:[0-9a-f]{64}', target):
+        raise BackupError('Invalid database destination identity')
+    store = Store(target=target)
     if args.check:
         record = store.recent()
     else:

@@ -19,7 +19,7 @@ SCRIPT
 chmod +x "$backup_helper"
 ledger=t
 applied_versions=$'001_initial.sql\n187_load_source_availability.sql'
-runuser() {
+mserp_db() {
     [[ $ledger != error ]] || return 1
     if [[ $* == *to_regclass* ]]; then printf '%s\n' "$ledger"; else printf '%s\n' "$applied_versions"; fi
 }
