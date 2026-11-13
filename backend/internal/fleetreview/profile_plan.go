@@ -28,6 +28,8 @@ type profileRow struct {
 	Review            []string        `json:"review,omitempty"`
 }
 
+const truckStatusCrewConflict = "Clustie status differs and the FleetScope truck has an assignment"
+
 const conflictingTruckMake = "Conflicting truck make"
 
 const uniqueFleetScopeIdentity = "Confirm a unique FleetScope identity"
@@ -390,6 +392,59 @@ func (p *profilePlan) resolveTruckMakeConflicts(source, receiver Snapshot) {
 	}
 }
 
+// A completed status correction can clear the old flag once the live
+// restrictions agree and neither system has a current working crew.
+func (p *profilePlan) resolveTruckStatusCrewConflicts(source, receiver Snapshot) {
+	for i, row := range p.Rows {
+		if row.Kind != "truck" || !slices.Contains(row.Review, truckStatusCrewConflict) {
+			continue
+		}
+		a, b := find(source.Trucks, row.LocalID), find(receiver.Trucks, row.RemoteID)
+		if !validVIN(a["vin"]) || !strings.EqualFold(a["vin"], b["vin"]) ||
+			a["status"] != b["operationalStatus"] || a["active"] != b["operationalActive"] {
+			continue
+		}
+		if a["status"] == "maintenance" && b["status"] == "active" && a["primaryId"] != "" && b["primaryId"] != "" {
+			row.Review = slices.Clone(row.Review)
+			row.Review[slices.Index(row.Review, truckStatusCrewConflict)] =
+				"Clustie maintenance recorded. FleetScope keeps the current crew while its truck status is Active."
+			p.Rows[i] = row
+			continue
+		}
+		if b["primaryId"] != "" || b["secondaryId"] != "" ||
+			(a["primaryId"] != "" && find(source.Drivers, a["primaryId"])["status"] != "terminated") ||
+			(a["secondaryId"] != "" && find(source.Drivers, a["secondaryId"])["status"] != "terminated") {
+			continue
+		}
+		expected := fleetScopeTruckStatus(a, b)
+		if expected == "active" || b["status"] != expected {
+			continue
+		}
+		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
+			return reason == truckStatusCrewConflict
+		})
+		if len(row.Review) == 0 {
+			p.Review--
+		}
+		p.Rows[i] = row
+	}
+}
+
+func fleetScopeTruckStatus(a, b Record) string {
+	switch {
+	case b["status"] == "out_of_service":
+		return "out_of_service"
+	case a["status"] == "terminated":
+		return "inactive"
+	case a["status"] == "out_of_service", a["status"] == "maintenance", a["conditionStatus"] == "shop", a["conditionStatus"] == "out_of_service":
+		return "out_of_service"
+	case a["active"] == "false":
+		return "inactive"
+	default:
+		return "active"
+	}
+}
+
 func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks, driverNames Record) {
 	for _, field := range []string{"year", "make", "model", "color", "plate", "plateState"} {
 		av, bv := strings.TrimSpace(a[field]), strings.TrimSpace(b[field])
@@ -436,19 +491,9 @@ func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks
 		r.Review = append(r.Review, "Review truck unit number")
 	}
 	planTruckOwnership(r, a, b, driverLinks, driverNames)
-	status := "active"
-	switch {
-	case b["status"] == "out_of_service":
-		status = "out_of_service"
-	case a["status"] == "terminated":
-		status = "inactive"
-	case a["status"] == "out_of_service", a["status"] == "maintenance", a["conditionStatus"] == "shop", a["conditionStatus"] == "out_of_service":
-		status = "out_of_service"
-	case a["active"] == "false":
-		status = "inactive"
-	}
+	status := fleetScopeTruckStatus(a, b)
 	if status != b["status"] && status != "active" && (b["primaryId"] != "" || b["secondaryId"] != "" || b["trailerId"] != "" || b["secondTrailerId"] != "") {
-		r.Review = append(r.Review, "Clustie status differs and the FleetScope truck has an assignment")
+		r.Review = append(r.Review, truckStatusCrewConflict)
 	} else {
 		r.change(fleetScope, "status", b["status"], status)
 		r.change(fleetScope, "operationalStatus", b["operationalStatus"], a["status"])
