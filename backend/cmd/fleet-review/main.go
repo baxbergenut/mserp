@@ -17,6 +17,8 @@ import (
 )
 
 type configuration struct {
+	ConfirmedDriverIdentities map[string]fleetreview.Record `json:"confirmedDriverIdentities,omitempty"`
+
 	SourceURL         string             `json:"sourceUrl"`
 	ReceiverURL       string             `json:"receiverUrl"`
 	CompanyID         string             `json:"companyId"`
@@ -109,7 +111,7 @@ func main() {
 	if c.Origin == "http://127.0.0.1:8096" || c.Origin == "http://localhost:8096" {
 		secure = false
 	}
-	app, e := fleetreview.NewServer(ctx, db, fleetreview.Config{Origin: c.Origin, Directory: c.Directory, Username: c.Username, PasswordHash: c.PasswordHash, Secure: secure, AllowApply: c.AllowApply, Policy: c.Policy})
+	app, e := fleetreview.NewServer(ctx, db, fleetreview.Config{Origin: c.Origin, Directory: c.Directory, Username: c.Username, PasswordHash: c.PasswordHash, Secure: secure, AllowApply: c.AllowApply, Policy: c.Policy, ConfirmedDriverIdentities: c.ConfirmedDriverIdentities})
 	if e != nil {
 		slog.Error("portal startup failed; verify database connectivity, schema and private state")
 		os.Exit(1)

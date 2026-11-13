@@ -22,3 +22,21 @@ func TestHistoricalDriverDeferral(t *testing.T) {
 		t.Fatal("display must defer historical rows while preserving the frozen plan")
 	}
 }
+
+func TestConfirmedDriverIdentityKeepsOtherReviewReasons(t *testing.T) {
+	plan := profilePlan{Review: 4, Rows: []profileRow{
+		{Kind: "driver", LocalID: "driver", Review: []string{uniqueFleetScopeIdentity}},
+		{Kind: "driver", RemoteID: "candidate", Review: []string{"No verified Clustie match"}},
+		{Kind: "driver", LocalID: "other", Review: []string{uniqueFleetScopeIdentity, "Review employment"}},
+		{Kind: "truck", LocalID: "truck", Review: []string{uniqueFleetScopeIdentity}},
+	}}
+	hash := digest(plan)
+	display := plan.forDisplay()
+	display.applyIdentityConfirmations(Record{"driver": "candidate", "other": "second", "truck": "vehicle"})
+	if display.Review != 2 || len(display.Rows) != 3 || !display.Rows[0].IdentityConfirmed ||
+		display.Rows[0].RemoteID != "candidate" || len(display.Rows[0].Review) != 0 ||
+		len(display.Rows[1].Review) != 1 || display.Rows[1].Review[0] != "Review employment" ||
+		display.Rows[2].IdentityConfirmed || digest(plan) != hash {
+		t.Fatalf("unexpected plan display: %+v", display)
+	}
+}

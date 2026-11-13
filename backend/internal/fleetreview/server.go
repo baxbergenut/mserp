@@ -26,6 +26,8 @@ import (
 var assets embed.FS
 
 type Config struct {
+	ConfirmedDriverIdentities map[string]Record
+
 	Origin, Directory, Username, PasswordHash string
 	Secure                                    bool
 	AllowApply                                bool
@@ -221,6 +223,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: "fleet_review_session", Value: t, Path: "/", Secure: s.cfg.Secure, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 8 * 3600})
 	jsonOut(w, 200, map[string]string{"csrf": csrf, "username": s.cfg.Username})
 }
+func (s *Server) displayProfilePlan() profilePlan {
+	plan := s.state.Profile.Plan.forDisplay()
+	if s.state.Batch.State == "complete" {
+		plan.applyIdentityConfirmations(s.cfg.ConfirmedDriverIdentities[s.state.Batch.ID])
+	}
+	return plan
+}
+
 func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -265,7 +275,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 					ids = append(ids, record["id"])
 				}
 			}
-			response["profile"] = map[string]any{"plan": profile.Plan.forDisplay(), "capturedAt": s.state.Batch.Started, "sourceIds": ids}
+			response["profile"] = map[string]any{"plan": s.displayProfilePlan(), "capturedAt": s.state.Batch.Started, "sourceIds": ids}
 			if s.state.Batch.State == "complete" {
 				// Include records added after the manual review snapshot.
 				existing := make(map[string]bool, len(view.Rows))
@@ -414,7 +424,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/profile-preview":
 		if s.state.Batch != nil {
 			if s.state.Profile != nil {
-				jsonOut(w, 200, map[string]any{"plan": s.state.Profile.Plan.forDisplay(), "capturedAt": s.state.Batch.Started})
+				jsonOut(w, 200, map[string]any{"plan": s.displayProfilePlan(), "capturedAt": s.state.Batch.Started})
 			} else {
 				fail(w, 409, "Finish or recover the frozen batch before previewing another")
 			}

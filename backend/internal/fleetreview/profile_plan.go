@@ -18,14 +18,17 @@ type profileChange struct {
 }
 
 type profileRow struct {
-	Deferred string          `json:"deferred,omitempty"`
-	Kind     string          `json:"kind"`
-	Label    string          `json:"label"`
-	LocalID  string          `json:"localId,omitempty"`
-	RemoteID string          `json:"remoteId,omitempty"`
-	Changes  []profileChange `json:"changes,omitempty"`
-	Review   []string        `json:"review,omitempty"`
+	IdentityConfirmed bool            `json:"identityConfirmed,omitempty"`
+	Deferred          string          `json:"deferred,omitempty"`
+	Kind              string          `json:"kind"`
+	Label             string          `json:"label"`
+	LocalID           string          `json:"localId,omitempty"`
+	RemoteID          string          `json:"remoteId,omitempty"`
+	Changes           []profileChange `json:"changes,omitempty"`
+	Review            []string        `json:"review,omitempty"`
 }
+
+const uniqueFleetScopeIdentity = "Confirm a unique FleetScope identity"
 
 const historicalDriverWithoutMatch = "Historical driver has no verified FleetScope match"
 
@@ -171,7 +174,7 @@ func buildProfilePlan(saved State, source, receiver Snapshot) profilePlan {
 			case kind == "driver" && a["status"] == "terminated" && b == nil:
 				r.Deferred = historicalDriverWithoutMatch
 			case b == nil || claims[b["id"]] != 1 || (draft.Reviewed && draft.Action == "update" && draft.RemoteID != b["id"]):
-				r.Review = append(r.Review, "Confirm a unique FleetScope identity")
+				r.Review = append(r.Review, uniqueFleetScopeIdentity)
 			default:
 				r.RemoteID = b["id"]
 				if kind == "driver" {
@@ -238,6 +241,39 @@ func (p profilePlan) forDisplay() profilePlan {
 		}
 	}
 	return p
+}
+
+// applyIdentityConfirmations overlays the owner's review decisions on the
+// completed plan. The frozen plan and both database receipts retain their hash.
+func (p *profilePlan) applyIdentityConfirmations(pairs Record) {
+	if len(pairs) == 0 {
+		return
+	}
+	confirmed := make(map[string]bool, len(pairs))
+	for i, row := range p.Rows {
+		remote := pairs[row.LocalID]
+		if row.Kind != "driver" || row.RemoteID != "" || remote == "" || !slices.Contains(row.Review, uniqueFleetScopeIdentity) {
+			continue
+		}
+		row.RemoteID = remote
+		row.IdentityConfirmed = true
+		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
+			return reason == uniqueFleetScopeIdentity
+		})
+		if len(row.Review) == 0 {
+			p.Review--
+		}
+		p.Rows[i] = row
+		confirmed[remote] = true
+	}
+	p.Rows = slices.DeleteFunc(p.Rows, func(row profileRow) bool {
+		if row.Kind != "driver" || row.LocalID != "" || !confirmed[row.RemoteID] ||
+			len(row.Review) != 1 || row.Review[0] != "No verified Clustie match" {
+			return false
+		}
+		p.Review--
+		return true
+	})
 }
 
 func validDriverField(field, value string) bool {
