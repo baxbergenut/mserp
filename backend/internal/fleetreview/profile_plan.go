@@ -442,7 +442,8 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 		}
 		a := find(source.Trucks, row.LocalID)
 		b := find(receiver.Trucks, row.RemoteID)
-		if row.RemoteID == "" && a["unit"] == "042" && validVIN(a["vin"]) {
+		approvedTruck := slices.Contains([]string{"042", "045", "097", "1027"}, a["unit"])
+		if row.RemoteID == "" && approvedTruck && validVIN(a["vin"]) {
 			matches := 0
 			for _, candidate := range receiver.Trucks {
 				if candidate["unit"] == a["unit"] && strings.EqualFold(candidate["vin"], a["vin"]) {
@@ -461,8 +462,20 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 			a["ownerKind"] == b["ownerKind"] && a["ownerKind"] == owner["kind"] &&
 			nullable(a["ownerDriverRef"]) == owner["mserpOwnerDriverId"] && nullable(a["ownerDate"]) == owner["effectiveDate"]
 		registrationMatches := exactTruck && a["plate"] != "" && a["plate"] == b["plate"] && a["plateState"] == b["plateState"]
-		reconciled042 := ownerMatches && a["unit"] == "042" && a["unit"] == b["unit"] &&
-			a["status"] == b["operationalStatus"] && a["active"] == b["operationalActive"] && registrationMatches
+		reconciledTruck := approvedTruck && ownerMatches && a["unit"] == b["unit"] &&
+			a["status"] == b["operationalStatus"] && a["active"] == b["operationalActive"]
+		for _, field := range []string{"make", "model", "year", "color", "plate", "plateState"} {
+			if a[field] != "" && norm(a[field]) != norm(b[field]) {
+				reconciledTruck = false
+			}
+		}
+		for _, field := range []string{"primaryId", "secondaryId"} {
+			if a[field] == "" {
+				reconciledTruck = reconciledTruck && b[field] == ""
+			} else {
+				reconciledTruck = reconciledTruck && b[field] != "" && links["driver:"+a[field]] == b[field]
+			}
+		}
 		retain088Crew := ownerMatches && a["unit"] == "088" && a["status"] == "maintenance" &&
 			b["status"] == "active" && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
 			a["primaryId"] != "" && b["primaryId"] != "" && links["driver:"+a["primaryId"]] == b["primaryId"] &&
@@ -477,7 +490,7 @@ func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, lin
 			case "Conflicting truck plate", "Verify truck registration":
 				return registrationMatches
 			case "Previously deferred":
-				if reconciled042 {
+				if reconciledTruck {
 					row.RemoteID = b["id"]
 					reconciledTrucks = append(reconciledTrucks, b["id"])
 				} else {
