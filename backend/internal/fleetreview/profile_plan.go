@@ -388,10 +388,18 @@ func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot
 			"ef2c6b0f-5a17-454d-bdc7-ab0025a425d6", // Francois Nshizirungu Gasasira
 			"fd77bb1c-d81d-4fe4-a263-d22f7b7a32ca", // Solomon Mazima
 		}, row.LocalID)
+		closeMelano := matchedActive && row.LocalID == "469a4893-62b6-42e7-954e-025e7704f848" &&
+			slices.Contains(row.Review, preserveHistoricalDriverProfile) &&
+			a["firstName"] != "" && a["firstName"] == b["firstName"] &&
+			a["lastName"] != "" && a["lastName"] == b["lastName"] &&
+			a["email"] != "" && a["email"] == b["email"]
 		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
 			return reason == driverEmploymentConflict || (reason == driverAssignedStatusConflict && matchedActive) ||
-				(reason == preserveHistoricalDriverProfile && closeHistorical)
+				(reason == preserveHistoricalDriverProfile && (closeHistorical || closeMelano))
 		})
+		if closeMelano {
+			row.Completion = "FleetScope name and email verified in Clustie. Driver Active and escrow record preserved."
+		}
 		if closeHistorical {
 			row.Completion = "Termination verified. Historical Clustie profile and escrow record preserved."
 		}
