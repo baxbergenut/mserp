@@ -42,7 +42,10 @@ type FleetSyncTruck struct {
 }
 
 func (t FleetSyncTruck) canExclude() bool {
-	return (t.PrimaryID == "" && t.SecondaryID == "") || (t.Truck.OperationalStatus == "terminated" && !t.Truck.OperationalActive)
+	return (t.PrimaryID == "" && t.SecondaryID == "") ||
+		(t.Truck.OperationalStatus == "terminated" && !t.Truck.OperationalActive) ||
+		(t.Truck.MSERPTruckID == "01295cf1-c798-48f1-a1c5-4183a9c7ae61" && t.Truck.UnitNumber == "782" &&
+			(t.Truck.VIN == nil || strings.TrimSpace(*t.Truck.VIN) == ""))
 }
 
 type FleetSyncLocal struct {

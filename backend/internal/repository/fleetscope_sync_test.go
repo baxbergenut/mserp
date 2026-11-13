@@ -402,3 +402,23 @@ func TestDeferredTerminatedFleetScopeTruckRetainsClustieCrew(t *testing.T) {
 		t.Fatal("reactivated truck with retained crew was excluded")
 	}
 }
+
+func TestApprovedTruck782ExclusionRequiresMissingVIN(t *testing.T) {
+	const id = "01295cf1-c798-48f1-a1c5-4183a9c7ae61"
+	local := FleetSyncLocal{Trucks: []FleetSyncTruck{{
+		Truck:     fleetscope.TruckProjection{MSERPTruckID: id, UnitNumber: "782", OperationalActive: true, OperationalStatus: "assigned"},
+		PrimaryID: "driver",
+	}}}
+	if _, err := desiredSyncCrews(local, nil); err == nil {
+		t.Fatal("truck 782 was skipped without an explicit exclusion")
+	}
+	links := []FleetSyncLink{{Kind: "truck", LocalID: id, ExcludedReason: "Owner approved skipping truck 782"}}
+	if crews, err := desiredSyncCrews(local, links); err != nil || len(crews) != 0 {
+		t.Fatalf("truck 782 should be excluded: %v, %v", crews, err)
+	}
+	vin := "1FUJGLDR9CSBP0782"
+	local.Trucks[0].Truck.VIN = &vin
+	if _, err := desiredSyncCrews(local, links); err == nil {
+		t.Fatal("truck 782 with a VIN should require a new review")
+	}
+}
