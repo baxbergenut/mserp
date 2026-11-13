@@ -257,6 +257,9 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		view := s.state
 		view.Profile = nil
 		response := map[string]any{"state": view, "applyBlocker": ready, "applying": s.applying}
+		if s.state.Batch != nil && s.state.Profile != nil {
+			response["profile"] = map[string]any{"plan": s.state.Profile.Plan, "capturedAt": s.state.Batch.Started}
+		}
 		if s.state.Batch != nil && s.state.Batch.State == "complete" {
 			a, b, err := s.db.Snapshot(ctx)
 			var links map[string]string

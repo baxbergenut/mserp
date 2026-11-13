@@ -1,6 +1,6 @@
 'use strict';
 const $=s=>document.querySelector(s);
-let state,csrf='',page=location.pathname==='/trucks'?'truck':location.pathname==='/review'?'review':'driver',editing=null,dirty=false,preflightHash='',applyBlocker='',busy=false,profilePreview=null;
+let state,csrf='',page=location.pathname==='/trucks'?'truck':location.pathname==='/review'?'review':'driver',editing=null,dirty=false,preflightHash='',applyBlocker='',busy=false,profilePreview=null,profileRows=new Map();
 const labels={firstName:'First name',lastName:'Last name',email:'Email',phone:'Phone',status:'Status',terminationDate:'Termination date',unit:'Truck unit',vin:'VIN',year:'Model year',make:'Make',model:'Model',plate:'License plate',plateState:'Plate state',active:'Operationally active',ownerId:'Recorded owner',ownerDriverId:'Driver owner',ownerDate:'Owner effective date',color:'Color',truckClass:'Truck class',gvwr:'GVWR (lb)',coverageDecision:'Insurance decision',coverageEvidence:'Reviewed insurance evidence',reconcileCrew:'Reconcile crew'};
 const driverFields=['firstName','lastName','email','phone','status','terminationDate'];
 const truckFields=['unit','vin','year','make','model','plate','plateState','active','status','ownerId','ownerDriverId','ownerDate','color','truckClass','gvwr','coverageDecision','coverageEvidence','reconcileCrew'];
@@ -34,8 +34,9 @@ function differences(r){const a=local(r),b=remote(r),v=r.values,d=[];
  }
  return [...new Set(d)];
 }
-function status(r){if(r.action==='defer')return 'amber';if(!r.reviewed)return 'red';if(!differences(r).length)return 'green';return state.batch?'red':'amber'}
-function reviewLabel(r){if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
+function profileResult(r){return state.batch?.state==='complete'?profileRows.get(r.localId):null}
+function status(r){const result=profileResult(r);if(result)return result.review?.length?'red':'green';if(r.action==='defer')return 'amber';if(!r.reviewed)return 'red';if(!differences(r).length)return 'green';return state.batch?'red':'amber'}
+function reviewLabel(r){const result=profileResult(r);if(result)return result.review?.length?'Needs review':'Applied';if(r.action==='defer')return 'Deferred';const color=status(r);if(color==='green')return 'Verified matching';return color==='amber'?'Ready to apply':'Needs attention'}
 function reviewProgress(rows){const total=rows.length,deferred=rows.filter(r=>r.action==='defer').length,reviewed=rows.filter(r=>r.reviewed&&r.action!=='defer').length,done=reviewed+deferred;return {total,deferred,reviewed,done,remaining:total-done,percent:total?Math.floor(done*100/total):0}}
 function fieldDifferent(r,key,av,bv){
  if(['coverageDecision','coverageEvidence','reconcileCrew'].includes(key))return false;
@@ -48,9 +49,29 @@ function fieldDifferent(r,key,av,bv){
 }
 function notice(message,error=false){$('#notice').hidden=!message;$('#notice').textContent=message;$('#notice').className=error?'error':''}
 async function api(path,body){const response=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:body===undefined?undefined:JSON.stringify(body)});let data;try{data=await response.json()}catch{throw Error('The server response was interrupted. Reload before retrying.')}if(response.status===401){$('#login').hidden=false;$('#workspace').hidden=true}if(!response.ok)throw Error(data.error||'Request failed');return data}
-async function load(){const data=await api('state');state=data.state;applyBlocker=data.applyBlocker;if(data.live){state.source=data.live.source;state.receiver=data.live.receiver;for(const r of state.rows)r.remoteId=data.live.links[r.id]||r.remoteId}$('#workspace').hidden=false;$('#login').hidden=true;render();}
+async function load(){
+ const data=await api('state');
+ state=data.state;
+ applyBlocker=data.applyBlocker;
+ if(data.profile){
+  profilePreview=data.profile;
+  profileRows=new Map(data.profile.plan.rows.filter(row=>row.localId).map(row=>[row.localId,row]));
+ }else if(!profilePreview?.hash){
+  profilePreview=null;
+  profileRows.clear();
+ }
+ if(data.live){
+  state.source=data.live.source;
+  state.receiver=data.live.receiver;
+  for(const r of state.rows)r.remoteId=data.live.links[r.id]||r.remoteId;
+ }
+ $('#workspace').hidden=false;
+ $('#login').hidden=true;
+ render();
+}
 function render(){
  for(const a of document.querySelectorAll('[data-page]'))a.classList.toggle('active',a.dataset.page===page);
+ $('#manual-review').hidden=state.batch?.state==='complete'&&!!profilePreview&&!profilePreview.hash;
  $('#title').textContent=page==='review'?'Final review':page==='truck'?'Trucks':'Drivers';$('#subtitle').textContent=page==='review'?'Confirm the complete batch before updating either system.':page==='truck'?'Confirm vehicle identity, ownership and missing details.':'Confirm people, contact details and employment status.';
  for(const kind of ['driver','truck']){const p=reviewProgress(state.rows.filter(r=>r.kind===kind)),bar=$('#'+kind+'-progress'),description=`${p.done} of ${p.total} reviewed or deferred (${p.percent}%). ${p.reviewed} reviewed, ${p.deferred} deferred, ${p.remaining} remaining. Deferred records are not approved changes.`;bar.max=p.total||1;bar.value=p.done;bar.setAttribute('aria-valuetext',description);$('#'+kind+'-count').textContent=p.percent+'%';bar.parentElement.title=description}
  const rows=page==='review'?state.rows:state.rows.filter(r=>r.kind===page);$('#stat-total').textContent=rows.length;for(const color of ['red','amber','green'])$('#stat-'+color).textContent=rows.filter(r=>status(r)===color).length;
@@ -59,7 +80,7 @@ function render(){
  const q=norm($('#search').value),f=$('#filter').value,visible=rows.filter(r=>{const a=local(r),b=remote(r);return (!q||norm([a.name,a.unit,a.vin,b.name,b.unit,b.vin,r.note].join(' ')).includes(q))&&(f==='all'||f==='defer'&&r.action==='defer'||f===status(r))});$('#list-count').textContent=visible.length+' records';const body=$('#rows');body.replaceChildren();
  for(const r of visible){const a=local(r),b=remote(r),color=status(r),tr=el('tr',undefined,'row-'+color);const name=el('td',a.name||a.unit||r.localId);name.append(el('small',r.kind==='truck'?(a.vin||'VIN missing'):(a.status||'Unknown status')));tr.append(name);
   const matched=el('td',b.name||b.unit||(r.action==='create'?'Create new record':'No match selected'));if(b.id)matched.append(el('small',r.kind==='truck'?b.vin:b.status));tr.append(matched);
-  const diff=differences(r);tr.append(el('td',diff.length?diff.slice(0,3).join(' Â· ')+(diff.length>3?' +'+(diff.length-3):''):'Values agree'));
+  const result=profileResult(r),diff=result?(result.review||[]):differences(r);tr.append(el('td',diff.length?diff.slice(0,3).join(' Â· ')+(diff.length>3?' +'+(diff.length-3):''):(result?'Batch changes applied':'Values agree')));
   const badge=el('td');badge.append(el('span',reviewLabel(r),'badge '+color));tr.append(badge);const action=el('td'),button=el('button',state.batch?'View':'Review','quiet');button.addEventListener('click',()=>openEditor(r));action.append(button);tr.append(action);body.append(tr)
  }
  if(!visible.length){const tr=el('tr'),td=el('td','No records match this filter.');td.colSpan=5;tr.append(td);body.append(tr)}
@@ -76,11 +97,19 @@ function profileValue(field,value){
 }
 function renderProfile(){
  const root=$('#profile-result');
+ $('#profile-preview').hidden=!!state.batch;
  root.hidden=!profilePreview;
  if(!profilePreview)return;
  const {plan}=profilePreview;
+ const complete=state.batch?.state==='complete'&&!profilePreview.hash;
+ $('#profile-title').textContent=complete?'Batch applied':'Batch preview';
+ $('#profile-changes-label').textContent=complete?'Applied changes':'Proposed changes';
+ $('#profile-before').textContent=complete?'Before':'Current';
+ $('#profile-after').textContent=complete?'Applied value':'Proposed';
  const versionMatches=profilePreview.version===state.version;
- $('#profile-summary').textContent=plan.drivers+' drivers and '+plan.trucks+' trucks with proposed changes. '+plan.review+' records have items to review. '+plan.matching+' already match. Previewed '+new Date(profilePreview.capturedAt).toLocaleString()+'.'+(profilePreview.hash&&!versionMatches?' Generate a fresh preview before applying.':'');
+ $('#profile-summary').textContent=complete
+  ? 'Applied changes to '+plan.drivers+' drivers and '+plan.trucks+' trucks. '+plan.review+' records have items left for review. Completed '+new Date(state.batch.finished).toLocaleString()+'.'
+  : plan.drivers+' drivers and '+plan.trucks+' trucks with proposed changes. '+plan.review+' records have items to review. '+plan.matching+' already match. Previewed '+new Date(profilePreview.capturedAt).toLocaleString()+'.'+(profilePreview.hash&&!versionMatches?' Generate a fresh preview before applying.':'');
  const rows=$('#profile-rows');
  rows.replaceChildren();
  const filter=$('#profile-filter').value;
@@ -88,7 +117,7 @@ function renderProfile(){
   const changes=row.changes||[],review=row.review||[];
   if(filter==='changes'&&!changes.length||filter==='review'&&!review.length)continue;
   const label=(row.kind==='driver'?'Driver · ':'Truck · ')+row.label;
-  for(const change of changes){
+  for(const change of filter==='review' ? [] : changes){
    const tr=el('tr');
    for(const value of [label,change.system,profileLabels[change.field]||change.field,profileValue(change.field,change.before),profileValue(change.field,change.after)])tr.append(el('td',value));
    rows.append(tr);
@@ -149,7 +178,7 @@ $('#profile-submit').addEventListener('click',async()=>{
  busy=true;$('#profile-submit').disabled=true;
  try{
   await api('profile-submit',{version:profilePreview.version,hash:profilePreview.hash,confirmation:$('#profile-confirm-text').value});
-  profilePreview=await api('profile-preview');
+  notice('');
   await load();
  }catch(e){notice(e.message,true)}finally{busy=false;$('#profile-submit').disabled=false}
 });
@@ -157,5 +186,5 @@ $('#preflight').addEventListener('click',async()=>{try{const r=await api('prefli
 $('#submit').addEventListener('click',async()=>{if(busy)return;busy=true;$('#submit').disabled=true;try{await api('submit',{version:state.version,hash:preflightHash,confirmation:$('#confirm-text').value});$('#confirmation').hidden=true;await load()}catch(e){notice(e.message,true)}finally{busy=false;$('#submit').disabled=false}});
 $('#retry').addEventListener('click',async()=>{try{await api('retry',{});await load()}catch(e){notice(e.message,true)}});
 $('#reset').addEventListener('click',async()=>{try{await api('reset',{});await load();notice('No database commit existed. The batch is back in review.')}catch(e){notice(e.message,true)}});
-setInterval(()=>{if(state?.batch&&!$('#editor').open)load().catch(e=>notice(e.message,true))},5000);
+setInterval(()=>{if(state?.batch?.state==='applying'&&!$('#editor').open)load().catch(e=>notice(e.message,true))},5000);
 (async()=>{try{const r=await api('session');csrf=r.csrf;await load()}catch(e){$('#login').hidden=false;$('#workspace').hidden=true}})();
