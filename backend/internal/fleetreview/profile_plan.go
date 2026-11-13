@@ -30,6 +30,9 @@ type profileRow struct {
 
 const truckStatusCrewConflict = "Clustie status differs and the FleetScope truck has an assignment"
 
+const conflictingTruckModel = "Conflicting truck model"
+const truckUnitReview = "Review truck unit number"
+
 const conflictingTruckMake = "Conflicting truck make"
 
 const uniqueFleetScopeIdentity = "Confirm a unique FleetScope identity"
@@ -445,9 +448,44 @@ func fleetScopeTruckStatus(a, b Record) string {
 	}
 }
 
+func isAntonUnitPair(a, b Record) bool {
+	unit := a["unit"]
+	return (unit == "1" || unit == "2" || unit == "3") && norm(b["unit"]) == unit+" anton" &&
+		validVIN(a["vin"]) && strings.EqualFold(a["vin"], b["vin"])
+}
+
+// Clear verified live model and unit discrepancies from the completed review.
+func (p *profilePlan) resolveTruckModelAndUnitConflicts(source, receiver Snapshot) {
+	for i, row := range p.Rows {
+		if row.Kind != "truck" || row.Deferred != "" || len(row.Review) == 0 {
+			continue
+		}
+		a, b := find(source.Trucks, row.LocalID), find(receiver.Trucks, row.RemoteID)
+		if !validVIN(a["vin"]) || !strings.EqualFold(a["vin"], b["vin"]) {
+			continue
+		}
+		modelMatches := validTruckField("model", strings.TrimSpace(b["model"])) && norm(a["model"]) == norm(b["model"])
+		unitMatches := a["unit"] != "" && a["unit"] == b["unit"]
+		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
+			return (modelMatches && (reason == conflictingTruckModel || reason == "Check truck model")) ||
+				(unitMatches && reason == truckUnitReview)
+		})
+		if len(row.Review) == 0 {
+			p.Review--
+		}
+		p.Rows[i] = row
+	}
+}
+
 func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks, driverNames Record) {
 	for _, field := range []string{"year", "make", "model", "color", "plate", "plateState"} {
 		av, bv := strings.TrimSpace(a[field]), strings.TrimSpace(b[field])
+		if field == "model" && validTruckField(field, bv) {
+			if norm(av) != norm(bv) {
+				r.change(clustie, field, a[field], bv)
+			}
+			continue
+		}
 		if av != "" && !validTruckField(field, av) || bv != "" && !validTruckField(field, bv) {
 			r.Review = append(r.Review, "Check truck "+field)
 			continue
@@ -488,7 +526,13 @@ func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks
 		}
 	}
 	if norm(a["unit"]) != norm(b["unit"]) {
-		r.Review = append(r.Review, "Review truck unit number")
+		if isAntonUnitPair(a, b) && !slices.ContainsFunc(remotes, func(other Record) bool {
+			return other["id"] != b["id"] && norm(other["unit"]) == norm(a["unit"])
+		}) {
+			r.change(fleetScope, "unit", b["unit"], a["unit"])
+		} else {
+			r.Review = append(r.Review, truckUnitReview)
+		}
 	}
 	planTruckOwnership(r, a, b, driverLinks, driverNames)
 	status := fleetScopeTruckStatus(a, b)

@@ -311,6 +311,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			}
 			if profileResponse != nil {
 				displayPlan.resolveTruckMakeConflicts(a, b)
+				displayPlan.resolveTruckModelAndUnitConflicts(a, b)
 				displayPlan.resolveTruckStatusCrewConflicts(a, b)
 				profileResponse["plan"] = displayPlan
 			}
@@ -441,6 +442,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					plan.resolveTruckMakeConflicts(a, b)
+					plan.resolveTruckModelAndUnitConflicts(a, b)
 					plan.resolveTruckStatusCrewConflicts(a, b)
 				}
 				jsonOut(w, 200, map[string]any{"plan": plan, "capturedAt": s.state.Batch.Started})

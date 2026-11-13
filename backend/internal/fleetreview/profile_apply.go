@@ -80,7 +80,7 @@ var remoteDriverColumns = map[string]string{
 	"firstName": "first_name", "lastName": "last_name", "email": "email", "phone": "phone_number", "status": "status",
 }
 var remoteTruckColumns = map[string]string{
-	"make": "make", "model": "model", "color": "color", "year": "year", "plate": "license_plate", "plateState": "license_plate_state",
+	"unit": "unit_number", "make": "make", "model": "model", "color": "color", "year": "year", "plate": "license_plate", "plateState": "license_plate_state",
 	"status": "status", "operationalStatus": "mserp_operational_status", "operationalActive": "mserp_operational_active",
 	"ownerKind": "ownership", "ownerDriverRef": "driver_id", "ownerSnapshot": "mserp_owner_snapshot", "coverageHold": "mserp_coverage_review",
 }
