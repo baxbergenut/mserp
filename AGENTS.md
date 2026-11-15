@@ -1112,7 +1112,7 @@ status while background source evidence refreshes.
   order. Reordering requires driver_board.write, retains hidden rows, and
   propagates through live board snapshots. Migration 201 adds shared Auto-order
   per dispatcher (including Unassigned). While enabled, snapshots sort the complete
-  roster by Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses,
+  roster by Ready, Dispatched, Enroute, Reserved, Rest, Deadhead, Home, then other statuses,
   with ties preserving the saved order. Cross-group drops update the assignment,
   then Auto-order places arrivals by status and appends them within their status
   tier. Empty active Auto-order groups remain available as drop targets. Within-group

@@ -188,12 +188,12 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 		}
 		exec(`UPDATE dispatchers SET active=true WHERE id=$1`, dispatcher)
 		exec(`UPDATE drivers SET dispatcher_id=$1 WHERE id=ANY($2::uuid[])`, dispatcher, ids)
-		exec(`INSERT INTO driver_board(driver_id,status) VALUES ($1,'HOME'),($2,'DISPATCHED'),($3,'READY'),($4,'REST')`, ids[0], ids[1], ids[2], added)
+		exec(`INSERT INTO driver_board(driver_id,status) VALUES ($1,'HOME'),($2,'DEADHEAD'),($3,'READY'),($4,'REST')`, ids[0], ids[1], ids[2], added)
 		if err := repo.SetDriverAutoOrder(ctx, dispatcher, true, actor); err != nil {
 			t.Fatal(err)
 		}
 		current := get()
-		want := []string{ids[2], ids[1], added, ids[0]}
+		want := []string{ids[2], added, ids[1], ids[0]}
 		if !current.AutoOrderDispatchers[dispatcher] || current.AutoOrderDispatchers[otherDispatcher] || !slices.Equal(group(current, dispatcher), want) {
 			t.Fatal("shared auto-order not applied", group(current, dispatcher), current.AutoOrderDispatchers)
 		}
@@ -232,7 +232,7 @@ func testDriverBoardOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 
 		exec(`UPDATE driver_board SET status='READY' WHERE driver_id=$1`, added)
 		exec(`UPDATE driver_board SET status='REST' WHERE driver_id=$1`, ids[2])
-		want = []string{added, ids[1], ids[2], ids[0]}
+		want = []string{added, ids[2], ids[1], ids[0]}
 		if got := group(get(), dispatcher); !slices.Equal(got, want) {
 			t.Fatal("status changes did not update the order", got)
 		}
