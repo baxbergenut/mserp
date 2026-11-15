@@ -227,10 +227,15 @@ func (c *Client) routeAttempt(ctx context.Context, mode string, lat, lng, toLat,
 		return Estimate{}, ErrRouteUnavailable
 	}
 	route := response.Routes[0]
+	carAccessSegments := false
 	for _, section := range route.Sections {
 		if section.Type == "TRAVEL_MODE" && section.TravelMode != mode {
 			if mode == "car" {
-				return Estimate{}, ErrRouteUnavailable
+				// TomTom can return a usable car ETA with an access segment
+				// marked "other" at a facility. Keep the returned estimate,
+				// with this limitation in its existing assumption details.
+				carAccessSegments = true
+				continue
 			}
 			return Estimate{}, ErrTomTomNoRoute
 		}
@@ -249,6 +254,9 @@ func (c *Client) routeAttempt(ctx context.Context, mode string, lat, lng, toLat,
 	estimate := Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: EstimateAssumptions}
 	if mode == "car" {
 		estimate.Assumptions = CarFallbackAssumptions
+		if carAccessSegments {
+			estimate.Assumptions += "; includes access segments not confirmed for cars"
+		}
 	}
 	for i, leg := range route.Legs {
 		var geometry *RouteGeometry
