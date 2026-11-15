@@ -242,6 +242,7 @@ type LoadPageQuery struct {
 	IncludeMissing bool
 	Pagination     Pagination
 	Search         string
+	Relevance      bool
 	Status         string
 	Customer       string
 	Dispatcher     string
@@ -300,7 +301,8 @@ WHERE ($1 = '' OR concat_ws(' ', load_id, shipment_id, customer_name,
 		direction = "ASC"
 	}
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
-	rows, err := r.pool.Query(ctx, selectLoadsSQL+where+" ORDER BY "+orderColumn+" "+direction+" NULLS LAST, id DESC LIMIT $9 OFFSET $10", pageArgs...)
+	order := searchRelevanceOrder(query.Relevance, "load_id") + orderColumn + " " + direction
+	rows, err := r.pool.Query(ctx, selectLoadsSQL+where+" ORDER BY "+order+" NULLS LAST, id DESC LIMIT $9 OFFSET $10", pageArgs...)
 	if err != nil {
 		return LoadPage{}, err
 	}

@@ -255,6 +255,7 @@ func (r *FleetRepository) ListDriversPage(
 	pagination Pagination,
 	search string,
 	includeInactive bool,
+	relevance bool,
 ) (Page[Driver], error) {
 	search = phone.Search(search)
 	const where = `
@@ -273,7 +274,7 @@ WHERE ($1 = '' OR concat_ws(' ', d.full_name, d.email, d.phone, t.unit_number,
 	}
 	pagination = pagination.Normalize(total)
 	rows, err := r.pool.Query(ctx, selectDriversSQL+where+`
-		ORDER BY d.full_name, d.id LIMIT $3 OFFSET $4`,
+		ORDER BY `+searchRelevanceOrder(relevance, "d.full_name")+`d.full_name, d.id LIMIT $3 OFFSET $4`,
 		search, includeInactive, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return Page[Driver]{}, err
@@ -687,7 +688,7 @@ WHERE ($1 = '' OR concat_ws(' ', t.unit_number, t.vin, t.make, t.model,
 	}
 	pagination = pagination.Normalize(total)
 	rows, err := r.pool.Query(ctx, selectTrucksSQL+where+`
-		ORDER BY CASE fleet_read.operating_status WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $4 OFFSET $5`,
+		ORDER BY `+searchRelevanceOrder(filter.Relevance, "t.unit_number")+`CASE fleet_read.operating_status WHEN 'ready' THEN 0 WHEN 'shop' THEN 1 WHEN 'in_use' THEN 2 WHEN 'out_of_service' THEN 3 ELSE 4 END,t.unit_number,t.id LIMIT $4 OFFSET $5`,
 		search, filter.Status, filter.GPSAlert, pagination.PageSize, pagination.Offset())
 	if err != nil {
 		return TruckPage{}, err

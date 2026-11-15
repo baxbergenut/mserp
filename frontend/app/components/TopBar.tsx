@@ -9,10 +9,26 @@ import { PageHeaderSlot } from "./PageHeader";
 import { useExpenseCategoryAccess, usePermissions, canCreateDriver, pageActionPermission } from "@/app/lib/access";
 import { fetchDriversPage, fetchTrucksPage, fetchLoadsPage, fetchExpensesPage, fetchInvestorsPage, logout } from "@/app/lib/api";
 
-type Result = { label: string; detail: string; href: string };
-type Group = { name: string; results: Result[]; failed?: boolean };
+const searchPermissions = {
+  Driver: "drivers.read",
+  Investor: "investors.read",
+  Truck: "trucks.read",
+  Load: "loads.read",
+  Expense: "expenses.read",
+};
+type Category = keyof typeof searchPermissions;
+type Result = { id: string | number; label: string; detail: string; href: string; rank: number };
+type Group = { category: Category; results: Result[]; failed: boolean };
 const quickActions = [{ label: "Expenses entry", path: "/expenses" }, { label: "Driver", path: "/drivers" }, { label: "Truck", path: "/trucks" }, { label: "Task", path: "/tasks" }];
 const itemClass = "block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-400";
+
+function searchRank(query: string, ...fields: (string | null)[]) {
+  const values = fields.map(field => field?.toLowerCase() ?? "");
+  if (values.includes(query)) return 0;
+  if (values.some(value => value.startsWith(query))) return 1;
+  if (values.some(value => value.includes(query))) return 2;
+  return 3;
+}
 
 export function TopBar({ username }: { username: string }) {
   const permissions = usePermissions();
@@ -51,22 +67,56 @@ export function TopBar({ username }: { username: string }) {
     let cancelled = false;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const page = { page: 1, pageSize: 5, search: term };
-      const requests: Array<{ name: string; request: () => Promise<Result[]> }> = [
-        { name: "Drivers", request: () => fetchDriversPage({ ...page, includeInactive: true }, controller.signal).then(r => r.items.map(d => ({ label: d.fullName, detail: [d.truckUnit && `Truck ${d.truckUnit}`, `${(d.status ?? (d.active ? "active" : "terminated")).replace(/^./, c => c.toUpperCase())} driver`].filter(Boolean).join(" · "), href: `/drivers/detail?id=${encodeURIComponent(d.id)}` }))) },
-        { name: "Investors", request: () => fetchInvestorsPage(page, controller.signal).then(r => r.items.map(i => ({ label: i.fullName, detail: `${i.active ? "Active investor" : "Inactive investor"} · ${i.trucks.length} trucks`, href: `/investors/detail?id=${encodeURIComponent(i.id)}` }))) },
-        { name: "Trucks", request: () => fetchTrucksPage(page, controller.signal).then(r => r.items.map(t => ({ label: `Truck ${t.unitNumber}`, detail: t.driverName ?? t.status, href: `/trucks/detail?id=${encodeURIComponent(t.id)}` }))) },
-        { name: "Loads", request: () => fetchLoadsPage(page, controller.signal).then(r => r.items.map(l => ({ label: l.LoadID || `DataTruck #${l.ID}`, detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "), href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}` }))) },
-        { name: "Expenses", request: () => fetchExpensesPage(page, controller.signal).then(r => r.items.map(e => ({ label: e.expenseType || e.category, detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "), href: `/expenses?search=${encodeURIComponent(term)}` }))) },
+      const page = { page: 1, pageSize: 5, search: term, sort: "relevance" };
+      const rank = (...fields: (string | null)[]) => searchRank(term.toLowerCase(), ...fields);
+      const requests: Array<{ category: Category; request: () => Promise<Result[]> }> = [
+        { category: "Driver", request: () => fetchDriversPage({ ...page, includeInactive: true }, controller.signal).then(r => r.items.map(d => ({
+          id: d.id,
+          label: d.fullName,
+          detail: [d.truckUnit && `Truck ${d.truckUnit}`, `${(d.status ?? (d.active ? "active" : "terminated")).replace(/^./, c => c.toUpperCase())} driver`].filter(Boolean).join(" · "),
+          href: `/drivers/detail?id=${encodeURIComponent(d.id)}`,
+          rank: rank(d.fullName),
+        }))) },
+        { category: "Investor", request: () => fetchInvestorsPage(page, controller.signal).then(r => r.items.map(i => ({
+          id: i.id,
+          label: i.fullName,
+          detail: `${i.active ? "Active investor" : "Inactive investor"} · ${i.trucks.length} trucks`,
+          href: `/investors/detail?id=${encodeURIComponent(i.id)}`,
+          rank: rank(i.fullName),
+        }))) },
+        { category: "Truck", request: () => fetchTrucksPage(page, controller.signal).then(r => r.items.map(t => ({
+          id: t.id,
+          label: `Truck ${t.unitNumber}`,
+          detail: t.driverName ?? t.status,
+          href: `/trucks/detail?id=${encodeURIComponent(t.id)}`,
+          rank: rank(t.unitNumber),
+        }))) },
+        { category: "Load", request: () => fetchLoadsPage(page, controller.signal).then(r => r.items.map(l => ({
+          id: l.ID,
+          label: l.LoadID || `DataTruck #${l.ID}`,
+          detail: [l.DriverName, (l.PickupTime || l.PickupAppointmentTime)?.slice(0, 10)].filter(Boolean).join(" · "),
+          href: `/loads?search=${encodeURIComponent(l.LoadID || String(l.ID))}`,
+          rank: rank(l.LoadID),
+        }))) },
+        { category: "Expense", request: () => fetchExpensesPage(page, controller.signal).then(r => r.items.map(e => ({
+          id: e.id,
+          label: e.expenseType || e.category,
+          detail: [e.expenseDate, e.referenceNumber, e.driverName].filter(Boolean).join(" · "),
+          href: `/expenses?search=${encodeURIComponent(term)}`,
+          rank: rank(e.expenseType || e.category, e.referenceNumber),
+        }))) },
       ];
-      const allowedRequests = requests.filter(r => permissions.includes(({ Drivers: "drivers.read", Trucks: "trucks.read", Loads: "loads.read", "Expenses": "expenses.read", Investors: "investors.read" } as Record<string, string>)[r.name]));
+      const allowedRequests = requests.filter(r => permissions.includes(searchPermissions[r.category]));
       const responses = await Promise.allSettled(allowedRequests.map(r => r.request()));
-      if (!cancelled) setData({ query: term, groups: responses.map((r, i) => ({ name: allowedRequests[i].name, results: r.status === "fulfilled" ? r.value : [], failed: r.status === "rejected" })) });
+      if (!cancelled) setData({ query: term, groups: responses.map((r, i) => ({ category: allowedRequests[i].category, results: r.status === "fulfilled" ? r.value : [], failed: r.status === "rejected" })) });
     }, 250);
     return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [term, menu, permissions]);
 
   const groups = data?.query === term ? data.groups : null;
+  const results = groups?.flatMap(group => group.results.map(result => ({ ...result, category: group.category })))
+    .sort((a, b) => a.rank - b.rank) ?? [];
+  const failed = groups?.filter(group => group.failed) ?? [];
 
   return <div ref={root} className="relative z-40 shrink-0 border-b border-zinc-800/60 bg-zinc-950">
     <header className="flex min-h-16 flex-wrap items-center gap-2 px-2 py-3 sm:gap-3 sm:px-6 xl:px-8" aria-label="Global navigation">
@@ -80,8 +130,12 @@ export function TopBar({ username }: { username: string }) {
         {menu === "search" && <section id="global-search" aria-label="Global search" className="absolute left-0 top-full mt-2 w-full overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 ui-popover">
       <div className="max-h-[65dvh] overflow-auto p-3" aria-live="polite">
         {term.length < 2 ? <p className="p-3 text-sm text-zinc-500">Type at least two characters to search records.</p> : !groups ? <p role="status" className="p-3 text-sm text-zinc-500">Searching…</p> : <>
-          {groups.map(group => <div key={group.name}>{(group.results.length > 0 || group.failed) && <h2 className="px-3 pb-1 pt-3 text-xs font-medium text-zinc-500">{group.name}</h2>}{group.failed && <p className="px-3 py-2 text-xs text-amber-400">Could not search {group.name.toLowerCase()}. Try closing and reopening search.</p>}{group.results.map((result, index) => <IntentLink key={`${result.href}:${index}`} href={result.href} onClick={close} className={itemClass}><span className="block text-zinc-200">{result.label}</span><span className="block text-xs text-zinc-500">{result.detail}</span></IntentLink>)}</div>)}
-          {groups.every(g => !g.results.length && !g.failed) && <p className="p-3 text-sm text-zinc-500">No records found for “{term}”.</p>}
+          {results.map(result => <IntentLink key={`${result.category}:${result.id}`} href={result.href} onClick={close} className={`${itemClass} flex items-start justify-between gap-3`}>
+            <span><span className="block text-zinc-200">{result.label}</span><span className="block text-xs text-zinc-500">{result.detail}</span></span>
+            <span className="shrink-0 text-xs text-zinc-400">{result.category}</span>
+          </IntentLink>)}
+          {failed.map(group => <p key={group.category} className="px-3 py-2 text-xs text-amber-400">Could not search {group.category.toLowerCase()}s. Try closing and reopening search.</p>)}
+          {!results.length && !failed.length && <p className="p-3 text-sm text-zinc-500">No records found for “{term}”.</p>}
           <p className="px-3 pt-3 text-xs text-zinc-600">Up to five matches per category. Loads and expenses open in their searchable lists.</p>
         </>}
       </div>

@@ -45,7 +45,7 @@ func (h fleetHandler) listInvestors(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		values, err := h.repo.ListInvestorDirectory(r.Context(), search, strings.EqualFold(query.Get("includeCompany"), "true"))
+		values, err := h.repo.ListInvestorDirectory(r.Context(), search, strings.EqualFold(query.Get("includeCompany"), "true"), query.Get("sort") == "relevance")
 		if err != nil {
 			h.writeError(w, err)
 			return
