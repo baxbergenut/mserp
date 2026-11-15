@@ -43,6 +43,7 @@ type BoardLoad struct {
 	CanRemoveFromQueue  bool        `json:"canRemoveFromQueue,omitempty"`
 	Overdue             bool        `json:"overdue,omitempty"`
 	Completed           bool        `json:"completed,omitempty"`
+	CompletedByName     string      `json:"completedByName,omitempty"`
 	CanRestoreToQueue   bool        `json:"canRestoreToQueue,omitempty"`
 	Manual              bool        `json:"manual,omitempty"`
 	PlanID              string      `json:"planId"`
@@ -823,6 +824,11 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 	if err := applyBoardStopCities(ctx, tx, views); err != nil {
 		return BoardLoads{}, err
 	}
+	if !includeRoute {
+		if err := annotateBoardCompletionActors(ctx, tx, id, views[id].Unavailable); err != nil {
+			return BoardLoads{}, err
+		}
+	}
 	return views[id], tx.Commit(ctx)
 }
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
@@ -1248,6 +1254,9 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	result = BoardLoadResult{Entry: saved[0], Loads: views[a.DriverID]}
+	if err = annotateBoardCompletionActors(ctx, tx, a.DriverID, result.Loads.Unavailable); err != nil {
+		return result, err
+	}
 	result.Entry.Status = boardProgressStatus(result.Entry.Status, result.Loads.Next)
 	if err = attachBoardUndoID(ctx, tx, &result.Entry); err != nil {
 		return result, err

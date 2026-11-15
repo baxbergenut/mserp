@@ -32,7 +32,11 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
  (88121,'PROGRESS-A','Dispatched',100,100,100,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Dallas","state":"TX"}}]}'),
  (88122,'PROGRESS-B','Dispatched',200,200,200,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Boston","state":"MA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Miami","state":"FL"}}]}')`)
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-28','PROGRESS-A',88121)`, d.ID)
-	actor := "progress-user-one"
+	var actor string
+	if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Progress editor',crypt('test-only',gen_salt('bf'))) RETURNING id`).Scan(&actor); err != nil {
+		t.Fatal(err)
+	}
+	defer exec(`DELETE FROM app_users WHERE id=$1`, actor)
 	rows, err := repo.Save(ctx, []DriverBoardEntry{{DriverID: d.ID, CurrentLoad: "PROGRESS-A", Notes: "Keep notes", ETA: "2026-10-01T15:00"}}, actor)
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +95,9 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	delivered := act(BoardLoadAction{Action: "advance"})
 	if e.CurrentLoad != "PROGRESS-B" || e.Status != "DISPATCHED" || delivered.Loads.SourceDestination != "Boston, MA" || e.Notes != "Keep notes" || e.ETA != "" {
 		t.Fatal("delivery/promotion", delivered)
+	}
+	if len(delivered.Loads.Unavailable) != 1 || delivered.Loads.Unavailable[0].CompletedByName != "Progress editor" {
+		t.Fatal("delivery did not record the completing editor", delivered.Loads.Unavailable)
 	}
 	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: staleEntry.Version, FromDate: staleView.FromDate, Revision: staleView.Revision, Action: "advance"}, actor); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("duplicate advance accepted", err)
@@ -276,7 +283,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 		t.Fatal("restored older plan is missing from source refresh", ids, err)
 	}
 	undo(e.UndoID)
-	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 || !v.Unavailable[0].CanRestoreToQueue {
+	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 || !v.Unavailable[0].CanRestoreToQueue || v.Unavailable[0].CompletedByName != "Progress editor" {
 		t.Fatal("restore undo did not reinstate completion", v)
 	}
 	act(restore)
