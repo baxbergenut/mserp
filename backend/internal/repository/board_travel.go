@@ -32,7 +32,8 @@ type BoardTravel struct {
 	Motion            string                     `json:"motion"`
 	Error             string                     `json:"error"`
 	Assumptions       string                     `json:"assumptions,omitempty"`
-	AddressPoint      *boardroutes.Waypoint      `json:"addressPoint,omitempty"`
+	AddressPoint      *boardroutes.Destination   `json:"addressPoint,omitempty"`
+	AddressProfile    string                     `json:"addressProfile,omitempty"`
 	AddressRejected   bool                       `json:"addressRejected,omitempty"`
 	LastKnownPosition bool                       `json:"lastKnownPosition,omitempty"`
 	Position          *boardRoutePosition        `json:"position,omitempty"`
@@ -99,6 +100,9 @@ func (t BoardTravel) moved(lat, lng float64) bool {
 }
 
 func (t BoardTravel) due(key string, location *DriverBoardLocation, now time.Time) bool {
+	if t.AddressRejected && t.AddressProfile != boardroutes.AddressGeocodeProfile {
+		return true
+	}
 	if t.Context != key || !sameTelemetrySource(t.Source, location.Source) || t.Mode != boardroutes.RouteProfile {
 		return true
 	}
@@ -318,7 +322,7 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			}
 			continue
 		}
-		if onlyDriver == "" && t.Context == a.Context && t.Mode == boardroutes.RouteProfile && t.AddressRejected && t.Enabled && !t.retryPending() {
+		if onlyDriver == "" && t.Context == a.Context && t.Mode == boardroutes.RouteProfile && t.AddressRejected && t.AddressProfile == boardroutes.AddressGeocodeProfile && t.Enabled && !t.retryPending() {
 			continue
 		}
 		unavailable := ""
@@ -445,14 +449,18 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			var itinerary string
 			if a.CustomDestination {
 				if t.AddressPoint == nil {
-					var destination boardroutes.Waypoint
+					var destination boardroutes.Destination
 					destination, e = routes.GeocodeAddress(ctx, a.routeAddress)
+					t.AddressProfile = boardroutes.AddressGeocodeProfile
 					if e == nil {
 						t.AddressPoint = &destination
 					}
 				}
 				if e == nil {
 					estimate, e = routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, t.AddressPoint.Latitude, t.AddressPoint.Longitude)
+					if e == nil && t.AddressPoint.City {
+						estimate.Assumptions += "; approximate destination: city center"
+					}
 				}
 			} else {
 				waypoints, itinerary = boardMapItinerary(job.view, job.stop)

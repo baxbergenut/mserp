@@ -615,6 +615,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	}
 	const customAddress = "123 Main Street, Newark, NJ 07102"
 	const invalidAddress = "Incomplete street"
+	const cityAddress = "Logan Township, NJ"
 	var customCalls, routeCalls atomic.Int32
 	var cancelRoute atomic.Bool
 	routeEntered := make(chan struct{}, 1)
@@ -624,6 +625,12 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 			switch req.URL.Path {
 			case "/geocode/" + customAddress + ".json":
 				_, _ = w.Write([]byte(`{"results":[{"type":"Point Address","matchConfidence":{"score":1},"position":{"lat":40.7357,"lon":-74.1724}}]}`))
+			case "/geocode/" + cityAddress + ".json":
+				if req.URL.Query().Get("entityTypeSet") == "Municipality,MunicipalitySubdivision" {
+					_, _ = w.Write([]byte(`{"results":[{"type":"Geography","entityType":"Municipality","matchConfidence":{"score":0.716},"address":{"municipality":"Logan","countrySubdivision":"NJ"},"position":{"lat":39.800963,"lon":-75.343825}}]}`))
+				} else {
+					_, _ = w.Write([]byte(`{"results":[{"type":"Street","matchConfidence":{"score":0.959},"position":{"lat":40.3786422,"lon":-74.4377689}}]}`))
+				}
 			case "/geocode/" + invalidAddress + ".json":
 				_, _ = w.Write([]byte(`{"results":[{"type":"Street","matchConfidence":{"score":1}}]}`))
 			default:
@@ -876,14 +883,14 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 
 	setAddress(invalidAddress)
 	view = runCustomRoute()
-	if view.Automation.TravelValue != "" || !strings.Contains(view.Automation.Reason, "complete destination address") {
+	if view.Automation.TravelValue != "" || !strings.Contains(view.Automation.Reason, "city and state or a street address") {
 		t.Fatal("partial address produced an estimate", view.Automation)
 	}
 	workerNow = time.Now().Add(boardRouteRetryInterval + time.Minute)
 	repo.now = func() time.Time { return workerNow }
 	runCustomRoute()
 	repo.now = originalClock
-	if customCalls.Load() != 2 {
+	if customCalls.Load() != 3 {
 		t.Fatal("rejected address was sent again", customCalls.Load())
 	}
 	view = setAddress("")
@@ -891,9 +898,38 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal("clearing the custom address did not restore the selected stop", view)
 	}
 	view = runCustomRoute()
-	if !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || customCalls.Load() != 2 {
+	if !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || customCalls.Load() != 3 {
 		t.Fatal("source stop routing did not resume", view.Automation)
 	}
+
+	// A city rejected by the old street-only geocoder retries immediately on rollout.
+	view = setAddress(cityAddress)
+	legacyRejected := BoardTravel{Enabled: true, Context: view.Automation.Context, Source: "five_eld", Mode: boardroutes.RouteProfile, AddressRejected: true, Error: "Enter a complete destination address for automatic ETA", AttemptedAt: time.Now()}
+	legacyBody, _ := json.Marshal(legacyRejected)
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=$2 WHERE driver_id=$1`, d.ID, legacyBody); err != nil {
+		t.Fatal(err)
+	}
+	beforeCity := customCalls.Load()
+	view = runCustomRoute()
+	if customCalls.Load() != beforeCity+2 || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") || !strings.Contains(view.Automation.Reason, "city center") || view.Automation.Arrived {
+		t.Fatal("legacy city rejection did not recover", view.Automation, customCalls.Load())
+	}
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || cached.AddressPoint == nil || !cached.AddressPoint.City || cached.AddressPoint.Latitude != 39.800963 || cached.AddressProfile != boardroutes.AddressGeocodeProfile {
+		t.Fatal("city coordinate cache missing", err, cached)
+	}
+	// Routine routes reuse city coordinates and retain the approximate-destination label.
+	workerNow = time.Now().Add(boardRouteInterval + time.Minute)
+	repo.now = func() time.Time { return workerNow }
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=travel-'position' WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	view = runCustomRoute()
+	repo.now = originalClock
+	if err = pool.QueryRow(ctx, `SELECT travel FROM driver_board_automation WHERE driver_id=$1`, d.ID).Scan(&cached); err != nil || customCalls.Load() != beforeCity+2 || !strings.Contains(cached.Assumptions, "city center") {
+		t.Fatal("city cache was not reused", view.Automation, customCalls.Load())
+	}
+	setAddress("")
+	runCustomRoute()
 
 	// Immediate retry runs only this driver and completes within the request.
 	trackingAt, trackingLat = time.Now().UTC(), 41.0
