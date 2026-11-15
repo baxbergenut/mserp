@@ -38,7 +38,7 @@ func (r *FleetRepository) ReviewFleetScopeIdentities(ctx context.Context, review
 	if strings.TrimSpace(review.Review) == "" || len(review.Links) == 0 || len(review.Links) > 1000 {
 		return result, errors.New("a review note and 1-1000 explicit identity pairs are required")
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return result, err
 	}
@@ -49,7 +49,10 @@ func (r *FleetRepository) ReviewFleetScopeIdentities(ctx context.Context, review
 	if err = setBoardActor(ctx, tx, "", "fleetscope_identity_review"); err != nil {
 		return result, err
 	}
-	if err = setAssignmentWeek(ctx, tx, ""); err != nil {
+	// Recovery is observed today, just like a newly received termination.
+	// Backdating assignments to Monday would erase work already performed.
+	loc, _ := time.LoadLocation("America/New_York")
+	if err = setAssignmentWeek(ctx, tx, time.Now().In(loc).Format(time.DateOnly)); err != nil {
 		return result, err
 	}
 	if _, err = tx.Exec(ctx, `LOCK TABLE fleetscope_driver_identity IN SHARE ROW EXCLUSIVE MODE`); err != nil {

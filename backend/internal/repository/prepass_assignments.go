@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"mserp/internal/prepass"
 )
@@ -62,7 +63,21 @@ func (r *TollRepository) ReconcilePrePassAssignments(ctx context.Context) error 
 }
 
 func (r *TollRepository) savePrePassAssignments(ctx context.Context, conn *pgxpool.Conn, snap prepass.FleetSnapshot) error {
-	rows, err := conn.Query(ctx, `SELECT id::text,account_number,vin,request->>'transponderNumber' FROM prepass_fleet_operations WHERE environment=$1 AND action='assign' AND state IN ('pending','queued')`, r.prepassEnvironment)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
+	if err = r.publishPrePassAssignments(ctx, tx, snap); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// The caller holds the environment fleet lock. Publish the roster and every
+// assignment it confirms together, regardless of what triggered the refresh.
+func (r *TollRepository) publishPrePassAssignments(ctx context.Context, tx pgx.Tx, snap prepass.FleetSnapshot) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,account_number,vin,request->>'transponderNumber' FROM prepass_fleet_operations WHERE environment=$1 AND action='assign' AND state IN ('pending','queued')`, r.prepassEnvironment)
 	if err != nil {
 		return err
 	}
@@ -82,11 +97,6 @@ func (r *TollRepository) savePrePassAssignments(ctx context.Context, conn *pgxpo
 	if err != nil {
 		return err
 	}
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.WithoutCancel(ctx))
 	raw, err := json.Marshal(snap)
 	if err != nil {
 		return err
@@ -94,8 +104,8 @@ func (r *TollRepository) savePrePassAssignments(ctx context.Context, conn *pgxpo
 	if _, err = tx.Exec(ctx, `INSERT INTO prepass_fleet_rosters(environment,snapshot) VALUES($1,$2) ON CONFLICT(environment) DO UPDATE SET snapshot=EXCLUDED.snapshot,refreshed_at=now()`, r.prepassEnvironment, raw); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE environment=$1 AND id=ANY($2::uuid[]) AND action='assign' AND state IN ('pending','queued')`, r.prepassEnvironment, confirmed); err != nil {
-		return err
+	if len(confirmed) > 0 {
+		_, err = tx.Exec(ctx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE environment=$1 AND id=ANY($2::uuid[]) AND action='assign' AND state IN ('pending','queued')`, r.prepassEnvironment, confirmed)
 	}
-	return tx.Commit(ctx)
+	return err
 }

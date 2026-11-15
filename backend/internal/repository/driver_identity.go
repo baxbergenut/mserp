@@ -19,6 +19,12 @@ type driverIdentity struct {
 // applied. Callers hold the fleet status lock through the end of the write.
 const driverIdentityFields = "normalized_name, coalesce(phone,''), lower(btrim(coalesce(email,'')))"
 
+// CheckReviewedDriverIdentity applies the same protection to an operator's
+// scoped profile update. The caller must hold the source and fleet locks.
+func CheckReviewedDriverIdentity(ctx context.Context, tx pgx.Tx, id string) error {
+	return checkDriverIdentity(ctx, tx, id, false)
+}
+
 func checkDriverIdentity(ctx context.Context, tx pgx.Tx, id string, activeOnly bool) error {
 	var duplicate bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS (

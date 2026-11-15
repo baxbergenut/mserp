@@ -379,30 +379,11 @@ func (p *profilePlan) resolveDriverEmploymentConflicts(source, receiver Snapshot
 		if !matchedTermination && !matchedActive {
 			continue
 		}
-		// The owner accepted the historical differences for these six verified drivers.
-		closeHistorical := matchedTermination && slices.Contains(row.Review, preserveHistoricalDriverProfile) && slices.Contains([]string{
-			"282defcb-aac7-4a94-8214-0f6ac54cf1f6", // Darriel Turro
-			"82be49a2-6ada-47d9-9282-1a658cf3c082", // Jerry Anteys
-			"99737308-2795-4cb1-af40-73900faa1632", // Maurique Kerley
-			"b2240bcf-98fe-4746-bb7f-94b80381f948", // Patrick Cyuzuzo
-			"ef2c6b0f-5a17-454d-bdc7-ab0025a425d6", // Francois Nshizirungu Gasasira
-			"fd77bb1c-d81d-4fe4-a263-d22f7b7a32ca", // Solomon Mazima
-		}, row.LocalID)
-		closeMelano := matchedActive && row.LocalID == "469a4893-62b6-42e7-954e-025e7704f848" &&
-			slices.Contains(row.Review, preserveHistoricalDriverProfile) &&
-			a["firstName"] != "" && a["firstName"] == b["firstName"] &&
-			a["lastName"] != "" && a["lastName"] == b["lastName"] &&
-			a["email"] != "" && a["email"] == b["email"]
+		// Employment can be verified from live records. Historical profile
+		// exceptions still require an explicit review, regardless of identity.
 		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
-			return reason == driverEmploymentConflict || (reason == driverAssignedStatusConflict && matchedActive) ||
-				(reason == preserveHistoricalDriverProfile && (closeHistorical || closeMelano))
+			return reason == driverEmploymentConflict || (reason == driverAssignedStatusConflict && matchedActive)
 		})
-		if closeMelano {
-			row.Completion = "FleetScope name and email verified in Clustie. Driver Active and escrow record preserved."
-		}
-		if closeHistorical {
-			row.Completion = "Termination verified. Historical Clustie profile and escrow record preserved."
-		}
 		if len(row.Review) == 0 {
 			p.Review--
 		}
@@ -486,152 +467,6 @@ func (p *profilePlan) resolveTruckStatusCrewConflicts(source, receiver Snapshot)
 	}
 }
 
-// Follow-up corrections use live evidence and leave the original batch receipts intact.
-func (p *profilePlan) resolveTruckReviewDecisions(source, receiver Snapshot, links Record) {
-	var reconciledTrucks []string
-	for i, row := range p.Rows {
-		if row.Kind != "truck" || len(row.Review) == 0 {
-			continue
-		}
-		a := find(source.Trucks, row.LocalID)
-		b := find(receiver.Trucks, row.RemoteID)
-		deferred101 := row.Label == "101" && row.LocalID == "2453e890-9103-43f7-80ce-0e6471c0644e"
-		if (deferred101 || slices.Contains([]string{"01 JACKISON", "7510", "2192", "9412"}, a["unit"])) &&
-			row.RemoteID == "" && len(row.Changes) == 0 && len(row.Review) == 1 && row.Review[0] == uniqueFleetScopeIdentity {
-			row.Deferred = "Deferred by owner"
-			row.Review = nil
-			p.Review--
-			p.Rows[i] = row
-			continue
-		}
-		if slices.Contains([]string{"446", "7455", "54075", "103", "9580", "7140", "4542"}, a["unit"]) {
-			row.Deferred = "Deferred by owner"
-			row.Review = nil
-			p.Review--
-			p.Rows[i] = row
-			continue
-		}
-		created4243 := a["unit"] == "4243" && row.RemoteID == "" && validVIN(a["vin"])
-		approvedTruck := slices.Contains([]string{"042", "045", "097", "1027"}, a["unit"])
-		confirmedExisting := slices.Contains([]string{"022", "130"}, a["unit"])
-		if row.RemoteID == "" && (approvedTruck || created4243 || confirmedExisting) && validVIN(a["vin"]) {
-			matches := 0
-			for _, candidate := range receiver.Trucks {
-				if candidate["unit"] == a["unit"] && strings.EqualFold(candidate["vin"], a["vin"]) {
-					b = candidate
-					matches++
-				}
-			}
-			if matches != 1 {
-				b = nil
-			}
-		}
-		var owner map[string]any
-		_ = json.Unmarshal([]byte(b["ownerSnapshot"]), &owner)
-		exactTruck := validVIN(a["vin"]) && strings.EqualFold(a["vin"], b["vin"])
-		ownerMatches := exactTruck && a["ownerId"] != "" && a["ownerId"] == owner["mserpOwnerId"] &&
-			a["ownerKind"] == b["ownerKind"] && a["ownerKind"] == owner["kind"] &&
-			nullable(a["ownerDriverRef"]) == owner["mserpOwnerDriverId"] && nullable(a["ownerDate"]) == owner["effectiveDate"]
-		registrationMatches := exactTruck && a["plate"] != "" && a["plate"] == b["plate"] && a["plateState"] == b["plateState"]
-		reconciledTruck := approvedTruck && ownerMatches && a["unit"] == b["unit"] &&
-			a["status"] == b["operationalStatus"] && a["active"] == b["operationalActive"]
-		for _, field := range []string{"make", "model", "year", "color", "plate", "plateState"} {
-			if a[field] != "" && norm(a[field]) != norm(b[field]) {
-				reconciledTruck = false
-			}
-		}
-		for _, field := range []string{"primaryId", "secondaryId"} {
-			if a[field] == "" {
-				reconciledTruck = reconciledTruck && b[field] == ""
-			} else {
-				reconciledTruck = reconciledTruck && b[field] != "" && links["driver:"+a[field]] == b[field]
-			}
-		}
-		if created4243 && len(row.Review) == 1 && row.Review[0] == uniqueFleetScopeIdentity && ownerMatches && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
-			b["year"] == "2022" && norm(b["make"]) == "frht" && norm(b["model"]) == "cascadia" {
-			row.RemoteID = b["id"]
-			if registrationMatches && a["plate"] == "017531A" && a["plateState"] == "KY" {
-				row.Review = nil
-				row.Completion = "Truck added to FleetScope. FleetScope handles insurance and crew assignment."
-				p.Review--
-			} else {
-				row.Review = []string{"Verify truck registration"}
-			}
-			p.Rows[i] = row
-			continue
-		}
-		if confirmedExisting && ownerMatches && a["unit"] == b["unit"] &&
-			a["status"] == b["operationalStatus"] && a["active"] == b["operationalActive"] {
-			approved130 := a["unit"] == "130" && a["primaryId"] != "" && links["driver:"+a["primaryId"]] == b["primaryId"] &&
-				a["secondaryId"] == "" && b["secondaryId"] == "" && b["status"] == "active"
-			approved022 := a["unit"] == "022" && registrationMatches && a["year"] == b["year"] &&
-				norm(a["make"]) == norm(b["make"]) && a["primaryId"] == "" && b["primaryId"] == "" &&
-				a["secondaryId"] == "" && b["secondaryId"] == "" && b["status"] == "out_of_service"
-			if approved130 || approved022 {
-				row.RemoteID = b["id"]
-				reconciledTrucks = append(reconciledTrucks, b["id"])
-				row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
-					return reason == "Review creation separately" || reason == uniqueFleetScopeIdentity
-				})
-				if len(row.Review) == 0 {
-					p.Review--
-					p.Rows[i] = row
-					continue
-				}
-			}
-		}
-		retainMaintenanceCrew := ownerMatches && slices.Contains([]string{"088", "5062", "2906", "1146"}, a["unit"]) && a["status"] == "maintenance" &&
-			b["status"] == "active" && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
-			a["primaryId"] != "" && b["primaryId"] != "" && links["driver:"+a["primaryId"]] == b["primaryId"] &&
-			((a["secondaryId"] == "" && b["secondaryId"] == "") ||
-				(a["secondaryId"] != "" && b["secondaryId"] != "" && links["driver:"+a["secondaryId"]] == b["secondaryId"]))
-		row.Review = slices.DeleteFunc(slices.Clone(row.Review), func(reason string) bool {
-			switch reason {
-			case truckStatusCrewConflict:
-				return retainMaintenanceCrew ||
-					(exactTruck && a["unit"] == "084" && a["status"] == "maintenance" &&
-						b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"] &&
-						b["status"] == "out_of_service" && b["primaryId"] == "" && b["secondaryId"] == "")
-			case "Confirm the FleetScope driver-owner identity", "Review existing FleetScope lease against Clustie ownership":
-				return ownerMatches
-			case conflictingTruckMake:
-				return exactTruck && a["unit"] == "1146" && norm(a["make"]) == norm(b["make"])
-			case "Conflicting truck color":
-				return exactTruck && a["unit"] == "1146" && norm(a["color"]) == norm(b["color"])
-			case "Conflicting truck plate", "Verify truck registration":
-				return registrationMatches
-			case "Check truck plateState":
-				return registrationMatches && validTruckField("plateState", a["plateState"])
-			case "FleetScope out-of-service hold stays in effect":
-				return exactTruck && a["unit"] == "079" && a["status"] == "available" && a["active"] == "true" &&
-					b["status"] == "active" && b["operationalStatus"] == a["status"] && b["operationalActive"] == a["active"]
-			case "Previously deferred":
-				if reconciledTruck {
-					row.RemoteID = b["id"]
-					reconciledTrucks = append(reconciledTrucks, b["id"])
-				} else {
-					row.Deferred = reason
-				}
-				return true
-			default:
-				return false
-			}
-		})
-		if len(row.Review) == 0 {
-			p.Review--
-		}
-		p.Rows[i] = row
-	}
-	p.Rows = slices.DeleteFunc(p.Rows, func(row profileRow) bool {
-		if row.Kind == "truck" && row.LocalID == "" && slices.Contains(reconciledTrucks, row.RemoteID) &&
-			len(row.Review) == 1 && row.Review[0] == "No verified Clustie match" {
-			p.Review--
-			return true
-		}
-		return false
-	})
-}
-
 func fleetScopeTruckStatus(a, b Record) string {
 	switch {
 	case b["status"] == "out_of_service":
@@ -645,12 +480,6 @@ func fleetScopeTruckStatus(a, b Record) string {
 	default:
 		return "active"
 	}
-}
-
-func isAntonUnitPair(a, b Record) bool {
-	unit := a["unit"]
-	return (unit == "1" || unit == "2" || unit == "3") && norm(b["unit"]) == unit+" anton" &&
-		validVIN(a["vin"]) && strings.EqualFold(a["vin"], b["vin"])
 }
 
 // Clear verified live model and unit discrepancies from the completed review.
@@ -725,13 +554,7 @@ func planTruck(r *profileRow, a, b Record, locals, remotes []Record, driverLinks
 		}
 	}
 	if norm(a["unit"]) != norm(b["unit"]) {
-		if isAntonUnitPair(a, b) && !slices.ContainsFunc(remotes, func(other Record) bool {
-			return other["id"] != b["id"] && norm(other["unit"]) == norm(a["unit"])
-		}) {
-			r.change(fleetScope, "unit", b["unit"], a["unit"])
-		} else {
-			r.Review = append(r.Review, truckUnitReview)
-		}
+		r.Review = append(r.Review, truckUnitReview)
 	}
 	planTruckOwnership(r, a, b, driverLinks, driverNames)
 	status := fleetScopeTruckStatus(a, b)

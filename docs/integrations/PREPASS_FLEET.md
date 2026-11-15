@@ -140,11 +140,19 @@ It never resends an assignment. Both vehicle and transponder rosters must show
 the exact account/VIN/device, without another vehicle/device conflict, before
 the receipt and cached roster confirm atomically. Transient read failures retain
 the queue. Old uncertain assignments can also confirm automatically when both
-rosters agree. The browser polls cached status every five visible seconds while
-waiting; no Review result or acknowledgment is required for assignments. Provider
+rosters agree. Every roster publication checks waiting assignments, and cached
+reads see the roster and receipts from the same database snapshot. The browser
+checks cached status every 2.5 seconds while visible and waiting. When the truck
+roster already shows the requested transponder, the banner clears; a transponder
+row can still show Verifying assignment until both rosters agree. No Review result
+or acknowledgment is required for assignments. Provider
 processing time is outside MSERP's control. Outstanding assignments are always
 returned alongside recent history, even when older than the latest 50 changes.
 Do not roll back to code without queue reservations while queued receipts exist.
+
+For an assigned device, **Unassign in PrePass** on the Transponders tab opens My
+PrePass. Complete the unassignment there, then use **Refresh PrePass** in
+Clustie. The documented Fleet v2 API does not expose an unassignment operation.
 
 For other unconfirmed operations, inspect the outcome in the PrePass portal, wait at
 least two minutes from request creation, then use Review result and acknowledge

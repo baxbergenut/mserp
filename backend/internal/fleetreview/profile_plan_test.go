@@ -94,7 +94,7 @@ func TestCompletedEmploymentReviewUsesLiveVerifiedPair(t *testing.T) {
 	}
 }
 
-func TestApprovedHistoricalDriverAndTruckCompletion(t *testing.T) {
+func TestHistoricalReviewDoesNotReuseOldIdentitySpecificApprovals(t *testing.T) {
 	const driver = "282defcb-aac7-4a94-8214-0f6ac54cf1f6"
 	const date = "2026-10-29"
 	const vin = "3AKJHHDRXNSNC4243"
@@ -117,9 +117,8 @@ func TestApprovedHistoricalDriverAndTruckCompletion(t *testing.T) {
 	hash := digest(plan)
 	display := plan.forDisplay()
 	display.resolveDriverEmploymentConflicts(source, receiver, links)
-	display.resolveTruckReviewDecisions(source, receiver, links)
-	if display.Review != 0 || display.Rows[0].Completion == "" || display.Rows[1].Completion == "" ||
-		display.Rows[1].RemoteID != "remote-truck" || digest(plan) != hash {
+	if display.Review != 2 || len(display.Rows[0].Review) != 1 || display.Rows[0].Review[0] != preserveHistoricalDriverProfile ||
+		display.Rows[1].RemoteID != "" || digest(plan) != hash {
 		t.Fatalf("unexpected completed rows: %+v", display)
 	}
 }

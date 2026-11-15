@@ -402,16 +402,29 @@ func TestPrePassFleetDatabase(t *testing.T) {
 				if id(`SELECT count(*)::text FROM prepass_fleet_operations WHERE id=ANY($1::uuid[]) AND state='queued'`, ids) != "2" {
 					t.Fatal("one-sided roster confirmed an assignment")
 				}
-				for _, in := range requests {
+				complete := func(in PrePassFleetChange) {
 					for i := range fake.snapshot.Transponders {
 						if fake.snapshot.Transponders[i].TransponderNumber == in.TransponderNumber {
 							fake.snapshot.Transponders[i].VIN = in.VIN
 						}
 					}
 				}
+				complete(requests[0])
 				must(restarted.ReconcilePrePassAssignments(ctx))
-				if id(`SELECT count(*)::text FROM prepass_fleet_operations WHERE id=ANY($1::uuid[]) AND state='confirmed'`, ids) != "2" || fake.calls != calls+2 {
-					t.Fatal("background confirmation failed or resent mutations")
+				if id(`SELECT state FROM prepass_fleet_operations WHERE id=$1`, requests[0].RequestID) != "confirmed" || fake.calls != calls+2 {
+					t.Fatal("background confirmation failed or resent a mutation")
+				}
+				// An unrelated edit also reads the full roster. Its response must not
+				// leave an already completed assignment waiting for the next worker tick.
+				complete(requests[1])
+				fake.ignoreWrite = false
+				edit := request("edit")
+				edit.Vehicle = fake.snapshot.Vehicles[0].Input()
+				edit.Vehicle.LicensePlate.Number = "QEDIT1"
+				ids = append(ids, edit.RequestID)
+				must(restarted.ChangePrePassFleet(ctx, edit, actor))
+				if id(`SELECT state FROM prepass_fleet_operations WHERE id=$1`, requests[1].RequestID) != "confirmed" || fake.calls != calls+3 {
+					t.Fatal("edit published the completed roster without confirming the queued receipt")
 				}
 			})
 			testFleetTollLinking(t, ctx, admin, repo, fake, actor, truck, newTruck)

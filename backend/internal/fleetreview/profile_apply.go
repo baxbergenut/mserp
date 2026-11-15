@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"mserp/internal/repository"
 )
 
 type profileBatch struct {
@@ -65,7 +66,14 @@ func PrintPreviewSummary(ctx context.Context, db *DB, directory string, out io.W
 // UPDATE out of the lifecycle path preserves employment, payroll and crews.
 func applyLocalProfile(ctx context.Context, tx pgx.Tx, r profileRow) error {
 	if r.Kind == "driver" {
-		return updateProfile(ctx, tx, "drivers", []any{r.LocalID}, r.values(clustie), localDriverColumns)
+		values := r.values(clustie)
+		if len(values) == 0 {
+			return nil
+		}
+		if err := updateProfile(ctx, tx, "drivers", []any{r.LocalID}, values, localDriverColumns); err != nil {
+			return err
+		}
+		return repository.CheckReviewedDriverIdentity(ctx, tx, r.LocalID)
 	}
 	return updateProfile(ctx, tx, "trucks", []any{r.LocalID}, r.values(clustie), localTruckColumns)
 }

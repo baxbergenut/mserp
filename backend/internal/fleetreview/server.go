@@ -326,7 +326,6 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			if profileResponse != nil {
 				displayPlan.resolveTruckMakeConflicts(a, b)
 				displayPlan.resolveTruckModelAndUnitConflicts(a, b)
-				displayPlan.resolveTruckReviewDecisions(a, b, links)
 				displayPlan.resolveTruckStatusCrewConflicts(a, b)
 				displayPlan.resolveDriverEmploymentConflicts(a, b, links)
 				profileResponse["plan"] = displayPlan
@@ -464,7 +463,6 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 						fail(w, 503, "Batch receipts are saved, but current readback is unavailable")
 						return
 					}
-					plan.resolveTruckReviewDecisions(a, b, links)
 					plan.resolveTruckStatusCrewConflicts(a, b)
 					plan.resolveDriverEmploymentConflicts(a, b, links)
 				}

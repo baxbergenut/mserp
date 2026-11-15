@@ -170,9 +170,16 @@ try {
   await expect(region.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
   await expect(region.getByRole('button', { name: 'Add truck', exact: true })).toBeEnabled();
   data.vehicles[0].vehicle.transponderNumber = '777111222';
+  await expect(region).not.toContainText('Waiting for PrePass to finish processing');
+  await expect(region.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
+  await page.getByRole('tab', { name: 'Transponders', exact: true }).click();
+  const assignedRow = region.getByRole('row').filter({ has: page.getByRole('cell', { name: '777111222', exact: true }) });
+  await expect(assignedRow.getByRole('cell', { name: 'Verifying assignment', exact: true })).toBeVisible();
+  await expect(assignedRow.getByRole('link', { name: 'Unassign in PrePass' })).toHaveCount(0);
   data.transponders[0].vin = vin; data.transponders[0].vehicleNumber = '003';
   data.operations[0].state = 'confirmed';
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(assignedRow.getByRole('cell', { name: 'Assigned', exact: true })).toBeVisible();
+  await expect(assignedRow.getByRole('link', { name: 'Unassign in PrePass' })).toHaveAttribute('href', 'https://my.prepass.com/');
   await expect(region).not.toContainText('Waiting for PrePass to finish processing');
   await expect(region).toContainText('Transponder assigned.');
   assert.equal(writes.filter(w => w.input.action === 'assign').length, 1);

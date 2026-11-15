@@ -16,6 +16,7 @@ import { TruckLinksTab } from "./TruckLinksTab";
 type Dialog = { kind: PrePassFleetChange["action"] | "plate"; requestId: string; entry?: PrePassFleetEntry } | { kind: "verify"; operation: PrePassFleetOperation };
 const labels = { add: "Add truck", edit: "Edit PrePass truck", remove: "Remove from PrePass", assign: "Assign transponder", link: "Link truck and tolls", plate: "Resolve plate", verify: "Review PrePass result" };
 const selectClass = controlClass.replace("w-full", "w-auto max-w-full");
+const myPrePass = "https://my.prepass.com/";
 
 export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "attention" }) {
   const permissions = usePermissions();
@@ -67,8 +68,13 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
   useEffect(() => {
     if (!hasWaitingAssignment) return;
     const controller = new AbortController();
-    const timer = setInterval(() => { if (!saving.current && document.visibilityState === "visible") void load(controller.signal); }, 5000);
-    return () => { clearInterval(timer); controller.abort(); };
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (!saving.current && document.visibilityState === "visible") await load(controller.signal);
+      if (!controller.signal.aborted) timer = setTimeout(poll, 2500);
+    };
+    timer = setTimeout(poll, 2500);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [hasWaitingAssignment, load]);
   async function run(operation: () => Promise<unknown>, message: string) {
     if (saving.current) return;
@@ -101,6 +107,8 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
   const rowLocked = (e: PrePassFleetEntry) => locked || assignments.some(o => o.accountNumber === e.vehicle.accountNumber && o.vin === e.vehicle.vin);
   const entries = data?.vehicles ?? [];
   const devices = data?.transponders ?? [];
+  const assignmentTruck = (o: PrePassFleetOperation) => entries.find(e => e.vehicle.accountNumber === o.accountNumber && e.vehicle.vin === o.vin);
+  const truckShowsAssignment = (o: PrePassFleetOperation) => !!o.transponderNumber && assignmentTruck(o)?.vehicle.transponderNumber === o.transponderNumber;
   const available = devices.filter(d => !d.vin.trim() && !d.vehicleNumber.trim() && !assignments.some(o => o.transponderNumber === d.transponderNumber)
     && !devices.some(other => other.transponderNumber === d.transponderNumber && (other.accountNumber !== d.accountNumber || !!other.vin.trim() || !!other.vehicleNumber.trim()))
     && !entries.some(e => e.vehicle.transponderNumber === d.transponderNumber));
@@ -150,7 +158,10 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
     {notice && <p role="status" className="text-[13px] text-emerald-400">{notice}</p>}
     {data && !data.configured && <ErrorBanner message="PrePass management is not configured on the server." />}
     {data?.configured && !data.refreshedAt && <p className="text-[13px] text-zinc-400">Select Refresh PrePass to load trucks and transponders.</p>}
-    {assignments.map(o => <div key={o.id} role="status" className="flex items-center gap-2 rounded-lg border border-blue-500/30 p-3 text-[13px] text-blue-400"><LoaderCircle className="h-4 w-4 shrink-0 animate-spin" /><span>Assigning transponder {o.transponderNumber} to truck {data?.vehicles.find(e => e.vehicle.accountNumber === o.accountNumber && e.vehicle.vin === o.vin)?.truckUnit || data?.vehicles.find(e => e.vehicle.accountNumber === o.accountNumber && e.vehicle.vin === o.vin)?.vehicle.vehicleNumber || o.vin}. Waiting for PrePass to finish processing; this updates automatically.</span></div>)}
+    {assignments.filter(o => !truckShowsAssignment(o)).map(o => {
+      const truck = assignmentTruck(o);
+      return <div key={o.id} role="status" className="flex items-center gap-2 rounded-lg border border-blue-500/30 p-3 text-[13px] text-blue-400"><LoaderCircle className="h-4 w-4 shrink-0 animate-spin" /><span>Assigning transponder {o.transponderNumber} to truck {truck?.truckUnit || truck?.vehicle.vehicleNumber || o.vin}. Waiting for PrePass to finish processing; this updates automatically.</span></div>;
+    })}
     {pending.filter(o => o.action !== "assign").map(o => <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-3 text-[13px] text-amber-400"><span>Unconfirmed {o.action} · VIN {o.vin}. Further changes are paused until the result is reviewed.</span>{canRecover && <button className="ui-button" disabled={busy} onClick={() => { setReviewed(false); setError(""); setDialog({ kind: "verify", operation: o }); }}>Review result</button>}</div>)}
     {view !== "attention" && <div className="flex flex-wrap items-center gap-2">
       <>
@@ -171,7 +182,13 @@ export function PrePassFleetTab({ view }: { view: "trucks" | "transponders" | "a
       </tr>)}</tbody>
     </table> : <table className="w-full min-w-[650px] text-left text-[13px]"><thead><tr className="border-b border-zinc-800 text-zinc-500">{["Transponder", "Assignment", "Truck", "VIN", "Actions"].map(h => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead><tbody>{loading ? <tr><td colSpan={6} className="p-8 text-center" role="status">Loading…</td></tr> : !count ? <tr><td colSpan={6}><EmptyState message="No PrePass records match this view." /></td></tr> : shownDevices.slice(offset, offset + pageSize).map(d => {
       const linked = entries.find(e => e.vehicle.accountNumber === d.accountNumber && e.vehicle.vin === d.vin);
-      return <tr key={`${d.accountNumber}:${d.transponderNumber}`} className="border-b border-zinc-800/60"><td className="px-3 py-2 font-mono">{d.transponderNumber}</td><td className="px-3 py-2">{assignments.some(o => o.transponderNumber === d.transponderNumber) ? "Assigning..." : available.includes(d) ? "Available" : d.vin || d.vehicleNumber ? "Assigned" : "Needs review"}</td><td className="px-3 py-2">{linked?.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${linked.truckId}`}>{linked.truckUnit}</Link> : linked?.truckUnit || d.vehicleNumber || "—"}</td><td className="px-3 py-2 font-mono text-[12px]">{d.vin || "—"}</td><td className="px-3 py-2">{canWrite && available.includes(d) && <button className="ui-button" disabled={locked || !entries.some(e => e.vehicle.accountNumber === d.accountNumber && !e.vehicle.transponderNumber && !assignments.some(o => o.accountNumber === e.vehicle.accountNumber && o.vin === e.vehicle.vin))} onClick={() => { open("assign", undefined, d.transponderNumber); setAccount(d.accountNumber); }}>Assign to truck</button>}</td></tr>;
+      const waiting = assignments.find(o => o.transponderNumber === d.transponderNumber);
+      const assigned = !!(d.vin.trim() || d.vehicleNumber.trim());
+      const status = waiting ? (truckShowsAssignment(waiting) ? "Verifying assignment" : "Assigning...") : available.includes(d) ? "Available" : assigned ? "Assigned" : "Needs review";
+      return <tr key={`${d.accountNumber}:${d.transponderNumber}`} className="border-b border-zinc-800/60"><td className="px-3 py-2 font-mono">{d.transponderNumber}</td><td className="px-3 py-2">{status}</td><td className="px-3 py-2">{linked?.truckId && canProfile ? <Link className="text-blue-400" href={`/trucks/detail?id=${linked.truckId}`}>{linked.truckUnit}</Link> : linked?.truckUnit || d.vehicleNumber || "—"}</td><td className="px-3 py-2 font-mono text-[12px]">{d.vin || "—"}</td><td className="px-3 py-2">
+        {canWrite && available.includes(d) && <button className="ui-button" disabled={locked || !entries.some(e => e.vehicle.accountNumber === d.accountNumber && !e.vehicle.transponderNumber && !assignments.some(o => o.accountNumber === e.vehicle.accountNumber && o.vin === e.vehicle.vin))} onClick={() => { open("assign", undefined, d.transponderNumber); setAccount(d.accountNumber); }}>Assign to truck</button>}
+        {canWrite && data?.environment === "production" && assigned && !waiting && <a className="ui-button" href={myPrePass} target="_blank" rel="noopener noreferrer" title="Unassign under Equipment Management, then refresh PrePass here">Unassign in PrePass</a>}
+      </td></tr>;
     })}</tbody></table>}</TableShell>
     <TablePagination page={currentPage} pageSize={pageSize} totalItems={count} totalPages={pages} onPageChange={setPage} onPageSizeChange={n => { setPageSize(n); setPage(1); }} />
     </>}

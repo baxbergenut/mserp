@@ -212,6 +212,33 @@ func TestDriverSetupDatabase(t *testing.T) {
 			if _, err = fleet.CreateDriver(ctx, melanoInput); err != nil {
 				t.Fatalf("creating a different person with the same name: %v", err)
 			}
+			// Concurrent requests cannot create two profiles for one email identity.
+			email := "Concurrent.Driver@Example.test"
+			concurrent := DriverInput{FullName: "Concurrent Identity", Email: &email, PayType: "cpm", Active: true}
+			results := make(chan error, 2)
+			for range 2 {
+				go func() { _, err := fleet.CreateDriver(ctx, concurrent); results <- err }()
+			}
+			successes, conflicts := 0, 0
+			for range 2 {
+				err := <-results
+				switch {
+				case err == nil:
+					successes++
+				case errors.Is(err, ErrDriverIdentityConflict):
+					conflicts++
+				default:
+					t.Fatalf("concurrent identity check: %v", err)
+				}
+			}
+			if successes != 1 || conflicts != 1 {
+				t.Fatalf("concurrent identity results: %d saved, %d rejected", successes, conflicts)
+			}
+			lowerEmail := "concurrent.driver@example.test"
+			concurrent.Email = &lowerEmail
+			if _, err = fleet.CreateDriver(ctx, concurrent); !errors.Is(err, ErrDriverIdentityConflict) {
+				t.Fatalf("case-insensitive email duplicate: %v", err)
+			}
 		})
 	}
 }

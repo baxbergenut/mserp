@@ -34,6 +34,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ## Start every task here
 
+FleetScope identity recovery enters the payroll source protocol before integration
+and fleet locks, and uses the current New York date for assignment changes.
+Releases include `backend/review-fleetscope-identities`; it previews by default
+and applies only an exact reviewed manifest digest. Deployment never runs it.
+The reconciliation portal's reusable preview uses current evidence and saved
+receipts; old driver IDs and truck numbers must not grant automatic exceptions.
+PrePass roster publication reconciles pending assignments atomically, and roster
+reads use one snapshot so completed assignments do not retain a stale banner.
+
 Missing DataTruck source records remain historical evidence. Loads hides confirmed
 missing IDs by default (`includeMissing=true` exposes labelled history); new Gross
 Board selections exclude them. The slow 15-minute/daily reconciliation replaces

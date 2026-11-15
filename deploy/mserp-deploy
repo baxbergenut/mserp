@@ -367,6 +367,10 @@ if [[ -f $extract_dir/backend/reconcile-loads ]]; then
     chown root:mserp "$extract_dir/backend/reconcile-loads"
     chmod 0750 "$extract_dir/backend/reconcile-loads"
 fi
+if [[ -f $extract_dir/backend/review-fleetscope-identities ]]; then
+    chown root:mserp "$extract_dir/backend/review-fleetscope-identities"
+    chmod 0750 "$extract_dir/backend/review-fleetscope-identities"
+fi
 mv "$extract_dir" "$release_dir"
 extract_dir=
 

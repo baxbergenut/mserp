@@ -6,7 +6,18 @@ import (
 	"mserp/internal/fleetscope"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
+
+func TestFleetScopeIdentityRecoveryResourceProtocolDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		if _, err := admin.Exec(ctx, `UPDATE payroll_projection_control SET protocol_mode='resources',capture_enabled=true WHERE singleton`); err != nil {
+			t.Fatal(err)
+		}
+		testFleetScopeIdentityRecovery(t, pool)
+	})
+}
 
 func testFleetScopeIdentityRecovery(t *testing.T, pool *pgxpool.Pool) {
 	ctx := context.Background()
@@ -68,6 +79,13 @@ func testFleetScopeIdentityRecovery(t *testing.T, pool *pgxpool.Pool) {
 		must(err)
 		if driver.Status != "terminated" || driver.Active {
 			t.Fatal("driver not terminated")
+		}
+		if !owned {
+			var ended string
+			must(pool.QueryRow(ctx, `SELECT (unassigned_at AT TIME ZONE 'America/New_York')::date::text FROM truck_driver_assignments WHERE truck_id=$1 AND driver_id=$2 ORDER BY unassigned_at DESC NULLS LAST LIMIT 1`, truck.ID, driver.ID).Scan(&ended))
+			if ended != boardLoadToday(time.Now()) {
+				t.Fatalf("recovery backdated the assignment: got %s", ended)
+			}
 		}
 		if owned {
 			if truck.Status != "terminated" || truck.DriverID == nil {
