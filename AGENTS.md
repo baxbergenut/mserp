@@ -930,8 +930,8 @@ status while background source evidence refreshes.
   schedule. Advancing the stop/load/truck resets it; later outside positions do not.
   Exact context-fenced cached route origins recover markers cleared by older releases.
   Fresh automatic markers are red; stale last-known markers are amber.
-  A typed Destination uses separately budgeted TomTom point-address geocoding,
-  then the same truck route profile. Cache verified coordinates by route context.
+  A typed Destination uses separately budgeted TomTom geocoding, preferring an exact street address and falling back to a unique city/locality,
+  then the same truck route profile. If ordinary results contain only street-name matches, a separately counted municipality search resolves the city. Township aliases require a matching city and state. City estimates carry an approximate city-center note. Cache verified coordinates by route context; geocoder profile address-or-city-v2 retries former address rejections once without invalidating valid route caches.
   The override keeps the selected stop appointment and suspends arrival detection.
   Clearing the address restores source-stop routing.
   ETA is automatic while its entry is blank; a typed

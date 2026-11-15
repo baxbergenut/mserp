@@ -223,10 +223,16 @@ arrival marker is suspended during the override. Clearing the address restores
 the selected stop as the routing destination.
 
 Custom addresses use [TomTom Geocoding](https://docs.tomtom.com/geocoding-api/documentation/tomtom-maps/v1/geocode)
-to resolve a complete, unambiguous point address before calculating a truck
-route. The coordinates are cached for the current selection and reused on
-refresh. Partial or unmatched addresses show an address correction message and
-wait for an edit or manual retry. Custom address ETA is shown in New York time.
+to prefer an exact street address, otherwise a unique city/locality before
+calculating a truck route. A separately counted municipality-only lookup handles
+cities hidden behind street-name results. Lower-confidence township aliases require
+both city and state to match. City estimates say "approximate destination: city center"
+in the ETA details; they never establish source-stop arrival. Coordinates and city
+precision are cached for the current selection and reused on refresh. Ambiguous or
+unmatched destinations request a city and state or street address and wait for an
+edit or manual retry. Geocoder profile `address-or-city-v2` retries older address
+rejections once after deployment while retaining valid route caches. Custom
+destination ETA is shown in New York time.
 Fresh movement of at least one mile can immediately replace a bootstrapped
 stale-position distance. Failed attempts retain a five-minute retry fence.
 Cached car ETA, distance and geometry expire immediately on read and the next
