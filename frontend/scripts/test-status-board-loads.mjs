@@ -62,13 +62,13 @@ try {
           const target = full.next.find(load => load.planId === input.planId);
           expect(target?.number).toBe('84V7859');
           expect(full.current.number).toBe('NEXT');
-          full = { ...full, next: full.next.filter(load => load.planId !== input.planId), unavailable: [...full.unavailable, { ...target, completed: true, completedByName: 'Ben Simpson', canRestoreToQueue: true }], revision: 'queued-completed' };
+          full = { ...full, next: full.next.filter(load => load.planId !== input.planId), unavailable: [...full.unavailable, { ...target, completed: true, completedByName: 'Ben Simpson', markedAsCompleted: true, canRestoreToQueue: true }], revision: 'queued-completed' };
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
         if (input.action === 'restore_completed' && input.planId === '84V7859') {
           const target = full.unavailable.find(load => load.planId === input.planId);
-          full = { ...full, next: [...full.next, { ...target, completed: false, completedByName: undefined, canRestoreToQueue: false }], unavailable: full.unavailable.filter(load => load.planId !== input.planId), revision: 'queued-restored' };
+          full = { ...full, next: [...full.next, { ...target, completed: false, completedByName: undefined, markedAsCompleted: undefined, canRestoreToQueue: false }], unavailable: full.unavailable.filter(load => load.planId !== input.planId), revision: 'queued-restored' };
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
@@ -384,7 +384,10 @@ try {
   await page.screenshot({ path: '../artifacts/queued-mark-completed.png', fullPage: true });
   await panel.getByRole('button', { name: 'Mark completed', exact: true }).click();
   await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: '84V7859 · Completed load by Ben Simpson' }).getByText('by Ben Simpson')).toBeVisible();
+  const markedComplete = panel.getByRole('button', { name: '84V7859 · Marked as Completed by Ben Simpson' });
+  await expect(markedComplete.getByText('Marked as', { exact: true })).toBeVisible();
+  await expect(markedComplete.getByText('Completed', { exact: true })).toBeVisible();
+  await expect(markedComplete.getByText('by Ben Simpson')).toBeVisible();
   await expect(panel.getByRole('button', { name: /NEXT.*Current load/ })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toHaveCount(0);
   await panel.getByRole('button', { name: /Restore to queue.*84V7859/ }).click();
@@ -403,7 +406,7 @@ try {
   await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toBeEnabled();
   await panel.getByRole('button', { name: 'Mark completed', exact: true }).click();
   await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: '84V7859 · Completed load by Ben Simpson' })).toBeVisible();
+  await expect(markedComplete).toBeVisible();
   expect(errors).toEqual([]);
   console.log(`Updater and Dispatcher non-admin: ` + 'Status Board loads passed: animated drag, keyboard reorder, queued completion/read-only permissions, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
 } finally {

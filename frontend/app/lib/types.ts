@@ -613,6 +613,7 @@ export interface BoardMapHistoryPoint {
 export interface BoardStop { key: string; type: string; location: string; streetAddress?: string; appointment: string; providerId?: number; latitude?: number; longitude?: number; schedule?: BoardSchedule; manualStopTime?: string }
 export interface BoardLoad {
   completedByName?: string;
+  markedAsCompleted?: boolean;
   previouslyActive?: boolean;
   canRemoveFromQueue?: boolean;
   overdue?: boolean;
