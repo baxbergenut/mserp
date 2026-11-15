@@ -113,7 +113,7 @@ Do not infer load identity from a number appearing inside a note.
 ## Rollout
 
 Install the matching deployment helper before applying migration 206. The helper
-quiesces API, expense-export and fleet-review writers for the schema change and
+quiesces API and expense-export writers for the schema change and
 rejects rollback binaries without `-gross-board-planning-capability` returning
 `gross-board-planning-v1`. Older binaries do not recognize the new unrelated
 payroll-source classification. Keep the SQL classification and Go exclusion list

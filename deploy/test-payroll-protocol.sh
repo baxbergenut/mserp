@@ -14,7 +14,6 @@ export test_root
 sed -e 's/\[\[ $EUID == 0 \]\]/true/' \
     -e "s@/run/lock/@$test_root/lock/@g" \
     -e "s@/opt/mserp/current/backend/mserp-api@$test_root/bin/api@g" \
-    -e "s@/opt/fleet-review/fleet-review@$test_root/bin/portal@g" \
     -e "s@WorkingDirectory=/etc/mserp@WorkingDirectory=$test_root/etc@g" \
     -e "s@/etc/mserp/@$test_root/etc/@g" "$helper" > "$test_root/helper"
 cat > "$test_root/bin/api" <<'SH'
@@ -38,12 +37,7 @@ case $1 in
     *) exit 2 ;;
 esac
 SH
-cat > "$test_root/bin/portal" <<'SH'
-#!/usr/bin/env bash
-[[ ${scenario:-} != incompatible_portal ]] || exit 1
-echo payroll-resources-v1
-SH
-chmod +x "$test_root/bin/api" "$test_root/bin/portal"
+chmod +x "$test_root/bin/api"
 flock() { return 0; }
 systemd-run() {
     [[ $1 == --quiet && $2 == --wait && $3 == --pipe && $4 == --collect && $5 == --uid=mserp ]]
@@ -89,11 +83,11 @@ python3() {
     fi
 }
 export -f flock systemd-run systemctl curl sleep python3
-for scenario in success incompatible_portal stale prepare_failure stop_failure lost start_failure readiness_failure uncertain rollback; do
+for scenario in success stale prepare_failure stop_failure lost start_failure readiness_failure uncertain rollback; do
     export scenario
     printf 'global 1\n' > "$test_root/status"
     printf 'ORIGINAL=preserved\n' > "$test_root/etc/mserp.env"
-    printf 'mserp-api.service\nmserp-expense-sheet.service\nfleet-review.service\n' > "$test_root/active"
+    printf 'mserp-api.service\nmserp-expense-sheet.service\n' > "$test_root/active"
     : > "$test_root/events"
     rm -f -- "$test_root/uncertain" "$test_root/start_failed"
     target=resources; epoch=1
@@ -105,12 +99,12 @@ for scenario in success incompatible_portal stale prepare_failure stop_failure l
     case $scenario in
         success|rollback)
             [[ $rc == 0 && $mode == "$target" && $actual_epoch == "$((epoch+1))" ]]
-            [[ $(wc -l < "$test_root/active") == 3 ]]
+            [[ $(wc -l < "$test_root/active") == 2 ]]
             grep -Fxq ORIGINAL=preserved "$test_root/etc/mserp.env" ;;
         lost|start_failure|readiness_failure)
             [[ $rc != 0 && $mode == global && $actual_epoch == 3 ]]
             [[ $(cat "$test_root/etc/mserp.env") == ORIGINAL=preserved ]]
-            [[ $(wc -l < "$test_root/active") == 3 ]] ;;
+            [[ $(wc -l < "$test_root/active") == 2 ]] ;;
         uncertain)
             [[ $rc != 0 && $mode == resources && ! -s $test_root/active ]]
             compgen -G "$test_root/etc/.payroll-protocol-backup.*" >/dev/null
@@ -121,7 +115,7 @@ for scenario in success incompatible_portal stale prepare_failure stop_failure l
             [[ ! $(grep '^switch ' "$test_root/events" || true) ]]
             compgen -G "$test_root/etc/.payroll-protocol-backup.*" >/dev/null
             rm -f -- "$test_root"/etc/.payroll-protocol-backup.* ;;
-        stale|prepare_failure|incompatible_portal)
+        stale|prepare_failure)
             [[ $rc != 0 && $mode == global && $actual_epoch == 1 ]]
             [[ ! -s $test_root/events ]]
             [[ $(cat "$test_root/etc/mserp.env") == ORIGINAL=preserved ]] ;;

@@ -38,8 +38,6 @@ FleetScope identity recovery enters the payroll source protocol before integrati
 and fleet locks, and uses the current New York date for assignment changes.
 Releases include `backend/review-fleetscope-identities`; it previews by default
 and applies only an exact reviewed manifest digest. Deployment never runs it.
-The reconciliation portal's reusable preview uses current evidence and saved
-receipts; old driver IDs and truck numbers must not grant automatic exceptions.
 PrePass roster publication reconciles pending assignments atomically, and roster
 reads use one snapshot so completed assignments do not retain a stale banner.
 
@@ -361,7 +359,7 @@ status while background source evidence refreshes.
   gate. Statement metadata uses period keys; balances and legacy overrides keep
   cross-period dependencies. Forced independent saves and shared-invoice races
   pass. Repository protocol transition/rollback fences old snapshots and queues
-  rebuilding. `deploy/mserp-payroll-protocol` quiesces API/export/portal writers
+  rebuilding. `deploy/mserp-payroll-protocol` quiesces API/export writers
   for switches in either direction. Recovery mocks cover stale epochs, failed
   shutdown/startup/readiness, lost and unknown outcomes, and rollback; Linux
   serialization checks pass. Activation requires completed shadow reconciliation and live verification. Never switch
@@ -453,23 +451,9 @@ status while background source evidence refreshes.
   build frontend with `/api`, then `node scripts/test-fleetscope-sync-views.mjs`.
 - `backend/internal/httpapi/toll_handlers.go`: toll listing and manual PrePass
   API sync.
-- The temporary MS Express reconciliation portal is a separate Go binary at
-  `backend/cmd/fleet-review`, with embedded UI and workflow in
-  `backend/internal/fleetreview`. It uses private JSON configuration and state,
-  distinct database credentials and HTTPS at `conflicts.msexpressinc.net`.
-  Drafts never write fleet records. A single explicitly reviewed batch uses
-  snapshot fences and immutable receipts in both databases; partial commits
-  recover only through the same frozen batch. It refuses enrolled integrations.
-  Approved mappings remain in receipts for later integration enrollment; portal
-  submission does not activate ongoing sync. Driver creation excludes missing
-  terminated drivers; ownership and crew/insurance review remain separate.
-  Final review can preview current matched profiles before submission. Clustie
-  supplies ownership and statuses, FleetScope supplies driver details, and truck
-  model is optional. Profile batches preserve Clustie lifecycle and accounting
-  fields and suppress DataTruck delivery.
-  See `deploy/README.md` for installation, recovery and retirement. Local database
-  tests use `MSERP_PORTAL_TEST_DATABASE_URL` and
-  `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
+- The temporary reconciliation portal is retired. Preserve its immutable database
+  receipts and root-only audit archive; do not restore its credentials or service.
+  See `deploy/README.md` for the retirement record.
 - `backend/internal/httpapi/expense_handlers.go`: expense listing, filtering,
   validation, and CRUD handlers.
   Broker responsibility requires a separate load number (migration 177), preserved
@@ -569,7 +553,7 @@ status while background source evidence refreshes.
   Confirmed parts produce `full_name` in First Last order and its matching key;
   legacy full-name-only writers cannot overwrite confirmed parts. Existing names
   are never split automatically. Forms require both for new drivers; unrelated
-  legacy profile edits can leave both unknown. Portal review saves both parts.
+  legacy profile edits can leave both unknown.
   FleetScope lifecycle/applicant webhooks accept optional paired `firstName`/
   `lastName` alongside `fullName`. Hire intake retains the supplied parts and
   prefills setup; legacy full-name-only events still require a reviewed split,
@@ -579,9 +563,7 @@ status while background source evidence refreshes.
   Missing/legacy DOBs stay blank; applicant and termination payloads exclude DOB.
   Migration 114 adds optional truck `color` (maximum 30 characters). Truck forms
   and details expose it; omitted/null API input preserves an existing color,
-  while an explicit empty string clears it. Portal batch submission saves the
-  reviewed color to both systems. Unknown source colors are omitted from portal
-  snapshots to preserve existing review fences; known color changes are fenced.
+  while an explicit empty string clears it.
   The ongoing FleetScope wire contract and color authority are unchanged.
 - `backend/internal/datatruck/`: paginated DataTruck client with rate-limit retry.
   A shared priority request gate paces all attempts at 15/minute; discovery

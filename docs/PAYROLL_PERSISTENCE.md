@@ -152,7 +152,7 @@ versions are unchanged and remain readable. The shared table is excluded from
 source capture and rejects updates, deletes and truncation.
 
 The nullable `payroll_projection_control.first_week` changes no history on deployment.
-With API/export/portal writers stopped, the operator command
+With API/export writers stopped, the operator command
 `-retire-payroll-before 2026-10-19` deletes earlier saved driver/investor statements
 and current projection pointers/jobs. It preserves invoices, payment allocations,
 audit history and immutable versions; it pins any effective pre-ledger cost evidence
@@ -515,8 +515,7 @@ The repository protocol switch requires the reviewed epoch, drains the exclusive
 gate and locks classified source tables, records a transition receipt, advances
 source fences and queues retained projections. Tests cover both directions, stale
 epochs, active writers, runtime-mode mismatch, rebuilding and unchanged financial
-history. `deploy/mserp-payroll-protocol TARGET EPOCH` stops the API, expense exporter
-and fleet-review service before switching, updates only payroll capability settings,
+history. `deploy/mserp-payroll-protocol TARGET EPOCH` stops the API and expense exporter before switching, updates only payroll capability settings,
 and restarts the previously active services. Its failure path stops writers again
 and attempts a quiesced protocol/configuration rollback; uncertain state leaves
 writers stopped with the private configuration backup. Helper recovery scenarios are validated in the isolated Linux mock harness. The deploy helper rejects an incompatible rollback
@@ -690,7 +689,7 @@ fallback; missing facts never mean that work/costs are absent. Canonical source 
 resource revisions, financial records and retry receipts are not garbage-collected.
 Current-row update churn is handled by ordinary MVCC/autovacuum, not permanent copies.
 
-Install the matching deploy helper first. It stops API/export/portal writers before
+Install the matching deploy helper first. It stops API/export writers before
 the fresh verified cutover backup and keeps them stopped through migration/activation.
 Its schema-based compatibility fence refuses pre-189 releases even if migration-ledger
 recording fails. A failed migration rolls back its table rebuild. Before accepting
@@ -935,7 +934,7 @@ migration order. The strict coverage check exposed the previous fixture ordering
 it was not relaxed to make the capture-enabled suite pass.
 
 Before installing migration 182, install the corresponding deploy helper. It
-pauses API/export/portal writers while adding source triggers, then uses the existing
+pauses API/export writers while adding source triggers, then uses the existing
 restart/rollback protocol. Migration alone leaves capture disabled. Do not enable
 capability gates out of order or change locking protocols with online flags.
 
