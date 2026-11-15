@@ -25,7 +25,7 @@ func (r *GrossBoardRepository) Presence(ctx context.Context, week time.Time) ([]
 	rows, err := r.pool.Query(ctx, `SELECT p.client_id,p.user_id,u.username,p.driver_id,p.week_start::text,coalesce(p.cell_date::text,''),p.slot,p.column_key,p.expires_at
  FROM gross_board_presence p JOIN app_users u ON u.id=p.user_id JOIN auth_sessions s ON s.token_hash=p.session_hash
  JOIN app_roles role ON role.id=u.role_id WHERE p.week_start=$1 AND p.expires_at>now() AND s.expires_at>now() AND u.active
- AND (role.system_role OR 'board.read'=ANY(role.permissions)) ORDER BY u.username,p.client_id`, week)
+ AND (role.system_role OR user_permission_allowed(role.permissions,u.permission_overrides,'board.read')) ORDER BY u.username,p.client_id`, week)
 	if err != nil {
 		return nil, err
 	}

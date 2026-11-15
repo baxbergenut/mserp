@@ -105,10 +105,16 @@ func (r *AuthRepository) TouchSession(ctx context.Context, hash string) error {
 func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string) (AuthSession, error) {
 	var s AuthSession
 	var system bool
-	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at,u.theme,r.name,u.version::text || ':' || r.version::text FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme, &s.User.RoleName, &s.User.AccessRevision)
+	var overrides PermissionOverrides
+	var categoryOverrides ExpenseCategoryOverrides
+	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at,u.theme,r.name,u.version::text || ':' || r.version::text,u.permission_overrides,u.expense_category_overrides FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme, &s.User.RoleName, &s.User.AccessRevision, &overrides, &categoryOverrides)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthSession{}, ErrAuthRecordNotFound
 	}
+	if err != nil {
+		return AuthSession{}, err
+	}
+	s.User.Permissions = EffectivePermissions(s.User.Permissions, overrides)
 	if system {
 		s.User.Administrator = true
 		s.User.Permissions = PermissionKeys()
@@ -117,7 +123,7 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 	query := `SELECT s.id::text,true,true,true,true,(s.active AND coalesce((to_jsonb(s)->>'accessorials')::boolean,false)) FROM expense_settings s WHERE s.kind='category' ORDER BY s.id`
 	args := []any{}
 	if !system {
-		query = `SELECT a.category_id::text,a.can_view,a.can_create,a.can_edit,a.can_delete,(s.active AND coalesce((to_jsonb(s)->>'accessorials')::boolean,false)) FROM role_expense_category_access a JOIN expense_settings s ON s.id=a.category_id WHERE a.role_id=$1 ORDER BY a.category_id`
+		query = `SELECT s.id::text,coalesce(a.can_view,false),coalesce(a.can_create,false),coalesce(a.can_edit,false),coalesce(a.can_delete,false),(s.active AND coalesce((to_jsonb(s)->>'accessorials')::boolean,false)) FROM expense_settings s LEFT JOIN role_expense_category_access a ON a.category_id=s.id AND a.role_id=$1 WHERE s.kind='category' ORDER BY s.id`
 		args = append(args, s.User.RoleID)
 	}
 	rows, accessErr := r.pool.Query(ctx, query, args...)
@@ -129,6 +135,9 @@ func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string
 		var access ExpenseCategoryAccess
 		if accessErr = rows.Scan(&access.CategoryID, &access.CanView, &access.CanCreate, &access.CanEdit, &access.CanDelete, &access.Accessorials); accessErr != nil {
 			return AuthSession{}, accessErr
+		}
+		if !system {
+			access = effectiveCategoryAccess(access, categoryOverrides[access.CategoryID])
 		}
 		s.User.ExpenseCategoryAccess = append(s.User.ExpenseCategoryAccess, access)
 	}

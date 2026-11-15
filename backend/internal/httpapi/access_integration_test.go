@@ -107,6 +107,11 @@ func TestAccessDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(profileMigration))
+				overridesMigration, e := os.ReadFile("../../sql/217_user_permission_overrides.sql")
+				if e != nil {
+					t.Fatal(e)
+				}
+				exec(string(overridesMigration))
 				var backfilled bool
 				if e = admin.QueryRow(ctx, `SELECT a.last_login_at=s.created_at FROM user_login_activity a JOIN auth_sessions s ON s.user_id=a.user_id`).Scan(&backfilled); e != nil || !backfilled {
 					t.Fatalf("existing login not preserved: %v", e)
