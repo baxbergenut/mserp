@@ -8598,6 +8598,16 @@ DO $$ DECLARE t text; op text; clause text; BEGIN
   END LOOP;
  END LOOP;
 END $$;
+-- The separately installed reconciliation portal retains its restricted login.
+-- Grant only the new capture/protocol objects its existing source writes need.
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='fleet_review_portal') THEN
+  GRANT SELECT ON payroll_projection_control TO fleet_review_portal;
+  GRANT INSERT ON payroll_projection_changes TO fleet_review_portal;
+  GRANT USAGE ON SEQUENCE payroll_projection_changes_id_seq TO fleet_review_portal;
+  GRANT SELECT,INSERT,UPDATE ON payroll_resource_revisions TO fleet_review_portal;
+ END IF;
+END $$;
 COMMIT;
 
 -- BEGIN 183_payroll_telemetry_classification.sql
@@ -8692,6 +8702,9 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='mserp_app') THEN
    ALTER TABLE payroll_resource_dependency_sets OWNER TO mserp_app;
    ALTER TABLE payroll_retirement_receipts OWNER TO mserp_app;
+ END IF;
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='fleet_review_portal') THEN
+   GRANT SELECT ON payroll_resource_dependency_sets TO fleet_review_portal;
  END IF;
 END $$;
 
@@ -9104,6 +9117,9 @@ DO $$ DECLARE t text; BEGIN
   ALTER TABLE payroll_statement_references OWNER TO mserp_app;
   ALTER TABLE payroll_storage_cutovers OWNER TO mserp_app;
   ALTER VIEW payroll_statement_versions OWNER TO mserp_app;
+ END IF;
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='fleet_review_portal') THEN
+  GRANT SELECT ON payroll_statement_versions,payroll_statement_current,payroll_statement_references,payroll_storage_cutovers,payroll_projection_generations TO fleet_review_portal;
  END IF;
 END $$;
 COMMIT;

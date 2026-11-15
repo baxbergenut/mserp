@@ -209,9 +209,11 @@ provisioner, runtime configuration and dedicated database access are removed.
 The hostname retains a static HTTP 410 response so it cannot fall through to the
 main application. Completed state and database receipts remain audit evidence;
 never replay a historical batch or restore the retired login from an old backup.
-Historical numbered migrations retain their original bytes. Fresh schema setup
-no longer grants portal access. The separate `review-fleetscope-identities`
-operator command and ongoing FleetScope integration remain supported.
+Historical numbered migrations and their exact copies in `backend/sql/init.sql`
+retain their original bytes for upgrade parity. Their conditional legacy grants
+are inert because the portal role is no longer provisioned. The separate
+`review-fleetscope-identities` operator command and ongoing FleetScope integration
+remain supported.
 
 ## Status palette rollback (172)
 
