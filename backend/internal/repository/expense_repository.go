@@ -143,6 +143,7 @@ type ExpensePageQuery struct {
 	ChargeDriverID           *string
 	Pagination               Pagination
 	Search                   string
+	Relevance                bool
 	CategoryID               string
 	VisibleCategoryIDs       []string
 	AccessibleCategoryIDs    []string
@@ -271,7 +272,7 @@ WHERE ` + search + `
 	query.Pagination = query.Pagination.Normalize(total)
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
 	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
-		ORDER BY e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
+		ORDER BY `+searchRelevanceOrder(query.Relevance, "coalesce(nullif(e.expense_type,''), e.category)", "e.reference_number")+`e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
 		`+fmt.Sprintf("LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2), pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err

@@ -105,6 +105,7 @@ type PageQuery = {
   page: number;
   pageSize: number;
   search?: string;
+  sort?: string;
 };
 
 function withQuery(path: string, values: Record<string, unknown>) {
@@ -286,7 +287,6 @@ export const fetchLoadsPage = (query: PageQuery & {
   driver?: string;
   pickupFrom?: string;
   pickupTo?: string;
-  sort?: string;
   direction?: string;
 }, signal?: AbortSignal) => paginatedRequest<LoadPage>(withQuery("/loads", query), signal);
 

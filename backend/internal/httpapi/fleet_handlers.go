@@ -569,6 +569,7 @@ func (handler fleetHandler) listDrivers(w http.ResponseWriter, r *http.Request) 
 		value, err := handler.repo.ListDriversPage(
 			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")),
 			strings.EqualFold(r.URL.Query().Get("includeInactive"), "true"),
+			r.URL.Query().Get("sort") == "relevance",
 		)
 		if err != nil {
 			handler.writeError(w, err)
@@ -717,7 +718,8 @@ func (handler fleetHandler) listTrucks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		value, err := handler.repo.ListTrucksPage(
-			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")), repository.TruckFilters{Status: status, GPSAlert: gpsAlert},
+			r.Context(), pagination, strings.TrimSpace(r.URL.Query().Get("search")),
+			repository.TruckFilters{Status: status, GPSAlert: gpsAlert, Relevance: r.URL.Query().Get("sort") == "relevance"},
 		)
 		if err != nil {
 			handler.writeError(w, err)

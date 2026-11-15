@@ -172,7 +172,7 @@ func TestInvestorsDatabase(t *testing.T) {
 			}
 			assertDirectory := func(search string, want ...string) {
 				t.Helper()
-				rows, err := repo.ListInvestorDirectory(ctx, search, false)
+				rows, err := repo.ListInvestorDirectory(ctx, search, false, false)
 				if err != nil {
 					t.Fatal(err)
 				}

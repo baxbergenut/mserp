@@ -377,6 +377,7 @@ func (handler expenseHandler) listExpenses(w http.ResponseWriter, r *http.Reques
 		Pagination:         pagination,
 		ChargeDriverID:     chargeDriverID, Responsibility: responsibility,
 		Search:     strings.TrimSpace(r.URL.Query().Get("search")),
+		Relevance:  r.URL.Query().Get("sort") == "relevance",
 		CategoryID: categoryID, VisibleCategoryIDs: visible, AccessibleCategoryIDs: accessible,
 
 		PaymentType: strings.TrimSpace(r.URL.Query().Get("paymentType")),

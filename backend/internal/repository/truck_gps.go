@@ -10,6 +10,7 @@ LEFT JOIN LATERAL (SELECT fleet_read.gps_alert AS alert) gps_health ON true
 `
 
 type TruckFilters struct {
-	Status   string
-	GPSAlert string
+	Status    string
+	GPSAlert  string
+	Relevance bool
 }

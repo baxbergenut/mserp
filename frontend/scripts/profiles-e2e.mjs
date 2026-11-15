@@ -6,6 +6,26 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   seedProfileFixture(sql, schema);
   await page.goto(`${base}/drivers/detail?id=${f.owner}`);
   await expect(page.getByRole('heading', { name: 'Morgan Hayes', exact: true })).toBeVisible();
+  const search = page.getByRole('region', { name: 'Global search' });
+  const globalSearchInput = page.getByRole('combobox', { name: 'Search records' });
+  sql(`SET search_path TO ${schema},public;
+    UPDATE drivers SET phone='2025550049' WHERE full_name='E2e Driver';
+    INSERT INTO trucks(unit_number,license_plate)
+      SELECT '00'||n, 'TEST-049-'||n FROM generate_series(1,6) n;
+    INSERT INTO trucks(unit_number) VALUES ('049'),('0490'),('X049');`);
+  await globalSearchInput.fill('049');
+  const searchLinks = search.getByRole('link');
+  await expect(searchLinks.nth(0).getByText('Truck 049', { exact: true })).toBeVisible();
+  await expect(searchLinks.nth(1).getByText('Truck 0490', { exact: true })).toBeVisible();
+  await expect(searchLinks.nth(2).getByText('Truck X049', { exact: true })).toBeVisible();
+  await expect(search.getByRole('link', { name: /E2e Driver/ })).toBeVisible();
+  await expect(search.getByText(/Could not search/)).toHaveCount(0);
+  await globalSearchInput.press('ArrowDown');
+  await expect(searchLinks.first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  sql(`SET search_path TO ${schema},public;
+    DELETE FROM trucks WHERE license_plate LIKE 'TEST-049-%' OR unit_number IN ('049','0490','X049');
+    UPDATE drivers SET phone=NULL WHERE full_name='E2e Driver';`);
   await expect(page.locator('[data-page-header] p')).toHaveCount(0);
   await expect(page.locator('aside').getByRole('button', { name: /Sign out/ })).toHaveCount(0);
   await expect(page.locator('main header').getByRole('link', { name: '101', exact: true })).toHaveAttribute('href', `/trucks/detail?id=${f.ownTruck}`);
@@ -71,8 +91,7 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   await page.getByRole('button', { name: 'Morgan Hayes 102', exact: true }).click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: 'Reopen truck', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
-  const search = page.getByRole('region', { name: 'Global search' });
-  await page.getByRole('combobox', { name: 'Search records' }).fill('Morgan Hayes');
+  await globalSearchInput.fill('Morgan Hayes');
   await expect(search.getByRole('link', { name: /Active investor/ })).toHaveAttribute('href', `/investors/detail?id=${f.investor}`);
   await page.keyboard.press('Escape');
   sql(`SET search_path TO ${schema},public; SET mserp.status_reason='Profile test'; UPDATE trucks SET status='out_of_service' WHERE id='${f.extraTruck}'; UPDATE drivers SET active=false WHERE id='${f.owner}';`);
@@ -81,7 +100,6 @@ export async function runProfilesE2E({ page, base, sql, schema, temp }) {
   const historicalPay = await (await page.request.get(`${base}/api/investor-pay?weekStart=2026-09-28&truckId=${f.extraTruck}`)).json();
   expect(historicalPay.drivers.find(d => d.id === f.extraTruck).settlement.finalized).toBe(true);
   expect(historicalPay.revision).toBe(hiddenPay.revision);
-  const globalSearchInput = page.getByRole('combobox', { name: 'Search records' });
   await globalSearchInput.fill('');
   await globalSearchInput.fill('Morgan Hayes');
   await expect(search.getByRole('link', { name: /Terminated driver/ })).toHaveAttribute('href', `/drivers/detail?id=${f.owner}`);
