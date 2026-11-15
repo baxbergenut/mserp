@@ -33,7 +33,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
  (88122,'PROGRESS-B','Dispatched',200,200,200,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Boston","state":"MA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Miami","state":"FL"}}]}')`)
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-09-28','PROGRESS-A',88121)`, d.ID)
 	var actor string
-	if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Progress editor','test-only') RETURNING id`).Scan(&actor); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Progress editor',crypt('test-only',gen_salt('bf'))) RETURNING id`).Scan(&actor); err != nil {
 		t.Fatal(err)
 	}
 	defer exec(`DELETE FROM app_users WHERE id=$1`, actor)

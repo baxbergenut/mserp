@@ -29,7 +29,7 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		name string
 		id   *string
 	}{{"Ben Simpson", &actor}, {"Second completion editor", &secondActor}} {
-		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES($1,'test-only') RETURNING id`, editor.name).Scan(editor.id); err != nil {
+		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES($1,crypt('test-only',gen_salt('bf'))) RETURNING id`, editor.name).Scan(editor.id); err != nil {
 			t.Fatal(err)
 		}
 	}
