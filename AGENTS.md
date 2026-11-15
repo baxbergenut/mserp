@@ -2870,6 +2870,9 @@ node scripts/test-charge-views.mjs
 node scripts/test-task-board-views.mjs
 node scripts/test-theme-views.mjs
 node scripts/test-prepass-views.mjs
+# Self-contained static servers and API/tile fixtures; build with /api first.
+node scripts/test-expense-documents.mjs
+node scripts/test-location-entrance.mjs
 ```
 
 Do not run `gofmt` across untouched files in a dirty worktree. A frontend build
