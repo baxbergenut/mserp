@@ -63,7 +63,7 @@ func TestSensitiveInvestorAccessMigration(t *testing.T) {
  ('Accountant',ARRAY['driver_pay.read','investor_pay.read','investor_pay.edit','investor_terms.read']),
  ('Accountants',ARRAY['trucks.read']),('Custom Admin',ARRAY['access.manage','investors.read']),('No access','{}');
  INSERT INTO app_roles(name,system_role) VALUES('Administrator',true);`)
-	migration, err := os.ReadFile("../../sql/217_sensitive_investor_access.sql")
+	migration, err := os.ReadFile("../../sql/220_sensitive_investor_access.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

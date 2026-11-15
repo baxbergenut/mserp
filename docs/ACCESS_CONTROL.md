@@ -25,9 +25,9 @@ task assignment and record-specific rules remain unchanged. SaveUser atomically
 persists account details and overrides, versions/audits the save, and revokes every
 session. Sessions and board presence evaluate current effective access.
 
-Migration 217 adds the two JSON objects with empty defaults, preserving existing
+Migration 219 adds the two JSON objects with empty defaults, preserving existing
 access. Install the matching deployment helper before release: it quiesces writers
-and rejects releases without migration 217 once the new columns exist, since older
+and rejects releases without migration 219 once the new columns exist, since older
 applications would ignore explicit denials. Deploy migration, API and frontend
 together. Validate `TestUserPermissionOverridesDatabase` on a disposable local
 database and `frontend/scripts/test-user-permissions.mjs` against review-local.
@@ -72,11 +72,11 @@ Each non-system role receives a `permissions_v2_migration` audit containing befo
 
 Deploy backend, migration and frontend as one coordinated release, after isolated validation. All users sign in again. Do not roll back to a pre-112 application: it interprets permissions differently. Use a permission-compatible build, or an explicitly reviewed database-and-application recovery procedure.
 
-### Sensitive investor cutover (217)
+### Sensitive investor cutover (220)
 
-Install the matching `deploy/mserp-deploy` helper before deploying migration 217. It stops the API during cutover and refuses older releases after the durable privacy marker is installed, including automatic rollback. A fresh backup is required by the existing migration policy.
+Install the matching `deploy/mserp-deploy` helper before deploying migration 220. It stops the API during cutover and refuses older releases after the durable privacy marker is installed, including automatic rollback. A fresh backup is required by the existing migration policy.
 
-Migration 217 preserves Administrator access, adds Investors View and Investor Pay View to the exact Accountant/Accountants roles (case-insensitive, trimmed), and removes Investors, Investor Pay and investor-agreement grants from every other non-system role. It preserves unrelated grants and Accountant write grants, increments role versions, records before/after audit receipts, and revokes sessions. Role names select the one-time rollout policy only; subsequent access always uses explicit capabilities. Review the post-deployment role list and audit receipts before considering rollout complete. No financial records are changed.
+Migration 220 preserves Administrator access, adds Investors View and Investor Pay View to the exact Accountant/Accountants roles (case-insensitive, trimmed), and removes Investors, Investor Pay and investor-agreement grants from every other non-system role. It preserves unrelated grants and Accountant write grants, increments role versions, records before/after audit receipts, and revokes sessions. Role names select the one-time rollout policy only; subsequent access always uses explicit capabilities. Review the post-deployment role list and audit receipts before considering rollout complete. No financial records are changed.
 
 Run `node scripts/test-investor-access.mjs` against review-local for raw API redaction, expense choices, mutation/profile responses, restricted pages and navigation, preserved authorized views, and live access revocation.
 

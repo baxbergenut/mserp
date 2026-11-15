@@ -63,7 +63,7 @@ func TestUserPermissionOverridesDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	migration, err := os.ReadFile("../../sql/217_user_permission_overrides.sql")
+	migration, err := os.ReadFile("../../sql/219_user_permission_overrides.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,6 +206,27 @@ func TestUserPermissionOverridesDatabase(t *testing.T) {
 			}
 			if !HasPermission(session().User, "access.manage") {
 				t.Fatal("reset did not restore role")
+			}
+			// Administrator full access is protected, including role transitions.
+			// Investor visibility gates inherited financial grants after user overrides.
+			exec(`UPDATE app_roles SET permissions=ARRAY['investors.read','investor_pay.read','investor_pay.finalize','investor_terms.read','investor_terms.edit'] WHERE id=$1`, roleID)
+			input = readUser()
+			input.PermissionOverrides = PermissionOverrides{"investors.read": "deny"}
+			if _, err = repo.SaveUser(ctx, adminID, input, ""); err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"investors.read", "investor_pay.read", "investor_pay.finalize", "investor_terms.read", "investor_terms.edit"} {
+				if HasPermission(session().User, key) {
+					t.Fatalf("user denial leaked %s", key)
+				}
+			}
+			input = readUser()
+			input.PermissionOverrides = PermissionOverrides{"investors.read": "allow"}
+			if _, err = repo.SaveUser(ctx, adminID, input, ""); err != nil {
+				t.Fatal(err)
+			}
+			if !HasPermission(session().User, "investor_pay.finalize") || !HasPermission(session().User, "investor_terms.edit") {
+				t.Fatal("explicit visibility grant did not restore inherited investor actions")
 			}
 			// Administrator full access is protected, including role transitions.
 			var adminRoleID string

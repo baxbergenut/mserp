@@ -40,7 +40,7 @@ func TestReverseGeocodeUsageDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Exec(context.Background(), `DROP SCHEMA `+q+` CASCADE`)
-	for _, path := range []string{"../../sql/197_board_route_usage.sql", "../../sql/207_ready_location.sql", "../../sql/217_board_destination_geocode_usage.sql"} {
+	for _, path := range []string{"../../sql/197_board_route_usage.sql", "../../sql/207_ready_location.sql", "../../sql/218_board_destination_geocode_usage.sql"} {
 		migration, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

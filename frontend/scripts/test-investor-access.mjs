@@ -35,7 +35,7 @@ try {
     const role = (await read(admin, '/settings/access')).roles.find(r => r.name === `${name}-${token}`);
     const email = `${name}-${token}@example.test`, password = randomBytes(18).toString('hex');
     await change(admin, 'POST', '/settings/users', { username: `${name}-${token}`, firstName: "Privacy", lastName: `${name}-${token}`, email, password, roleId: role.id, active: true });
-    return { ...await login(email, password), role };
+    return { ...await login(email, password), role, email, password };
   }
   const restricted = await user('investor-restricted', operational);
   const authorized = await user('investor-reader', [...operational, 'investors.read', 'investor_pay.read', 'investor_terms.read']);
@@ -50,6 +50,22 @@ try {
   expect((await read(restricted, `/trucks/${truck.id}`)).ownerName).toBe('Investor');
   expect((await read(restricted, '/lookups/investors')).find(i => i.id === owner.id).fullName).toBe('Investor');
   expect((await read(authorized, `/trucks/${truck.id}`)).ownerName).toBe(owner.fullName);
+  // A user denial must mask names and suppress role-granted Investor Pay access.
+  const managed = (await read(admin, '/settings/access')).users.find(u => u.email === authorized.email);
+  await change(admin, 'PUT', `/settings/users/${managed.id}`, { ...managed, permissionOverrides: { 'investors.read': 'deny' } });
+  expect((await authorized.context.request.get(`${base}/api/auth/session`)).status()).toBe(401);
+  const denied = await login(authorized.email, authorized.password);
+  expect((await read(denied, `/trucks/${truck.id}`)).ownerName).toBe('Investor');
+  expect((await denied.context.request.get(`${base}/api/investor-pay?weekStart=2026-10-05`)).status()).toBe(403);
+  await denied.page.goto(`${base}/accounting/investor-pay`);
+  await expect(denied.page.getByRole('heading', { name: 'Access restricted', exact: true })).toBeVisible();
+  const current = (await read(admin, '/settings/access')).users.find(u => u.id === managed.id);
+  await change(admin, 'PUT', `/settings/users/${managed.id}`, { ...current, permissionOverrides: { 'investors.read': 'allow' } });
+  Object.assign(authorized, await login(authorized.email, authorized.password));
+  expect((await read(authorized, `/trucks/${truck.id}`)).ownerName).toBe(owner.fullName);
+  const reset = (await read(admin, '/settings/access')).users.find(u => u.id === managed.id);
+  await change(admin, 'PUT', `/settings/users/${managed.id}`, { ...reset, permissionOverrides: {} });
+  Object.assign(authorized, await login(authorized.email, authorized.password));
   const truckEdit = Object.fromEntries(['unitNumber','vin','year','make','model','color','licensePlate','licenseState','isCompanyOwned','status','mileage','nextServiceMiles','driverId','active','ownerId','statusVersion'].map(key => [key, truck[key]]));
   for (const key of ['registrationExpires','insuranceExpires','lastServiceDate']) truckEdit[key] = truck[key]?.slice(0,10) ?? '';
   truckEdit.notes = 'Operational edit with masked owner';

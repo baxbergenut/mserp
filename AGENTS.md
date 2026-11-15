@@ -73,7 +73,7 @@ conversion used that faulty check and created duplicate slots.
 
 ## Sensitive investor access
 
-Migration 217 makes Investors View (`investors.read`) sensitive and a prerequisite for Investor Pay and investor agreements. API JSON and board SSE project owner names to Investor without this grant, including operational lookups, expenses, maintenance, charges, escrow, Scale and FleetScope snapshots. Operational IDs/driver-owner relationships remain for expense routing; projections never modify caches or financial snapshots. Install the matching deploy helper before the quiesced cutover; it blocks rollback to releases without the privacy migration. The one-time migration grants investor visibility only to Administrator and Accountant/Accountants roles, audits changes and revokes sessions. Later explicit grants remain configurable. Validate `TestSensitiveInvestorAccessMigration` and `frontend/scripts/test-investor-access.mjs`; see `docs/ACCESS_CONTROL.md`.
+Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisite for Investor Pay and investor agreements. API JSON and board SSE project owner names to Investor without this grant, including operational lookups, expenses, maintenance, charges, escrow, Scale and FleetScope snapshots. Operational IDs/driver-owner relationships remain for expense routing; projections never modify caches or financial snapshots. Install the matching deploy helper before the quiesced cutover; it blocks rollback to releases without the privacy migration. The one-time migration grants investor visibility only to Administrator and Accountant/Accountants roles, audits changes and revokes sessions. Later explicit grants remain configurable. Validate `TestSensitiveInvestorAccessMigration` and `frontend/scripts/test-investor-access.mjs`; see `docs/ACCESS_CONTROL.md`.
 
 ## Pay-page actions
 
@@ -947,7 +947,7 @@ status while background source evidence refreshes.
   five-axle, 53 ft trailer profile for ETAs, mileage and cached map geometry.
   An unroutable itinerary retries only the active stop with the same profile.
   Migration 197 records each attempt in board_route_usage, unrelated to payroll.
-  Migration 217 adds the custom address geocoding counter and retains prior counts.
+  Migration 218 adds the custom address geocoding counter and retains prior counts.
   TOMTOM_ROUTING_API_KEY supplies the key. BOARD_ROUTES_PAID_PROVIDER accepts
   off or tomtom. BOARD_ROUTES_TOMTOM_MONTHLY_FREE can reduce the 20,000 routing
   allowance. BOARD_ADDRESS_GEOCODE_MONTHLY_LIMIT caps new address lookups at
@@ -1795,11 +1795,11 @@ assignment lookup lists.
   Users refreshes every 30 visible seconds and on focus. Activity does not change
   account versions or invalidate financial caches.
   Session issuance locks/rechecks the user version to prevent stale login races.
-  Migration 217 adds per-user allow/deny overrides for catalog and expense-category
+  Migration 219 adds per-user allow/deny overrides for catalog and expense-category
   permissions below account details in the user modal. Missing keys inherit the role;
   denied prerequisites disable dependent actions. Administrator retains full access.
   Saves are versioned, audited and revoke sessions; transactional access checks and
-  board presence use effective grants. Install the matching deploy helper before 217
+  board presence use effective grants. Install the matching deploy helper before 219
   to quiesce writers and block rollback to binaries that ignore denials. See
   docs/ACCESS_CONTROL.md and TestUserPermissionOverridesDatabase.
   Current effective permissions are loaded for every request. Account and role writes

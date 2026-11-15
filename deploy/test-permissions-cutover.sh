@@ -3,8 +3,8 @@ set -euo pipefail
 helper=${1:-$(dirname "$0")/mserp-deploy}
 bash -n "$helper"
 permissions_migration=112_permissions_v2.sql
-user_permissions_migration=217_user_permission_overrides.sql
-investor_access_migration=217_sensitive_investor_access.sql
+user_permissions_migration=219_user_permission_overrides.sql
+investor_access_migration=220_sensitive_investor_access.sql
 manager_verification_migration=151_retire_expense_manager_verification.sql
 accounting_cutover_migration=160_accounting_cutover.sql
 payroll_cost_start_migration=173_payroll_cost_start.sql

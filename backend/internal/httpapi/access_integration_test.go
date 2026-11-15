@@ -107,7 +107,7 @@ func TestAccessDatabase(t *testing.T) {
 					t.Fatal(e)
 				}
 				exec(string(profileMigration))
-				overridesMigration, e := os.ReadFile("../../sql/217_user_permission_overrides.sql")
+				overridesMigration, e := os.ReadFile("../../sql/219_user_permission_overrides.sql")
 				if e != nil {
 					t.Fatal(e)
 				}

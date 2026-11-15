@@ -63,7 +63,7 @@ func TestPermissionsV2Migration(t *testing.T) {
 				exec(`INSERT INTO app_roles(name,permissions) VALUES ('Ops',ARRAY['fleet.read','fleet.write']),('Broken',ARRAY['fleet.write','payroll.write','escrow.write']),('Finance',ARRAY['payroll.read','payroll.write','payroll.finalize','charges.read','charges.write','escrow.read','escrow.write']),('Accountant',ARRAY[]::text[])`)
 				exec(`INSERT INTO app_users(username,password_hash,role_id) SELECT 'cutover',crypt('test-fixture-only',gen_salt('bf')),id FROM app_roles WHERE name='Ops'; INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) SELECT id,repeat('a',64),repeat('b',43),now()+interval '1 day' FROM app_users WHERE username='cutover'`)
 				exec(string(migration))
-				investorMigration, readErr := os.ReadFile("../../sql/217_sensitive_investor_access.sql")
+				investorMigration, readErr := os.ReadFile("../../sql/220_sensitive_investor_access.sql")
 				if readErr != nil {
 					t.Fatal(readErr)
 				}

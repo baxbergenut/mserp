@@ -182,7 +182,7 @@ the TomTom allowance. The paid provider setting accepts `off` (default) or
 `tomtom`. The previous Google key and monthly allowance settings are retired.
 
 Migration 197 records every request attempt in `board_route_usage` before HTTP.
-Migration 217 enables a separate `tomtom_geocode` counter for custom addresses.
+Migration 218 enables a separate `tomtom_geocode` counter for custom addresses.
 The counters use TomTom's account billing timezone (UTC by default). Existing
 routing usage stays on the same monthly counter. Reconcile other same-SKU
 account usage against the configured routing allowance before activation.
