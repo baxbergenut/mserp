@@ -1669,8 +1669,8 @@ assignment lookup lists.
   is displayed unchanged until explicitly replaced or cleared. Idle board refresh
   pauses while the ETA editor is open. Dispatcher is shown by group/filter rather
   than a repeated table column. Personal view controls follow the status filter
-  on the same row. Dispatch destination cells are editable (home statuses retain the home-address display): typing overrides the
-  selected source address; clearing a typed override restores that selected stop.
+  on the same row. Destination cells are editable in every status. Typing overrides
+  the default destination; clearing a typed override restores the status default.
   Clicking the destination never changes stops. Imported locations display City,
   ST without ZIP codes; custom addresses retain their exact text and stop identity.
   The muted PU/DEL indicator remains. Text edits detach destination source safely.
@@ -3666,7 +3666,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Driver address follows Home time and shows only profile city/state. The board
   API includes city/state without street or ZIP. HOME, HOME (YARD), and VACATION
-  display that address as Destination without changing saved load/manual destinations.
+  default to that address in Destination. Saved custom destinations take precedence;
+  clearing the custom text restores the home address.
 - Status Board Home time uses versioned driver_board.leave_plan JSON (homeStart,
   homeEnd, vacationReturn). Calendar dates use New York; Monday–Sunday dates show
   HOME FRI/BACK TUE, otherwise day/month. Home switches to Back only once its
