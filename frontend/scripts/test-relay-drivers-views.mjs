@@ -169,7 +169,10 @@ else {
     await page.setViewportSize({width:1440,height:1000});
     await page.goto(base+'/tolls');
     await page.getByRole('tab',{name:'Needs attention',exact:true}).click();
-    await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(3);
+    await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(2);
+    await page.getByLabel('Select transaction toll-flagged',{exact:true}).check();
+    await expect(page.getByRole('button',{name:/^Link selected/})).toHaveCount(0);
+    await page.getByRole('button',{name:'Clear selection',exact:true}).click();
     await expect(page.getByText('Flagged',{exact:true})).toBeVisible();
     await page.screenshot({path:join(tmpdir(),'mserp-toll-attention-desktop.png'),fullPage:true});
     await expect(page.getByLabel('Attention tolls posted since')).toHaveValue('2026-09-01');
@@ -214,7 +217,7 @@ else {
     await page.getByRole('button',{name:'Next page',exact:true}).click();
     await page.getByLabel('Select transaction paged-29',{exact:true}).check();
     await expect(page.getByText('2 selected · 0 flagged',{exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Link selected',exact:true}).click();
+    await page.getByRole('button',{name:'Link selected (2)',exact:true}).click();
     await page.getByRole('dialog').getByLabel(/^Truck/).selectOption('truck-01');
     await page.getByRole('dialog').getByRole('button',{name:'Preview selected tolls',exact:true}).click();
     if(writes.at(-1).transactionIds.join(',')!=='toll-one,paged-29')throw new Error('Cross-page selection was lost');
@@ -222,17 +225,17 @@ else {
     await page.getByRole('button',{name:'Clear selection',exact:true}).click();
     tollLinks.transactions=tollLinks.transactions.filter(t=>!t.id.startsWith('paged-'));
     await page.getByRole('button',{name:'Previous page',exact:true}).click();
-    await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(3);
+    await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(2);
     await page.getByRole('button',{name:'Link truck',exact:true}).first().click();
     await expect(page.getByRole('dialog')).toContainText('Only the selected transactions');
     await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
     await page.getByLabel('Select transaction toll-one',{exact:true}).check();
     await page.getByLabel('Select transaction toll-flagged',{exact:true}).check();
-    await page.getByRole('button',{name:'Link selected',exact:true}).click();
+    await page.getByRole('button',{name:'Link selected (1)',exact:true}).click();
     await page.getByRole('dialog').getByLabel(/^Truck/).selectOption('truck-01');
     await expect(page.getByRole('dialog')).toContainText('4V4NC9EG4NN297330');
     await page.getByRole('dialog').getByRole('button',{name:'Preview selected tolls',exact:true}).click();
-    await expect(page.getByRole('dialog')).toContainText('2 tolls');
+    await expect(page.getByRole('dialog')).toContainText('1 toll');
     await page.getByRole('dialog').getByLabel(/^Truck/).selectOption('truck-001');
     await expect(page.getByRole('dialog').getByRole('button',{name:'Preview selected tolls',exact:true})).toBeVisible();
     await page.getByRole('dialog').getByLabel(/^Truck/).selectOption('truck-01');
@@ -240,7 +243,7 @@ else {
     await page.getByRole('dialog').getByRole('button',{name:'Link transactions',exact:true}).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('heading',{name:'Saved truck mappings'})).toBeVisible();
-    if(writes.at(-1).revision!=='b'.repeat(64)||writes.at(-1).truckId!=='truck-01'||writes.at(-1).transactionIds.join(',')!=='toll-one,toll-flagged')throw new Error('Exact reviewed selection not sent');
+    if(writes.at(-1).revision!=='b'.repeat(64)||writes.at(-1).truckId!=='truck-01'||writes.at(-1).transactionIds.join(',')!=='toll-one')throw new Error('Linking should include only unlinked selected tolls');
     await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(1);
     await expect(page.getByLabel('Select transaction toll-unselected',{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Undo mapping',exact:true}).click();
@@ -250,7 +253,6 @@ else {
     await page.screenshot({path:join(tmpdir(),'mserp-prepass-trucks.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    tollLinks.transactions.push(structuredClone(originalFlaggedToll));
     tollReadOnly=true; await page.reload();
     await expect(page.getByText('Flagged',{exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Link truck',exact:true})).toHaveCount(0);

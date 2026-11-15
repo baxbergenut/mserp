@@ -92,6 +92,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
     finally { saving.current = false; setBusy(false); }
   }
   const transactions = data?.items ?? [];
+  const unlinkedSelected = selected.filter(id => selectedRows.get(id)?.truckId === null);
   const flaggedSelected = selected.flatMap(id => selectedRows.get(id) ?? []).filter(t => selected.includes(t.id) && t.truckId && t.flag?.status === "review" && !t.reviewed && t.reviewRevision);
   const totalPages = data?.totalPages ?? 1;
   const currentPage = data?.page ?? page;
@@ -102,7 +103,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
   return <section className="space-y-4" aria-label="PrePass truck links">
     <div className="flex flex-wrap items-center gap-3">
       <TableFilters><label className="flex items-center gap-2 text-[13px] text-zinc-400">Posted since<input aria-label="Attention tolls posted since" disabled={busy} type="date" className={controlClass.replace("w-full", "w-auto")} value={from || data?.dateFrom || ""} onChange={e => { setFrom(e.target.value); setSelected([]); setSnapshot(null); setSelectedRows(new Map()); setPage(1); }} /></label><label className="flex items-center gap-2 text-[13px] text-zinc-400"><input type="checkbox" disabled={busy} checked={showReviewed} onChange={e => { setShowReviewed(e.target.checked); setSelected([]); setSnapshot(null); setSelectedRows(new Map()); setPage(1); }} />Show reviewed</label></TableFilters>
-      {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected · {flaggedSelected.length} flagged</span><button className="ui-button ui-button-primary" disabled={busy || selected.length > 100} onClick={() => open(selected)}>Link selected</button><button className="ui-button" disabled={busy || flaggedSelected.length === 0 || flaggedSelected.length > 100} onClick={() => void markSelectedReviewed()}>Mark selected reviewed</button><button className="ui-button" disabled={busy} onClick={() => setSelected([])}>Clear selection</button>{selected.length > 100 && <span className="text-[12px] text-amber-400">Select up to 100 transactions per action.</span>}</>}
+      {canWrite && selected.length > 0 && <><span className="text-[13px] text-zinc-400">{selected.length} selected · {flaggedSelected.length} flagged</span>{unlinkedSelected.length > 0 && <button className="ui-button ui-button-primary" disabled={busy || unlinkedSelected.length > 100} onClick={() => open(unlinkedSelected)}>Link selected ({unlinkedSelected.length})</button>}<button className="ui-button" disabled={busy || flaggedSelected.length === 0 || flaggedSelected.length > 100} onClick={() => void markSelectedReviewed()}>Mark selected reviewed</button><button className="ui-button" disabled={busy} onClick={() => setSelected([])}>Clear selection</button>{(unlinkedSelected.length > 100 || flaggedSelected.length > 100) && <span className="text-[12px] text-amber-400">Select up to 100 transactions per action.</span>}</>}
       <div className="ml-auto">{actions}</div>
     </div>
     {error && !input && !undo && <ErrorBanner message={error} />}
@@ -119,7 +120,7 @@ export function TruckLinksTab({ actions }: { actions?: ReactNode }) {
         <td className="px-3 py-2"><div>{[t.entryPlazaName || t.entryPlaza, t.exitPlazaName || t.exitPlaza].filter(Boolean).join(" → ")}</div><div className="text-[11px] text-zinc-500">{t.exitDate} {t.exitTime} · {t.agency}</div></td>
         <td className="px-3 py-2 text-right font-mono tabular-nums">{money(t.amount)}</td>
         <td className="px-3 py-2"><div className="flex items-center gap-1">{!t.truckId && <span className="text-amber-400">Unlinked</span>}{t.flag?.status === "review" && <><TransactionFlagIcon flag={t.flag} kind="toll" /><span className={t.reviewed ? "text-emerald-400" : "text-zinc-400"} title={t.reviewed ? `Reviewed by ${t.reviewedBy || "a user"} at ${t.reviewedAt}` : undefined}>{t.reviewed ? "Reviewed" : "Flagged"}</span></>}</div></td>
-        <td className="px-3 py-2">{canWrite && <div className="flex flex-wrap gap-2"><button className="ui-button" disabled={busy} onClick={() => open([t.id])}>Link truck</button>{t.flag?.status === "review" && t.reviewRevision && <button className="ui-button" disabled={busy} onClick={() => void markReviewed(t)}>{t.reviewed ? "Reopen" : "Mark reviewed"}</button>}</div>}</td>
+        <td className="px-3 py-2">{canWrite && <div className="flex flex-wrap gap-2">{!t.truckId && <button className="ui-button" disabled={busy} onClick={() => open([t.id])}>Link truck</button>}{t.flag?.status === "review" && t.reviewRevision && <button className="ui-button" disabled={busy} onClick={() => void markReviewed(t)}>{t.reviewed ? "Reopen" : "Mark reviewed"}</button>}</div>}</td>
       </tr>)}</tbody>
     </table></TableShell>
     {data && <TablePagination page={currentPage} pageSize={pageSize} totalItems={data.total} totalPages={totalPages} onPageChange={setPage} onPageSizeChange={value => { setPageSize(value); setPage(1); }} />}
