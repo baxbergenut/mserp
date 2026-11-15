@@ -4,83 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func TestPayrollPortalCapturePrivilegesDatabase(t *testing.T) {
-	dsn := os.Getenv("MSERP_DRIVER_PAY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("local disposable payroll database required")
-	}
-	cfg, err := pgx.ParseConfig(dsn)
-	if err != nil || !strings.HasSuffix(cfg.Database, "_test") || (cfg.Host != "localhost" && cfg.Host != "127.0.0.1") {
-		t.Fatal("local _test database required")
-	}
-	ctx := context.Background()
-	setup, err := pgx.Connect(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = setup.Exec(ctx, `DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='fleet_review_portal') THEN CREATE ROLE fleet_review_portal NOLOGIN; END IF; END $$`)
-	_ = setup.Close(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
-		seedPayrollProjectionTest(t, ctx, pool)
-		// Reproduce the portal's previously granted canonical-table access without
-		// accidentally granting any new derived-table or sequence privileges.
-		_, err := admin.Exec(ctx, `DO $$ DECLARE item record; BEGIN
-EXECUTE format('GRANT USAGE ON SCHEMA %I TO fleet_review_portal',current_schema());
-FOR item IN SELECT c.relname,c.relkind FROM pg_class c WHERE c.relnamespace=current_schema()::regnamespace AND c.relkind IN ('r','S')
-AND c.relname NOT LIKE 'payroll_projection_%' AND c.relname NOT LIKE 'payroll_statement_%' AND c.relname NOT LIKE 'payroll_command_%'
-AND c.relname NOT IN ('payroll_resource_revisions','payroll_protocol_events','payroll_load_facts','payroll_routing_facts','payroll_cost_months','payroll_source_months') LOOP
-IF item.relkind='S' THEN EXECUTE format('GRANT USAGE ON SEQUENCE %I TO fleet_review_portal',item.relname);
-ELSE EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON %I TO fleet_review_portal',item.relname); END IF;
-END LOOP; END $$`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = NewDriverPayRepository(pool).EnablePayrollShadow(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = pool.Exec(ctx, `UPDATE payroll_projection_control SET protocol_mode='resources'`); err != nil {
-			t.Fatal(err)
-		}
-		portal := pool.Config().Copy()
-		portal.ConnConfig.RuntimeParams["role"] = "fleet_review_portal"
-		writer, err := pgxpool.NewWithConfig(ctx, portal)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer writer.Close()
-		tx, err := beginPayrollSourceMutation(ctx, writer)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback(ctx)
-		if _, err = tx.Exec(ctx, `UPDATE drivers SET full_name='Portal updated driver' WHERE id=$1`, projectionDriver); err != nil {
-			t.Fatal(err)
-		}
-		if err = tx.Commit(ctx); err != nil {
-			t.Fatal(err)
-		}
-		var captured bool
-		if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_projection_changes WHERE table_name='drivers')`).Scan(&captured); err != nil || !captured {
-			t.Fatal("restricted portal source change not captured", err)
-		}
-		var denied bool
-		if err = writer.QueryRow(ctx, `SELECT NOT has_table_privilege(current_user,'payroll_projection_control','UPDATE')`).Scan(&denied); err != nil || !denied {
-			t.Fatal("portal gained protocol-management access", err)
-		}
-	})
-}
 
 func TestPayrollAdditionalWriterGatesDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {

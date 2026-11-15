@@ -30,7 +30,6 @@ extract_dir=
 cutover_started=false
 deployment_complete=false
 expense_exporter_stopped=false
-fleet_review_stopped=false
 previous_release=$(readlink -f "$current_link" 2>/dev/null || true)
 permissions_migration=112_permissions_v2.sql
 user_permissions_migration=219_user_permission_overrides.sql
@@ -274,7 +273,6 @@ cleanup() {
             if [[ $expense_exporter_stopped == true ]]; then
                 systemctl restart mserp-expense-sheet.service
             fi
-            if [[ $fleet_review_stopped == true ]]; then systemctl restart fleet-review.service; fi
             systemctl reload nginx
             echo "deployment failed; restored compatible application" >&2
         else
@@ -347,10 +345,6 @@ if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq "$payroll_storage_migrat
         expense_exporter_stopped=true
         systemctl stop mserp-expense-sheet.service
     fi
-    if systemctl is-active --quiet fleet-review.service; then
-        fleet_review_stopped=true
-        systemctl stop fleet-review.service
-    fi
 fi
 prepare_release_backup
 
@@ -402,10 +396,6 @@ for migration_name in "${pending_migrations[@]}"; do
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi
-        if systemctl is-active --quiet fleet-review.service; then
-            fleet_review_stopped=true
-            systemctl stop fleet-review.service
-        fi
     fi
     if [[ $migration_name == "$investor_access_migration" || $migration_name == "$permissions_migration" || $migration_name == "$user_permissions_migration" || $migration_name == "$manager_verification_migration" || $migration_name == "$accounting_cutover_migration" || $migration_name == "$accounting_retirement_migration" || $migration_name == "$status_colors_migration" || $migration_name == "$status_palette_rollback_migration" || $migration_name == "$payroll_revision_migration" || $migration_name == "$payroll_load_revision_migration" || $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" || $migration_name == "$expense_archive_migration" || $migration_name == "$pti_operational_migration" || $migration_name == "$unrelated_payroll_migration" || $migration_name == "$company_expense_migration" || $migration_name == "$driver_gross_migration" || $migration_name == "$modified_sync_migration" || $migration_name == "$routing_usage_migration" || $migration_name == "$expense_drafts_migration" || $migration_name == "$accessorial_expenses_migration" || $migration_name == "$escrow_settlement_migration" || $migration_name == "$gross_planning_migration" || $migration_name == "$escrow_balance_migration" || $migration_name == "$escrow_adjustment_migration" || $migration_name == "$gross_week_lock_migration" || $migration_name == "$investor_accounts_migration" ]]; then
         # No old application may write between a contract cutover and activation.
@@ -415,10 +405,6 @@ for migration_name in "${pending_migrations[@]}"; do
             expense_exporter_stopped=true
             systemctl stop mserp-expense-sheet.service
         fi
-    fi
-    if [[ $migration_name == "$payroll_projection_migration" || $migration_name == "$payroll_telemetry_migration" || $migration_name == "$payroll_operational_migration" || $migration_name == "$payroll_shared_migration" || $migration_name == "$expense_verification_migration" || $migration_name == "$load_availability_migration" || $migration_name == "$board_operational_migration" || $migration_name == "$payroll_storage_migration" || $migration_name == "$expense_archive_migration" || $migration_name == "$pti_operational_migration" || $migration_name == "$unrelated_payroll_migration" || $migration_name == "$company_expense_migration" || $migration_name == "$driver_gross_migration" || $migration_name == "$modified_sync_migration" || $migration_name == "$routing_usage_migration" || $migration_name == "$expense_drafts_migration" || $migration_name == "$accessorial_expenses_migration" || $migration_name == "$escrow_settlement_migration" || $migration_name == "$gross_planning_migration" || $migration_name == "$escrow_balance_migration" || $migration_name == "$escrow_adjustment_migration" || $migration_name == "$gross_week_lock_migration" || $migration_name == "$investor_accounts_migration" ]] && systemctl is-active --quiet fleet-review.service; then
-        fleet_review_stopped=true
-        systemctl stop fleet-review.service
     fi
     echo "applying migration $migration_name"
     mserp_db psql -X -v ON_ERROR_STOP=1 --dbname=mserp --file="$migration"
@@ -452,7 +438,6 @@ if [[ $expense_exporter_stopped == true ]] || systemctl is-active --quiet mserp-
     systemctl restart mserp-expense-sheet.service
 fi
 
-if [[ $fleet_review_stopped == true ]]; then systemctl restart fleet-review.service; fi
 
 deployment_complete=true
 rm -f -- "$incoming_archive"

@@ -53,9 +53,8 @@ PostgreSQL 16 Standard, primary only, with storage autoscaling off. The observed
 price at creation was $15.15/month. Its connection limit is 22.
 
 The API pool is capped at 10, with separate board-ready and payroll LISTEN
-connections. The exporter uses up to two direct connections. The reconciliation
-portal source pool defaults to four on this server: cap it explicitly at four in
-its source URL. This gives a potential 18 application connections, leaving four
+connections. The exporter uses up to two direct connections. With the portal
+retired, this gives a potential 14 application connections, leaving eight
 for administration/backup/restore. Avoid concurrent operator workers during
 maintenance. Monitor actual concurrency and memory before increasing pools.
 Direct connections preserve LISTEN and session advisory locks; transaction
@@ -68,10 +67,6 @@ ones; its default 64 locks therefore allocates only a quarter of the former
 that default during startup. The 256 setting restores equivalent capacity
 without a plan upgrade and requires a database restart. Verify the live setting
 with SQL and confirm payroll preparation completes without shared-memory errors.
-
-The separate `fleetreview` OS user cannot traverse `/etc/mserp` (0750). Give its
-source URL a CA file under `/etc/fleet-review/database-ca.crt` (root-owned 0644),
-and verify readability as `fleetreview`. Its receiver URL remains unchanged.
 
 ## Verified production cutover
 
@@ -93,31 +88,28 @@ writes. Other local PostgreSQL databases and services remain in place.
 1. Verify the target cluster, region, VPC, trusted source and CA. Restrict network
    access to the production Droplet. Rehearse restoring a consistent custom dump
    into a separate target database. Check extensions, object ownership, runtime
-   and portal grants, schema ledger, constraints and sequences. Do not run
+   grants, schema ledger, constraints and sequences. Do not run
    background integrations against the rehearsal copy.
    Create the target from `template0` with UTF8 encoding and the source database's
    `C.UTF-8` LC_COLLATE/LC_CTYPE. The provider's default `en_US.UTF-8` sorts text
    differently. Compare data manifests by table name independent of result order.
-   Preserve database ownership by `mserp_app` and the existing inherited
-   `mserp_app` membership of `fleet_review_portal`; table grants alone do not
-   reproduce the source database's effective schema privileges. Former
+   Preserve database ownership by `mserp_app` and effective application
+   privileges. Do not restore the retired portal login or its grants. Former
    `postgres`-owned objects become managed-administrator-owned, while the
    application-owned tables, sequences, views and functions keep their owners.
-2. Keep the original runtime/portal configuration and verified source backup in a
-   root-only recovery directory. Inventory all writers. The portal has a separate
-   `sourceUrl` in `/etc/fleet-review/config.json`; its FleetScope `receiverUrl`
-   belongs to another system and must remain unchanged.
+2. Keep the original runtime configuration and verified source backup in a
+   root-only recovery directory. Inventory all writers.
 3. Serialize against `/run/lock/mserp-deploy.lock` and the backup lock. Pause the
-   backup timer, API, expense exporter and reconciliation portal. Ensure no other
+   backup timer, API and expense exporter. Ensure no other
    operator job or database session can write Clustie. Do not stop the PostgreSQL
    service: it also hosts unrelated databases.
 4. Take the final consistent dump while writers are stopped. Retain its checksum,
    catalog validation and source manifest. Restore to a fresh managed `mserp`
    database, preserving roles/grants and application ownership. Compare every
    public table's row count and deterministic content digest, sequences, migration
-   ledger, constraints, indexes and triggers. Test read permissions as both runtime
-   roles. Analyze the restored database before activation.
-5. Atomically replace the application URL, portal source URL, CA and matching
+   ledger, constraints, indexes and triggers. Test read permissions as the application runtime
+   role. Analyze the restored database before activation.
+5. Atomically replace the application URL, CA and matching
    administrator service file. Verify helper destination identity. Create and
    verify a managed backup before allowing ordinary deployments again. Restore
    the timer and services, then check active release, readiness, HTTPS/login,

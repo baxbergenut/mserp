@@ -14,12 +14,6 @@ flock -n 9 || { echo "another deployment or payroll transition is running" >&2; 
 binary=/opt/mserp/current/backend/mserp-api
 config=/etc/mserp/mserp.env
 [[ $($binary -payroll-protocol-capability) == payroll-resources-v1 ]] || { echo "release lacks the required payroll protocol" >&2; exit 1; }
-# The portal is independently installed. Its old binary must not rejoin writers
-# after the protocol transition, even when it was temporarily stopped beforehand.
-portal=/opt/fleet-review/fleet-review
-if [[ -f $portal ]]; then
-    [[ $($portal -payroll-protocol-capability) == payroll-resources-v1 ]] || { echo "install the matching fleet-review binary before switching payroll" >&2; exit 1; }
-fi
 operator() {
     # Match the service's environment precedence and optional integration files.
     # A login shell does not inherit EnvironmentFile, and loading local dotenv
@@ -37,14 +31,14 @@ read -r previous actual_epoch < <(printf '%s' "$status" | python3 -c 'import jso
 backup=''
 staged=''
 active=()
-for service in mserp-api.service mserp-expense-sheet.service fleet-review.service; do
+for service in mserp-api.service mserp-expense-sheet.service; do
     if systemctl is-active --quiet "$service"; then active+=("$service"); fi
 done
 stopped=false
 complete=false
 writers_stopped() {
     local service
-    for service in mserp-api.service mserp-expense-sheet.service fleet-review.service; do
+    for service in mserp-api.service mserp-expense-sheet.service; do
         if systemctl is-active --quiet "$service"; then return 1; fi
     done
 }
@@ -99,7 +93,7 @@ p.write_text("\n".join(result)+"\n")
 PY
 stopped=true
 for service in "${active[@]}"; do systemctl stop "$service"; done
-for service in mserp-api.service mserp-expense-sheet.service fleet-review.service; do
+for service in mserp-api.service mserp-expense-sheet.service; do
     if systemctl is-active --quiet "$service"; then echo "writer did not stop: $service" >&2; exit 1; fi
 done
 operator -payroll-protocol-switch "$target" -payroll-protocol-epoch "$epoch"

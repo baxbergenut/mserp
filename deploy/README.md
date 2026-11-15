@@ -201,122 +201,19 @@ Database-query failures also deny rollback. Existing migration 113 remains intac
 To roll back manually, repoint `/opt/mserp/current` to a permission-compatible
 directory in `/opt/mserp/releases`, then restart `mserp-api` and reload Nginx.
 
-## Temporary fleet reconciliation portal
+## Retired reconciliation portal
 
-Final review includes **Generate live preview**. This reads both systems using
-read-only transactions and shows field-level changes plus unresolved items.
-Driver matches use a completed hire link, a still-valid saved identity review,
-or an exact name and unique shared contact. Trucks require an unambiguous VIN.
-The preview prefers FleetScope driver profile fields, fills missing truck
-details in either direction, and treats model as optional. Clustie supplies
-dated ownership and status. Home and Vacation represent active employment in
-FleetScope. FleetScope safety restrictions, employment
-transitions, leases and status changes that would release a crew require
-separate review. The profile submission checks the preview hash against both
-live systems, then uses the existing receipts. Its Clustie writes are limited
-to profile columns, with DataTruck profile delivery suppressed for the
-transaction. To verify live counts without reviewer credentials, run the
-portal binary with the normal config and the `-preview-summary` flag.
-
-The truck-color build requires MSERP migration 114. Reviewed truck colors are
-saved in both databases on final submission. Unknown MSERP colors remain absent
-from snapshot hashes, preserving existing reviews during the additive rollout;
-once populated, color participates in snapshot conflict checks. Do not replace
-the portal binary while a batch is frozen or partially committed.
-
-The structured-name portal build requires MSERP migration 104. It saves reviewed
-first/last names in both systems and uses those parts in snapshot fences. Before
-upgrading an existing portal, back up its state and resolve any frozen or partially
-committed batch using the original binary; do not change snapshot formats during
-recovery. After upgrading, refresh the snapshots and re-review changed driver rows.
-The migration leaves all existing full names untouched and does not activate sync.
-
-`backend/cmd/fleet-review` serves the separate, embedded Drivers/Trucks review UI
-at `https://conflicts.msexpressinc.net`. Build it locally for Linux with CGO off;
-it is not part of the normal MSERP release archive. Use the supplied
-`fleet-review.service` and `fleet-review.nginx.conf`, with the same ACME webroot
-and renewal hook as MSERP. Validate Nginx before reloading it.
-
-The operator bootstrap `provision-fleet-review.py` accepts secret JSON over SSH
-stdin, verifies both company identities and the exact ownership migration hash,
-takes private schema/scoped backups, and creates dedicated credentials and
-immutable receipt storage. FleetScope's normal API deployment should apply its
-ownership migration first. Never log the bootstrap payload. The portal is bound
-to loopback port 8096. Its service cannot write outside its private state folder.
-
-- `/etc/fleet-review/config.json`: root-owned, group-readable private settings,
-  database URLs, pinned company identity, login hash and `allowApply` gate.
-- `/var/lib/fleet-review/state.json`: saved snapshot, drafts and frozen batch;
-  private to the service account. Back this up before any operator maintenance.
-- `/var/backups/fleet-review`: restricted operator backups.
-- Each database's `fleet_review.receipts`: immutable plan hash, identity mappings,
-  before/after values and shared reviewer-account attribution. A shared account
-  identifies the review account, not an individual staff member.
-
-Generate credentials using `fleet-review -generate-credentials PRIVATE_PATH`.
-Transfer the password privately to the authorized reviewer; never commit it.
-Changing the configured bcrypt hash and restarting revokes all in-memory sessions.
-Cookies are host-only, Secure, HttpOnly and SameSite Strict; mutations require an
-exact Origin and session CSRF token. Login attempts are throttled. No database
-credentials, payroll amounts, SSNs or documents are sent to the browser.
-
-Reviewers confirm identity, edit values and save drafts before marking rows as
-reviewed. **Save reviewed record** confirms the review directly, without a separate
-checkbox; **Save draft** leaves the record unreviewed. Candidate names/VINs never
-authorize automatic linking. Missing required vehicle facts must be supplied or
-explicitly deferred; fabricated identifiers are
-rejected. Missing terminated drivers are deferred. Existing drivers' status and
-contact values default to MSERP; named exceptions live in private operator policy.
-FleetScope's legacy `class_8` is displayed and saved as `8`. Startup upgrades only
-unfrozen draft values and increments the review version, preserving review flags
-and exact source snapshots. Frozen batches and their receipt hashes stay unchanged.
-Ownership uses existing MSERP owners or a confirmed driver owner, with an explicit
-effective date when ownership changes. Investor ownership is projected into
-FleetScope as a named owner snapshot, never as a lease. Existing insurance facts
-remain intact; owner adoption requires separate coverage review. Crew adoption is
-an explicit per-truck decision and requires all crew identities and eligibility.
-
-Final submission requires every row to be reviewed or explicitly deferred and a
-typed confirmation. The server locks the affected fleet tables briefly, verifies
-the frozen snapshots and commits a durable receipt in MSERP, then FleetScope.
-These are two database commits, not a distributed atomic transaction. On an
-interrupted response/restart, use **Recover the same batch**. Receipt readback
-prevents duplicate creation. If either database changed after a partial commit,
-stop and inspect the immutable receipt and current records; never delete receipts,
-replace the batch or blindly restore a database. **Return uncommitted batch to
-review** is allowed only when neither database has a receipt.
-
-Refreshing before submission preserves drafts and unchanged reviews; changed
-records need another review. Green requires reviewed matching current values.
-Reviewed differences appear amber as **Ready to apply**, while unreviewed records
-remain red. This is a saved decision, not a database write. A blank termination
-date is valid for an active driver. UI status checks run with
-`node backend/scripts/test-fleet-review-status.mjs` from the repository root.
-Drivers and Trucks sidebar links show their own reviewed-or-deferred percentage
-with a left-to-right fill, matching the list's remaining attention rows. Hover
-shows reviewed, deferred and remaining counts. Deferrals count once, even before
-confirmation; this display never sets their review flag or bypasses final checks.
-Other unsaved reviews do not count. Progress is independent of search/filter state
-and updates after each save.
-Deferred records and coverage/safety/crew differences remain visible after success.
-Normal site changes during review can invalidate the final snapshot, so arrange
-a brief fleet-edit freeze for the final check and application.
-
-The portal refuses existing integration enrollment, links or outbound operations,
-even if mode is off. It records reviewed mappings in receipts, but does not install
-ongoing sync links or activate the worker. Use those receipts in the separately
-reviewed bootstrap/baseline workflow from `docs/FLEETSCOPE_SYNC_RUNBOOK.md` and the
-FleetScope runbook. After reconciliation, disable final application, retire portal
-access and database credentials, preserve its audit records, and only then perform
-the separately approved integration activation.
-
-Validation: `go test ./...`, `go vet ./...`, and browser login/draft/navigation
-checks. The database suite requires full disposable MSERP and FleetScope schemas
-on localhost, with URLs in `MSERP_PORTAL_TEST_DATABASE_URL` and
-`FLEETSCOPE_PORTAL_TEST_DATABASE_URL` (database names end in `_portal_test`). It
-checks restricted runtime permissions, snapshot conflicts, missing-record
-creation, ownership, lifecycle/trailer preservation, partial commits, replay,
-immutable receipts and enrollment fencing. Never point these tests at production.
+The temporary portal at `conflicts.msexpressinc.net` was retired on 2026-11-15
+following completion of its reviewed batch. Its source, binary packaging, service,
+provisioner, runtime configuration and dedicated database access are removed.
+The hostname retains a static HTTP 410 response so it cannot fall through to the
+main application. Completed state and database receipts remain audit evidence;
+never replay a historical batch or restore the retired login from an old backup.
+Historical numbered migrations and their exact copies in `backend/sql/init.sql`
+retain their original bytes for upgrade parity. Their conditional legacy grants
+are inert because the portal role is no longer provisioned. The separate
+`review-fleetscope-identities` operator command and ongoing FleetScope integration
+remain supported.
 
 ## Status palette rollback (172)
 
@@ -337,14 +234,8 @@ active, rollback binaries must include migration 182 and answer
 
 After correctness checks, measured performance review and shadow cohort reconciliation,
 install `deploy/mserp-payroll-protocol` as `/usr/local/bin/mserp-payroll-protocol`
-owned by root with mode 0755. Migration 182 pauses the fleet-review service as well
-as the API/exporter. Before protocol activation, install the packaged
-`backend/fleet-review` binary at its existing `/opt/fleet-review/fleet-review`
-path while that service is stopped; preserve the preceding binary for recovery.
-The protocol helper checks its capability before stopping or switching any writer.
-Migration 182 grants the existing `fleet_review_portal` role only the new capture
-and protocol-read privileges its canonical source writes require; it cannot change
-protocol settings. A differently named portal role needs equivalent explicit grants.
+owned by root with mode 0755. Migration 182 pauses the API and exporter.
+The protocol helper checks the application capability before switching writers.
 
 First enable shadow mode with prepared capabilities off, restart the API, and wait
 for its full-reference backfill to reconcile every queued period. Inspect job errors,
