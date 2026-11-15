@@ -63,9 +63,12 @@ this first version. No unsupported activation/deactivation state is invented.
 Migration 083 connects fleet links to dated toll mappings. Linking requires an
 inclusive travel start date and previews all eligible unlinked tolls from that
 date, regardless of posting date. Zero existing tolls is valid for future imports.
-The reviewed current fleet transponderNumber maps to transaction ppDeviceId/tag;
-exact vehicleNumber is a fallback when no reviewed tag rule matches. Rules are
-account/environment scoped. Existing linked transactions are always preserved.
+On API tolls, a reported vehicleNumber that uniquely identifies a Clustie truck
+takes precedence (migration 221). Dated mappings handle tolls that need a fallback.
+Among those mappings, the reviewed fleet transponderNumber matches transaction
+ppDeviceId first, followed by the exact fleet unit. Rules are account/environment
+scoped. Fleet previews exclude tolls with a resolvable reported vehicleNumber.
+Existing linked transactions are preserved.
 The operation refuses stale previews, conflicting reviewed mappings, duplicate
 provider unit/tag identities and changes affecting finalized statements. Relinking
 closes only this fleet vehicle's previous rules at the chosen start date, without

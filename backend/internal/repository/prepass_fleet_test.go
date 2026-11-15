@@ -156,11 +156,17 @@ func TestPrePassFleetDatabase(t *testing.T) {
 				exec(string(init))
 			}
 			if mode == "migration" {
-				migration, e := os.ReadFile("../../sql/120_prepass_assignment_queue.sql")
-				if e != nil {
-					t.Fatal(e)
+				for _, name := range []string{
+					"120_prepass_assignment_queue.sql",
+					"154_toll_transaction_links.sql",
+					"221_prepass_reported_truck.sql",
+				} {
+					migration, e := os.ReadFile("../../sql/" + name)
+					if e != nil {
+						t.Fatal(e)
+					}
+					exec(string(migration))
 				}
-				exec(string(migration))
 			}
 			// Existing fleet tables need read/row-lock privileges; new tables must already
 			// be owned by the application role via the migration, not a blanket grant.

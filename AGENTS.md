@@ -633,6 +633,10 @@ status while background source evidence refreshes.
   Date-bounded reviewed mappings resolve unlinked tolls and future imports;
   preserve existing links. Preview/save/undo use `tolls.link`; listing uses
   `tolls.read`. Finalized driver/investor statements block manual corrections.
+  Migration 221 makes the truck reported on an API toll authoritative when its
+  exact unit resolves uniquely through truck aliases. Dated mappings cover API
+  tolls without a resolvable reported truck. Grouped previews skip API tolls
+  eligible for exact-unit reconciliation. The migration rewrites no existing tolls.
   See `docs/integrations/PREPASS_TRUCK_LINKS.md` for dates, audit and validation.
 - `backend/internal/prepass/`: authenticated PrePass account discovery and
   paginated toll transaction client.

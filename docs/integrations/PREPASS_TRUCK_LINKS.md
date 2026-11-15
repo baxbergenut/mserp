@@ -76,9 +76,11 @@ non-administrator roles). Writes validate the reviewed transaction snapshot and
 serialize mapping changes/imports. Overlapping active mappings for one identity
 and environment are rejected. Repeated identical save UUIDs are idempotent.
 
-Mappings apply only to unlinked historical rows and new imports. On new rows a
-confirmed mapping wins over a unit-name guess; sync preserves existing truck
-links. Environment and travel-date bounds are always enforced. The database
+Mappings apply only to unlinked historical rows and new imports. For API tolls,
+the provider's reported unit wins when it uniquely identifies a Clustie truck
+through its exact unit or recorded unit alias (migration 221). Dated rules still
+handle tolls that need a fallback. Sync preserves existing truck links.
+Environment and travel-date bounds are always enforced. The database
 trigger also records mapping provenance, including future imports. Undo disables
 the rule, clears only its own attributed links, and records all affected IDs.
 It does not delete tolls or mapping history. A stale undo version is rejected.
