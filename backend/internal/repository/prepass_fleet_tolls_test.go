@@ -70,6 +70,11 @@ func testFleetTollLinking(t *testing.T, ctx context.Context, admin *pgx.Conn, re
 	importTolls("production", foreign)
 	importTolls("nonproduction", makeToll(81006, "unrecognized", "777111222", "2026-10-06"))
 	assertTruck(81004, other) // Existing exact-unit link must survive a different tag rule.
+	// An older unlinked row now has a resolvable reported unit. It belongs
+	// to reconciliation even though it matches the fleet link's tag.
+	importTolls("production", makeToll(81012, "LATE-004", "777111222", "2026-10-08"))
+	assertTruck(81012, "")
+	exec(`INSERT INTO truck_unit_aliases(unit_key,truck_id) VALUES('LATE-004',$1)`, other)
 	in := request()
 	p := preview(&in)
 	if p.Count != 2 || p.Amount != "5.00" {
@@ -107,11 +112,17 @@ func testFleetTollLinking(t *testing.T, ctx context.Context, admin *pgx.Conn, re
 	if id(`SELECT sum(jsonb_array_length(e.transaction_ids))::text FROM prepass_truck_mapping_events e JOIN prepass_truck_mappings m ON m.id=e.mapping_id WHERE m.fleet_request_id=$1`, in.RequestID) != "2" {
 		t.Fatal("backfilled IDs missing from audit")
 	}
-	// Tag beats an unreviewed alias on new imports; exact unit is the fallback
-	// even when the source has a tag for which no reviewed mapping exists.
+	// The truck reported on a new toll wins over a different tag mapping.
+	// An unresolved vehicle number still uses the reviewed mapping.
 	importTolls("production", makeToll(81007, "004", "777111222", "2026-10-07"), makeToll(81008, "003A", "new-tag", "2026-10-07"))
-	assertTruck(81007, truck)
+	assertTruck(81007, other)
 	assertTruck(81008, truck)
+	if id(`SELECT (truck_mapping_id IS NULL)::text FROM tolls WHERE prepass_toll_id=81007`) != "true" {
+		t.Fatal("reported unit was attributed to the fallback mapping")
+	}
+	assertTruck(81012, "")
+	must(repo.ReconcileTruckAssignments(ctx))
+	assertTruck(81012, other)
 	importTolls("production", makeToll(81004, "003A", "777111222", "2026-10-06"))
 	assertTruck(81004, other)
 	// A later start closes this vehicle's old rules without unlinking old tolls.

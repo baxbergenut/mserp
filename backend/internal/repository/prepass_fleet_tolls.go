@@ -27,8 +27,8 @@ func validateFleetTollLink(in PrePassFleetChange) error {
 	return nil
 }
 
-// Only unlinked rows can be affected. A reviewed tag rule for another vehicle
-// takes precedence over this vehicle's unit fallback.
+// Only unlinked rows without a resolvable reported truck can use a fallback
+// rule. Among fallback rules, the tag takes precedence over the fleet unit.
 const fleetTollAffected = ` FROM tolls t WHERE t.truck_id IS NULL
  AND coalesce(t.prepass_environment,'production')=$1 AND t.customer_id=$2 AND t.exit_date >= $3::date
  AND (('tag:'||upper(btrim(coalesce(t.prepass_tag_id,''))))=ANY($4::text[])
@@ -37,7 +37,7 @@ const fleetTollAffected = ` FROM tolls t WHERE t.truck_id IS NULL
  AND (m.account_number IS NULL OR m.account_number=$2)
  AND m.identity_key='tag:'||upper(btrim(coalesce(t.prepass_tag_id,'')))
  AND t.exit_date>=m.effective_from AND (m.effective_to IS NULL OR t.exit_date<=m.effective_to)
- AND NOT (m.account_number IS NOT DISTINCT FROM $2 AND m.fleet_vin IS NOT DISTINCT FROM $5))))`
+ AND NOT (m.account_number IS NOT DISTINCT FROM $2 AND m.fleet_vin IS NOT DISTINCT FROM $5))))` + prePassFallbackOnly
 
 func (r *TollRepository) fleetTollPreview(ctx context.Context, tx pgx.Tx, in PrePassFleetChange, v prepass.Vehicle) (PrePassTruckPreview, []string, error) {
 	out := PrePassTruckPreview{Units: []string{}}

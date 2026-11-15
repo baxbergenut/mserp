@@ -85,13 +85,13 @@ func testPrePassTruckLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	if got := id(`SELECT count(*)::text FROM tolls WHERE prepass_toll_id=90003 AND truck_id IS NULL`); got != "1" {
 		t.Fatal("old tag usage linked")
 	}
-	next := makeToll(90005, "001", "2026-10-06", "777780673") // Mapping beats unit-name guess on a new import.
+	next := makeToll(90005, "001", "2026-10-06", "777780673") // A reported unit beats the old tag mapping.
 	result, err := repo.UpsertDay(ctx, "production", time.Now(), []prepass.Transaction{next}, time.Now(), false)
 	if err != nil || result.Unmatched != 0 {
 		t.Fatalf("future import %+v %v", result, err)
 	}
-	if got := id(`SELECT truck_id::text FROM tolls WHERE prepass_toll_id=90005`); got != truck {
-		t.Fatal("future mapping not applied")
+	if got := id(`SELECT truck_id::text FROM tolls WHERE prepass_toll_id=90005`); got != other {
+		t.Fatal("reported unit was overridden")
 	}
 	if _, err = repo.UpsertDay(ctx, "production", time.Now(), txns, time.Now(), false); err != nil {
 		t.Fatal(err)
@@ -114,8 +114,11 @@ func testPrePassTruckLinks(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	if err = repo.UndoPrePassTruckLink(ctx, in.ID, 1, actor); err != nil {
 		t.Fatal(err)
 	}
-	if got := id(`SELECT count(*)::text FROM tolls WHERE prepass_toll_id IN(90001,90002,90005) AND truck_id IS NULL AND truck_mapping_id IS NULL`); got != "3" {
+	if got := id(`SELECT count(*)::text FROM tolls WHERE prepass_toll_id IN(90001,90002) AND truck_id IS NULL AND truck_mapping_id IS NULL`); got != "2" {
 		t.Fatal("undo missed future imports", got)
+	}
+	if got := id(`SELECT truck_id::text FROM tolls WHERE prepass_toll_id=90005`); got != other {
+		t.Fatal("undo changed the source-routed toll")
 	}
 	if err = repo.UndoPrePassTruckLink(ctx, in.ID, 1, actor); err == nil {
 		t.Fatal("stale undo accepted")

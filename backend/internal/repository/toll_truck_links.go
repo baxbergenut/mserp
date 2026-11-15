@@ -165,7 +165,10 @@ func validatePrePassLink(in PrePassTruckLinkInput) error {
 	return nil
 }
 
-const prePassAffected = ` FROM tolls t WHERE t.truck_id IS NULL AND coalesce(t.prepass_environment,'production')=$1 AND prepass_truck_key(t.prepass_tag_id,t.equipment_unit)=$2 AND t.exit_date >= $3::date AND ($4::date IS NULL OR t.exit_date <= $4::date)`
+// A grouped mapping only backfills tolls that need a fallback identity.
+const prePassFallbackOnly = ` AND (t.prepass_toll_id IS NULL OR resolve_load_truck(t.equipment_unit) IS NULL)`
+
+const prePassAffected = ` FROM tolls t WHERE t.truck_id IS NULL AND coalesce(t.prepass_environment,'production')=$1 AND prepass_truck_key(t.prepass_tag_id,t.equipment_unit)=$2 AND t.exit_date >= $3::date AND ($4::date IS NULL OR t.exit_date <= $4::date)` + prePassFallbackOnly
 
 func prePassArgs(in PrePassTruckLinkInput) []any {
 	return []any{in.Environment, in.IdentityKey, in.From, nullableDate(in.To)}
