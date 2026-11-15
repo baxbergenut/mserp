@@ -333,10 +333,16 @@ jobs:
         working-directory: frontend
         run: |
           node scripts/test-expense-views.mjs
+          node scripts/test-expense-documents.mjs
           node scripts/test-expense-amount-search.mjs
           node scripts/test-payroll-expenses.mjs
           node scripts/test-gross-board-notes.mjs
           node scripts/test-layover-views.mjs
+
+      - name: Verify profile map entrance in Chromium
+        if: inputs.full_browser_tests == true
+        working-directory: frontend
+        run: node scripts/test-location-entrance.mjs
 
       - name: Verify spreadsheet keyboard navigation in Chromium
         if: inputs.full_browser_tests == true
