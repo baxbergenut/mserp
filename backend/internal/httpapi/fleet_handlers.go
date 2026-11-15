@@ -934,7 +934,7 @@ func (handler fleetHandler) writeError(w http.ResponseWriter, err error) {
 		writeAPIError(w, 409, err.Error())
 		return
 	}
-	if errors.Is(err, repository.ErrDriverTeamConflict) || errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrProfileNoteConflict) {
+	if errors.Is(err, repository.ErrDriverTeamConflict) || errors.Is(err, repository.ErrUpdaterConflict) || errors.Is(err, repository.ErrDriverBoardConflict) || errors.Is(err, repository.ErrProfileNoteConflict) || errors.Is(err, repository.ErrDriverIdentityConflict) {
 		writeAPIError(w, http.StatusConflict, err.Error())
 		return
 	}

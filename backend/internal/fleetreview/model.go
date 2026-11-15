@@ -46,13 +46,14 @@ type Policy struct {
 	Notes         map[string]string `json:"notes"`
 }
 type State struct {
-	Policy     Policy   `json:"policy"`
-	Version    int      `json:"version"`
-	CapturedAt string   `json:"capturedAt"`
-	Source     Snapshot `json:"source"`
-	Receiver   Snapshot `json:"receiver"`
-	Rows       []Row    `json:"rows"`
-	Batch      *Batch   `json:"batch"`
+	Policy     Policy        `json:"policy"`
+	Version    int           `json:"version"`
+	CapturedAt string        `json:"capturedAt"`
+	Source     Snapshot      `json:"source"`
+	Receiver   Snapshot      `json:"receiver"`
+	Rows       []Row         `json:"rows"`
+	Batch      *Batch        `json:"batch"`
+	Profile    *profileBatch `json:"profile,omitempty"`
 }
 
 func token() string {
@@ -321,10 +322,13 @@ func validateRow(r Row, s State) error {
 			}
 		}
 	} else {
-		for k, max := range map[string]int{"unit": 20, "make": 50, "model": 50, "plate": 15, "color": 30, "truckClass": 20} {
+		for k, max := range map[string]int{"unit": 20, "make": 50, "plate": 15, "color": 30, "truckClass": 20} {
 			if len(v[k]) < 1 || len(v[k]) > max {
 				return errors.New(k + " is required and must fit FleetScope's field limit")
 			}
+		}
+		if len([]rune(v["model"])) > 50 {
+			return errors.New("model must fit FleetScope's field limit")
 		}
 		if len(v["vin"]) != 17 || strings.ContainsAny(v["vin"], "IOQioq") || strings.Trim(v["vin"], "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") != "" {
 			return errors.New("a real 17-character uppercase VIN is required")
@@ -345,6 +349,9 @@ func validateRow(r Row, s State) error {
 		}
 		for _, k := range []string{"vin", "plate", "make", "model"} {
 			value := strings.ToUpper(strings.TrimSpace(v[k]))
+			if k == "model" && value == "" {
+				continue
+			}
 			if value == "UNKNOWN" || value == "TBD" || value == "N/A" || value == "NONE" || value == "TEST" || strings.Trim(value, "0") == "" || strings.Trim(value, "B") == "" {
 				return errors.New(k + " needs a real value; save an incomplete draft instead of a placeholder")
 			}

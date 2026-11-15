@@ -203,6 +203,21 @@ directory in `/opt/mserp/releases`, then restart `mserp-api` and reload Nginx.
 
 ## Temporary fleet reconciliation portal
 
+Final review includes **Generate live preview**. This reads both systems using
+read-only transactions and shows field-level changes plus unresolved items.
+Driver matches use a completed hire link, a still-valid saved identity review,
+or an exact name and unique shared contact. Trucks require an unambiguous VIN.
+The preview prefers FleetScope driver profile fields, fills missing truck
+details in either direction, and treats model as optional. Clustie supplies
+dated ownership and status. Home and Vacation represent active employment in
+FleetScope. FleetScope safety restrictions, employment
+transitions, leases and status changes that would release a crew require
+separate review. The profile submission checks the preview hash against both
+live systems, then uses the existing receipts. Its Clustie writes are limited
+to profile columns, with DataTruck profile delivery suppressed for the
+transaction. To verify live counts without reviewer credentials, run the
+portal binary with the normal config and the `-preview-summary` flag.
+
 The truck-color build requires MSERP migration 114. Reviewed truck colors are
 saved in both databases on final submission. Unknown MSERP colors remain absent
 from snapshot hashes, preserving existing reviews during the additive rollout;

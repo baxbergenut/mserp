@@ -79,14 +79,17 @@ Deploy migration `052_fleetscope_termination.sql` before enabling the sender.
 The hire endpoint continues accepting only `driver.hired`; the termination
 endpoint accepts only `driver.terminated`.
 
-A termination atomically marks the explicitly linked driver inactive, clears the
-dispatcher, ends the current truck assignment, and creates an **Offboard [name]**
-task in the existing shared Tasks list. Assignments end in the current New York
-accounting week. Source termination dates are retained for review, without
+A termination atomically marks the explicitly linked driver Terminated, clears
+the dispatcher, and creates an **Offboard [name]** task. Non-owned trucks release
+the driver and become Ready unless another employed operator or an independent
+Shop/OOS restriction remains. Existing own-truck links remain; eligible
+owner-operated trucks become Terminated. Trucks with another employed direct/team
+operator are held for review, and continuing investor fleets remain independent.
+Assignments end using the current New York assignment date. Source termination dates are retained for review, without
 automatically rewriting earlier financial periods. Ownership, load links,
 expenses, payroll, external identity mappings and assignment history remain.
 Load imports cannot reactivate inactive drivers or assign inactive trucks/drivers.
-Marking a driver/truck inactive through fleet forms also clears current assignments.
+Driver profile and Employment status changes share the same offboarding rules.
 
 Charges are paused from the current New York week using the existing charge
 rules. If saved/confirmed charge rows block that pause, the pause rolls back,
@@ -94,8 +97,8 @@ operational offboarding still completes, and the task flags the required
 accounting correction. Database errors roll back the entire receipt for retry.
 Manual deactivation retains its existing charge-pause validation.
 
-Only a completed intake's explicit identity link authorizes automatic driver
-changes. Unlinked/legacy/deleted identities create a review task. Names are never
+Completed intake links and confirmed `fleetscope_driver_identity` UUID mappings
+authorize automatic driver changes. Unlinked/legacy/deleted identities create a review task. Names are never
 used to automatically deactivate anyone. A pending hire is cancelled; setup
 completion rejects it. A termination arriving before hire blocks the late setup
 task as well. Neither delivery order can create a managed driver automatically.
@@ -106,6 +109,20 @@ snapshot is retained. Retries do not reapply deactivation or recreate tasks afte
 completion/deletion. HTTP 200 includes `status` (`accepted` or `duplicate`) and
 `terminationId`. Shared tasks refresh every 15 seconds while visible and idle.
 
+For reviewed legacy identities, `go run ./cmd/review-fleetscope-identities
+-manifest <private.json>` previews a version-fenced transaction and rolls it back.
+Pass `-apply <preview-sha256>` with the same file to commit. The manifest contains
+`companyId`, a `review` note, and `links` with `driverId`, `fleetscopeDriverId`,
+the current driver `updatedAt`, and an `evidence` description. Only explicitly
+reviewed pairs belong in the manifest; never generate links from names alone.
+An optional `terminationId` resolves that exact held receipt through the shared
+offboarding logic. It refuses conflicting identities, stale driver versions and
+termination dates preceding a current rehire. Already-terminated drivers retain
+their existing termination date and fleet state. Original webhook receipts and
+task completion states remain intact, and the review is recorded in
+`fleetscope_sync_audit`. The command starts no workers, makes no provider calls,
+and does not enable outbound sync. Linking by itself does not replay old events.
+
 ## Accounting workflow
 
 1. Find the driver with a **New** badge in the regular Drivers table and click
@@ -115,6 +132,9 @@ completion/deletion. HTTP 200 includes `status` (`accepted` or `duplicate`) and
 3. For a new person, choose Complete setup. Review the prefilled details, enter
    a positive pay rate, and choose dispatcher/truck/active status as appropriate.
    If possible matches exist, explicitly confirm this is a different person.
+   Setup checks the saved name and contact details, including any edits to the
+   form. A matching name plus the same phone or email requires using or
+   reviewing the existing Clustie profile.
 4. For an existing person, use **Already in MSERP?**, select and verify that driver's
    contact details, and confirm. Existing profile, pay, assignments, and active
    status are preserved; any needed edits happen through the normal driver form.

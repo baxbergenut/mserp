@@ -17,6 +17,8 @@ import (
 )
 
 type configuration struct {
+	ConfirmedDriverIdentities map[string]fleetreview.Record `json:"confirmedDriverIdentities,omitempty"`
+
 	SourceURL         string             `json:"sourceUrl"`
 	ReceiverURL       string             `json:"receiverUrl"`
 	CompanyID         string             `json:"companyId"`
@@ -36,6 +38,7 @@ func main() {
 	file := flag.String("config", "", "private JSON configuration file")
 	provision := flag.Bool("provision-receipts", false, "explicitly install receipt storage in both configured databases")
 	credentials := flag.String("generate-credentials", "", "write generated credentials to a private file, then exit")
+	preview := flag.Bool("preview-summary", false, "read both live systems and print reconciliation counts")
 	capability := flag.Bool("payroll-protocol-capability", false, "print the supported payroll lock protocol without reading private configuration")
 	flag.Parse()
 	if *capability {
@@ -94,6 +97,13 @@ func main() {
 		fmt.Println("Receipt storage installed in both databases")
 		return
 	}
+	if *preview {
+		if err := fleetreview.PrintPreviewSummary(ctx, db, c.Directory, os.Stdout); err != nil {
+			slog.Error("could not preview live records", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8096"
 	}
@@ -101,7 +111,7 @@ func main() {
 	if c.Origin == "http://127.0.0.1:8096" || c.Origin == "http://localhost:8096" {
 		secure = false
 	}
-	app, e := fleetreview.NewServer(ctx, db, fleetreview.Config{Origin: c.Origin, Directory: c.Directory, Username: c.Username, PasswordHash: c.PasswordHash, Secure: secure, AllowApply: c.AllowApply, Policy: c.Policy})
+	app, e := fleetreview.NewServer(ctx, db, fleetreview.Config{Origin: c.Origin, Directory: c.Directory, Username: c.Username, PasswordHash: c.PasswordHash, Secure: secure, AllowApply: c.AllowApply, Policy: c.Policy, ConfirmedDriverIdentities: c.ConfirmedDriverIdentities})
 	if e != nil {
 		slog.Error("portal startup failed; verify database connectivity, schema and private state")
 		os.Exit(1)

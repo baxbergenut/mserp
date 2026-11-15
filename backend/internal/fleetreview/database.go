@@ -55,7 +55,11 @@ func records(ctx context.Context, q queryer, sql string, args ...any) ([]Record,
 	}
 	return out, rows.Err()
 }
-func (d *DB) source(ctx context.Context, q queryer) (s Snapshot, e error) {
+func (d *DB) source(ctx context.Context, q queryer, profile bool) (s Snapshot, e error) {
+	condition := ""
+	if profile {
+		condition = " || jsonb_build_object('conditionStatus',t.condition_status)"
+	}
 	if d.SourceCompanyName != "" {
 		var valid bool
 		e = q.QueryRow(ctx, `SELECT count(*)=1 AND bool_and(full_name=$1) FROM investors WHERE is_company`, d.SourceCompanyName).Scan(&valid)
@@ -71,7 +75,7 @@ func (d *DB) source(ctx context.Context, q queryer) (s Snapshot, e error) {
 	if e != nil {
 		return
 	}
-	s.Trucks, e = records(ctx, q, `SELECT jsonb_build_object('id',t.id,'unit',t.unit_number,'vin',t.vin,'year',t.year,'make',t.make,'model',t.model,'plate',t.license_plate,'plateState',t.license_state,'active',t.active,'status',t.status,'ownerId',t.owner_id,'ownerName',coalesce(od.full_name,o.full_name),'ownerKind',CASE WHEN o.is_company THEN 'company' WHEN o.driver_id IS NOT NULL THEN 'driver' ELSE 'investor' END,'ownerDriverRef',o.driver_id,'ownerDate',CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date END,'ownershipVersion',md5(row_to_json(h)::text),'updatedAt',t.updated_at,'primaryId',a.driver_id,'secondaryId',team.team_driver_id) || CASE WHEN t.color IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('color',t.color) END
+	s.Trucks, e = records(ctx, q, `SELECT jsonb_build_object('id',t.id,'unit',t.unit_number,'vin',t.vin,'year',t.year,'make',t.make,'model',t.model,'plate',t.license_plate,'plateState',t.license_state,'active',t.active,'status',t.status,'ownerId',t.owner_id,'ownerName',coalesce(od.full_name,o.full_name),'ownerKind',CASE WHEN o.is_company THEN 'company' WHEN o.driver_id IS NOT NULL THEN 'driver' ELSE 'investor' END,'ownerDriverRef',o.driver_id,'ownerDate',CASE WHEN h.start_known THEN (h.assigned_at AT TIME ZONE 'America/New_York')::date END,'ownershipVersion',md5(row_to_json(h)::text),'updatedAt',t.updated_at,'primaryId',a.driver_id,'secondaryId',team.team_driver_id) || CASE WHEN t.color IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('color',t.color) END`+condition+`
  FROM trucks t JOIN investors o ON o.id=t.owner_id LEFT JOIN drivers od ON od.id=o.driver_id LEFT JOIN truck_ownership_history h ON h.truck_id=t.id AND h.unassigned_at IS NULL
  LEFT JOIN truck_driver_assignments a ON a.truck_id=t.id AND a.unassigned_at IS NULL
  LEFT JOIN driver_teams team ON team.main_driver_id=a.driver_id AND team.start_week<=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date AND (team.end_week IS NULL OR team.end_week>date_trunc('week',now() AT TIME ZONE 'America/New_York')::date) ORDER BY t.id`)
@@ -81,7 +85,11 @@ func (d *DB) source(ctx context.Context, q queryer) (s Snapshot, e error) {
 	s.Owners, e = records(ctx, q, `SELECT jsonb_build_object('id',i.id,'name',coalesce(d.full_name,i.full_name),'kind',CASE WHEN i.is_company THEN 'company' WHEN i.driver_id IS NOT NULL THEN 'driver' ELSE 'investor' END,'driverId',i.driver_id,'updatedAt',i.updated_at) FROM investors i LEFT JOIN drivers d ON d.id=i.driver_id ORDER BY i.id`)
 	return
 }
-func (d *DB) receiver(ctx context.Context, q queryer) (s Snapshot, e error) {
+func (d *DB) receiver(ctx context.Context, q queryer, profile bool) (s Snapshot, e error) {
+	pending := ""
+	if profile {
+		pending = " || jsonb_build_object('terminationPending',termination_pending)"
+	}
 	var name, dot string
 	e = q.QueryRow(ctx, `SELECT name,dot_number FROM companies WHERE id=$1`, d.CompanyID).Scan(&name, &dot)
 	if e != nil {
@@ -90,7 +98,7 @@ func (d *DB) receiver(ctx context.Context, q queryer) (s Snapshot, e error) {
 	if name != d.CompanyName || dot != d.DOT {
 		return s, errors.New("FleetScope company identity does not match the pinned company")
 	}
-	s.Drivers, e = records(ctx, q, `SELECT jsonb_build_object('id',id,'firstName',first_name,'lastName',last_name,'name',first_name||' '||last_name,'email',email,'phone',phone_number,'status',status,'terminationDate',termination_date::date,'updatedAt',updated_at) FROM drivers WHERE company_id=$1 ORDER BY id`, d.CompanyID)
+	s.Drivers, e = records(ctx, q, `SELECT jsonb_build_object('id',id,'firstName',first_name,'lastName',last_name,'name',first_name||' '||last_name,'email',email,'phone',phone_number,'status',status,'terminationDate',termination_date::date,'updatedAt',updated_at)`+pending+` FROM drivers WHERE company_id=$1 ORDER BY id`, d.CompanyID)
 	if e != nil {
 		return
 	}
@@ -119,6 +127,10 @@ func (d *DB) receiver(ctx context.Context, q queryer) (s Snapshot, e error) {
 	return
 }
 func (d *DB) Snapshot(ctx context.Context) (Snapshot, Snapshot, error) {
+	return d.snapshot(ctx, false)
+}
+
+func (d *DB) snapshot(ctx context.Context, profile bool) (Snapshot, Snapshot, error) {
 	a, e := d.Source.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if e != nil {
 		return Snapshot{}, Snapshot{}, e
@@ -129,11 +141,11 @@ func (d *DB) Snapshot(ctx context.Context) (Snapshot, Snapshot, error) {
 		return Snapshot{}, Snapshot{}, e
 	}
 	defer b.Rollback(ctx)
-	source, e := d.source(ctx, a)
+	source, e := d.source(ctx, a, profile)
 	if e != nil {
 		return source, Snapshot{}, e
 	}
-	remote, e := d.receiver(ctx, b)
+	remote, e := d.receiver(ctx, b, profile)
 	return source, remote, e
 }
 

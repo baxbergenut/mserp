@@ -109,8 +109,14 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 	if !out.Configured {
 		return out, nil
 	}
+	// A roster and its assignment receipts must be read from the same commit.
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
 	var raw []byte
-	err := r.pool.QueryRow(ctx, `SELECT snapshot,refreshed_at FROM prepass_fleet_rosters WHERE environment=$1`, r.prepassEnvironment).Scan(&raw, &out.RefreshedAt)
+	err = tx.QueryRow(ctx, `SELECT snapshot,refreshed_at FROM prepass_fleet_rosters WHERE environment=$1`, r.prepassEnvironment).Scan(&raw, &out.RefreshedAt)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return out, err
 	}
@@ -122,7 +128,7 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		out.Accounts = snap.Accounts
 		out.Transponders = snap.Transponders
 	}
-	rows, err := r.pool.Query(ctx, `SELECT id::text,unit_number,coalesce(vin,''),coalesce(license_plate,''),coalesce(license_state,''),active,updated_at FROM trucks ORDER BY unit_number,id`)
+	rows, err := tx.Query(ctx, `SELECT id::text,unit_number,coalesce(vin,''),coalesce(license_plate,''),coalesce(license_state,''),active,updated_at FROM trucks ORDER BY unit_number,id`)
 	if err != nil {
 		return out, err
 	}
@@ -140,7 +146,7 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		return out, err
 	}
 	links := map[string]string{}
-	rows, err = r.pool.Query(ctx, `SELECT account_number,vin,truck_id::text FROM prepass_fleet_links WHERE environment=$1`, r.prepassEnvironment)
+	rows, err = tx.Query(ctx, `SELECT account_number,vin,truck_id::text FROM prepass_fleet_links WHERE environment=$1`, r.prepassEnvironment)
 	if err != nil {
 		return out, err
 	}
@@ -160,7 +166,7 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 	// Read open mappings once, including their earliest effective date per identity.
 	type mappingKey struct{ account, vin, truck, identity string }
 	mappings := map[mappingKey]string{}
-	rows, err = r.pool.Query(ctx, `SELECT coalesce(account_number,''),coalesce(fleet_vin,''),truck_id::text,identity_key,min(effective_from)::text FROM prepass_truck_mappings WHERE active AND effective_to IS NULL AND environment=$1 GROUP BY account_number,fleet_vin,truck_id,identity_key`, r.prepassEnvironment)
+	rows, err = tx.Query(ctx, `SELECT coalesce(account_number,''),coalesce(fleet_vin,''),truck_id::text,identity_key,min(effective_from)::text FROM prepass_truck_mappings WHERE active AND effective_to IS NULL AND environment=$1 GROUP BY account_number,fleet_vin,truck_id,identity_key`, r.prepassEnvironment)
 	if err != nil {
 		return out, err
 	}
@@ -220,7 +226,7 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		}
 		out.Vehicles = append(out.Vehicles, e)
 	}
-	rows, err = r.pool.Query(ctx, `SELECT o.id::text,o.account_number,o.vin,o.action,o.state,coalesce(u.username,'Deleted user'),o.created_at,coalesce(o.request->>'transponderNumber','') FROM prepass_fleet_operations o LEFT JOIN app_users u ON u.id=o.actor_id WHERE o.environment=$1 AND (o.state IN ('pending','queued') OR o.id IN (SELECT id FROM prepass_fleet_operations WHERE environment=$1 ORDER BY created_at DESC LIMIT 50)) ORDER BY (o.state IN ('pending','queued')) DESC,o.created_at DESC`, r.prepassEnvironment)
+	rows, err = tx.Query(ctx, `SELECT o.id::text,o.account_number,o.vin,o.action,o.state,coalesce(u.username,'Deleted user'),o.created_at,coalesce(o.request->>'transponderNumber','') FROM prepass_fleet_operations o LEFT JOIN app_users u ON u.id=o.actor_id WHERE o.environment=$1 AND (o.state IN ('pending','queued') OR o.id IN (SELECT id FROM prepass_fleet_operations WHERE environment=$1 ORDER BY created_at DESC LIMIT 50)) ORDER BY (o.state IN ('pending','queued')) DESC,o.created_at DESC`, r.prepassEnvironment)
 	if err != nil {
 		return out, err
 	}
@@ -232,7 +238,10 @@ func (r *TollRepository) PrePassFleet(ctx context.Context) (PrePassFleetList, er
 		}
 		out.Operations = append(out.Operations, o)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return out, err
+	}
+	return out, tx.Commit(ctx)
 }
 
 func (r *TollRepository) prepassLock(ctx context.Context) (*pgxpool.Conn, func(), error) {
@@ -301,11 +310,6 @@ func (r *TollRepository) fetchPrePassFleet(ctx context.Context) (prepass.FleetSn
 		e = normalizePrePassFleet(&s)
 	}
 	return s, e
-}
-func (r *TollRepository) savePrePassFleet(ctx context.Context, conn *pgxpool.Conn, s prepass.FleetSnapshot) error {
-	b, _ := json.Marshal(s)
-	_, e := conn.Exec(ctx, `INSERT INTO prepass_fleet_rosters(environment,snapshot) VALUES($1,$2) ON CONFLICT(environment) DO UPDATE SET snapshot=EXCLUDED.snapshot,refreshed_at=now()`, r.prepassEnvironment, b)
-	return e
 }
 func (r *TollRepository) RefreshPrePassFleet(ctx context.Context) error {
 	conn, done, e := r.prepassLock(ctx)
@@ -561,6 +565,9 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		}
 		return prepassInvalid("PrePass accepted the change, but it could not be verified. Review the unresolved request before retrying.")
 	}
+	if in.Action == "assign" {
+		return r.savePrePassAssignments(opCtx, conn, after)
+	}
 	actual, found := findPrePassVehicle(after, in.AccountNumber, in.VIN)
 	verified := false
 	switch in.Action {
@@ -571,13 +578,8 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 		}
 	case "remove":
 		verified = !found
-	case "assign":
-		verified = confirmedPrePassAssignment(after, in.AccountNumber, in.VIN, in.TransponderNumber)
 	}
 	if !verified {
-		if in.Action == "assign" {
-			return r.savePrePassFleet(opCtx, conn, after)
-		}
 		if in.Action == "add" || resolvePlate {
 			_ = tx.Rollback(opCtx)
 		}
@@ -624,7 +626,7 @@ func (r *TollRepository) ChangePrePassFleet(ctx context.Context, in PrePassFleet
 			return err
 		}
 	}
-	if err = r.savePrePassFleet(opCtx, conn, after); err != nil {
+	if err = r.savePrePassAssignments(opCtx, conn, after); err != nil {
 		return err
 	}
 	_, err = conn.Exec(opCtx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID)
@@ -636,8 +638,7 @@ func (r *TollRepository) writePrePassPlateResult(ctx context.Context, tx pgx.Tx,
 		return err
 	}
 	// Keep the local plate, verified roster and receipt in one commit.
-	roster, _ := json.Marshal(snapshot)
-	if _, err := tx.Exec(ctx, `INSERT INTO prepass_fleet_rosters(environment,snapshot) VALUES($1,$2) ON CONFLICT(environment) DO UPDATE SET snapshot=EXCLUDED.snapshot,refreshed_at=now()`, r.prepassEnvironment, roster); err != nil {
+	if err := r.publishPrePassAssignments(ctx, tx, snapshot); err != nil {
 		return err
 	}
 	_, err := tx.Exec(ctx, `UPDATE prepass_fleet_operations SET state='confirmed',resolved_at=now() WHERE id=$1`, in.RequestID)
@@ -725,7 +726,7 @@ func (r *TollRepository) VerifyPrePassFleetOperation(ctx context.Context, id, ac
 	if err != nil {
 		return err
 	}
-	if err = r.savePrePassFleet(ctx, conn, snap); err != nil {
+	if err = r.savePrePassAssignments(ctx, conn, snap); err != nil {
 		return err
 	}
 	result, err := conn.Exec(ctx, `UPDATE prepass_fleet_operations SET state='verified',resolved_at=now(),resolved_by=$3 WHERE id=$1 AND environment=$2 AND state='pending' AND created_at<now()-interval '2 minutes'`, id, r.prepassEnvironment, actor)

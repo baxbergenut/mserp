@@ -66,41 +66,11 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 		}
 		notes := fmt.Sprintf("FleetScope termination date: %s\nFleetScope driver ID: %s\n", event.TerminationDate, event.Driver.ID)
 		if driverID != nil {
-			if err = lockChargeDrivers(ctx, tx, []string{*driverID}); err != nil {
-				return IntakeResult{}, err
+			appliedNotes, applyErr := applyFleetScopeTermination(ctx, tx, *driverID, event.TerminationDate)
+			if applyErr != nil {
+				return IntakeResult{}, applyErr
 			}
-			// Financial exceptions must be reviewed without preventing operational offboarding.
-			// A savepoint ensures a rejected pause never leaves partially changed charges.
-			pauseTx, pauseErr := tx.Begin(ctx)
-			if pauseErr != nil {
-				return IntakeResult{}, pauseErr
-			}
-			pauseErr = pauseDriverCharges(ctx, pauseTx, *driverID, ChargeCurrentWeek(), "")
-			if pauseErr != nil {
-				if err = pauseTx.Rollback(ctx); err != nil {
-					return IntakeResult{}, err
-				}
-				var validation *ChargeValidationError
-				if !errors.As(pauseErr, &validation) {
-					return IntakeResult{}, pauseErr
-				}
-				notes += "ACTION REQUIRED: Charges were not paused. " + validation.Message + ". Review and pause charges in Accounting.\n"
-			} else {
-				if err = pauseTx.Commit(ctx); err != nil {
-					return IntakeResult{}, err
-				}
-				notes += "Driver charges paused from the current New York week (where applicable). Review the termination date for any earlier settlement corrections.\n"
-			}
-			if _, err = tx.Exec(ctx, `SELECT set_config('mserp.assignment_source','fleetscope_termination',true)`); err != nil {
-				return IntakeResult{}, err
-			}
-			if _, err = tx.Exec(ctx, `UPDATE drivers SET active=false,status='terminated',termination_date=$2::date,dispatcher_id=NULL,updated_at=now() WHERE id=$1`, *driverID, event.TerminationDate); err != nil {
-				return IntakeResult{}, err
-			}
-			if err = offboardDriverAssignments(ctx, tx, *driverID, "", "fleetscope_termination"); err != nil {
-				return IntakeResult{}, err
-			}
-			notes += "Driver marked terminated; dispatcher assignment disconnected. Non-owned truck assignments disconnected; existing own-truck links retained. Eligible owner-operated trucks made inactive unless an active teammate requires review. Continuing active-investor fleets are unaffected.\nClustie driver ID: " + *driverID + "\n"
+			notes += appliedNotes
 		} else if foundIntake && completedAt == nil {
 			notes += "Pending driver setup cancelled. No managed driver was linked. Review any existing Clustie record before marking it terminated.\n"
 		} else {
@@ -129,4 +99,46 @@ func (r *FleetRepository) AcceptFleetScopeTermination(ctx context.Context, event
 		return IntakeResult{}, err
 	}
 	return result, tx.Commit(ctx)
+}
+
+// Shared by delivery and explicit recovery of a receipt held for identity review.
+func applyFleetScopeTermination(ctx context.Context, tx pgx.Tx, driverID, terminationDate string) (string, error) {
+	var err error
+	notes := ""
+	if err = lockChargeDrivers(ctx, tx, []string{driverID}); err != nil {
+		return "", err
+	}
+	// Financial exceptions must be reviewed without preventing operational offboarding.
+	// A savepoint ensures a rejected pause never leaves partially changed charges.
+	pauseTx, pauseErr := tx.Begin(ctx)
+	if pauseErr != nil {
+		return "", pauseErr
+	}
+	pauseErr = pauseDriverCharges(ctx, pauseTx, driverID, ChargeCurrentWeek(), "")
+	if pauseErr != nil {
+		if err = pauseTx.Rollback(ctx); err != nil {
+			return "", err
+		}
+		var validation *ChargeValidationError
+		if !errors.As(pauseErr, &validation) {
+			return "", pauseErr
+		}
+		notes += "ACTION REQUIRED: Charges were not paused. " + validation.Message + ". Review and pause charges in Accounting.\n"
+	} else {
+		if err = pauseTx.Commit(ctx); err != nil {
+			return "", err
+		}
+		notes += "Driver charges paused from the current New York week (where applicable). Review the termination date for any earlier settlement corrections.\n"
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('mserp.assignment_source','fleetscope_termination',true)`); err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE drivers SET active=false,status='terminated',termination_date=$2::date,dispatcher_id=NULL,updated_at=now() WHERE id=$1`, driverID, terminationDate); err != nil {
+		return "", err
+	}
+	if err = offboardDriverAssignments(ctx, tx, driverID, "", "fleetscope_termination"); err != nil {
+		return "", err
+	}
+	notes += "Driver marked terminated; dispatcher assignment disconnected. Non-owned truck assignments disconnected; existing own-truck links retained. Eligible owner-operated trucks made inactive unless an active teammate requires review. Continuing active-investor fleets are unaffected.\nClustie driver ID: " + driverID + "\n"
+	return notes, nil
 }

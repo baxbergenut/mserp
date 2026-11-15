@@ -34,6 +34,15 @@ deployment helper applies numbered migrations recorded in `schema_migrations`.
 
 ## Start every task here
 
+FleetScope identity recovery enters the payroll source protocol before integration
+and fleet locks, and uses the current New York date for assignment changes.
+Releases include `backend/review-fleetscope-identities`; it previews by default
+and applies only an exact reviewed manifest digest. Deployment never runs it.
+The reconciliation portal's reusable preview uses current evidence and saved
+receipts; old driver IDs and truck numbers must not grant automatic exceptions.
+PrePass roster publication reconciles pending assignments atomically, and roster
+reads use one snapshot so completed assignments do not retain a stale banner.
+
 Missing DataTruck source records remain historical evidence. Loads hides confirmed
 missing IDs by default (`includeMissing=true` exposes labelled history); new Gross
 Board selections exclude them. The slow 15-minute/daily reconciliation replaces
@@ -417,6 +426,9 @@ status while background source evidence refreshes.
 - `backend/internal/fleetscope/`, `backend/internal/httpapi/fleetscope_handlers.go`,
   and `backend/internal/repository/fleetscope_repository.go`: signed new-hire
   intake and setup tasks. See `docs/FLEETSCOPE_WEBHOOK.md` for configuration.
+  Driver setup and identity edits reject a matching name plus the same phone
+  or email, including matches on terminated profiles. Reactivation checks for
+  an active match. FleetScope linking leaves the existing profile intact.
 - Outbound FleetScope fleet sync uses migration 103, `fleetscope/sync.go`,
   repository `fleetscope_sync*.go`, `httpapi/fleetscope_sync_handlers.go`, and
   Settings > FleetScope. Default off; no receiver writes on deployment alone.
@@ -451,6 +463,10 @@ status while background source evidence refreshes.
   Approved mappings remain in receipts for later integration enrollment; portal
   submission does not activate ongoing sync. Driver creation excludes missing
   terminated drivers; ownership and crew/insurance review remain separate.
+  Final review can preview current matched profiles before submission. Clustie
+  supplies ownership and statuses, FleetScope supplies driver details, and truck
+  model is optional. Profile batches preserve Clustie lifecycle and accounting
+  fields and suppress DataTruck delivery.
   See `deploy/README.md` for installation, recovery and retirement. Local database
   tests use `MSERP_PORTAL_TEST_DATABASE_URL` and
   `FLEETSCOPE_PORTAL_TEST_DATABASE_URL`, each ending in `_portal_test` on localhost.
@@ -3724,6 +3740,13 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   saves, pays, completes a program or issues a provider payment.
 
 ### Termination assignments and owned trucks (148)
+
+- `backend/cmd/review-fleetscope-identities` previews/applies an explicit reviewed
+  identity manifest with a SHA256 and per-driver updatedAt fence. It can resolve
+  selected held FleetScope termination receipts using shared offboarding logic.
+  It preserves webhook receipts, rejects identity conflicts/rehire ambiguity,
+  audits the review, and starts no provider jobs or outbound sync. See
+  `docs/FLEETSCOPE_WEBHOOK.md`; TestFleetScopeDatabase covers recovery and replay.
 
 - Profile edits, Employment status and FleetScope termination share
   `repository/driver_offboarding.go`. Use recorded `investors.driver_id` ownership,

@@ -41,6 +41,9 @@ func saveReceipt(ctx context.Context, tx pgx.Tx, s State, company, actor string,
 	return e
 }
 func batchHash(s State) string {
+	if s.Profile != nil {
+		return digest(s.Profile)
+	}
 	return digest(struct {
 		Source, Receiver Snapshot
 		Rows             []Row
@@ -48,6 +51,12 @@ func batchHash(s State) string {
 	}{s.Source, s.Receiver, s.Rows, s.Policy})
 }
 func validateBatch(s State) error {
+	if s.Profile != nil {
+		if s.Profile.Plan.Drivers+s.Profile.Plan.Trucks == 0 {
+			return errors.New("no profile changes to apply")
+		}
+		return nil
+	}
 	seen := map[string]bool{}
 	selected := 0
 	rowIDs := map[string]bool{}
@@ -81,10 +90,8 @@ func validateBatch(s State) error {
 }
 func fsDriverStatus(s string) string {
 	switch s {
-	case "vacation":
-		return "on_vacation"
-	case "home":
-		return "inactive"
+	case "home", "vacation":
+		return "active"
 	}
 	return s
 }
@@ -130,6 +137,11 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 	if _, e = b.Exec(ctx, `SELECT set_config('fleetscope.actor_name',$1,true)`, "Fleet reconciliation · "+actor); e != nil {
 		return e
 	}
+	if s.Profile != nil {
+		if _, e = a.Exec(ctx, `SELECT set_config('mserp.datatruck_import','on',true)`); e != nil {
+			return e
+		}
+	}
 	var hasState bool
 	if e = a.QueryRow(ctx, `SELECT to_regclass('public.fleetscope_sync_state') IS NOT NULL`).Scan(&hasState); e != nil {
 		return e
@@ -150,15 +162,19 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 	if e != nil {
 		return e
 	}
-	source, e := d.source(ctx, a)
+	source, e := d.source(ctx, a, s.Profile != nil)
 	if e != nil {
 		return e
 	}
-	remote, e := d.receiver(ctx, b)
+	remote, e := d.receiver(ctx, b, s.Profile != nil)
 	if e != nil {
 		return e
 	}
-	wantSource, wantRemote := s.Source, s.Receiver
+	beforeSource, beforeRemote := s.Source, s.Receiver
+	if s.Profile != nil {
+		beforeSource, beforeRemote = s.Profile.Source, s.Profile.Receiver
+	}
+	wantSource, wantRemote := beforeSource, beforeRemote
 	links := map[string]string{}
 	if ar != nil {
 		if ar.Hash != s.Batch.Hash {
@@ -175,6 +191,64 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 	if digest(source) != digest(wantSource) || digest(remote) != digest(wantRemote) {
 		return errors.New("records changed since review or the partial commit; refresh before a new batch, or contact the operator for a partial-batch recovery")
 	}
+	if s.Profile != nil {
+		for _, row := range s.Profile.Plan.Rows {
+			if ar == nil {
+				if e := applyLocalProfile(ctx, a, row); e != nil {
+					return e
+				}
+			}
+			if br == nil {
+				if e := d.applyRemoteProfile(ctx, b, row); e != nil {
+					return e
+				}
+			}
+			if row.LocalID != "" && row.RemoteID != "" {
+				links[row.Kind+":"+row.LocalID] = row.RemoteID
+			}
+		}
+		if ar == nil {
+			source, e = d.source(ctx, a, true)
+			if e != nil {
+				return e
+			}
+		}
+		if br == nil {
+			remote, e = d.receiver(ctx, b, true)
+			if e != nil {
+				return e
+			}
+		}
+	} else if source, remote, e = d.applyReviewedRows(ctx, a, b, s, ar == nil, br == nil, source, remote, links); e != nil {
+		return e
+	}
+	if ar == nil {
+		if e = saveReceipt(ctx, a, s, d.CompanyID, actor, beforeSource, source, links); e != nil {
+			return e
+		}
+	}
+	if br == nil {
+		if e = saveReceipt(ctx, b, s, d.CompanyID, actor, beforeRemote, remote, links); e != nil {
+			return e
+		}
+	}
+	if e = a.Commit(ctx); e != nil {
+		return fmt.Errorf("MSERP commit confirmation unavailable; recover using the same batch: %w", e)
+	}
+	if e = b.Commit(ctx); e != nil {
+		return fmt.Errorf("FleetScope commit confirmation unavailable; recover using the same batch: %w", e)
+	}
+	// A new connection must observe both durable receipts before success.
+	for _, pool := range []queryer{d.Source, d.Receiver} {
+		var hash string
+		if e = pool.QueryRow(ctx, `SELECT plan_hash FROM fleet_review.receipts WHERE batch_id=$1 AND company_id=$2`, s.Batch.ID, d.CompanyID).Scan(&hash); e != nil || hash != s.Batch.Hash {
+			return errors.New("batch needs receipt readback; do not create a replacement batch")
+		}
+	}
+	return nil
+}
+func (d *DB) applyReviewedRows(ctx context.Context, a, b pgx.Tx, s State, writeSource, writeReceiver bool, source, remote Snapshot, links map[string]string) (Snapshot, Snapshot, error) {
+	var e error
 	for _, r := range s.Rows {
 		if r.Action == "defer" {
 			continue
@@ -187,7 +261,7 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 			}
 		}
 	}
-	if ar == nil {
+	if writeSource {
 		for _, kind := range []string{"driver", "truck"} {
 			for _, r := range s.Rows {
 				if r.Action == "defer" || r.Kind != kind {
@@ -206,16 +280,16 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 					e = repository.ApplyReviewedTruck(ctx, a, r.LocalID, v)
 				}
 				if e != nil {
-					return fmt.Errorf("MSERP record %s: %w", r.LocalID, e)
+					return source, remote, fmt.Errorf("MSERP record %s: %w", r.LocalID, e)
 				}
 			}
 		}
-		source, e = d.source(ctx, a)
+		source, e = d.source(ctx, a, false)
 		if e != nil {
-			return e
+			return source, remote, e
 		}
 	}
-	if br == nil {
+	if writeReceiver {
 		for _, r := range s.Rows {
 			if r.Action == "defer" || r.Kind != "driver" {
 				continue
@@ -225,7 +299,7 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 			target := links[r.ID]
 			if r.Action != "create" && fsDriverStatus(v["status"]) != "active" {
 				if e = d.releaseIneligibleDriver(ctx, b, target); e != nil {
-					return e
+					return source, remote, e
 				}
 			}
 			if r.Action == "create" {
@@ -234,7 +308,7 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 				_, e = b.Exec(ctx, `UPDATE drivers SET first_name=$3,last_name=$4,email=$5,phone_number=$6,status=$7,termination_date=nullif($8,'')::date,termination_pending=false,updated_at=now() WHERE id=$1 AND company_id=$2`, target, d.CompanyID, v["firstName"], v["lastName"], v["email"], v["phone"], fsDriverStatus(v["status"]), v["terminationDate"])
 			}
 			if e != nil {
-				return fmt.Errorf("FleetScope driver %s: %w", r.LocalID, e)
+				return source, remote, fmt.Errorf("FleetScope driver %s: %w", r.LocalID, e)
 			}
 		}
 		for _, r := range s.Rows {
@@ -266,11 +340,11 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 				_, e = b.Exec(ctx, `UPDATE vehicles SET unit_number=$3,vin=$4,year=$5::int,make=$6,model=$7,license_plate=$8,license_plate_state=$9,color=$10,truck_class=$11,gvwr_lbs=$12::int,ownership=$13,driver_id=$14,status=$15,leased_from=NULL,mserp_managed=true,mserp_owner_snapshot=$16,mserp_operational_active=$17::boolean,mserp_operational_status=$18,mserp_coverage_review=true,updated_at=now() WHERE id=$1 AND company_id=$2`, target, d.CompanyID, v["unit"], v["vin"], v["year"], v["make"], v["model"], v["plate"], v["plateState"], v["color"], v["truckClass"], v["gvwr"], t["ownerKind"], ownerDriver, status, ownerJSON, v["active"], v["status"])
 			}
 			if e != nil {
-				return fmt.Errorf("FleetScope truck %s: %w", r.LocalID, e)
+				return source, remote, fmt.Errorf("FleetScope truck %s: %w", r.LocalID, e)
 			}
 			if v["coverageEvidence"] != "" {
 				if e = d.reviewCoverage(ctx, b, target, v); e != nil {
-					return fmt.Errorf("truck %s: %w", t["unit"], e)
+					return source, remote, fmt.Errorf("truck %s: %w", t["unit"], e)
 				}
 			}
 		}
@@ -285,22 +359,22 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 			var hold bool
 			var status string
 			if e = b.QueryRow(ctx, `SELECT mserp_coverage_review,status FROM vehicles WHERE id=$1 AND company_id=$2`, target, d.CompanyID).Scan(&hold, &status); e != nil {
-				return e
+				return source, remote, e
 			}
 			if (hold || status != "active") && t["primaryId"] != "" {
-				return fmt.Errorf("truck %s requires coverage/safety review before crew reconciliation", t["unit"])
+				return source, remote, fmt.Errorf("truck %s requires coverage/safety review before crew reconciliation", t["unit"])
 			}
 			for _, key := range []string{"primaryId", "secondaryId"} {
 				if t[key] != "" && links["driver:"+t[key]] == "" {
-					return fmt.Errorf("truck %s has an unreviewed crew identity", t["unit"])
+					return source, remote, fmt.Errorf("truck %s has an unreviewed crew identity", t["unit"])
 				}
 			}
 			// Clear all selected crews first to allow reviewed swaps. Preserve trailers.
 			if _, e = b.Exec(ctx, `UPDATE fleet_assignments SET ended_at=now(),updated_at=now() WHERE company_id=$1 AND vehicle_id=$2 AND ended_at IS NULL AND trailer_id IS NULL`, d.CompanyID, target); e != nil {
-				return e
+				return source, remote, e
 			}
 			if _, e = b.Exec(ctx, `UPDATE fleet_assignments SET driver_id=NULL,team_driver_id=NULL,updated_at=now() WHERE company_id=$1 AND vehicle_id=$2 AND ended_at IS NULL AND trailer_id IS NOT NULL`, d.CompanyID, target); e != nil {
-				return e
+				return source, remote, e
 			}
 		}
 		for _, r := range s.Rows {
@@ -315,51 +389,29 @@ func (d *DB) Apply(ctx context.Context, s State, actor string) error {
 			primary, secondary := links["driver:"+t["primaryId"]], nullable(links["driver:"+t["secondaryId"]])
 			var eligible bool
 			if e = b.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM drivers WHERE company_id=$1 AND (id=$2::uuid OR id=$3::uuid) AND status<>'active')`, d.CompanyID, primary, secondary).Scan(&eligible); e != nil {
-				return e
+				return source, remote, e
 			}
 			if !eligible {
-				return errors.New("crew contains an ineligible FleetScope driver")
+				return source, remote, errors.New("crew contains an ineligible FleetScope driver")
 			}
 			tag, err := b.Exec(ctx, `UPDATE fleet_assignments SET driver_id=$3,team_driver_id=$4,updated_at=now() WHERE company_id=$1 AND vehicle_id=$2 AND ended_at IS NULL`, d.CompanyID, target, primary, secondary)
 			if err != nil {
-				return err
+				return source, remote, err
 			}
 			if tag.RowsAffected() == 0 {
 				if _, e = b.Exec(ctx, `INSERT INTO fleet_assignments(company_id,vehicle_id,driver_id,team_driver_id) VALUES($1,$2,$3,$4)`, d.CompanyID, target, primary, secondary); e != nil {
-					return e
+					return source, remote, e
 				}
 			}
 		}
-		remote, e = d.receiver(ctx, b)
+		remote, e = d.receiver(ctx, b, false)
 		if e != nil {
-			return e
+			return source, remote, e
 		}
 	}
-	if ar == nil {
-		if e = saveReceipt(ctx, a, s, d.CompanyID, actor, s.Source, source, links); e != nil {
-			return e
-		}
-	}
-	if br == nil {
-		if e = saveReceipt(ctx, b, s, d.CompanyID, actor, s.Receiver, remote, links); e != nil {
-			return e
-		}
-	}
-	if e = a.Commit(ctx); e != nil {
-		return fmt.Errorf("MSERP commit confirmation unavailable; recover using the same batch: %w", e)
-	}
-	if e = b.Commit(ctx); e != nil {
-		return fmt.Errorf("FleetScope commit confirmation unavailable; recover using the same batch: %w", e)
-	}
-	// A new connection must observe both durable receipts before success.
-	for _, pool := range []queryer{d.Source, d.Receiver} {
-		var hash string
-		if e = pool.QueryRow(ctx, `SELECT plan_hash FROM fleet_review.receipts WHERE batch_id=$1 AND company_id=$2`, s.Batch.ID, d.CompanyID).Scan(&hash); e != nil || hash != s.Batch.Hash {
-			return errors.New("batch needs receipt readback; do not create a replacement batch")
-		}
-	}
-	return nil
+	return source, remote, nil
 }
+
 func nullable(s string) any {
 	if s == "" {
 		return nil

@@ -26,6 +26,8 @@ import (
 var assets embed.FS
 
 type Config struct {
+	ConfirmedDriverIdentities map[string]Record
+
 	Origin, Directory, Username, PasswordHash string
 	Secure                                    bool
 	AllowApply                                bool
@@ -221,6 +223,32 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: "fleet_review_session", Value: t, Path: "/", Secure: s.cfg.Secure, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 8 * 3600})
 	jsonOut(w, 200, map[string]string{"csrf": csrf, "username": s.cfg.Username})
 }
+func (s *Server) displayProfilePlan() profilePlan {
+	plan := s.state.Profile.Plan.forDisplay()
+	if s.state.Batch.State == "complete" {
+		plan.applyIdentityConfirmations(s.cfg.ConfirmedDriverIdentities[s.state.Batch.ID])
+	}
+	return plan
+}
+
+func (s *Server) readBatchIdentityLinks(ctx context.Context) (Record, error) {
+	var raw []byte
+	if err := s.db.Source.QueryRow(ctx, "SELECT identity_links FROM fleet_review.receipts WHERE batch_id=$1 AND company_id=$2", s.state.Batch.ID, s.db.CompanyID).Scan(&raw); err != nil {
+		return nil, err
+	}
+	links := Record{}
+	if err := json.Unmarshal(raw, &links); err != nil {
+		return nil, err
+	}
+	for localID, remoteID := range s.cfg.ConfirmedDriverIdentities[s.state.Batch.ID] {
+		key := "driver:" + localID
+		if links[key] == "" {
+			links[key] = remoteID
+		}
+	}
+	return links, nil
+}
+
 func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -254,20 +282,53 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		} else if e := s.db.CheckApplyReady(ctx); e != nil {
 			ready = publicError(e)
 		}
-		response := map[string]any{"state": s.state, "applyBlocker": ready, "applying": s.applying}
-		if s.state.Batch != nil && s.state.Batch.State == "complete" {
-			a, b, err := s.db.Snapshot(ctx)
-			var links map[string]string
-			var raw []byte
-			if err == nil {
-				err = s.db.Source.QueryRow(ctx, `SELECT identity_links FROM fleet_review.receipts WHERE batch_id=$1 AND company_id=$2`, s.state.Batch.ID, s.db.CompanyID).Scan(&raw)
+		view := s.state
+		view.Profile = nil
+		response := map[string]any{"state": view, "applyBlocker": ready, "applying": s.applying}
+		var profileResponse map[string]any
+		var displayPlan profilePlan
+		if s.state.Batch != nil && s.state.Profile != nil {
+			profile := s.state.Profile
+			ids := make([]string, 0, len(profile.Source.Drivers)+len(profile.Source.Trucks))
+			for _, kind := range [][]Record{profile.Source.Drivers, profile.Source.Trucks} {
+				for _, record := range kind {
+					ids = append(ids, record["id"])
+				}
 			}
+			displayPlan = s.displayProfilePlan()
+			profileResponse = map[string]any{"plan": displayPlan, "capturedAt": s.state.Batch.Started, "sourceIds": ids}
+			response["profile"] = profileResponse
+			if s.state.Batch.State == "complete" {
+				// Include records added after the manual review snapshot.
+				existing := make(map[string]bool, len(view.Rows))
+				for _, row := range view.Rows {
+					existing[row.ID] = true
+				}
+				view.Rows = append([]Row(nil), view.Rows...)
+				for _, row := range initial(profile.Source, profile.Receiver, s.state.Policy).Rows {
+					if !existing[row.ID] {
+						view.Rows = append(view.Rows, row)
+					}
+				}
+				response["state"] = view
+			}
+		}
+		if s.state.Batch != nil && s.state.Batch.State == "complete" {
+			a, b, err := s.db.snapshot(ctx, true)
+			var links Record
 			if err == nil {
-				err = json.Unmarshal(raw, &links)
+				links, err = s.readBatchIdentityLinks(ctx)
 			}
 			if err != nil {
 				fail(w, 503, "Batch receipts are saved, but current readback is unavailable. Retry before treating records as matching.")
 				return
+			}
+			if profileResponse != nil {
+				displayPlan.resolveTruckMakeConflicts(a, b)
+				displayPlan.resolveTruckModelAndUnitConflicts(a, b)
+				displayPlan.resolveTruckStatusCrewConflicts(a, b)
+				displayPlan.resolveDriverEmploymentConflicts(a, b, links)
+				profileResponse["plan"] = displayPlan
 			}
 			response["live"] = map[string]any{"source": a, "receiver": b, "links": links}
 		}
@@ -385,6 +446,71 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jsonOut(w, 200, map[string]bool{"ok": true})
+	case "GET /api/profile-preview":
+		if s.state.Batch != nil {
+			if s.state.Profile != nil {
+				plan := s.displayProfilePlan()
+				if s.state.Batch.State == "complete" {
+					a, b, err := s.db.snapshot(ctx, true)
+					if err != nil {
+						fail(w, 503, "Could not read current records from both systems")
+						return
+					}
+					plan.resolveTruckMakeConflicts(a, b)
+					plan.resolveTruckModelAndUnitConflicts(a, b)
+					links, err := s.readBatchIdentityLinks(ctx)
+					if err != nil {
+						fail(w, 503, "Batch receipts are saved, but current readback is unavailable")
+						return
+					}
+					plan.resolveTruckStatusCrewConflicts(a, b)
+					plan.resolveDriverEmploymentConflicts(a, b, links)
+				}
+				jsonOut(w, 200, map[string]any{"plan": plan, "capturedAt": s.state.Batch.Started})
+			} else {
+				fail(w, 409, "Finish or recover the frozen batch before previewing another")
+			}
+			return
+		}
+		preview, err := s.db.profilePreview(ctx, s.state)
+		if err != nil {
+			fail(w, 503, "Could not read current records from both systems")
+			return
+		}
+		jsonOut(w, 200, map[string]any{"plan": preview.Plan, "hash": digest(preview), "version": s.state.Version, "capturedAt": now()})
+	case "POST /api/profile-submit":
+		var in struct {
+			Version            int
+			Hash, Confirmation string
+		}
+		if decode(r, &in) != nil || in.Version != s.state.Version || in.Confirmation != "APPLY REVIEWED CHANGES" || s.state.Batch != nil {
+			fail(w, 409, "Preview confirmation is missing or stale")
+			return
+		}
+		if !s.cfg.AllowApply {
+			fail(w, 409, "Final application is disabled")
+			return
+		}
+		if e = s.db.CheckApplyReady(ctx); e != nil {
+			fail(w, 409, publicError(e))
+			return
+		}
+		preview, err := s.db.profilePreview(ctx, s.state)
+		if err != nil {
+			fail(w, 503, "Could not verify current records from both systems")
+			return
+		}
+		if digest(preview) != in.Hash {
+			fail(w, 409, "Live records changed. Generate and inspect a fresh batch preview.")
+			return
+		}
+		next := s.state
+		next.Profile = preview
+		if err = validateBatch(next); err != nil {
+			fail(w, 422, err.Error())
+			return
+		}
+		s.submit(w, next, in.Hash)
 	case "POST /api/preflight":
 		var in struct {
 			Version int `json:"version"`
@@ -441,16 +567,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 			fail(w, 422, e.Error())
 			return
 		}
-		s.state.Batch = &Batch{ID: id(), Hash: in.Hash, State: "applying", Started: now()}
-		s.state.Version++
-		if e = s.save(); e != nil {
-			s.state.Batch = nil
-			s.state.Version--
-			fail(w, 500, "Batch could not be saved; nothing was applied")
-			return
-		}
-		s.startApply()
-		jsonOut(w, 202, s.state.Batch)
+		s.submit(w, s.state, in.Hash)
 	case "POST /api/retry":
 		if !s.cfg.AllowApply || s.state.Batch == nil || s.applying || s.state.Batch.State == "complete" {
 			fail(w, 409, "No recoverable batch")
@@ -480,6 +597,7 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		}
 		old := s.state
 		s.state.Batch = nil
+		s.state.Profile = nil
 		s.state.Version++
 		if e = s.save(); e != nil {
 			s.state = old
@@ -491,6 +609,20 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "Not found")
 	}
 }
+func (s *Server) submit(w http.ResponseWriter, next State, hash string) {
+	old := s.state
+	next.Batch = &Batch{ID: id(), Hash: hash, State: "applying", Started: now()}
+	next.Version++
+	s.state = next
+	if err := s.save(); err != nil {
+		s.state = old
+		fail(w, 500, "Batch could not be saved")
+		return
+	}
+	s.startApply()
+	jsonOut(w, 202, s.state.Batch)
+}
+
 func publicError(e error) string {
 	var pe *pgconn.PgError
 	if errors.As(e, &pe) {
