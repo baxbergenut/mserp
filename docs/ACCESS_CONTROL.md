@@ -5,9 +5,11 @@ The application uses one role per user. Grants apply to all records in the permi
 ## Per-user overrides
 
 Settings > Users > Edit user shows User permissions after the account details. Each
-capability and expense-category action can inherit its role, explicitly Allow, or
-explicitly Deny. The editor previews effective access and can reset all exceptions
-to the role. Exceptions survive ordinary role changes; selecting Administrator
+capability and expense-category action uses the same checkbox matrix as the role
+editor. Checked boxes show effective access. Checkbox changes save only the user’s
+exceptions; unchanged permissions continue to follow the role. Reset to role clears
+all exceptions. Turning off View also unchecks dependent actions, as in role editing.
+Exceptions survive ordinary role changes; selecting Administrator
 clears them because Administrator accounts retain protected full access.
 
 `ManagedUser.permissionOverrides` maps catalog keys to `allow` or `deny`.

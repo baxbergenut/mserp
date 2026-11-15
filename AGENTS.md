@@ -1796,7 +1796,9 @@ assignment lookup lists.
   account versions or invalidate financial caches.
   Session issuance locks/rechecks the user version to prevent stale login races.
   Migration 219 adds per-user allow/deny overrides for catalog and expense-category
-  permissions below account details in the user modal. Missing keys inherit the role;
+  permissions below account details in the user modal, using the same checkbox
+  matrices as role editing. Checkbox changes save exceptions; Reset to role clears
+  them. Missing keys inherit the role;
   denied prerequisites disable dependent actions. Administrator retains full access.
   Saves are versioned, audited and revoke sessions; transactional access checks and
   board presence use effective grants. Install the matching deploy helper before 219
