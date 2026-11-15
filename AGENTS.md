@@ -4099,6 +4099,9 @@ the existing budget/backoff; manual destination text stays untouched.
   corrects a local completion. Provider-terminal loads remain non-restorable.
 - Check testBoardQueuedCompletion in TestDriverBoardDatabase (fresh/migrated)
   and frontend/scripts/test-status-board-loads.mjs.
+- The Next Loads panel shows the recorded editor next to Completed. Both queued
+  completion and current-load progression use the original name from the board
+  audit. Provider-only completions have no editor label.
 
 ## Relay status-linked fuel policies (208)
 

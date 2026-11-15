@@ -3,10 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.Pool, original *DriverBoardRepository, fleet *FleetRepository) {
@@ -23,9 +24,19 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 			t.Fatal(err)
 		}
 	}
+	var actor, secondActor string
+	for _, editor := range []struct {
+		name string
+		id   *string
+	}{{"Ben Simpson", &actor}, {"Second completion editor", &secondActor}} {
+		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES($1,crypt('test-only',gen_salt('bf'))) RETURNING id`, editor.name).Scan(editor.id); err != nil {
+			t.Fatal(err)
+		}
+	}
 	defer func() {
 		exec(`DELETE FROM drivers WHERE id=$1`, d.ID)
 		exec(`DELETE FROM loads WHERE id BETWEEN 88971 AND 88973`)
+		exec(`DELETE FROM app_users WHERE id IN ($1,$2)`, actor, secondActor)
 	}()
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES (88971,'84V7859','in_transit',100,100,'{}'),(88972,'COMPLETE-CURRENT','Dispatched',200,200,'{}'),(88973,'COMPLETE-MANUAL','Dispatched',0,0,'{}')`)
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES($1,'2026-11-02','84V7859',88971)`, d.ID)
@@ -59,7 +70,7 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 	act := func(a BoardLoadAction) BoardLoadResult {
 		t.Helper()
-		r, err := repo.ChangeLoads(ctx, a, "")
+		r, err := repo.ChangeLoads(ctx, a, actor)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,8 +114,12 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		t.Fatal("last queue completion did not preserve loaded progress", old, done.Entry)
 	}
 	p := find(done.Loads.Unavailable, "84V7859")
-	if find(done.Loads.Next, "84V7859") != nil || p == nil || !p.Completed || !p.CanRestoreToQueue {
+	if find(done.Loads.Next, "84V7859") != nil || p == nil || !p.Completed || !p.CanRestoreToQueue || p.CompletedByName != "Ben Simpson" {
 		t.Fatal("completion", done)
+	}
+	exec(`UPDATE app_users SET username='Renamed completion editor' WHERE id=$1`, actor)
+	if p := find(view().Unavailable, "84V7859"); p == nil || p.CompletedByName != "Ben Simpson" {
+		t.Fatal("completion name snapshot after reload", p)
 	}
 	if e.CurrentLoad != old.CurrentLoad || e.Destination != old.Destination || e.ETA != old.ETA || e.Notes != old.Notes || done.Loads.Current.Number != initial.Current.Number || done.Loads.StopKey != initial.StopKey {
 		t.Fatal("current changed", old, done)
@@ -122,13 +137,16 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 	if restored.Entry.Status != "RESERVED" {
 		t.Fatal("restoring queue did not reserve current trip", restored.Entry)
 	}
-	if find(restored.Loads.Next, "84V7859") == nil || restored.Loads.Current.Number != "COMPLETE-CURRENT" {
+	if p := find(restored.Loads.Next, "84V7859"); p == nil || p.CompletedByName != "" || restored.Loads.Current.Number != "COMPLETE-CURRENT" {
 		t.Fatal("restore", restored)
 	}
+	actor, secondActor = secondActor, actor
 	act(action("complete_queued", target.PlanID))
+	// Keep the plan in the visible week when it becomes terminal at the provider.
+	exec(`UPDATE gross_board_entries SET service_date='2026-11-09' WHERE plan_id=$1`, target.PlanID)
 	exec(`UPDATE loads SET status='Delivered' WHERE id=88971`)
-	if p := find(view().Unavailable, "84V7859"); p != nil && p.CanRestoreToQueue {
-		t.Fatal("provider terminal restore")
+	if p := find(view().Unavailable, "84V7859"); p == nil || p.CanRestoreToQueue || p.CompletedByName != "Second completion editor" {
+		t.Fatal("provider terminal load lost local completion attribution", p)
 	}
 	if _, err = repo.ChangeLoads(ctx, action("restore_completed", target.PlanID), ""); !errors.Is(err, ErrBoardLoadSelection) {
 		t.Fatal("provider terminal accepted", err)
@@ -149,5 +167,9 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		if find(r.Loads.Next, number) == nil {
 			t.Fatal("manual restore", r)
 		}
+	}
+	exec(`UPDATE loads SET status='Delivered' WHERE id=88973`)
+	if p := find(view().Unavailable, "COMPLETE-MANUAL"); p == nil || !p.Completed || p.CompletedByName != "" {
+		t.Fatal("provider-only completion received a board editor", p)
 	}
 }
