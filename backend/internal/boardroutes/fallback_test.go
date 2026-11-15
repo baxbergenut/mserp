@@ -61,10 +61,11 @@ func TestTruckRouteRetry(t *testing.T) {
 
 func TestCarFallback(t *testing.T) {
 	for _, tc := range []struct {
-		name                                      string
-		following, section, carFails, budgetFails bool
+		name                                                string
+		following, section, carFails, budgetFails, carOther bool
 	}{
 		{name: "active stop"},
+		{name: "car facility access segment", carOther: true},
 		{name: "truck segment unavailable", section: true},
 		{name: "itinerary", following: true},
 		{name: "car also unavailable", carFails: true},
@@ -108,7 +109,11 @@ func TestCarFallback(t *testing.T) {
 					_, _ = w.Write([]byte(`{"detailedError":{"code":"NO_ROUTE_FOUND"}}`))
 					return
 				}
-				_, _ = w.Write([]byte(`{"routes":[{"sections":[{"sectionType":"TRAVEL_MODE","travelMode":"car"}],"summary":{"travelTimeInSeconds":600,"lengthInMeters":10000},"legs":[{"encodedPolyline":"car-path","encodedPolylinePrecision":5}]}]}`))
+				carMode := "car"
+				if tc.carOther {
+					carMode = "other"
+				}
+				_, _ = w.Write([]byte(strings.Replace(`{"routes":[{"sections":[{"sectionType":"TRAVEL_MODE","travelMode":"car"}],"summary":{"travelTimeInSeconds":600,"lengthInMeters":10000},"legs":[{"encodedPolyline":"car-path","encodedPolylinePrecision":5}]}]}`, `"travelMode":"car"`, `"travelMode":"`+carMode+`"`, 1)))
 			}))
 			defer server.Close()
 			client := NewClient(Options{TomTomAPIKey: "test", RequestsPerMinute: 120})
@@ -132,7 +137,11 @@ func TestCarFallback(t *testing.T) {
 			if calls != wantCalls || reserved != truckCalls+1 || (err != nil) != (tc.carFails || tc.budgetFails) {
 				t.Fatalf("calls=%d reserved=%d estimate=%+v err=%v", calls, reserved, estimate, err)
 			}
-			if err == nil && (estimate.Meters != 10000 || estimate.Duration.Seconds() != 600 || estimate.Assumptions != CarFallbackAssumptions || estimate.Geometry == nil || estimate.Geometry.Polyline != "car-path" || estimate.FollowingRejected != tc.following || len(estimate.Following) != 0) {
+			wantAssumptions := CarFallbackAssumptions
+			if tc.carOther {
+				wantAssumptions += "; includes access segments not confirmed for cars"
+			}
+			if err == nil && (estimate.Meters != 10000 || estimate.Duration.Seconds() != 600 || estimate.Assumptions != wantAssumptions || estimate.Geometry == nil || estimate.Geometry.Polyline != "car-path" || estimate.FollowingRejected != tc.following || len(estimate.Following) != 0) {
 				t.Fatalf("bad fallback: %+v", estimate)
 			}
 		})
