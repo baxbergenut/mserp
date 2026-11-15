@@ -142,6 +142,8 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 	actor, secondActor = secondActor, actor
 	act(action("complete_queued", target.PlanID))
+	// Keep the plan in the visible week when it becomes terminal at the provider.
+	exec(`UPDATE gross_board_entries SET service_date='2026-11-09' WHERE plan_id=$1`, target.PlanID)
 	exec(`UPDATE loads SET status='Delivered' WHERE id=88971`)
 	if p := find(view().Unavailable, "84V7859"); p == nil || p.CanRestoreToQueue || p.CompletedByName != "Second completion editor" {
 		t.Fatal("provider terminal load lost local completion attribution", p)
@@ -165,5 +167,9 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		if find(r.Loads.Next, number) == nil {
 			t.Fatal("manual restore", r)
 		}
+	}
+	exec(`UPDATE loads SET status='Delivered' WHERE id=88973`)
+	if p := find(view().Unavailable, "COMPLETE-MANUAL"); p == nil || !p.Completed || p.CompletedByName != "" {
+		t.Fatal("provider-only completion received a board editor", p)
 	}
 }
