@@ -20,6 +20,7 @@ import (
 const RouteProfile = "truck-791-v1"
 
 const EstimateAssumptions = "TomTom traffic-aware truck route (VRC 791), excluding HOS and breaks"
+const CarFallbackAssumptions = "TomTom traffic-aware car route fallback (truck route unavailable), excluding HOS and breaks"
 
 type Options struct {
 	Enabled                    bool
@@ -124,18 +125,24 @@ var ErrRouteUnavailable = errors.New("route unavailable")
 var ErrTomTomNoRoute = fmt.Errorf("%w: TomTom could not find a truck route for VRC 791", ErrRouteUnavailable)
 
 func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, following ...Waypoint) (Estimate, error) {
-	estimate, err := c.routeAttempt(ctx, lat, lng, toLat, toLng, following)
-	if len(following) == 0 || !errors.Is(err, ErrTomTomNoRoute) {
+	estimate, err := c.routeAttempt(ctx, "truck", lat, lng, toLat, toLng, following)
+	if !errors.Is(err, ErrTomTomNoRoute) {
 		return estimate, err
 	}
-	// A later stop may be unreachable. Retry just the active stop with the
-	// same truck profile and a separate reservation.
-	estimate, err = c.routeAttempt(ctx, lat, lng, toLat, toLng, nil)
-	estimate.FollowingRejected = true
+	// Prefer a truck route to the active stop if a later stop is unreachable.
+	if len(following) > 0 {
+		estimate, err = c.routeAttempt(ctx, "truck", lat, lng, toLat, toLng, nil)
+	}
+	// Only an explicit no-route result permits a car fallback. Each attempt
+	// retains the same rate limit and durable usage reservation.
+	if errors.Is(err, ErrTomTomNoRoute) {
+		estimate, err = c.routeAttempt(ctx, "car", lat, lng, toLat, toLng, nil)
+	}
+	estimate.FollowingRejected = len(following) > 0
 	return estimate, err
 }
 
-func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float64, following []Waypoint) (Estimate, error) {
+func (c *Client) routeAttempt(ctx context.Context, mode string, lat, lng, toLat, toLng float64, following []Waypoint) (Estimate, error) {
 	if c.Budget == nil {
 		return Estimate{}, errors.New("routing usage accounting unavailable")
 	}
@@ -155,6 +162,14 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 		"maxAlternatives": {"0"}, "sectionType": {"travelMode"}, "vehicleCommercial": {"true"},
 		"vehicleLength": {"22.4028"}, "vehicleWidth": {"2.5908"}, "vehicleHeight": {"4.1148"},
 		"vehicleWeight": {"36287"}, "vehicleNumberOfAxles": {"5"},
+	}
+	if mode == "car" {
+		q.Set("travelMode", "car")
+		for key := range q {
+			if strings.HasPrefix(key, "vehicle") {
+				q.Del(key)
+			}
+		}
 	}
 	locations := fmt.Sprintf("%.7f,%.7f:%.7f,%.7f", lat, lng, toLat, toLng)
 	for _, point := range following {
@@ -182,6 +197,9 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 				} `json:"detailedError"`
 			}
 			if json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&failure) == nil && failure.DetailedError.Code == "NO_ROUTE_FOUND" {
+				if mode == "car" {
+					return Estimate{}, ErrRouteUnavailable
+				}
 				return Estimate{}, ErrTomTomNoRoute
 			}
 		}
@@ -210,7 +228,10 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 	}
 	route := response.Routes[0]
 	for _, section := range route.Sections {
-		if section.Type == "TRAVEL_MODE" && section.TravelMode != "truck" {
+		if section.Type == "TRAVEL_MODE" && section.TravelMode != mode {
+			if mode == "car" {
+				return Estimate{}, ErrRouteUnavailable
+			}
 			return Estimate{}, ErrTomTomNoRoute
 		}
 	}
@@ -226,6 +247,9 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 		return Estimate{}, ErrRouteUnavailable
 	}
 	estimate := Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: EstimateAssumptions}
+	if mode == "car" {
+		estimate.Assumptions = CarFallbackAssumptions
+	}
 	for i, leg := range route.Legs {
 		var geometry *RouteGeometry
 		if leg.Polyline != "" && (leg.Precision == 5 || leg.Precision == 7) {

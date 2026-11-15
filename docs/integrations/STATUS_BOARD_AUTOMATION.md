@@ -156,7 +156,7 @@ TomTom uses the fastest route with departure set to now. The active stop
 supplies ETA and mileage, while later legs supply map geometry. If TomTom
 returns `NO_ROUTE_FOUND` for an itinerary or marks part of it unavailable
 for trucks, the client can make one separately counted request for the active
-stop alone using the same profile. If the active stop is unreachable, the
+stop alone using the same profile. If the active stop has no truck route, it makes one separately counted car-route attempt without truck restrictions. The ETA details identify this car fallback; cached valid truck estimates remain usable. Authentication, quota and other provider errors do not trigger fallback. If the car route is also unreachable, the
 board shows the estimate as unavailable. Provider response bodies stay private.
 
 Server environment:
