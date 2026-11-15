@@ -11,7 +11,17 @@ export const PermissionsContext = createContext<string[]>([]);
 export const PermissionCatalogContext = createContext<PermissionDefinition[]>([]);
 export const usePermissions = () => {
  const permissions=useContext(PermissionsContext), catalog=useContext(PermissionCatalogContext);
- return useMemo(()=>catalog.length ? permissions.filter(key=>{const definition=catalog.find(p=>p.key===key);return definition ? definition.requires.every(required=>permissions.includes(required)) : key==="expenses.read" || key==="expenses.write";}) : permissions,[permissions,catalog]);
+ return useMemo(() => {
+  let effective = permissions;
+  if (!permissions.includes("investors.read")) effective = effective.filter(key => !key.startsWith("investor_pay.") && !key.startsWith("investor_terms.") && !key.startsWith("investors."));
+  if (!catalog.length) return effective;
+  for (let i = 0; i < catalog.length; i++) {
+    const next = effective.filter(key => { const definition = catalog.find(p => p.key === key); return definition ? definition.requires.every(required => effective.includes(required)) : key === "expenses.read" || key === "expenses.write"; });
+    if (next.length === effective.length) break;
+    effective = next;
+  }
+  return effective;
+ }, [permissions, catalog]);
 };
 export const ExpenseCategoryAccessContext = createContext<ExpenseCategoryAccess[]>([]);
 export const useExpenseCategoryAccess = () => useContext(ExpenseCategoryAccessContext);
@@ -42,6 +52,6 @@ export function firstAllowedPage(permissions: string[], administrator = false): 
   return ["/gross-board", "/driver-board", "/loads", "/drivers", "/trucks", "/fleet/inventory", "/fleet/trailers", "/dispatchers", "/updaters", "/investors", "/accounting/investor-pay", "/accounting/dispatcher-pay", "/weighmytruck", "/expenses", "/expenses/settings", "/accounting/driver-pay", "/accounting/escrow", "/accounting/driver-charges", "/fuel", "/tolls", "/tasks", "/settings"].find(p => canVisitPage(permissions,p)) ?? "/access-denied";
 }
 
-export function canVisitPage(permissions: string[], path: string, administrator = false) { if (path === "/dashboard" || path.startsWith("/dashboard/")) return administrator; const required=pagePermission(path); return !required || permissions.includes(required); }
+export function canVisitPage(permissions: string[], path: string, administrator = false) { if (path.startsWith("/accounting/investor-pay") && !permissions.includes("investors.read")) return false; if (path === "/dashboard" || path.startsWith("/dashboard/")) return administrator; const required=pagePermission(path); return !required || permissions.includes(required); }
 export function canCreateDriver(permissions: string[]) { return ["drivers.create","drivers.private.edit","driver_compensation.edit","escrow.create"].every(key=>permissions.includes(key)); }
 export function pageActionPermission(path:string, action:"create"|"edit"|"delete") { const area=path.split("/")[1]; return ["drivers","trucks","dispatchers","updaters","investors","tasks"].includes(area) ? area+"."+action : ""; }

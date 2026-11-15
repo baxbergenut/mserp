@@ -71,6 +71,10 @@ conversion used that faulty check and created duplicate slots.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
+## Sensitive investor access
+
+Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisite for Investor Pay and investor agreements. API JSON and board SSE project owner names to Investor without this grant, including operational lookups, expenses, maintenance, charges, escrow, Scale and FleetScope snapshots. Operational IDs/driver-owner relationships remain for expense routing; projections never modify caches or financial snapshots. Install the matching deploy helper before the quiesced cutover; it blocks rollback to releases without the privacy migration. The one-time migration grants investor visibility only to Administrator and Accountant/Accountants roles, audits changes and revokes sessions. Later explicit grants remain configurable. Validate `TestSensitiveInvestorAccessMigration` and `frontend/scripts/test-investor-access.mjs`; see `docs/ACCESS_CONTROL.md`.
+
 ## Pay-page actions
 
 Investor Pay offers Keep money and finalize on positive payables. It freezes the
@@ -926,10 +930,10 @@ status while background source evidence refreshes.
   schedule. Advancing the stop/load/truck resets it; later outside positions do not.
   Exact context-fenced cached route origins recover markers cleared by older releases.
   Fresh automatic markers are red; stale last-known markers are amber.
-  A typed Destination uses a budgeted Google Routes address waypoint. It keeps
-  the selected stop's PU/DEL schedule and suspends that stop's arrival marker.
-  Clearing the address restores source-stop routing. Paid custom routing requires
-  BOARD_ROUTES_PAID_PROVIDER=google.
+  A typed Destination uses separately budgeted TomTom point-address geocoding,
+  then the same truck route profile. Cache verified coordinates by route context.
+  The override keeps the selected stop appointment and suspends arrival detection.
+  Clearing the address restores source-stop routing.
   ETA is automatic while its entry is blank; a typed
   time or mileage overrides it until cleared. The ETA popup has a blank optional
   manual PU/DEL time for the selected load stop, overriding only the displayed
@@ -939,23 +943,22 @@ status while background source evidence refreshes.
   even when DataTruck lists a different driver, without an extra confirmation.
   A startup/minute cache-only GPS evaluator never advances progress. Provider
   routing is default off and requires explicit access/operations/speed verification.
-  Routing uses TomTom traffic-aware car estimates first (20,000/month), then
-  Google DRIVE/TRAFFIC_UNAWARE Essentials (10,000/month). Migration 197 records
-  durable pre-HTTP attempt reservations in board_route_usage, unrelated to payroll.
-  BOARD_ROUTES_PAID_PROVIDER defaults off; production explicitly uses tomtom after
-  both allowances, the cheaper provider at November 4 verified rates.
-  TOMTOM_ROUTING_API_KEY supplies its key. BOARD_ROUTES_TOMTOM_MONTHLY_FREE and
-  BOARD_ROUTES_GOOGLE_MONTHLY_FREE can reduce the allowances. Google months use
-  Pacific time; BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE defaults UTC. Reconcile existing
-  same-SKU account usage before activation. No truck restrictions or toll prices.
-  Legacy `BOARD_ROUTES_STANDARD_SEMI`/`BOARD_ROUTES_PROFILES_FILE` are ignored.
+  Routing uses TomTom traffic-aware commercial truck estimates with the VRC 791
+  five-axle, 53 ft trailer profile for ETAs, mileage and cached map geometry.
+  An unroutable itinerary retries only the active stop with the same profile.
+  Migration 197 records each attempt in board_route_usage, unrelated to payroll.
+  Migration 218 adds the custom address geocoding counter and retains prior counts.
+  TOMTOM_ROUTING_API_KEY supplies the key. BOARD_ROUTES_PAID_PROVIDER accepts
+  off or tomtom. BOARD_ROUTES_TOMTOM_MONTHLY_FREE can reduce the 20,000 routing
+  allowance. BOARD_ADDRESS_GEOCODE_MONTHLY_LIMIT caps new address lookups at
+  1,000/month by default. BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE defaults to UTC.
   Each truck context refreshes after 90 minutes AND one straight-line mile from
   the last successful route origin. Skipped polls never reset either baseline.
   Cached GPS gates tracking calls; the tracking origin is checked again before
   routing. Load/stop/destination-coordinate/truck-context changes bypass both gates
   on the next minute pass and take queue priority. Failed attempts back off five
-  minutes. Old truck-route caches establish a DRIVE baseline once.
-  `GOOGLE_ROUTING_API_TOKEN` aliases `BOARD_ROUTES_API_KEY` when the latter is empty.
+  minutes. Car-route estimates and geometry expire on read. The next eligible pass
+  calculates truck routes even for unchanged positions.
   Stale GPS displays yellow last-known miles without diagnostic hover notes, including
   a one-time route from cached coordinates when no estimate existed. Reuse the
   unchanged position's route; never infer stopped/ignition state from staleness.
@@ -1112,7 +1115,7 @@ status while background source evidence refreshes.
   order. Reordering requires driver_board.write, retains hidden rows, and
   propagates through live board snapshots. Migration 201 adds shared Auto-order
   per dispatcher (including Unassigned). While enabled, snapshots sort the complete
-  roster by Ready, Dispatched, Enroute, Reserved, Rest, Home, then other statuses,
+  roster by Ready, Dispatched, Enroute, Reserved, Rest, Deadhead, Home, then other statuses,
   with ties preserving the saved order. Cross-group drops update the assignment,
   then Auto-order places arrivals by status and appends them within their status
   tier. Empty active Auto-order groups remain available as drop targets. Within-group
@@ -1669,8 +1672,8 @@ assignment lookup lists.
   is displayed unchanged until explicitly replaced or cleared. Idle board refresh
   pauses while the ETA editor is open. Dispatcher is shown by group/filter rather
   than a repeated table column. Personal view controls follow the status filter
-  on the same row. Dispatch destination cells are editable (home statuses retain the home-address display): typing overrides the
-  selected source address; clearing a typed override restores that selected stop.
+  on the same row. Destination cells are editable in every status. Typing overrides
+  the default destination; clearing a typed override restores the status default.
   Clicking the destination never changes stops. Imported locations display City,
   ST without ZIP codes; custom addresses retain their exact text and stop identity.
   The muted PU/DEL indicator remains. Text edits detach destination source safely.
@@ -1766,7 +1769,7 @@ assignment lookup lists.
   One role per user, with a code-owned
   permission catalog in repository/access_permissions.go. The built-in
   Administrator role is immutable and has the complete catalog. The API checks
-  current role permissions on every request and denies unmapped resources;
+  current effective permissions on every request and denies unmapped resources;
   hiding navigation is supplementary. Settings creates/edits roles, provisions
   and disables users, resets passwords, and revokes all sessions. There is no
   email verification, SMTP requirement, invitation token or public registration.
@@ -1792,7 +1795,14 @@ assignment lookup lists.
   Users refreshes every 30 visible seconds and on focus. Activity does not change
   account versions or invalidate financial caches.
   Session issuance locks/rechecks the user version to prevent stale login races.
-  Current role permissions are loaded for every request. Account and role writes
+  Migration 219 adds per-user allow/deny overrides for catalog and expense-category
+  permissions below account details in the user modal. Missing keys inherit the role;
+  denied prerequisites disable dependent actions. Administrator retains full access.
+  Saves are versioned, audited and revoke sessions; transactional access checks and
+  board presence use effective grants. Install the matching deploy helper before 219
+  to quiesce writers and block rollback to binaries that ignore denials. See
+  docs/ACCESS_CONTROL.md and TestUserPermissionOverridesDatabase.
+  Current effective permissions are loaded for every request. Account and role writes
   are versioned and audited without password material; serialized updates retain
   at least one active Administrator. Drivers, Trucks, Dispatchers, Updaters and
   Investors are independent. Private details, documents, compensation and each
@@ -3666,7 +3676,8 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
 
 - Driver address follows Home time and shows only profile city/state. The board
   API includes city/state without street or ZIP. HOME, HOME (YARD), and VACATION
-  display that address as Destination without changing saved load/manual destinations.
+  default to that address in Destination. Saved custom destinations take precedence;
+  clearing the custom text restores the home address.
 - Status Board Home time uses versioned driver_board.leave_plan JSON (homeStart,
   homeEnd, vacationReturn). Calendar dates use New York; Monday–Sunday dates show
   HOME FRI/BACK TUE, otherwise day/month. Home switches to Back only once its
@@ -4041,7 +4052,7 @@ Status Board database tests verify the production payroll coverage check.
 
 Status Board missing automatic ETA offers an editor-only retry button. The context-fenced POST /driver-board/eta-retry/{driverId} runs a targeted calculation immediately, preserves provider budgets/backoff and uses a five-second manual double-click guard. Busy calculations return an error rather than queueing. See docs/integrations/STATUS_BOARD_AUTOMATION.md and frontend/scripts/test-board-eta-retry.mjs.
 
-TomTom HTTP400 NO_ROUTE_FOUND permits one separately budgeted Google coordinate fallback. Other errors do not switch providers, and paid TomTom never enables paid Google. Provider error bodies remain private; boardroutes tests cover fallback eligibility and counting.
+When TomTom cannot route a truck through an itinerary, Status Board makes one separately counted attempt for the active stop with the same VRC 791 profile. Provider error bodies remain private. The boardroutes tests cover retry eligibility and request accounting.
 
 READY location uses migration 207's separate TomTom reverse-geocoded Five ELD
 address cache, with existing manual destinations taking precedence. READY hides

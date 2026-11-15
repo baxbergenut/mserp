@@ -74,7 +74,7 @@ func (c *Client) ReverseGeocodeAddress(ctx context.Context, lat, lng float64) (R
 	if !c.Options.Enabled || strings.TrimSpace(c.Options.TomTomAPIKey) == "" || c.Options.ReverseGeocodeMonthlyLimit <= 0 {
 		return ReverseAddress{}, errors.New("reverse geocoding is not enabled")
 	}
-	if math.IsNaN(lat) || math.IsNaN(lng) || math.IsInf(lat, 0) || math.IsInf(lng, 0) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || lat == 0 && lng == 0 {
+	if !validCoordinate(lat, lng) {
 		return ReverseAddress{}, errors.New("invalid reverse geocoding position")
 	}
 	budget, ok := c.Budget.(ReverseGeocodeBudget)
@@ -105,16 +105,7 @@ func (c *Client) ReverseGeocodeAddress(ctx context.Context, lat, lng float64) (R
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		delay := time.Minute
-		if res.StatusCode == http.StatusTooManyRequests {
-			delay = 5 * time.Minute
-		}
-		c.mu.Lock()
-		until := time.Now().Add(delay)
-		if until.After(c.blockedUntil) {
-			c.blockedUntil = until
-		}
-		c.mu.Unlock()
+		c.pauseAfterHTTPError(res.StatusCode)
 		return ReverseAddress{}, fmt.Errorf("reverse geocoding returned HTTP %d", res.StatusCode)
 	}
 	var response struct {
@@ -155,4 +146,8 @@ func (c *Client) ReverseGeocodeAddress(ctx context.Context, lat, lng float64) (R
 		Municipality: city, LocalName: localName, State: state,
 		StateName: strings.TrimSpace(address.CountrySubdivisionName), PostalCode: strings.TrimSpace(address.PostalCode),
 	}, nil
+}
+
+func validCoordinate(lat, lng float64) bool {
+	return !math.IsNaN(lat) && !math.IsNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat != 0 || lng != 0)
 }

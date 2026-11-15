@@ -19,11 +19,13 @@ const date = new Date(`${today}T12:00:00Z`);
 date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
 const week = date.toISOString().slice(0, 10);
 sql(`INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,phone,dispatcher_id) VALUES('${driver}','Avery Bennett','avery bennett','cpm',0.6,'2025550198','63000000-0000-0000-0000-000000000012') ON CONFLICT DO NOTHING;
+UPDATE drivers SET city='Louisville',state='Kentucky' WHERE id='${driver}';
 INSERT INTO trucks(id,unit_number) VALUES('${truck}','MS-TRUCK-12345') ON CONFLICT DO NOTHING;
 INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at,source) SELECT '${truck}','${driver}','${week}','Synthetic status review' WHERE NOT EXISTS(SELECT 1 FROM truck_driver_assignments WHERE truck_id='${truck}' AND driver_id='${driver}');
 INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
 (989201,'${number}','dispatched',99999.99,99999.99,1200,'{"stops":[{"id":9892011,"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"id":9892012,"ordering":2,"stop_type":"delivery","location":{"city":"Dallas","state":"TX"}},{"id":9892013,"ordering":3,"stop_type":"delivery","location":{"city":"Fort Worth","state":"TX"}}]}'),
-(989202,'NEXT-LONG-LOAD-123456789','dispatched',1500,1500,450,'{"stops":[{"id":9892021,"ordering":1,"stop_type":"pickup","schedule_type":"appointment","scheduled_date":"${today}","scheduled_time":"15:00:00","location":{"city":"Oklahoma City","state":"OK"}},{"id":9892022,"ordering":2,"stop_type":"delivery","location":{"city":"Kansas City","state":"MO"}}]}') ON CONFLICT(id) DO NOTHING;
+(989202,'NEXT-LONG-LOAD-123456789','dispatched',1500,1500,450,'{"stops":[{"id":9892021,"ordering":1,"stop_type":"pickup","schedule_type":"appointment","scheduled_date":"${today}","scheduled_time":"15:00:00","location":{"city":"Oklahoma City","state":"OK"}},{"id":9892022,"ordering":2,"stop_type":"delivery","location":{"city":"Kansas City","state":"MO"}}]}'),
+(989203,'REVIEW-BOARD-DISPATCH','dispatched',1500,1500,450,'{}') ON CONFLICT(id) DO NOTHING;
 INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate) VALUES('${driver}','${week}','${number}',989201,88888.88) ON CONFLICT DO NOTHING;`);
 
 const browser = await chromium.launch();
@@ -66,6 +68,25 @@ try {
   expect(await field('Destination').evaluate(el => el.closest('td').getBoundingClientRect().width)).toBeLessThanOrEqual(280);
   await field('Destination').fill(''); await saved();
   await expect(field('Destination')).toHaveValue('Atlanta, GA');
+  for (const status of ['HOME', 'HOME (YARD)', 'VACATION']) {
+    await field('Status').selectOption(status);
+    if (status !== 'VACATION') await page.getByLabel('Home start date', { exact: true }).fill(today);
+    await page.getByRole('button', { name: 'Apply dates', exact: true }).click();
+    await expect.poll(async () => (await readEntry()).status).toBe(status);
+    await expect(field('Destination')).toHaveValue('Louisville, KY');
+    const custom = `Custom destination for ${status}`;
+    await field('Destination').fill(custom);
+    await expect.poll(async () => (await readEntry()).destination).toBe(custom);
+    await page.reload();
+    await expect(field('Destination')).toHaveValue(custom);
+    await field('Destination').fill('');
+    await expect.poll(async () => (await readEntry()).destination).toBe('');
+    await expect(field('Destination')).toHaveValue('Louisville, KY');
+  }
+  await field('Status').selectOption('DISPATCHED');
+  await expect.poll(async () => (await readEntry()).status).toBe('DISPATCHED');
+  await expect(field('Destination')).toHaveValue('Atlanta, GA');
+  expect((await read()).stopKey).toBe(beforeClick.stopKey);
   await field('Advance load').click();
   const dialog = page.getByRole('dialog', { name: 'Next stop · Avery Bennett' });
   await expect(dialog).toBeVisible();
@@ -140,7 +161,7 @@ try {
   const board = await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json();
   const examples = [
     { id: '63000000-0000-0000-0000-000000000011', status: 'READY', trailerNumber: 'JBHZ 45678', destination: '123 Custom Warehouse Road, Indianapolis, IN', notes: 'Custom address override' },
-    { id: '63000000-0000-0000-0000-000000000010', status: 'DISPATCHED', currentLoad: 'REVIEW-103', trailerNumber: 'TA 20986', eta: '14:30', notes: 'Pickup appointment' },
+    { id: '63000000-0000-0000-0000-000000000010', status: 'DISPATCHED', currentLoad: 'REVIEW-BOARD-DISPATCH', trailerNumber: 'TA 20986', eta: '14:30', notes: 'Pickup appointment' },
   ];
   const sampleSave = await page.request.put(`${base}/api/driver-board`, { headers, data: { entries: examples.map(({ id, ...values }) => ({ ...board.entries.find(entry => entry.driverId === id), ...values, statusEdited: true })) } });
   expect(sampleSave.ok(), await sampleSave.text()).toBe(true);
@@ -149,5 +170,5 @@ try {
   await expect(field('Destination')).toHaveValue('Dallas, TX');
   await page.locator('[data-scroll-key="driver-board"]').evaluate(el => { el.scrollLeft = 0; });
   await page.screenshot({ path: join(dirname(accessFile), 'status-board-review.png'), fullPage: true });
-  console.log('Passed: real saved custom addresses, clearing override, out-of-order deliveries, cancel, intermediate/final completion, undo, reload, fixed money/phone widths and content sizing. Synthetic review data retained.');
+  console.log('Passed: saved custom destinations in dispatch and leave statuses, clearing overrides, out-of-order deliveries, cancel, intermediate/final completion, undo, reload, fixed money/phone widths and content sizing. Synthetic review data retained.');
 } finally { await browser.close(); }

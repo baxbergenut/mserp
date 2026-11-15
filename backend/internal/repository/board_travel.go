@@ -32,6 +32,7 @@ type BoardTravel struct {
 	Motion            string                     `json:"motion"`
 	Error             string                     `json:"error"`
 	Assumptions       string                     `json:"assumptions,omitempty"`
+	AddressPoint      *boardroutes.Waypoint      `json:"addressPoint,omitempty"`
 	AddressRejected   bool                       `json:"addressRejected,omitempty"`
 	LastKnownPosition bool                       `json:"lastKnownPosition,omitempty"`
 	Position          *boardRoutePosition        `json:"position,omitempty"`
@@ -57,7 +58,7 @@ type BoardMapRoute struct {
 }
 
 func (t BoardTravel) mapRoute(key string, stop BoardStop, now, gpsAt time.Time) *BoardMapRoute {
-	if !t.Enabled || t.Geometry == nil || t.Context != key || t.CalculatedAt.IsZero() ||
+	if !t.Enabled || t.Mode != boardroutes.RouteProfile || t.Geometry == nil || t.Context != key || t.CalculatedAt.IsZero() ||
 		t.CalculatedAt.After(now) || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || gpsAt.IsZero() || gpsAt.After(now) {
 		return nil
 	}
@@ -86,7 +87,7 @@ func (t *BoardTravel) preserveNewerRetry(current BoardTravel, key string) {
 
 // Only a retry bound to this exact selection can survive route mode/source renewal.
 func (t BoardTravel) newRouteContext(key, source string) BoardTravel {
-	next := BoardTravel{Context: key, Source: source, Mode: boardroutes.TravelMode}
+	next := BoardTravel{Context: key, Source: source, Mode: boardroutes.RouteProfile}
 	if t.Context == key {
 		next.RetryRequestedAt, next.RetryCompletedAt = t.RetryRequestedAt, t.RetryCompletedAt
 	}
@@ -98,7 +99,7 @@ func (t BoardTravel) moved(lat, lng float64) bool {
 }
 
 func (t BoardTravel) due(key string, location *DriverBoardLocation, now time.Time) bool {
-	if t.Context != key || !sameTelemetrySource(t.Source, location.Source) || t.Mode != boardroutes.TravelMode {
+	if t.Context != key || !sameTelemetrySource(t.Source, location.Source) || t.Mode != boardroutes.RouteProfile {
 		return true
 	}
 	if t.retryPending() {
@@ -134,8 +135,8 @@ func (t BoardTravel) display(key string, now, gpsAt time.Time) (value, reason st
 	if !t.Enabled {
 		return "", "Automatic travel estimates are not enabled"
 	}
-	if t.Context != key || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || t.CalculatedAt.IsZero() || t.CalculatedAt.After(now) {
-		if t.Context == key && t.Error != "" {
+	if t.Context != key || t.Mode != boardroutes.RouteProfile || t.ReportedAt.IsZero() || t.ReportedAt.After(now) || t.CalculatedAt.IsZero() || t.CalculatedAt.After(now) {
+		if t.Context == key && t.Error != "" && (t.Mode == boardroutes.RouteProfile || t.CalculatedAt.IsZero()) {
 			return "", t.Error
 		}
 		return "", "Automatic estimate unavailable or stale"
@@ -317,7 +318,7 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			}
 			continue
 		}
-		if onlyDriver == "" && t.Context == a.Context && t.AddressRejected && t.Enabled && !t.retryPending() {
+		if onlyDriver == "" && t.Context == a.Context && t.Mode == boardroutes.RouteProfile && t.AddressRejected && t.Enabled && !t.retryPending() {
 			continue
 		}
 		unavailable := ""
@@ -359,7 +360,7 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			}
 			continue
 		}
-		urgent := t.Context != a.Context || !sameTelemetrySource(t.Source, d.Location.Source) || t.Mode != boardroutes.TravelMode
+		urgent := t.Context != a.Context || !sameTelemetrySource(t.Source, d.Location.Source) || t.Mode != boardroutes.RouteProfile
 		targets = append(targets, target{d, view, stop, t, vin, lastKnown, urgent})
 	}
 	if onlyDriver != "" && !matchedDriver {
@@ -443,7 +444,16 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			var waypoints []boardMapWaypoint
 			var itinerary string
 			if a.CustomDestination {
-				estimate, e = routes.RouteAddress(ctx, point.Coordinates.Lat, point.Coordinates.Lng, a.routeAddress)
+				if t.AddressPoint == nil {
+					var destination boardroutes.Waypoint
+					destination, e = routes.GeocodeAddress(ctx, a.routeAddress)
+					if e == nil {
+						t.AddressPoint = &destination
+					}
+				}
+				if e == nil {
+					estimate, e = routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, t.AddressPoint.Latitude, t.AddressPoint.Longitude)
+				}
 			} else {
 				waypoints, itinerary = boardMapItinerary(job.view, job.stop)
 				if itinerary == t.RejectedItinerary {
@@ -455,15 +465,14 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 				}
 				estimate, e = routes.Route(ctx, point.Coordinates.Lat, point.Coordinates.Lng, *job.stop.Latitude, *job.stop.Longitude, points...)
 			}
-			if len(waypoints) > 0 && (estimate.FollowingRejected || errors.Is(e, boardroutes.ErrTomTomNoRoute)) {
-				// A later stop can reject the itinerary. Use the active stop alone
-				// on the next ordinary refresh for this itinerary.
+			if estimate.FollowingRejected {
+				// Subsequent refreshes use the active stop until the itinerary changes.
 				t.RejectedItinerary = itinerary
 			}
 			if e != nil {
 				t.Error = e.Error()
 				t.AddressRejected = errors.Is(e, boardroutes.ErrAddressUnmatched)
-				if t.AddressRejected || (len(waypoints) == 0 && errors.Is(e, boardroutes.ErrRouteUnavailable)) {
+				if t.AddressRejected || errors.Is(e, boardroutes.ErrRouteUnavailable) {
 					t.CalculatedAt = time.Time{}
 				}
 			} else {

@@ -37,9 +37,9 @@ var Permissions = []Permission{
 	{Key: "updaters.create", Label: "Add Updaters", Group: "Updaters", Action: "create", Requires: []string{"updaters.read"}, Sensitive: false},
 	{Key: "updaters.edit", Label: "Edit Updaters", Group: "Updaters", Action: "edit", Requires: []string{"updaters.read"}, Sensitive: false},
 	{Key: "updaters.delete", Label: "Delete Updaters", Group: "Updaters", Action: "delete", Requires: []string{"updaters.read"}, Sensitive: false},
-	{Key: "investors.read", Label: "View Investors", Group: "Investors", Action: "read", Requires: []string{}, Sensitive: false},
-	{Key: "investors.create", Label: "Add Investors", Group: "Investors", Action: "create", Requires: []string{"investors.read"}, Sensitive: false},
-	{Key: "investors.edit", Label: "Edit Investors", Group: "Investors", Action: "edit", Requires: []string{"investors.read"}, Sensitive: false},
+	{Key: "investors.read", Label: "View Investors", Group: "Investors", Action: "read", Requires: []string{}, Sensitive: true},
+	{Key: "investors.create", Label: "Add Investors", Group: "Investors", Action: "create", Requires: []string{"investors.read"}, Sensitive: true},
+	{Key: "investors.edit", Label: "Edit Investors", Group: "Investors", Action: "edit", Requires: []string{"investors.read"}, Sensitive: true},
 	{Key: "drivers.private.read", Label: "View Driver private details", Group: "Driver private details", Action: "read", Requires: []string{"drivers.read"}, Sensitive: true},
 	{Key: "drivers.private.edit", Label: "Edit Driver private details", Group: "Driver private details", Action: "edit", Requires: []string{"drivers.read", "drivers.private.read"}, Sensitive: true},
 	{Key: "drivers.documents.read", Label: "View Driver documents", Group: "Driver documents", Action: "read", Requires: []string{"drivers.read"}, Sensitive: true},
@@ -50,13 +50,13 @@ var Permissions = []Permission{
 	{Key: "driver_compensation.edit", Label: "Edit Driver compensation", Group: "Driver compensation", Action: "edit", Requires: []string{"driver_compensation.read"}, Sensitive: true},
 	{Key: "dispatcher_compensation.read", Label: "View Dispatcher compensation", Group: "Dispatcher compensation", Action: "read", Requires: []string{}, Sensitive: true},
 	{Key: "dispatcher_compensation.edit", Label: "Edit Dispatcher compensation", Group: "Dispatcher compensation", Action: "edit", Requires: []string{"dispatcher_compensation.read"}, Sensitive: true},
-	{Key: "investor_terms.read", Label: "View Investor agreements", Group: "Investor agreements", Action: "read", Requires: []string{}, Sensitive: true},
+	{Key: "investor_terms.read", Label: "View Investor agreements", Group: "Investor agreements", Action: "read", Requires: []string{"investors.read"}, Sensitive: true},
 	{Key: "investor_terms.edit", Label: "Edit Investor agreements", Group: "Investor agreements", Action: "edit", Requires: []string{"investor_terms.read"}, Sensitive: true},
 	{Key: "driver_pay.read", Label: "View Driver Pay", Group: "Driver Pay", Action: "read", Requires: []string{}, Sensitive: true},
 	{Key: "driver_pay.edit", Label: "Edit Driver Pay", Group: "Driver Pay", Action: "edit", Requires: []string{"driver_pay.read"}, Sensitive: true},
 	{Key: "driver_pay.finalize", Label: "Finalize Driver Pay", Group: "Driver Pay", Action: "finalize", Requires: []string{"driver_pay.read"}, Sensitive: true},
 	{Key: "driver_pay.reopen", Label: "Reopen Driver Pay", Group: "Driver Pay", Action: "reopen", Requires: []string{"driver_pay.read"}, Sensitive: true},
-	{Key: "investor_pay.read", Label: "View Investor Pay", Group: "Investor Pay", Action: "read", Requires: []string{}, Sensitive: true},
+	{Key: "investor_pay.read", Label: "View Investor Pay", Group: "Investor Pay", Action: "read", Requires: []string{"investors.read"}, Sensitive: true},
 	{Key: "investor_pay.edit", Label: "Edit Investor Pay", Group: "Investor Pay", Action: "edit", Requires: []string{"investor_pay.read"}, Sensitive: true},
 	{Key: "investor_pay.finalize", Label: "Finalize Investor Pay", Group: "Investor Pay", Action: "finalize", Requires: []string{"investor_pay.read"}, Sensitive: true},
 	{Key: "investor_pay.reopen", Label: "Reopen Investor Pay", Group: "Investor Pay", Action: "reopen", Requires: []string{"investor_pay.read"}, Sensitive: true},
@@ -147,4 +147,23 @@ func ValidPermissions(keys []string) bool {
 	}
 	return true
 }
-func HasPermission(user AuthUser, key string) bool { return slices.Contains(user.Permissions, key) }
+
+// Investor data stays protected even for inconsistent stored grants.
+func HasPermission(user AuthUser, key string) bool {
+	if !slices.Contains(user.Permissions, key) {
+		return false
+	}
+	switch key {
+	case "investors.create", "investors.edit", "investor_terms.read", "investor_terms.edit", "investor_pay.read", "investor_pay.edit", "investor_pay.finalize", "investor_pay.reopen":
+		if !slices.Contains(user.Permissions, "investors.read") {
+			return false
+		}
+	}
+	switch key {
+	case "investor_terms.edit":
+		return slices.Contains(user.Permissions, "investor_terms.read")
+	case "investor_pay.edit", "investor_pay.finalize", "investor_pay.reopen":
+		return slices.Contains(user.Permissions, "investor_pay.read")
+	}
+	return true
+}

@@ -1,8 +1,7 @@
-// Package boardroutes implements budgeted car-route ETA estimates.
+// Package boardroutes implements budgeted commercial truck ETA estimates.
 package boardroutes
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,31 +16,27 @@ import (
 	"time"
 )
 
-const TravelMode = "DRIVE"
+// RouteProfile versions the cached estimates and geometry for the selected vehicle.
+const RouteProfile = "truck-791-v1"
 
-const EstimateAssumptions = "car route estimate; truck restrictions, HOS and breaks are not included"
+const EstimateAssumptions = "TomTom traffic-aware truck route (VRC 791), excluding HOS and breaks"
 
 type Options struct {
 	Enabled                    bool
-	APIKey                     string
 	SpeedUnit                  string
 	RequestsPerMinute          int
 	TomTomAPIKey               string
-	GoogleMonthlyFree          int
 	TomTomMonthlyFree          int
 	PaidProvider               string
 	TomTomBillingTimezone      string
 	ReverseGeocodeMonthlyLimit int
+	AddressGeocodeMonthlyLimit int
 }
 
 func LoadOptions() (Options, error) {
-	o := Options{Enabled: os.Getenv("BOARD_ROUTES_ENABLED") == "true", RequestsPerMinute: 30, GoogleMonthlyFree: 10000, TomTomMonthlyFree: 20000, PaidProvider: "off", TomTomBillingTimezone: "UTC", ReverseGeocodeMonthlyLimit: 1000}
+	o := Options{Enabled: os.Getenv("BOARD_ROUTES_ENABLED") == "true", RequestsPerMinute: 30, TomTomMonthlyFree: 20000, PaidProvider: "off", TomTomBillingTimezone: "UTC", ReverseGeocodeMonthlyLimit: 1000, AddressGeocodeMonthlyLimit: 1000}
 	if !o.Enabled {
 		return o, nil
-	}
-	o.APIKey = strings.TrimSpace(os.Getenv("BOARD_ROUTES_API_KEY"))
-	if o.APIKey == "" {
-		o.APIKey = strings.TrimSpace(os.Getenv("GOOGLE_ROUTING_API_TOKEN"))
 	}
 	o.TomTomAPIKey = strings.TrimSpace(os.Getenv("TOMTOM_ROUTING_API_KEY"))
 	if v := os.Getenv("BOARD_ROUTES_TOMTOM_BILLING_TIMEZONE"); v != "" {
@@ -50,7 +45,11 @@ func LoadOptions() (Options, error) {
 	if _, err := time.LoadLocation(o.TomTomBillingTimezone); err != nil {
 		return o, errors.New("invalid TomTom billing timezone")
 	}
-	for name, dst := range map[string]*int{"BOARD_ROUTES_GOOGLE_MONTHLY_FREE": &o.GoogleMonthlyFree, "BOARD_ROUTES_TOMTOM_MONTHLY_FREE": &o.TomTomMonthlyFree} {
+	for name, dst := range map[string]*int{
+		"BOARD_ROUTES_TOMTOM_MONTHLY_FREE":    &o.TomTomMonthlyFree,
+		"BOARD_REVERSE_GEOCODE_MONTHLY_LIMIT": &o.ReverseGeocodeMonthlyLimit,
+		"BOARD_ADDRESS_GEOCODE_MONTHLY_LIMIT": &o.AddressGeocodeMonthlyLimit,
+	} {
 		if v := os.Getenv(name); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 || n > *dst {
@@ -59,25 +58,15 @@ func LoadOptions() (Options, error) {
 			*dst = n
 		}
 	}
-	if v := os.Getenv("BOARD_REVERSE_GEOCODE_MONTHLY_LIMIT"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 || n > 1000 {
-			return o, errors.New("invalid reverse geocoding monthly limit")
-		}
-		o.ReverseGeocodeMonthlyLimit = n
-	}
 	if v := os.Getenv("BOARD_ROUTES_PAID_PROVIDER"); v != "" {
 		o.PaidProvider = v
 	}
-	if o.PaidProvider != "off" && o.PaidProvider != "tomtom" && o.PaidProvider != "google" {
+	if o.PaidProvider != "off" && o.PaidProvider != "tomtom" {
 		return o, errors.New("invalid paid routing provider")
 	}
-	if o.PaidProvider == "tomtom" && o.TomTomAPIKey == "" || o.PaidProvider == "google" && o.APIKey == "" {
-		return o, errors.New("paid routing provider requires its API key")
-	}
 	o.SpeedUnit = os.Getenv("FIVE_ELD_SPEED_UNIT")
-	if (o.APIKey == "" && o.TomTomAPIKey == "") || os.Getenv("BOARD_ROUTES_ACCESS_VERIFIED") != "true" || os.Getenv("BOARD_ROUTES_OPERATIONS_VERIFIED") != "true" || os.Getenv("FIVE_ELD_SPEED_VERIFIED") != "true" || (o.SpeedUnit != "mph" && o.SpeedUnit != "kph") {
-		return o, errors.New("board routes requires key, verified access/operations and verified mph/kph speed semantics")
+	if o.TomTomAPIKey == "" || os.Getenv("BOARD_ROUTES_ACCESS_VERIFIED") != "true" || os.Getenv("BOARD_ROUTES_OPERATIONS_VERIFIED") != "true" || os.Getenv("FIVE_ELD_SPEED_VERIFIED") != "true" || (o.SpeedUnit != "mph" && o.SpeedUnit != "kph") {
+		return o, errors.New("board routes requires a TomTom key, verified access/operations and verified mph/kph speed semantics")
 	}
 	if v := os.Getenv("BOARD_ROUTES_REQUESTS_PER_MINUTE"); v != "" {
 		n, e := strconv.Atoi(v)
@@ -92,9 +81,9 @@ func LoadOptions() (Options, error) {
 type Client struct {
 	Options          Options
 	HTTP             *http.Client
-	URL              string
 	TomTomURL        string
 	TomTomReverseURL string
+	TomTomGeocodeURL string
 	Budget           Budget
 	mu               sync.Mutex
 	next             time.Time
@@ -102,7 +91,7 @@ type Client struct {
 }
 
 func NewClient(o Options) *Client {
-	return &Client{Options: o, HTTP: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, URL: "https://routes.googleapis.com/directions/v2:computeRoutes", TomTomURL: "https://api.tomtom.com/routing/1/calculateRoute", TomTomReverseURL: "https://api.tomtom.com/search/2/reverseGeocode"}
+	return &Client{Options: o, HTTP: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, TomTomURL: "https://api.tomtom.com/routing/1/calculateRoute", TomTomReverseURL: "https://api.tomtom.com/search/2/reverseGeocode", TomTomGeocodeURL: "https://api.tomtom.com/search/2/geocode"}
 }
 
 type Estimate struct {
@@ -132,105 +121,61 @@ type RouteGeometry struct {
 }
 
 var ErrRouteUnavailable = errors.New("route unavailable")
-var ErrTomTomNoRoute = fmt.Errorf("%w: TomTom could not find a drivable route (NO_ROUTE_FOUND)", ErrRouteUnavailable)
-var ErrAddressUnmatched = errors.New("Enter a complete destination address for automatic ETA")
+var ErrTomTomNoRoute = fmt.Errorf("%w: TomTom could not find a truck route for VRC 791", ErrRouteUnavailable)
 
 func (c *Client) Route(ctx context.Context, lat, lng, toLat, toLng float64, following ...Waypoint) (Estimate, error) {
-	return c.route(ctx, lat, lng, toLat, toLng, "", following)
-}
-
-func (c *Client) RouteAddress(ctx context.Context, lat, lng float64, address string) (Estimate, error) {
-	return c.route(ctx, lat, lng, 0, 0, address, nil)
-}
-
-func (c *Client) route(ctx context.Context, lat, lng, toLat, toLng float64, address string, following []Waypoint) (Estimate, error) {
-	options := c.Options
-	if address != "" {
-		// Google resolves address waypoints in the same metered route request.
-		if options.APIKey == "" {
-			return Estimate{}, errors.New("Custom destination routing requires Google Routes")
-		}
-		options.TomTomAPIKey = ""
-	}
-	estimate, err := c.routeAttempt(ctx, lat, lng, toLat, toLng, address, options, following)
-	if !errors.Is(err, ErrTomTomNoRoute) || address != "" {
+	estimate, err := c.routeAttempt(ctx, lat, lng, toLat, toLng, following)
+	if len(following) == 0 || !errors.Is(err, ErrTomTomNoRoute) {
 		return estimate, err
 	}
-	if options.APIKey == "" {
-		return Estimate{}, fmt.Errorf("%w; Google fallback is not configured", err)
-	}
-	// One separately paced/accounted coordinate fallback. Excluding TomTom leaves
-	// only Google's remaining allowance or an explicitly selected paid Google plan.
-	// In particular, paid TomTom does not authorize paid Google.
-	options.TomTomAPIKey = ""
-	fallback, fallbackErr := c.routeAttempt(ctx, lat, lng, toLat, toLng, "", options, nil)
-	if fallbackErr != nil {
-		return Estimate{}, fmt.Errorf("%w; Google fallback unavailable: %w", err, fallbackErr)
-	}
-	fallback.FollowingRejected = len(following) > 0
-	return fallback, nil
+	// A later stop may be unreachable. Retry just the active stop with the
+	// same truck profile and a separate reservation.
+	estimate, err = c.routeAttempt(ctx, lat, lng, toLat, toLng, nil)
+	estimate.FollowingRejected = true
+	return estimate, err
 }
 
-func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float64, address string, options Options, following []Waypoint) (Estimate, error) {
+func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float64, following []Waypoint) (Estimate, error) {
 	if c.Budget == nil {
 		return Estimate{}, errors.New("routing usage accounting unavailable")
-	}
-	if err := ctx.Err(); err != nil {
-		return Estimate{}, err
 	}
 	if err := c.waitForProvider(ctx); err != nil {
 		return Estimate{}, err
 	}
 	// Commit the reservation before sending; failed/unknown outcomes are not refunded.
-	provider, err := c.Budget.Reserve(ctx, options)
-	if err != nil {
+	if err := c.Budget.Reserve(ctx, c.Options); err != nil {
 		return Estimate{}, err
 	}
-	var req *http.Request
-	if provider == "google" {
-		point := func(a, b float64) any {
-			return map[string]any{"location": map[string]any{"latLng": map[string]float64{"latitude": a, "longitude": b}}}
-		}
-		destination := point(toLat, toLng)
-		fields := "routes.duration,routes.distanceMeters"
-		if address != "" {
-			destination = map[string]string{"address": address}
-			fields += ",geocodingResults.destination"
-		}
-		body, _ := json.Marshal(map[string]any{"origin": point(lat, lng), "destination": destination, "travelMode": TravelMode, "routingPreference": "TRAFFIC_UNAWARE"})
-		req, err = http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(body))
-		if err == nil {
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("X-Goog-Api-Key", c.Options.APIKey)
-			req.Header.Set("X-Goog-FieldMask", fields)
-		}
-	} else if provider == "tomtom" && address == "" {
-		q := url.Values{"key": {c.Options.TomTomAPIKey}, "traffic": {"true"}, "departAt": {"now"}, "travelMode": {"car"}, "routeType": {"fastest"}, "routeRepresentation": {"encodedPolyline"}, "maxAlternatives": {"0"}}
-		locations := fmt.Sprintf("%.7f,%.7f:%.7f,%.7f", lat, lng, toLat, toLng)
-		for _, point := range following {
-			locations += fmt.Sprintf(":%.7f,%.7f", point.Latitude, point.Longitude)
-		}
-		endpoint := c.TomTomURL + "/" + locations + "/json?" + q.Encode()
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		// Avoid net/http's automatic GET replay on a failed reused connection.
-		if req != nil {
-			req.Close = true
-		}
-	} else {
-		return Estimate{}, errors.New("invalid routing provider")
+	// VRC 791 covers five axles and a trailer over 48 ft and up to 53 ft.
+	// The WB-67 combination is 73 ft 6 in long and 8 ft 6 in wide.
+	// Use 13 ft 6 in clearance height and 80,000 lb gross weight for the ETA profile.
+	q := url.Values{
+		"key": {c.Options.TomTomAPIKey}, "traffic": {"true"}, "departAt": {"now"},
+		"travelMode": {"truck"}, "routeType": {"fastest"}, "routeRepresentation": {"encodedPolyline"},
+		"maxAlternatives": {"0"}, "sectionType": {"travelMode"}, "vehicleCommercial": {"true"},
+		"vehicleLength": {"22.4028"}, "vehicleWidth": {"2.5908"}, "vehicleHeight": {"4.1148"},
+		"vehicleWeight": {"36287"}, "vehicleNumberOfAxles": {"5"},
 	}
+	locations := fmt.Sprintf("%.7f,%.7f:%.7f,%.7f", lat, lng, toLat, toLng)
+	for _, point := range following {
+		locations += fmt.Sprintf(":%.7f,%.7f", point.Latitude, point.Longitude)
+	}
+	endpoint := c.TomTomURL + "/" + locations + "/json?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return Estimate{}, errors.New("invalid routing request")
 	}
+	// Avoid net/http's automatic GET replay on a failed reused connection.
+	req.Close = true
 	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return Estimate{}, errors.New("routing connection unavailable")
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		// Only this exact documented code permits fallback. Never expose provider
-		// messages, URLs or unknown codes, which can contain credentials/user data.
-		if provider == "tomtom" && res.StatusCode == http.StatusBadRequest {
+		// Only the documented no-route error permits an active-stop retry.
+		// Provider messages and URLs can include private data.
+		if res.StatusCode == http.StatusBadRequest {
 			var failure struct {
 				DetailedError struct {
 					Code string `json:"code"`
@@ -240,93 +185,74 @@ func (c *Client) routeAttempt(ctx context.Context, lat, lng, toLat, toLng float6
 				return Estimate{}, ErrTomTomNoRoute
 			}
 		}
-		c.mu.Lock()
-		delay := time.Minute
-		if res.StatusCode == 429 {
-			delay = 5 * time.Minute
-		}
-		c.blockedUntil = time.Now().Add(delay)
-		c.mu.Unlock()
-		if res.StatusCode < 500 && res.StatusCode != 429 {
+		c.pauseAfterHTTPError(res.StatusCode)
+		if res.StatusCode < 500 && res.StatusCode != http.StatusTooManyRequests {
 			return Estimate{}, fmt.Errorf("%w: HTTP %d", ErrRouteUnavailable, res.StatusCode)
 		}
 		return Estimate{}, fmt.Errorf("routing returned HTTP %d", res.StatusCode)
 	}
-	if provider == "tomtom" {
-		var response struct {
-			Routes []struct {
-				Summary routeSummary `json:"summary"`
-				Legs    []struct {
-					Summary   routeSummary `json:"summary"`
-					Polyline  string       `json:"encodedPolyline"`
-					Precision int          `json:"encodedPolylinePrecision"`
-				} `json:"legs"`
-			} `json:"routes"`
-		}
-		if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&response); err != nil || len(response.Routes) == 0 {
-			return Estimate{}, ErrRouteUnavailable
-		}
-		route := response.Routes[0]
-		summary := route.Summary
-		if len(following) > 0 {
-			if len(route.Legs) != len(following)+1 {
-				return Estimate{}, ErrRouteUnavailable
-			}
-			// The board's ETA and arrival evidence belong to the active stop.
-			summary = route.Legs[0].Summary
-		}
-		if summary.Seconds == nil || *summary.Seconds < 0 || *summary.Seconds > 31536000 || summary.Meters == nil || *summary.Meters < 0 {
-			return Estimate{}, ErrRouteUnavailable
-		}
-		estimate := Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: "TomTom traffic-aware " + EstimateAssumptions}
-		for i, leg := range route.Legs {
-			var geometry *RouteGeometry
-			if leg.Polyline != "" && (leg.Precision == 5 || leg.Precision == 7) {
-				geometry = &RouteGeometry{Polyline: leg.Polyline, Precision: leg.Precision}
-			}
-			if i == 0 && len(route.Legs) == len(following)+1 {
-				estimate.Geometry = geometry
-			} else if len(following) > 0 {
-				result := RouteLeg{}
-				if leg.Summary.Meters != nil && *leg.Summary.Meters >= 0 {
-					result = RouteLeg{Meters: *leg.Summary.Meters, Geometry: geometry}
-				}
-				estimate.Following = append(estimate.Following, result)
-			}
-		}
-		return estimate, nil
-	}
 	var response struct {
-		GeocodingResults struct {
-			Destination struct {
-				PlaceID      string `json:"placeId"`
-				PartialMatch bool   `json:"partialMatch"`
-				Status       struct {
-					Code int `json:"code"`
-				} `json:"geocoderStatus"`
-			} `json:"destination"`
-		} `json:"geocodingResults"`
 		Routes []struct {
-			Duration string `json:"duration"`
-			Meters   *int   `json:"distanceMeters"`
+			Sections []struct {
+				Type       string `json:"sectionType"`
+				TravelMode string `json:"travelMode"`
+			} `json:"sections"`
+			Summary routeSummary `json:"summary"`
+			Legs    []struct {
+				Summary   routeSummary `json:"summary"`
+				Polyline  string       `json:"encodedPolyline"`
+				Precision int          `json:"encodedPolylinePrecision"`
+			} `json:"legs"`
 		} `json:"routes"`
 	}
-	if err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&response); err != nil {
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&response); err != nil || len(response.Routes) == 0 {
 		return Estimate{}, ErrRouteUnavailable
 	}
-	if address != "" {
-		match := response.GeocodingResults.Destination
-		if match.PartialMatch || match.Status.Code != 0 || match.PlaceID == "" {
-			return Estimate{}, ErrAddressUnmatched
+	route := response.Routes[0]
+	for _, section := range route.Sections {
+		if section.Type == "TRAVEL_MODE" && section.TravelMode != "truck" {
+			return Estimate{}, ErrTomTomNoRoute
 		}
 	}
-	if len(response.Routes) == 0 {
+	summary := route.Summary
+	if len(following) > 0 {
+		if len(route.Legs) != len(following)+1 {
+			return Estimate{}, ErrRouteUnavailable
+		}
+		// The board's ETA and arrival evidence belong to the active stop.
+		summary = route.Legs[0].Summary
+	}
+	if summary.Seconds == nil || *summary.Seconds < 0 || *summary.Seconds > 31536000 || summary.Meters == nil || *summary.Meters < 0 {
 		return Estimate{}, ErrRouteUnavailable
 	}
-	r := response.Routes[0]
-	duration, err := time.ParseDuration(r.Duration)
-	if err != nil || duration < 0 || r.Meters == nil || *r.Meters < 0 {
-		return Estimate{}, ErrRouteUnavailable
+	estimate := Estimate{Duration: time.Duration(*summary.Seconds) * time.Second, Meters: *summary.Meters, Assumptions: EstimateAssumptions}
+	for i, leg := range route.Legs {
+		var geometry *RouteGeometry
+		if leg.Polyline != "" && (leg.Precision == 5 || leg.Precision == 7) {
+			geometry = &RouteGeometry{Polyline: leg.Polyline, Precision: leg.Precision}
+		}
+		if i == 0 && len(route.Legs) == len(following)+1 {
+			estimate.Geometry = geometry
+		} else if len(following) > 0 {
+			result := RouteLeg{}
+			if leg.Summary.Meters != nil && *leg.Summary.Meters >= 0 {
+				result = RouteLeg{Meters: *leg.Summary.Meters, Geometry: geometry}
+			}
+			estimate.Following = append(estimate.Following, result)
+		}
 	}
-	return Estimate{Duration: duration, Meters: *r.Meters, Assumptions: "Google traffic-unaware " + EstimateAssumptions}, nil
+	return estimate, nil
+}
+
+func (c *Client) pauseAfterHTTPError(status int) {
+	delay := time.Minute
+	if status == http.StatusTooManyRequests {
+		delay = 5 * time.Minute
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	until := time.Now().Add(delay)
+	if until.After(c.blockedUntil) {
+		c.blockedUntil = until
+	}
 }

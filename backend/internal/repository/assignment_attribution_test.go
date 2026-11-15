@@ -44,6 +44,10 @@ func TestAssignmentAttributionDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	overrides, err := os.ReadFile("../../sql/219_user_permission_overrides.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
 	source := strings.ReplaceAll(string(init), "\r\n", "\n")
 	change := strings.ReplaceAll(string(migration), "\r\n", "\n")
 	boundary := strings.LastIndex(source, change)
@@ -84,6 +88,7 @@ func TestAssignmentAttributionDatabase(t *testing.T) {
 				exec(change)
 				exec(string(assignmentView))
 				exec(string(provisioning))
+				exec(string(overrides))
 			}
 			if got := scalar(`SELECT truck_id::text FROM clustie_loads WHERE id=9166`); got != legacyTruck {
 				t.Fatal("upgrade ignored existing native assignments", got)

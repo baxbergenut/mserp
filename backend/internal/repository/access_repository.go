@@ -34,20 +34,22 @@ type ExpenseAccessCategory struct {
 	Active bool   `json:"active"`
 }
 type ManagedUser struct {
-	FirstName      string     `json:"firstName"`
-	LastName       string     `json:"lastName"`
-	DateOfBirth    *string    `json:"dateOfBirth,omitempty"`
-	Phone          *string    `json:"phone,omitempty"`
-	LastLoginAt    *time.Time `json:"lastLoginAt"`
-	LastActivityAt *time.Time `json:"lastActivityAt"`
-	Online         bool       `json:"online"`
-	ID             string     `json:"id"`
-	Username       string     `json:"username"`
-	Email          string     `json:"email"`
-	RoleID         string     `json:"roleId"`
-	Active         bool       `json:"active"`
-	Password       string     `json:"password,omitempty"`
-	Version        int        `json:"version"`
+	PermissionOverrides      PermissionOverrides      `json:"permissionOverrides"`
+	ExpenseCategoryOverrides ExpenseCategoryOverrides `json:"expenseCategoryOverrides"`
+	FirstName                string                   `json:"firstName"`
+	LastName                 string                   `json:"lastName"`
+	DateOfBirth              *string                  `json:"dateOfBirth,omitempty"`
+	Phone                    *string                  `json:"phone,omitempty"`
+	LastLoginAt              *time.Time               `json:"lastLoginAt"`
+	LastActivityAt           *time.Time               `json:"lastActivityAt"`
+	Online                   bool                     `json:"online"`
+	ID                       string                   `json:"id"`
+	Username                 string                   `json:"username"`
+	Email                    string                   `json:"email"`
+	RoleID                   string                   `json:"roleId"`
+	Active                   bool                     `json:"active"`
+	Password                 string                   `json:"password,omitempty"`
+	Version                  int                      `json:"version"`
 }
 type AccessData struct {
 	Users             []ManagedUser           `json:"users"`
@@ -77,13 +79,13 @@ func (r *AuthRepository) AccessData(ctx context.Context) (AccessData, error) {
 	categoryRows.Close()
 	rows, err := r.pool.Query(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),coalesce(u.role_id::text,''),u.active,u.version,a.last_login_at,a.last_activity_at,
 		u.active AND u.role_id IS NOT NULL AND EXISTS(SELECT 1 FROM auth_sessions s WHERE s.user_id=u.id AND s.expires_at>now() AND s.last_seen_at>now()-interval '2 minutes')
-		,u.first_name,u.last_name,u.date_of_birth::text,u.phone FROM app_users u LEFT JOIN user_login_activity a ON a.user_id=u.id ORDER BY lower(u.username),u.id`)
+		,u.first_name,u.last_name,u.date_of_birth::text,u.phone,u.permission_overrides,u.expense_category_overrides FROM app_users u LEFT JOIN user_login_activity a ON a.user_id=u.id ORDER BY lower(u.username),u.id`)
 	if err != nil {
 		return data, err
 	}
 	for rows.Next() {
 		var u ManagedUser
-		if err = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.Active, &u.Version, &u.LastLoginAt, &u.LastActivityAt, &u.Online, &u.FirstName, &u.LastName, &u.DateOfBirth, &u.Phone); err != nil {
+		if err = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.Active, &u.Version, &u.LastLoginAt, &u.LastActivityAt, &u.Online, &u.FirstName, &u.LastName, &u.DateOfBirth, &u.Phone, &u.PermissionOverrides, &u.ExpenseCategoryOverrides); err != nil {
 			rows.Close()
 			return data, err
 		}
@@ -143,7 +145,7 @@ func accessLock(ctx context.Context, tx pgx.Tx, actor string) error {
 		return ErrAccessConflict
 	}
 	var allowed bool
-	err := tx.QueryRow(ctx, `SELECT u.active AND (r.system_role OR 'access.manage'=ANY(r.permissions)) FROM app_users u JOIN app_roles r ON r.id=u.role_id WHERE u.id=$1`, actor).Scan(&allowed)
+	err := tx.QueryRow(ctx, `SELECT u.active AND (r.system_role OR user_permission_allowed(r.permissions,u.permission_overrides,'access.manage')) FROM app_users u JOIN app_roles r ON r.id=u.role_id WHERE u.id=$1`, actor).Scan(&allowed)
 	if err != nil {
 		return err
 	}
@@ -167,6 +169,9 @@ func revokeUser(ctx context.Context, tx pgx.Tx, id string) error {
 
 func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input ManagedUser, passwordHash string) (string, error) {
 	input.Password = ""
+	if !validUserOverrides(input.PermissionOverrides, input.ExpenseCategoryOverrides) {
+		return "", chargeInvalid("Invalid user permission overrides")
+	}
 	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return "", err
@@ -182,9 +187,21 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 	if !administrator && (input.DateOfBirth != nil || input.Phone != nil) {
 		return "", chargeInvalid("Only Administrators can edit DOB and phone")
 	}
-	var dispatcherRole bool
-	if err = tx.QueryRow(ctx, `SELECT dispatcher_role FROM app_roles WHERE id=$1`, input.RoleID).Scan(&dispatcherRole); err != nil {
+	var dispatcherRole, systemRole bool
+	if err = tx.QueryRow(ctx, `SELECT dispatcher_role,system_role FROM app_roles WHERE id=$1`, input.RoleID).Scan(&dispatcherRole, &systemRole); err != nil {
 		return "", err
+	}
+	if systemRole && (len(input.PermissionOverrides) > 0 || len(input.ExpenseCategoryOverrides) > 0) {
+		return "", chargeInvalid("Administrator accounts always have full access; select another role to customize permissions")
+	}
+	for categoryID := range input.ExpenseCategoryOverrides {
+		var exists bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM expense_settings WHERE id::text=$1 AND kind='category')`, categoryID).Scan(&exists); err != nil {
+			return "", err
+		}
+		if !exists {
+			return "", chargeInvalid("Invalid expense category override")
+		}
 	}
 	if dispatcherRole {
 		var paired bool
@@ -217,9 +234,13 @@ func (r *AuthRepository) SaveUser(ctx context.Context, actor string, input Manag
 	if err != nil {
 		return "", err
 	}
+	// Omitted override objects preserve existing choices; empty objects reset them.
 	_, err = tx.Exec(ctx, `UPDATE app_users SET first_name=$2,last_name=$3,
 	 date_of_birth=CASE WHEN $4::text IS NULL THEN date_of_birth ELSE NULLIF($4,'')::date END,
-	 phone=coalesce($5,phone) WHERE id=$1`, id, input.FirstName, input.LastName, input.DateOfBirth, input.Phone)
+	 phone=coalesce($5,phone),
+ permission_overrides=CASE WHEN $8 THEN '{}'::jsonb ELSE coalesce($6::jsonb,permission_overrides) END,
+ expense_category_overrides=CASE WHEN $8 THEN '{}'::jsonb ELSE coalesce($7::jsonb,expense_category_overrides) END
+ WHERE id=$1`, id, input.FirstName, input.LastName, input.DateOfBirth, input.Phone, input.PermissionOverrides, input.ExpenseCategoryOverrides, systemRole)
 	if err != nil {
 		return "", err
 	}

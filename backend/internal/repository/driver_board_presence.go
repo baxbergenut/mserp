@@ -20,7 +20,7 @@ func (r *DriverBoardRepository) Presence(ctx context.Context) ([]BoardPresence, 
  FROM driver_board_presence p JOIN app_users u ON u.id=p.user_id JOIN auth_sessions s ON s.token_hash=p.session_hash
  JOIN app_roles role ON role.id=u.role_id JOIN drivers d ON d.id=p.driver_id
  WHERE p.expires_at>now() AND s.expires_at>now() AND u.active AND d.active
- AND (role.system_role OR 'driver_board.read'=ANY(role.permissions)) ORDER BY u.username,p.client_id`)
+ AND (role.system_role OR user_permission_allowed(role.permissions,u.permission_overrides,'driver_board.read')) ORDER BY u.username,p.client_id`)
 	if err != nil {
 		return nil, err
 	}
