@@ -296,7 +296,7 @@ func TestTrackingMotion(t *testing.T) {
 	if motion != "moving" {
 		t.Fatal("duplicate changed movement")
 	}
-	estimate := BoardTravel{Enabled: true, Context: "one", Motion: "moving", CalculatedAt: now, ReportedAt: now, ArrivalAt: time.Date(2026, 10, 17, 19, 0, 0, 0, time.UTC)}
+	estimate := BoardTravel{Enabled: true, Mode: boardroutes.RouteProfile, Context: "one", Motion: "moving", CalculatedAt: now, ReportedAt: now, ArrivalAt: time.Date(2026, 10, 17, 19, 0, 0, 0, time.UTC)}
 	if value, _ := estimate.display("one", now, now); value != "ETA 15:00" {
 		t.Fatal(value)
 	}
@@ -349,7 +349,7 @@ func TestBoardTravelDistanceDisplay(t *testing.T) {
 		{"resting long haul", "stopped", 1000, 12 * time.Hour, "1000mi"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			estimate := BoardTravel{Enabled: true, Context: "one", Motion: tc.motion, Miles: tc.miles, Assumptions: boardroutes.EstimateAssumptions,
+			estimate := BoardTravel{Enabled: true, Mode: boardroutes.RouteProfile, Context: "one", Motion: tc.motion, Miles: tc.miles, Assumptions: boardroutes.EstimateAssumptions,
 				CalculatedAt: now, ReportedAt: now, ArrivalAt: now.Add(time.Hour)}
 			got, reason := estimate.display("one", now.Add(tc.age), now)
 			if got != tc.want {
@@ -373,7 +373,7 @@ func TestBoardTravelETARounding(t *testing.T) {
 		{"2026-10-21T03:59:00Z", "ETA 00:00"},
 	} {
 		arrival, _ := time.Parse(time.RFC3339, tc.arrival)
-		travel := BoardTravel{Enabled: true, Context: "one", Motion: "moving", CalculatedAt: now, ReportedAt: now, ArrivalAt: arrival}
+		travel := BoardTravel{Enabled: true, Mode: boardroutes.RouteProfile, Context: "one", Motion: "moving", CalculatedAt: now, ReportedAt: now, ArrivalAt: arrival}
 		if got, _ := travel.display("one", now, now); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.arrival, got, tc.want)
 		}
@@ -382,7 +382,7 @@ func TestBoardTravelETARounding(t *testing.T) {
 
 func TestBoardTravelRefreshSchedule(t *testing.T) {
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
-	base := BoardTravel{Enabled: true, Context: "load-a", Mode: boardroutes.TravelMode, Source: "five_eld",
+	base := BoardTravel{Enabled: true, Context: "load-a", Mode: boardroutes.RouteProfile, Source: "five_eld",
 		CalculatedAt: now.Add(-91 * time.Minute), AttemptedAt: now.Add(-91 * time.Minute),
 		Position: &boardRoutePosition{Latitude: 40, Longitude: -74}}
 	for _, tc := range []struct {
@@ -402,7 +402,12 @@ func TestBoardTravelRefreshSchedule(t *testing.T) {
 			l.Latitude = 40
 		}, "load-b", true},
 		{"new source bypasses timer", func(t *BoardTravel, _ *DriverBoardLocation) { t.Source = "samsara"; t.AttemptedAt = now }, "load-a", true},
-		{"truck route cache migrates", func(t *BoardTravel, _ *DriverBoardLocation) { t.Mode = ""; t.AttemptedAt = now }, "load-a", true},
+		{"legacy car cache refreshes without movement", func(t *BoardTravel, l *DriverBoardLocation) {
+			t.Mode = "DRIVE"
+			t.CalculatedAt = now
+			t.AttemptedAt = now
+			l.Latitude = 40
+		}, "load-a", true},
 		{"failed attempt backs off", func(t *BoardTravel, _ *DriverBoardLocation) { t.AttemptedAt = now.Add(-time.Minute) }, "load-a", false},
 		{"missing baseline established once", func(t *BoardTravel, _ *DriverBoardLocation) { t.Position = nil }, "load-a", true},
 		{"fresh movement after rest", func(t *BoardTravel, _ *DriverBoardLocation) {
@@ -437,7 +442,7 @@ func TestBoardTravelRefreshSchedule(t *testing.T) {
 
 func TestBoardTravelFreshnessBetweenRefreshes(t *testing.T) {
 	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
-	travel := BoardTravel{Enabled: true, Context: "load", Motion: "moving", Miles: 100,
+	travel := BoardTravel{Enabled: true, Mode: boardroutes.RouteProfile, Context: "load", Motion: "moving", Miles: 100,
 		CalculatedAt: now.Add(-85 * time.Minute), ReportedAt: now.Add(-85 * time.Minute), ArrivalAt: now.Add(time.Hour)}
 	if got, _ := travel.display("load", now, now); got != "ETA 09:00" || travel.stale(now, now) {
 		t.Fatal("fresh GPS did not retain the ETA between paid route refreshes", got)
@@ -570,7 +575,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	travel := BoardTravel{Enabled: true, Context: view.Automation.Context, CalculatedAt: now, ReportedAt: now, ArrivalAt: now.Add(time.Hour), Motion: "moving", Miles: 133}
+	travel := BoardTravel{Enabled: true, Mode: "DRIVE", Context: view.Automation.Context, CalculatedAt: now, ReportedAt: now, ArrivalAt: now.Add(time.Hour), Motion: "moving", Miles: 133, Geometry: &boardroutes.RouteGeometry{Polyline: "legacy", Precision: 5}}
 	if err = repo.storeBoardTravel(ctx, d.ID, truck.ID, view.Revision, view.Automation.Context, travel); err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +594,18 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Automation.TravelMode != "auto" || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") {
+	if view.Automation.TravelValue != "" {
+		t.Fatal("legacy car ETA remained visible", view.Automation)
+	}
+	if mapRoute, err := repo.MapRoute(ctx, d.ID); err != nil || mapRoute != nil {
+		t.Fatal("legacy car geometry remained visible", err, mapRoute)
+	}
+	travel.Mode = boardroutes.RouteProfile
+	if err = repo.storeBoardTravel(ctx, d.ID, truck.ID, view.Revision, view.Automation.Context, travel); err != nil {
+		t.Fatal(err)
+	}
+	view, err = repo.Loads(ctx, d.ID, "")
+	if err != nil || view.Automation.TravelMode != "auto" || !strings.HasPrefix(view.Automation.TravelValue, "ETA ") {
 		t.Fatal("automatic estimate projection", view.Automation)
 	}
 	// Stale GPS can bootstrap distance without inventing movement or querying ELD.
@@ -603,7 +619,23 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	var cancelRoute atomic.Bool
 	routeEntered := make(chan struct{}, 1)
 	routeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/geocode/") {
+			customCalls.Add(1)
+			switch req.URL.Path {
+			case "/geocode/" + customAddress + ".json":
+				_, _ = w.Write([]byte(`{"results":[{"type":"Point Address","matchConfidence":{"score":1},"position":{"lat":40.7357,"lon":-74.1724}}]}`))
+			case "/geocode/" + invalidAddress + ".json":
+				_, _ = w.Write([]byte(`{"results":[{"type":"Street","matchConfidence":{"score":1}}]}`))
+			default:
+				t.Errorf("unexpected address geocoded: %q", req.URL.Path)
+			}
+			return
+		}
 		routeCalls.Add(1)
+		q := req.URL.Query()
+		if req.Method != http.MethodGet || q.Get("travelMode") != "truck" || q.Get("vehicleNumberOfAxles") != "5" || q.Get("vehicleLength") != "22.4028" {
+			t.Error("expected VRC 791 truck route")
+		}
 		if cancelRoute.Load() {
 			routeEntered <- struct{}{}
 			select {
@@ -612,40 +644,16 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 			}
 			return
 		}
-		if req.Method == http.MethodGet {
-			_, _ = w.Write([]byte(`{"routes":[{"summary":{"travelTimeInSeconds":3600,"lengthInMeters":160934},"legs":[{"encodedPolyline":"_p~iF~ps|U_ulLnnqC","encodedPolylinePrecision":5}]}]}`))
+		if strings.HasSuffix(req.URL.Path, ":40.7357000,-74.1724000/json") {
+			_, _ = w.Write([]byte(`{"routes":[{"summary":{"travelTimeInSeconds":7200,"lengthInMeters":321868}}]}`))
 			return
 		}
-		var request struct {
-			Destination struct {
-				Address string `json:"address"`
-			} `json:"destination"`
-		}
-		if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
-			t.Error(err)
-		}
-		if address := request.Destination.Address; address != "" {
-			customCalls.Add(1)
-			if !strings.Contains(req.Header.Get("X-Goog-FieldMask"), "geocodingResults.destination") {
-				t.Error("missing address verification fields")
-			}
-			switch address {
-			case customAddress:
-				_, _ = w.Write([]byte(`{"geocodingResults":{"destination":{"placeId":"fixture"}},"routes":[{"duration":"7200s","distanceMeters":321868}]}`))
-			case invalidAddress:
-				_, _ = w.Write([]byte(`{"geocodingResults":{"destination":{"placeId":"fixture","partialMatch":true}},"routes":[{"duration":"3600s","distanceMeters":160934}]}`))
-			default:
-				t.Errorf("unexpected address routed: %q", address)
-			}
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"routes":[{"duration":"3600s","distanceMeters":160934}]}`))
+		_, _ = w.Write([]byte(`{"routes":[{"summary":{"travelTimeInSeconds":3600,"lengthInMeters":160934},"legs":[{"encodedPolyline":"_p~iF~ps|U_ulLnnqC","encodedPolylinePrecision":5}]}]}`))
 	}))
 	defer routeServer.Close()
-	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, APIKey: "fixture", TomTomAPIKey: "fixture", SpeedUnit: "mph", RequestsPerMinute: 120, GoogleMonthlyFree: 10000, TomTomMonthlyFree: 20000, TomTomBillingTimezone: "UTC"})
+	routes := boardroutes.NewClient(boardroutes.Options{Enabled: true, TomTomAPIKey: "fixture", SpeedUnit: "mph", RequestsPerMinute: 120, TomTomMonthlyFree: 20000, TomTomBillingTimezone: "UTC", AddressGeocodeMonthlyLimit: 1000})
 	routes.TomTomURL = routeServer.URL
-	routes.URL = routeServer.URL
+	routes.TomTomGeocodeURL = routeServer.URL + "/geocode"
 	routes.Budget = boardroutes.NewPostgresBudget(pool)
 	// A just-edited destination must settle before any paid provider request.
 	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET route_not_before=$2 WHERE driver_id=$1`, d.ID, now.Add(5*time.Second)); err != nil {
@@ -840,12 +848,6 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if _, err := pool.Exec(ctx, `UPDATE five_eld_locations SET reported_at=$2 WHERE vin=$1`, vin, trackingAt); err != nil {
 		t.Fatal(err)
 	}
-	// Address waypoints use the Google allowance even while TomTom is preferred.
-	coordinateOptions := routes.Options
-	routes.Options.TomTomAPIKey = "fixture"
-	routes.Options.TomTomMonthlyFree = 20000
-	routes.Options.PaidProvider = "tomtom"
-	routes.TomTomURL = routeServer.URL
 	view = setAddress(customAddress)
 	if !view.Automation.CustomDestination || view.Automation.TravelValue != "" || view.Automation.Arrived {
 		t.Fatal("previous destination evidence carried over", view.Automation)
@@ -859,6 +861,19 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal("stop time could not be edited independently", err, updated)
 	}
 	entry, appointment = updated.Entry, "DEL 16:00 SAT"
+	// A refresh of the same custom destination reuses its coordinate match.
+	workerNow = time.Now().Add(boardRouteInterval + time.Minute)
+	repo.now = func() time.Time { return workerNow }
+	if _, err = pool.Exec(ctx, `UPDATE driver_board_automation SET travel=travel-'position' WHERE driver_id=$1`, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	before := routeCalls.Load()
+	runCustomRoute()
+	repo.now = originalClock
+	if customCalls.Load() != 1 || routeCalls.Load() != before+1 {
+		t.Fatal("refresh did not reuse verified destination coordinates", customCalls.Load(), routeCalls.Load()-before)
+	}
+
 	setAddress(invalidAddress)
 	view = runCustomRoute()
 	if view.Automation.TravelValue != "" || !strings.Contains(view.Automation.Reason, "complete destination address") {
@@ -871,7 +886,6 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if customCalls.Load() != 2 {
 		t.Fatal("rejected address was sent again", customCalls.Load())
 	}
-	routes.Options = coordinateOptions
 	view = setAddress("")
 	if !view.DestinationSource || view.Automation.CustomDestination || view.SourceDestination != "South River, NJ" {
 		t.Fatal("clearing the custom address did not restore the selected stop", view)
@@ -893,7 +907,7 @@ func testBoardAutomationDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err != nil {
 		t.Fatal(err)
 	}
-	retryTravel := BoardTravel{Enabled: true, Context: view.Automation.Context, Source: "five_eld", Mode: boardroutes.TravelMode, CalculatedAt: trackingAt, ReportedAt: trackingAt, AttemptedAt: trackingAt, ArrivalAt: trackingAt.Add(time.Hour), Miles: 100, Position: &boardRoutePosition{Latitude: trackingLat, Longitude: -74.3909193}}
+	retryTravel := BoardTravel{Enabled: true, Context: view.Automation.Context, Source: "five_eld", Mode: boardroutes.RouteProfile, CalculatedAt: trackingAt, ReportedAt: trackingAt, AttemptedAt: trackingAt, ArrivalAt: trackingAt.Add(time.Hour), Miles: 100, Position: &boardRoutePosition{Latitude: trackingLat, Longitude: -74.3909193}}
 	// A failed automatic attempt seconds ago must not block the first manual click.
 	retryTravel.Error = "route unavailable: HTTP 400"
 	retryTravel.CalculatedAt = time.Time{}
