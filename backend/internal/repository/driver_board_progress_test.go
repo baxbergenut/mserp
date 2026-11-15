@@ -96,7 +96,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	if e.CurrentLoad != "PROGRESS-B" || e.Status != "DISPATCHED" || delivered.Loads.SourceDestination != "Boston, MA" || e.Notes != "Keep notes" || e.ETA != "" {
 		t.Fatal("delivery/promotion", delivered)
 	}
-	if len(delivered.Loads.Unavailable) != 1 || delivered.Loads.Unavailable[0].CompletedByName != "Progress editor" {
+	if len(delivered.Loads.Unavailable) != 1 || delivered.Loads.Unavailable[0].MarkedAsCompleted || delivered.Loads.Unavailable[0].CompletedByName != "Progress editor" {
 		t.Fatal("delivery did not record the completing editor", delivered.Loads.Unavailable)
 	}
 	if _, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: staleEntry.Version, FromDate: staleView.FromDate, Revision: staleView.Revision, Action: "advance"}, actor); !errors.Is(err, ErrDriverBoardConflict) {
@@ -283,7 +283,7 @@ func testBoardProgress(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 		t.Fatal("restored older plan is missing from source refresh", ids, err)
 	}
 	undo(e.UndoID)
-	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 || !v.Unavailable[0].CanRestoreToQueue || v.Unavailable[0].CompletedByName != "Progress editor" {
+	if v = view(); len(v.Next) != 0 || len(v.Unavailable) != 1 || !v.Unavailable[0].CanRestoreToQueue || v.Unavailable[0].MarkedAsCompleted || v.Unavailable[0].CompletedByName != "Progress editor" {
 		t.Fatal("restore undo did not reinstate completion", v)
 	}
 	act(restore)

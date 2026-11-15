@@ -44,6 +44,7 @@ type BoardLoad struct {
 	Overdue             bool        `json:"overdue,omitempty"`
 	Completed           bool        `json:"completed,omitempty"`
 	CompletedByName     string      `json:"completedByName,omitempty"`
+	MarkedAsCompleted   bool        `json:"markedAsCompleted,omitempty"`
 	CanRestoreToQueue   bool        `json:"canRestoreToQueue,omitempty"`
 	Manual              bool        `json:"manual,omitempty"`
 	PlanID              string      `json:"planId"`
@@ -825,7 +826,7 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 		return BoardLoads{}, err
 	}
 	if !includeRoute {
-		if err := annotateBoardCompletionActors(ctx, tx, id, views[id].Unavailable); err != nil {
+		if err := annotateBoardCompletions(ctx, tx, id, views[id].Unavailable); err != nil {
 			return BoardLoads{}, err
 		}
 	}
@@ -1254,7 +1255,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	result = BoardLoadResult{Entry: saved[0], Loads: views[a.DriverID]}
-	if err = annotateBoardCompletionActors(ctx, tx, a.DriverID, result.Loads.Unavailable); err != nil {
+	if err = annotateBoardCompletions(ctx, tx, a.DriverID, result.Loads.Unavailable); err != nil {
 		return result, err
 	}
 	result.Entry.Status = boardProgressStatus(result.Entry.Status, result.Loads.Next)

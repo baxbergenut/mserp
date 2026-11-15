@@ -114,11 +114,11 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		t.Fatal("last queue completion did not preserve loaded progress", old, done.Entry)
 	}
 	p := find(done.Loads.Unavailable, "84V7859")
-	if find(done.Loads.Next, "84V7859") != nil || p == nil || !p.Completed || !p.CanRestoreToQueue || p.CompletedByName != "Ben Simpson" {
+	if find(done.Loads.Next, "84V7859") != nil || p == nil || !p.Completed || !p.CanRestoreToQueue || !p.MarkedAsCompleted || p.CompletedByName != "Ben Simpson" {
 		t.Fatal("completion", done)
 	}
 	exec(`UPDATE app_users SET username='Renamed completion editor' WHERE id=$1`, actor)
-	if p := find(view().Unavailable, "84V7859"); p == nil || p.CompletedByName != "Ben Simpson" {
+	if p := find(view().Unavailable, "84V7859"); p == nil || !p.MarkedAsCompleted || p.CompletedByName != "Ben Simpson" {
 		t.Fatal("completion name snapshot after reload", p)
 	}
 	if e.CurrentLoad != old.CurrentLoad || e.Destination != old.Destination || e.ETA != old.ETA || e.Notes != old.Notes || done.Loads.Current.Number != initial.Current.Number || done.Loads.StopKey != initial.StopKey {
@@ -145,7 +145,7 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 	// Keep the plan in the visible week when it becomes terminal at the provider.
 	exec(`UPDATE gross_board_entries SET service_date='2026-11-09' WHERE plan_id=$1`, target.PlanID)
 	exec(`UPDATE loads SET status='Delivered' WHERE id=88971`)
-	if p := find(view().Unavailable, "84V7859"); p == nil || p.CanRestoreToQueue || p.CompletedByName != "Second completion editor" {
+	if p := find(view().Unavailable, "84V7859"); p == nil || p.CanRestoreToQueue || !p.MarkedAsCompleted || p.CompletedByName != "Second completion editor" {
 		t.Fatal("provider terminal load lost local completion attribution", p)
 	}
 	if _, err = repo.ChangeLoads(ctx, action("restore_completed", target.PlanID), ""); !errors.Is(err, ErrBoardLoadSelection) {
@@ -169,7 +169,7 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		}
 	}
 	exec(`UPDATE loads SET status='Delivered' WHERE id=88973`)
-	if p := find(view().Unavailable, "COMPLETE-MANUAL"); p == nil || !p.Completed || p.CompletedByName != "" {
+	if p := find(view().Unavailable, "COMPLETE-MANUAL"); p == nil || !p.Completed || p.MarkedAsCompleted || p.CompletedByName != "" {
 		t.Fatal("provider-only completion received a board editor", p)
 	}
 }

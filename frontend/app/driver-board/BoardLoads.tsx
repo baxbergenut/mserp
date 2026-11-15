@@ -123,14 +123,18 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     const inTransit = kind === "earlier" && inTransitLoad(load);
     const status = current ? "Current" : kind === "completed" ? "Completed" : load.previouslyActive ? "Previously active" : inTransit ? "In Transit" : load.overdue ? "Overdue" : "";
     const completedBy = kind === "completed" ? load.completedByName : undefined;
+    const markedAsCompleted = kind === "completed" && load.markedAsCompleted;
+    const statusLabel = markedAsCompleted ? "Marked as Completed" : status ? `${status} load` : "";
     const draggable = kind === "next" && canEdit && drag.queue.length > 1 && !locked;
     return <article key={load.planId} data-queued-load={kind === "next" ? load.planId : undefined}
       onPointerDown={draggable ? event => drag.start(event, load.planId) : undefined}
       className={`relative rounded-lg border data-[load-dragging=true]:z-[15] data-[load-dragging=true]:cursor-grabbing data-[load-dragging=true]:bg-zinc-950 data-[load-dragging=true]:ring-2 data-[load-dragging=true]:ring-blue-400 ${draggable ? "touch-none cursor-grab select-none" : ""} ${current ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-800"}`}>
       <div className="flex items-center">
-        <button type="button" aria-label={`${load.number}${status ? ` · ${status} load` : ""}${completedBy ? ` by ${completedBy}` : ""}`} aria-expanded={open}
+        <button type="button" aria-label={`${load.number}${statusLabel ? ` · ${statusLabel}` : ""}${completedBy ? ` by ${completedBy}` : ""}`} aria-expanded={open}
         className={`flex min-h-10 min-w-0 flex-1 items-center gap-2 px-3 text-left text-sm font-medium text-zinc-200 hover:bg-zinc-800/60 ${draggable ? "cursor-[inherit]" : ""}`}
-        onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null || load.sourceMissing ? "text-red-300" : ""}`}>{load.number}</span>{status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${current ? "bg-blue-500/20 text-blue-200" : "bg-zinc-800 text-zinc-300"}`}>{status}</span>}
+        onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null || load.sourceMissing ? "text-red-300" : ""}`}>{load.number}</span>
+          {markedAsCompleted && <span className="shrink-0 text-xs text-zinc-400">Marked as</span>}
+          {status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${current ? "bg-blue-500/20 text-blue-200" : "bg-zinc-800 text-zinc-300"}`}>{status}</span>}
           {completedBy && <span className="max-w-[45%] truncate text-xs text-zinc-400" title={completedBy}>by {completedBy}</span>}
         </button><CopyLoadNumber number={load.number} /></div>
       {open && <div className="border-t border-zinc-800 px-3 pb-3">{detail(load)}

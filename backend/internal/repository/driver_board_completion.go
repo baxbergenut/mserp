@@ -6,9 +6,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Read attribution only for the load panel and its action responses. Use the
-// audit's name snapshot from the actual completion, including older completions.
-func annotateBoardCompletionActors(ctx context.Context, tx pgx.Tx, driver string, loads []BoardLoad) error {
+// Read completion details only for the load panel and its action responses.
+// A final advance clears or replaces the current load. Mark completed leaves
+// both its text and its selected plan intact, including when neither is set.
+func annotateBoardCompletions(ctx context.Context, tx pgx.Tx, driver string, loads []BoardLoad) error {
 	var positions []int
 	var loadKeys, planKeys, aliasKeys []string
 	for i, load := range loads {
@@ -25,7 +26,7 @@ func annotateBoardCompletionActors(ctx context.Context, tx pgx.Tx, driver string
 
 	// The key must still be completed locally. Undoing a restore brings back
 	// the original completion and should still credit its original actor.
-	rows, err := tx.Query(ctx, `SELECT candidate.ordinal, event.actor_name
+	rows, err := tx.Query(ctx, `SELECT candidate.ordinal, event.actor_name, event.marked_as_completed
  FROM driver_board_load_state s
  CROSS JOIN unnest($2::text[], $3::text[], $4::text[]) WITH ORDINALITY AS candidate(load_key, plan_key, alias_key, ordinal)
  CROSS JOIN LATERAL (
@@ -33,7 +34,12 @@ func annotateBoardCompletionActors(ctx context.Context, tx pgx.Tx, driver string
      WHERE (s.payload->'completed') ? key) AS active
  ) keys
  JOIN LATERAL (
-   SELECT CASE WHEN h.source='board' AND h.actor_id<>'' AND h.actor_name<>'System' THEN h.actor_name ELSE '' END AS actor_name
+   SELECT CASE WHEN h.source='board' AND h.actor_id<>'' AND h.actor_name<>'System' THEN h.actor_name ELSE '' END AS actor_name,
+     h.source='board' AND NOT (h.after_values ? 'currentLoad')
+       AND ROW((h.before_values->>'loadPlan')::jsonb#>>'{current,planId}', (h.before_values->>'loadPlan')::jsonb#>>'{current,loadId}')
+         IS NOT DISTINCT FROM
+           ROW((h.after_values->>'loadPlan')::jsonb#>>'{current,planId}', (h.after_values->>'loadPlan')::jsonb#>>'{current,loadId}')
+       AS marked_as_completed
    FROM driver_board_history h
    WHERE h.driver_id=s.driver_id AND h.undo_of IS NULL
      AND h.before_values ? 'loadPlan' AND h.after_values ? 'loadPlan'
@@ -49,10 +55,13 @@ func annotateBoardCompletionActors(ctx context.Context, tx pgx.Tx, driver string
 	for rows.Next() {
 		var ordinal int
 		var name string
-		if err := rows.Scan(&ordinal, &name); err != nil {
+		var markedAsCompleted bool
+		if err := rows.Scan(&ordinal, &name, &markedAsCompleted); err != nil {
 			return err
 		}
-		loads[positions[ordinal-1]].CompletedByName = name
+		load := &loads[positions[ordinal-1]]
+		load.CompletedByName = name
+		load.MarkedAsCompleted = markedAsCompleted
 	}
 	return rows.Err()
 }

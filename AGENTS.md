@@ -4101,7 +4101,9 @@ the existing budget/backoff; manual destination text stays untouched.
   and frontend/scripts/test-status-board-loads.mjs.
 - The Next Loads panel shows the recorded editor next to Completed. Both queued
   completion and current-load progression use the original name from the board
-  audit. Provider-only completions have no editor label.
+  audit. The panel prefixes the badge with Marked as for queued completions,
+  which preserve the current load's text and selection in the audit.
+  Provider-only completions have no editor label.
 
 ## Relay status-linked fuel policies (208)
 
