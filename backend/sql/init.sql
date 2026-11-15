@@ -10318,10 +10318,14 @@ COMMIT;
 
 BEGIN;
 ALTER TABLE trucks ADD COLUMN truck_class varchar(20), ADD COLUMN gvwr_lbs integer;
+COMMIT;
+
+BEGIN;
 ALTER TABLE board_route_usage DROP CONSTRAINT board_route_usage_provider_check;
 ALTER TABLE board_route_usage ADD CONSTRAINT board_route_usage_provider_check
     CHECK (provider IN ('tomtom','google','tomtom_reverse','tomtom_geocode'));
 COMMIT;
+
 -- User exceptions are applied after role grants; missing keys inherit.
 ALTER TABLE app_users ADD COLUMN permission_overrides jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(permission_overrides)='object');
 ALTER TABLE app_users ADD COLUMN expense_category_overrides jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(expense_category_overrides)='object');
@@ -10331,3 +10335,24 @@ CREATE FUNCTION user_permission_allowed(role_permissions text[], overrides jsonb
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
  SELECT CASE overrides->>permission_key WHEN 'allow' THEN true WHEN 'deny' THEN false ELSE permission_key=ANY(role_permissions) END
 $$;
+
+BEGIN;
+-- One-time deployment policy. Later explicit role edits use the normal catalog.
+CREATE TEMP TABLE investor_access_before ON COMMIT DROP AS
+SELECT id,permissions FROM app_roles;
+UPDATE app_roles SET permissions=CASE
+ WHEN lower(btrim(name)) IN ('accountant','accountants') THEN
+   ARRAY(SELECT DISTINCT p FROM unnest(permissions || ARRAY['investors.read','investor_pay.read']) p ORDER BY p)
+ ELSE ARRAY(SELECT p FROM unnest(permissions) p
+   WHERE p NOT LIKE 'investors.%' AND p NOT LIKE 'investor_pay.%' AND p NOT LIKE 'investor_terms.%')
+ END,version=version+1 WHERE NOT system_role;
+INSERT INTO access_audit(actor_id,action,target_id,details)
+SELECT NULL,'sensitive_investor_access',r.id,
+ jsonb_build_object('before',b.permissions,'after',r.permissions,'reason','Investor access restricted to Administrators and Accountants at deployment')
+FROM app_roles r JOIN investor_access_before b USING(id);
+-- Drop cached browser data through a fresh sign-in at the privacy cutover.
+DELETE FROM auth_sessions;
+-- A durable marker also fences rollback if migration-ledger recording fails.
+CREATE OR REPLACE FUNCTION investor_identity_access_v1() RETURNS boolean
+LANGUAGE sql IMMUTABLE AS $$ SELECT true $$;
+COMMIT;

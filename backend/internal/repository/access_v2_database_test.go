@@ -63,6 +63,11 @@ func TestPermissionsV2Migration(t *testing.T) {
 				exec(`INSERT INTO app_roles(name,permissions) VALUES ('Ops',ARRAY['fleet.read','fleet.write']),('Broken',ARRAY['fleet.write','payroll.write','escrow.write']),('Finance',ARRAY['payroll.read','payroll.write','payroll.finalize','charges.read','charges.write','escrow.read','escrow.write']),('Accountant',ARRAY[]::text[])`)
 				exec(`INSERT INTO app_users(username,password_hash,role_id) SELECT 'cutover',crypt('test-fixture-only',gen_salt('bf')),id FROM app_roles WHERE name='Ops'; INSERT INTO auth_sessions(user_id,token_hash,csrf_token,expires_at) SELECT id,repeat('a',64),repeat('b',43),now()+interval '1 day' FROM app_users WHERE username='cutover'`)
 				exec(string(migration))
+				investorMigration, readErr := os.ReadFile("../../sql/217_sensitive_investor_access.sql")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				exec(string(investorMigration))
 				for _, name := range []string{"Ops", "Broken", "Finance", "Accountant"} {
 					var keys []string
 					if err := db.QueryRow(ctx, "SELECT permissions FROM app_roles WHERE name=$1", name).Scan(&keys); err != nil {
@@ -82,7 +87,7 @@ func TestPermissionsV2Migration(t *testing.T) {
 					if name == "Broken" && len(keys) != 0 {
 						t.Fatal("write-without-view expanded access")
 					}
-					if name == "Finance" && (!slices.Contains(keys, "investor_pay.reopen") || !slices.Contains(keys, "investor_terms.edit") || !slices.Contains(keys, "escrow.create") || !slices.Contains(keys, "escrow.edit") || !slices.Contains(keys, "escrow.delete")) {
+					if name == "Finance" && (slices.Contains(keys, "investor_pay.reopen") || slices.Contains(keys, "investor_terms.edit") || !slices.Contains(keys, "escrow.create") || !slices.Contains(keys, "escrow.edit") || !slices.Contains(keys, "escrow.delete")) {
 						t.Fatal("financial mapping missing")
 					}
 					if name == "Accountant" && !slices.Contains(keys, "expenses.accounting.verify") {

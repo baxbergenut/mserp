@@ -173,6 +173,9 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 		if h.snapshotEvent == "grossBoard" {
 			path = "/gross-board/events"
 		}
+		if !repository.HasPermission(session.User, "investors.read") {
+			projectInvestorNames(value, false)
+		}
 		projectFields(value, session.User, path)
 		if h.snapshotEvent == "board" && ctx.Value(boardOverviewContext{}) == true {
 			if board, ok := value.(map[string]any); ok {
