@@ -7,7 +7,8 @@ export interface DashboardMetric {
   repeats: number; repeatedGross: string; rawGross: string;
 }
 export interface DashboardBreakdown extends DashboardMetric { id: string; name: string }
-export interface DashboardPerformance { current: DashboardMetric; previous: DashboardMetric; trend: DashboardBreakdown[]; dispatchers: DashboardBreakdown[] }
+export interface DashboardDispatcher extends DashboardBreakdown { grossPerActiveTruck: string | null }
+export interface DashboardPerformance { current: DashboardMetric; previous: DashboardMetric; trend: DashboardBreakdown[]; dispatchers: DashboardDispatcher[] }
 export interface DashboardItem { id: string; label: string; count: number; amount?: string; previousAmount?: string; incomplete?: number; href: string; note?: string }
 export interface DashboardSection { kind: "performance" | "fleet" | "cost" | "attention"; title: string; updatedAt: string; error?: string; items: DashboardItem[]; performance?: DashboardPerformance }
 export interface CompanyDashboard { period: DashboardPeriod; sections: Record<string, DashboardSection> }

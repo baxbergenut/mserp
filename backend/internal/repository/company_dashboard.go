@@ -112,11 +112,15 @@ type DashboardBreakdown struct {
 	Name string `json:"name"`
 	DashboardMetric
 }
+type DashboardDispatcher struct {
+	DashboardBreakdown
+	GrossPerActiveTruck *string `json:"grossPerActiveTruck"`
+}
 type DashboardPerformance struct {
-	Current     DashboardMetric      `json:"current"`
-	Previous    DashboardMetric      `json:"previous"`
-	Trend       []DashboardBreakdown `json:"trend"`
-	Dispatchers []DashboardBreakdown `json:"dispatchers"`
+	Current     DashboardMetric       `json:"current"`
+	Previous    DashboardMetric       `json:"previous"`
+	Trend       []DashboardBreakdown  `json:"trend"`
+	Dispatchers []DashboardDispatcher `json:"dispatchers"`
 }
 type DashboardItem struct {
 	ID             string  `json:"id"`
@@ -198,12 +202,34 @@ const companyDashboardMetricsSQL = `jsonb_build_object(
  'rawGross',coalesce(sum(gross),0)::text)`
 
 func (r *DashboardRepository) Performance(ctx context.Context, p DashboardPeriod) (DashboardPerformance, error) {
-	value := DashboardPerformance{Trend: []DashboardBreakdown{}, Dispatchers: []DashboardBreakdown{}}
+	value := DashboardPerformance{Trend: []DashboardBreakdown{}, Dispatchers: []DashboardDispatcher{}}
 	// One statement keeps all visible reporting aggregates on the same snapshot.
-	query := companyDashboardCTE + `, summary AS (
+	query := companyDashboardCTE + `, truck_days AS (
+ SELECT days.driver_id,days.service_date,a.truck_id
+ FROM (
+  SELECT DISTINCT driver_id,service_date FROM dated WHERE service_date >= $3::date AND inclusion='included'
+ ) days
+ LEFT JOIN driver_teams team ON team.team_driver_id=days.driver_id
+  AND team.start_week<=days.service_date AND (team.end_week IS NULL OR days.service_date<team.end_week)
+ LEFT JOIN LATERAL (
+  SELECT min(h.truck_id::text) AS truck_id
+  FROM truck_driver_assignments h
+  WHERE h.driver_id=coalesce(team.main_driver_id,days.driver_id)
+   AND h.assigned_at<((days.service_date+1)::timestamp AT TIME ZONE 'America/New_York')
+   AND (h.unassigned_at IS NULL OR h.unassigned_at>=((days.service_date+1)::timestamp AT TIME ZONE 'America/New_York'))
+   AND (h.unassigned_at IS NULL OR h.assigned_at<h.unassigned_at)
+  HAVING count(DISTINCT h.truck_id)=1
+ ) a ON true
+ ), summary AS (
  SELECT 'current' AS kind,'' AS id,'' AS name,` + companyDashboardMetricsSQL + ` AS metrics FROM dated WHERE service_date BETWEEN $3::date AND $2::date
  UNION ALL SELECT 'previous','','',` + companyDashboardMetricsSQL + ` FROM dated WHERE service_date BETWEEN $1::date AND $4::date
- UNION ALL SELECT 'dispatcher',dispatcher_id,dispatcher_name,` + companyDashboardMetricsSQL + ` FROM dated WHERE service_date BETWEEN $3::date AND $2::date GROUP BY dispatcher_id,dispatcher_name
+ UNION ALL SELECT 'dispatcher',dispatcher_id,dispatcher_name,` + companyDashboardMetricsSQL + ` ||
+ jsonb_build_object('grossPerActiveTruck',
+  CASE WHEN dispatcher_id<>'' AND count(*) FILTER (WHERE inclusion='included' AND truck_id IS NULL)=0
+  THEN round(sum(gross) FILTER (WHERE inclusion='included') / nullif(count(DISTINCT truck_id),0),2)::text END
+ )
+ FROM dated LEFT JOIN truck_days USING (driver_id,service_date)
+ WHERE service_date >= $3::date GROUP BY dispatcher_id,dispatcher_name
  UNION ALL SELECT 'trend',date_trunc($5,service_date)::date::text,'',` + companyDashboardMetricsSQL + ` FROM dated WHERE service_date BETWEEN $3::date AND $2::date GROUP BY date_trunc($5,service_date)
  ) SELECT kind,id,name,metrics FROM summary ORDER BY kind,id`
 	rows, err := r.pool.Query(ctx, query, p.CompareFrom, p.DateTo, p.DateFrom, p.CompareTo, p.Bucket)
@@ -213,12 +239,12 @@ func (r *DashboardRepository) Performance(ctx context.Context, p DashboardPeriod
 	defer rows.Close()
 	for rows.Next() {
 		var kind string
-		var row DashboardBreakdown
+		var row DashboardDispatcher
 		var raw []byte
 		if err = rows.Scan(&kind, &row.ID, &row.Name, &raw); err != nil {
 			return value, err
 		}
-		if err = json.Unmarshal(raw, &row.DashboardMetric); err != nil {
+		if err = json.Unmarshal(raw, &row); err != nil {
 			return value, err
 		}
 		switch kind {
@@ -229,7 +255,7 @@ func (r *DashboardRepository) Performance(ctx context.Context, p DashboardPeriod
 		case "dispatcher":
 			value.Dispatchers = append(value.Dispatchers, row)
 		case "trend":
-			value.Trend = append(value.Trend, row)
+			value.Trend = append(value.Trend, row.DashboardBreakdown)
 		}
 	}
 	return value, rows.Err()

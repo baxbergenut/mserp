@@ -1024,6 +1024,8 @@ status while background source evidence refreshes.
   available in the API. No provider calls.
   Weekly and Right now tabs request separate section projections. Weekly uses
   full Monday-Sunday periods with a date range selector on the left.
+  Dispatcher bars default to gross per active truck using distinct dated trucks
+  on counted loads. Missing or ambiguous truck assignments leave GPT unavailable.
   Expense categories use a compact grid within Recorded costs.
   The revenue waterfall and its exclusive review
   dialogs/API/calculation are retired; dashboard reads no longer calculate payroll.

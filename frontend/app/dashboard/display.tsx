@@ -12,8 +12,15 @@ export function Change({ current, previous }: { current: string | number | null;
   const Icon = delta >= 0 ? ArrowUpRight : ArrowDownRight;
   return <span className="inline-flex items-center gap-1 text-xs text-zinc-400"><Icon size={13} />{Math.abs(delta).toFixed(1)}% {delta >= 0 ? "higher" : "lower"}</span>;
 }
-export function Panel({ title, children, subtitle }: { title: string; children: ReactNode; subtitle?: string }) {
-  return <section className="min-w-0 rounded-xl border border-zinc-800 bg-card p-4"><h2 className="text-sm font-semibold text-zinc-100">{title}</h2>{subtitle && <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>}{children}</section>;
+export function Panel({ title, children, subtitle, actions }: { title: string; children: ReactNode; subtitle?: string; actions?: ReactNode }) {
+  return <section className="min-w-0 rounded-xl border border-zinc-800 bg-card p-4">
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+      {actions}
+    </div>
+    {subtitle && <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>}
+    {children}
+  </section>;
 }
 export function SectionError({ section }: { section: DashboardSection }) {
   return section.error ? <p role="status" className="mt-2 text-xs text-amber-400">{section.error}{section.performance || section.items.length ? ` · Last result: ${new Date(section.updatedAt).toLocaleTimeString()}` : ""}</p> : null;

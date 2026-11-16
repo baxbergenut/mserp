@@ -60,11 +60,17 @@ func TestCompanyDashboardDatabase(t *testing.T) {
 	_, err = pool.Exec(ctx, `CREATE TEMP TABLE drivers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE dispatchers(id uuid PRIMARY KEY,full_name text);
  CREATE TEMP TABLE driver_dispatcher_assignments(driver_id uuid,dispatcher_id uuid,dispatcher_name text,assigned_at timestamptz,unassigned_at timestamptz,start_known boolean);
+ CREATE TEMP TABLE driver_teams(team_driver_id uuid,main_driver_id uuid,start_week date,end_week date);
+ CREATE TEMP TABLE truck_driver_assignments(driver_id uuid,truck_id uuid,assigned_at timestamptz,unassigned_at timestamptz);
  CREATE TEMP TABLE loads(id int PRIMARY KEY,load_id text,total_pay numeric(12,2),total_miles numeric(12,2));
  CREATE TEMP TABLE gross_board_entries(driver_id uuid,service_date date,load_number text,load_record_id int,original_rate numeric(12,2),driver_rate numeric(12,2),miles numeric(12,2),version int,entered_original_rate numeric(12,2),entered_miles numeric(12,2),day_status text DEFAULT '',note text);
  CREATE TEMP TABLE gross_board_extra_entries(LIKE gross_board_entries);ALTER TABLE gross_board_extra_entries ADD COLUMN slot int;ALTER TABLE gross_board_extra_entries ADD COLUMN deleted boolean DEFAULT false;
  INSERT INTO drivers VALUES('00000000-0000-0000-0000-000000000001','Driver A'),('00000000-0000-0000-0000-000000000002','Driver B');
  INSERT INTO dispatchers VALUES('00000000-0000-0000-0000-000000000010','Dispatch A'),('00000000-0000-0000-0000-000000000011','Dispatch B');
+ INSERT INTO driver_teams VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002','2026-10-19',null);
+ INSERT INTO truck_driver_assignments VALUES
+ ('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000020','2026-10-19 00:00-04','2026-10-25 00:00-04'),
+ ('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000021','2026-10-25 00:00-04',null);
  INSERT INTO driver_dispatcher_assignments VALUES('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000010','Dispatch A','2026-01-01 00:00-05','2026-10-21 00:00-04',true),('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','Dispatch B','2026-10-21 00:00-04',null,true);
  INSERT INTO loads VALUES(1,'REPEAT',1000,500),(2,'OVERRIDE',900,450),(3,'NO-MILES',200,null),(4,'CONFLICT',500,100),(5,'AMBIGUOUS',500,100),(6,'AMBIGUOUS',600,100),(7,'NO-RATE',null,300);
  INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate,entered_original_rate,entered_miles) VALUES
@@ -95,6 +101,30 @@ func TestCompanyDashboardDatabase(t *testing.T) {
 	}
 	if v.Previous.Gross != "1000.00" || len(v.Dispatchers) != 3 {
 		t.Fatalf("bad comparison/breakdown %+v", v)
+	}
+	for _, row := range v.Dispatchers {
+		want := map[string]string{"Dispatch A": "1200.00", "Dispatch B": "200.00"}[row.Name]
+		got := ""
+		if row.GrossPerActiveTruck != nil {
+			got = *row.GrossPerActiveTruck
+		}
+		if got != want {
+			t.Fatalf("%s gross per active truck = %q, want %q", row.Name, got, want)
+		}
+	}
+	if _, err = pool.Exec(ctx, `UPDATE truck_driver_assignments SET assigned_at='2026-10-24 00:00-04' WHERE unassigned_at IS NULL`); err != nil {
+		t.Fatal(err)
+	}
+	v, err = repo.Performance(ctx, p)
+	if err != nil || len(v.Dispatchers) != 3 || v.Dispatchers[2].GrossPerActiveTruck != nil {
+		t.Fatalf("ambiguous dated truck assignment should leave GPT unavailable: %+v, %v", v.Dispatchers, err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE truck_driver_assignments SET unassigned_at='2026-10-24 00:00-04' WHERE unassigned_at IS NOT NULL`); err != nil {
+		t.Fatal(err)
+	}
+	v, err = repo.Performance(ctx, p)
+	if err != nil || len(v.Dispatchers) != 3 || v.Dispatchers[2].GrossPerActiveTruck == nil || *v.Dispatchers[2].GrossPerActiveTruck != "100.00" {
+		t.Fatalf("midweek truck swap should count both distinct trucks: %+v, %v", v.Dispatchers, err)
 	}
 	page, err := repo.DashboardLoads(ctx, p, "", "", Pagination{Page: 99, PageSize: 3})
 	if err != nil {

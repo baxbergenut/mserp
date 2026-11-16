@@ -28,7 +28,21 @@ function dashboard(query) {
   const period = { preset: query.get('preset') || 'week', dateFrom, dateTo, compareFrom: '2026-10-12', compareTo: '2026-10-18', bucket: 'day' };
   const sections = {};
   if (empty) return { period, sections };
-  if (allowed.includes('board.read')) sections.performance = section('performance', 'Gross Board performance', [], partial ? { error: 'This section could not be loaded' } : { performance: { current: metrics, previous: { ...metrics, gross: '128000.00' }, trend: ['19','20','21','22','23','24','25'].map((day, i) => ({ ...metrics, id: `2026-10-${day}`, name: '', gross: String(10000 + i * 3500) })), dispatchers: [ { ...metrics, id: dispatcher, name: 'Dispatch East', gross: '72000.00' }, { ...metrics, id: '00000000-0000-0000-0000-000000000011', name: 'Dispatch West', gross: '71250.00' } ] } });
+  if (allowed.includes('board.read')) sections.performance = section('performance', 'Gross Board performance', [], partial ? { error: 'This section could not be loaded' } : {
+    performance: {
+      current: metrics,
+      previous: { ...metrics, gross: '128000.00' },
+      trend: ['19','20','21','22','23','24','25'].map((day, i) => ({
+        ...metrics, id: `2026-10-${day}`, name: '', gross: String(10000 + i * 3500),
+      })),
+      dispatchers: [
+        { ...metrics, id: dispatcher, name: 'Dispatch East', gross: '72000.00', rpm: '3.10', miles: '42000.00', grossPerActiveTruck: '24000.00' },
+        { ...metrics, id: 'dispatch-west', name: 'Dispatch West', gross: '71250.00', rpm: '2.60', miles: '50000.00', grossPerActiveTruck: '35625.00' },
+        { ...metrics, id: 'dispatch-north', name: 'Dispatch North', gross: '44000.00', rpm: '2.80', miles: '48000.00', grossPerActiveTruck: '44000.00' },
+        { ...metrics, id: 'dispatch-south', name: 'Dispatch South', gross: '10000.00', rpm: '4.20', miles: '32000.00', grossPerActiveTruck: null },
+      ],
+    },
+  });
   for (const kind of ['trucks', 'trailers']) if (allowed.includes(`${kind}.read`)) sections[kind] = section('fleet', kind === 'trucks' ? 'Trucks' : 'Trailers', ['Ready', 'In use', 'Shop', 'OOS', 'Terminated'].map((label, i) => ({ id: ['ready', 'in_use', 'shop', 'out_of_service', 'terminated'][i], label, count: [12, 136, 8, 2, 14][i], href: `${kind === 'trucks' ? '/trucks' : '/fleet/trailers'}?dashboard=1&status=${['ready', 'in_use', 'shop', 'out_of_service', 'terminated'][i]}` })));
   if (allowed.includes('drivers.read')) sections.drivers = section('fleet', 'Drivers', ['Active','Home','Vacation','Rest','Reset','Family issue','Health issue','New driver','Without truck'].map((label, i) => ({ id: ['active','home','vacation','rest','reset','family_issue','health_issue','new_driver','unassigned'][i], label, count: [126,8,4,2,3,0,1,2,6][i], href: '/drivers?dashboard=1&employment=active&availability=home' })));
   if (allowed.includes('tasks.read')) sections.tasks = section('attention', 'Your tasks', [{ id: 'open', label: 'Open tasks', count: 12, href: '/tasks?dashboard=1&status=open' }]);
@@ -85,7 +99,26 @@ try {
   await expect(page.getByRole('heading', {name:/2026-10-19|Weekly overview/})).toHaveCount(0);
   await expect(page.getByText(/Compared with|Reconcile totals|provisional rows|conflicting rows|repeated rows|Incomplete \/ review/)).toHaveCount(0);
   await expect(grossCard.getByRole('button')).toHaveCount(0);
-  await expect(page.getByRole('cell', {name:'Dispatch East'}).getByRole('button')).toHaveCount(0);
+  const dispatcherControls = page.getByRole('group', {name:'Dispatcher metric'});
+  const dispatcherChart = page.getByRole('list', {name:/Dispatchers by/});
+  const dispatcherRows = dispatcherChart.getByRole('listitem');
+  const expectRanking = async (names, values) => {
+    await expect(dispatcherRows).toHaveText(names.map((name, i) => `Dispatch ${name}${['🥇', '🥈', '🥉', ''][i]}${values[i]}`));
+    await expect.poll(() => dispatcherRows.evaluateAll(rows => rows.every((row, i) =>
+      i === 0 || row.getBoundingClientRect().top >= rows[i - 1].getBoundingClientRect().bottom - 1
+    ))).toBe(true);
+  };
+  await expect(dispatcherControls.getByRole('button', {name:'GPT', exact:true})).toHaveAttribute('aria-pressed', 'true');
+  await expectRanking(['North', 'West', 'East', 'South'], ['$44,000.00', '$35,625.00', '$24,000.00', '—']);
+  for (const [label, names, values] of [
+    ['Gross', ['East', 'West', 'North', 'South'], ['$72,000.00', '$71,250.00', '$44,000.00', '$10,000.00']],
+    ['RPM', ['South', 'East', 'North', 'West'], ['$4.20', '$3.10', '$2.80', '$2.60']],
+    ['Miles', ['West', 'North', 'East', 'South'], ['50,000', '48,000', '42,000', '32,000']],
+    ['GPT', ['North', 'West', 'East', 'South'], ['$44,000.00', '$35,625.00', '$24,000.00', '—']],
+  ]) {
+    await dispatcherControls.getByRole('button', {name:label, exact:true}).click();
+    await expectRanking(names, values);
+  }
   const categories = page.getByRole('region', {name:'Expenses by category'});
   await expect(categories.getByRole('link')).toHaveCount(16);
   expect(await categories.evaluate(el => el.clientHeight <= 224 && el.scrollHeight > el.clientHeight)).toBe(true);
@@ -112,7 +145,14 @@ try {
   await expect(page.getByRole('link',{name:/Terminated|Without truck|Family issue|Health issue|New driver|Reset|Rest:/})).toHaveCount(0);
   await page.screenshot({path:join(output,'dashboard-current.png'),fullPage:true});
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
-  await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'Miles',exact:true}).click();
+  const trendControls = page.getByRole('group', {name:'Trend metric'});
+  const trendHeading = page.getByRole('heading', {name:'Original Gross trend'});
+  await expect(trendHeading).toBeVisible();
+  const trendHeader = await trendHeading.boundingBox();
+  const trendActions = await trendControls.boundingBox();
+  expect(Math.abs(trendHeader.y - trendActions.y)).toBeLessThan(5);
+  expect(trendActions.x).toBeGreaterThan(trendHeader.x + trendHeader.width);
+  await trendControls.getByRole('button', {name:'Miles',exact:true}).click();
   await expect(page.getByRole('heading', {name:'Recorded miles trend'})).toBeVisible();
   await page.getByRole('group', {name:'Trend metric'}).getByRole('button', {name:'RPM',exact:true}).click();
   await expect(page.getByRole('heading', {name:'RPM trend'})).toBeVisible();

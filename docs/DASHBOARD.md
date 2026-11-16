@@ -42,8 +42,12 @@ No migration or additional environment variable is required.
   loads having both values. A missing or zero comparison baseline has no
   percentage change.
 - Dispatcher attribution uses the existing daily historical assignment rule,
-  with an explicit Unassigned group. No truck denominator or productivity ranking
-  is introduced. Current fleet and attention counts are independent of dates.
+  with an explicit Unassigned group. The dispatcher chart defaults to gross per
+  active truck and can also rank by gross, RPM, or miles. GPT divides counted
+  Original Gross by the distinct trucks on those counted loads, using their
+  dated Clustie assignments and the main driver's truck for a team. GPT is
+  unavailable for an unassigned dispatcher or an unresolved truck assignment.
+  Current fleet and attention counts are independent of dates.
 - Trucks, drivers and trailers appear as pie charts with linked count/percentage labels
   around their slices and connector lines. Names and totals sit above each card
   (for example, Trucks 117). Truck totals include Ready, In use, Shop and OOS, excluding
