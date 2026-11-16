@@ -75,6 +75,19 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		// Repeat reads must reuse evidence without sharing mutable result objects.
 		company.Current[0].Metrics["gross"] = -1
 		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 110000})
+		// Collaboration heartbeats must not evict unchanged financial snapshots.
+		if _, err = admin.Exec(ctx, `UPDATE payroll_cache_revisions SET revision=revision+1 WHERE table_name IN ('driver_board_presence','gross_board_presence','fleetscope_sync_state','maintenance_odometer_readings','payroll_statement_current')`); err != nil {
+			t.Fatal(err)
+		}
+		if presence := read(ReportCompany, "2026-10-12", "2026-10-18"); presence.Revision != company.Revision {
+			t.Fatal("board presence invalidated financial report")
+		}
+		if _, err = admin.Exec(ctx, `UPDATE payroll_cache_revisions SET revision=revision+1 WHERE table_name='maintenance_configuration'`); err != nil {
+			t.Fatal(err)
+		}
+		if classification := read(ReportCompany, "2026-10-12", "2026-10-18"); classification.Revision == company.Revision {
+			t.Fatal("maintenance classification did not invalidate report")
+		}
 		if _, err = admin.Exec(ctx, `UPDATE loads SET total_pay=1200 WHERE id=61001`); err != nil {
 			t.Fatal(err)
 		}
