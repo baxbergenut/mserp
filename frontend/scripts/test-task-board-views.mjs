@@ -255,19 +255,21 @@ try {
   await expect(page.getByRole('checkbox', { name: 'Test Dispatcher', exact: true })).toBeChecked();
   await page.keyboard.press('Escape');
   await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-views.png') });
+  await page.clock.setFixedTime(new Date('2026-11-03T14:00:00Z'));
+  const grossWeek = '2026-11-02';
   await page.evaluate(() => sessionStorage.setItem('mserp-navigation-v1:user:/gross-board:view:page:week', JSON.stringify('2026-09-07')));
   await page.goto(`${base}/gross-board`);
-  await expect.poll(() => grossRequests.at(-1)).toBe(week);
+  await expect.poll(() => grossRequests.at(-1)).toBe(grossWeek);
   await page.getByRole('button', { name: 'Previous week', exact: true }).click();
-  await expect.poll(() => grossRequests.at(-1)).toBe('2026-09-28');
+  await expect.poll(() => grossRequests.at(-1)).toBe('2026-10-26');
   await page.reload();
-  await expect.poll(() => grossRequests.at(-1)).toBe(week);
+  await expect.poll(() => grossRequests.at(-1)).toBe(grossWeek);
   await page.getByRole('button', { name: 'Previous week', exact: true }).click();
   await page.goto(`${base}/tasks`);
   await page.getByRole('link', { name: 'Gross Board', exact: true }).click();
-  await expect.poll(() => grossRequests.at(-1)).toBe(week);
+  await expect.poll(() => grossRequests.at(-1)).toBe(grossWeek);
   await page.goto(`${base}/gross-board?driverId=${driverId}&date=2026-09-15&slot=0&loadNumber=TEST&from=driver-pay`);
-  await expect.poll(() => grossRequests.at(-1)).toBe('2026-09-14');
+  await expect.poll(() => grossRequests.at(-1)).toBe('2026-10-19');
 
   const directoryRequests = [];
   await page.route('**/api/driver-directory?**', async route => {

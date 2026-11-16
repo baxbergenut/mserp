@@ -5,7 +5,7 @@ import { ArrowLeft, Banknote, ChevronDown, CircleDollarSign, Headset, Pencil, Pl
 import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
-import { latestPayrollWeek } from "../payrollWeek";
+import { clampWeek, latestPayrollWeek } from "../payrollWeek";
 import { WeekSelector } from "@/app/components/WeekSelector";
 import { useLatestPayrollWeek } from "./useLatestPayrollWeek";
 import { TierMedal } from "./TierMedal";
@@ -31,7 +31,7 @@ export function WeeklyPayReport() {
   const [rules, setRules] = useState<DispatcherCommissionRuleVersion[]>([]);
   const latestWeek = useLatestPayrollWeek();
   const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek());
-  const week = storedWeek > latestWeek ? latestWeek : storedWeek;
+  const week = clampWeek(storedWeek, latestWeek);
   const [availableWeeks, setAvailableWeeks] = useState([week]);
   const weeks = useMemo(() => [...availableWeeks, week, latestWeek], [availableWeeks, week, latestWeek]);
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
@@ -105,7 +105,7 @@ export function WeeklyPayReport() {
     </div>
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <WeekSelector label="Payroll week" week={week} weeks={weeks} disabled={busy || loading} onChange={switchWeek}
+        <WeekSelector label="Payroll week" week={week} weeks={weeks} lastWeek={latestWeek} disabled={busy || loading} onChange={switchWeek}
           jump={{ label: "Last week", onClick: () => switchWeek(latestWeek), disabled: week === latestWeek }} />
       </div>
       <div className="flex min-w-0 flex-[1_1_22rem] items-center gap-2">

@@ -71,24 +71,26 @@ try {
     await expect(picker).toHaveValue('2026-10-19');
     await expect(picker.locator('optgroup[label="2026"] option:checked')).toHaveText('Week 43 · 10/19 → 10/25');
     await expect(picker.locator('option[value="2026-10-26"]')).toHaveCount(0);
-    const dates = await picker.locator('option').evaluateAll(options => options.map(option => option.value));
-    assert.deepEqual(dates, [...new Set(dates)].sort().reverse(), kind + ' weeks descend across all year groups');
-    assert.equal(dates[0], '2026-10-19');
+    await expect(picker.locator('option')).toHaveCount(1);
     await expect(next).toBeDisabled();
-    await previous.click();
-    await expect.poll(() => weeks.at(-1)).toBe('2026-10-12');
+    await expect(previous).toBeDisabled();
     await page.clock.fastForward(61_000);
     // Monday unlocks the newly completed week without a page reload.
     await expect(picker.locator('option[value="2026-10-26"]')).toHaveText('Week 44 · 10/26 → 11/01');
-    await expect(picker).toHaveValue('2026-10-12');
+    await expect(picker).toHaveValue('2026-10-19');
     await expect(picker.locator('option').first()).toHaveAttribute('value', '2026-10-26');
-    await next.click();
-    await expect.poll(() => weeks.at(-1)).toBe('2026-10-19');
     await next.click();
     await expect.poll(() => weeks.at(-1)).toBe('2026-10-26');
     await expect(next).toBeDisabled();
     await expect(picker.locator('option[value="2026-11-02"]')).toHaveCount(0);
-    assert(weeks.every(week => week <= '2026-10-26'));
+    assert(weeks.every(week => week >= '2026-10-19' && week <= '2026-10-26'));
+    await page.goto(`http://127.0.0.1:${server.address().port}/accounting/${kind}-pay?weekStart=2026-10-12`);
+    if (kind === 'dispatcher') {
+      // Dispatcher Pay uses its remembered selection instead of URL parameters.
+      await expect(picker.locator('option[value="2026-10-12"]')).toHaveCount(0);
+    } else {
+      await expect(picker).toHaveValue('2026-10-19');
+    }
     await page.close();
   }
   console.log('Completed-week payroll: New York DST, default/deep-link limits, descending week order, selection retention, Monday rollover, all three pages passed.');

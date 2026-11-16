@@ -17,7 +17,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { AlertTriangle, Banknote, ChevronDown, CloudCheck, Download, Ellipsis, UserRound } from "lucide-react";
 import { changeDriverPayMembership, APIError, fetchDriverPay, fetchInvestorOptions, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, InvestorOption, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
-import { latestPayrollWeek } from "../payrollWeek";
+import { clampWeek, FIRST_CLUSTIE_WEEK, latestPayrollWeek } from "../payrollWeek";
 import { WeekSelector } from "@/app/components/WeekSelector";
 import { useLatestPayrollWeek } from "../components/useLatestPayrollWeek";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
@@ -55,7 +55,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const params = useSearchParams();
   const latestWeek = useLatestPayrollWeek();
   const [payrollFirstWeek, setFirstWeek] = useState<string | null>(null);
-  const firstWeek = payrollFirstWeek ?? "2000-01-03";
+  const firstWeek = payrollFirstWeek ?? FIRST_CLUSTIE_WEEK;
   const availability = useRef<Partial<Record<"driver" | "investor", Promise<PayrollAvailability>>>>({});
   const requested = params.get("weekStart");
   const targetId = params.get(investor ? "truckId" : "driverId") ?? params.get("driverId");
@@ -67,10 +67,10 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     // Clamp a deep link when it changes. Monday's availability update must not
     // navigate away from the statement the user is currently reviewing.
     const latest = latestPayrollWeek();
-    return requested > latest ? latest : requested;
+    return clampWeek(requested, latest);
   }, [requested]);
   const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek(), initialWeek);
-  const week = storedWeek > latestWeek ? latestWeek : storedWeek < firstWeek ? firstWeek : storedWeek;
+  const week = clampWeek(storedWeek, latestWeek, firstWeek);
   const optionsFirst = payrollFirstWeek ?? week;
   const optionsLatest = payrollFirstWeek ? latestWeek : week;
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) || targetInvestor !== null ? targetId ?? "" : undefined);
@@ -152,7 +152,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const fetchPay = useCallback(async (selectedWeek: string, signal?: AbortSignal) => {
     const kind = investor ? "investor" : "driver";
     const bounds = await (availability.current[kind] ??= fetchPayrollAvailability(investor).catch(reason => { delete availability.current[kind]; throw reason; }));
-    const earliest = bounds.firstWeek || "2000-01-03";
+    const earliest = bounds.firstWeek > FIRST_CLUSTIE_WEEK ? bounds.firstWeek : FIRST_CLUSTIE_WEEK;
     setFirstWeek(earliest);
     selectedWeek = selectedWeek < earliest ? earliest : selectedWeek;
     const query = { summary: "1", detailIds: [...openedRef.current].slice(0, 100).join(","), page, pageSize, ...filters };

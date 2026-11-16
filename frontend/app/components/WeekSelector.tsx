@@ -2,27 +2,29 @@
 
 import { useMemo } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { payrollWeekGroups, payrollWeekLabel, payrollWeekOptions } from "@/app/accounting/payrollWeek";
+import { FIRST_CLUSTIE_WEEK, payrollWeekGroups, payrollWeekLabel, payrollWeekOptions } from "@/app/accounting/payrollWeek";
 import { controlClass } from "./management/ManagementUI";
 
 type WeekSelectorProps = {
   label?: string;
   week: string;
-  showWeekNumber?: boolean;
+  weeks?: string[];
+  firstWeek?: string;
+  lastWeek: string;
   disabled?: boolean;
   onChange: (week: string) => void;
   jump?: { label: string; onClick: () => void; disabled?: boolean };
-} & ({ weeks: string[]; firstWeek?: never; lastWeek?: never }
-  | { weeks?: never; firstWeek?: string; lastWeek?: string });
+};
 
 const arrow = "ui-button shrink-0 !px-2 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
 
 export function WeekSelector({
-  label = "Week", week, showWeekNumber = true, disabled, onChange, jump,
-  weeks, firstWeek = "2000-01-03", lastWeek = "2100-12-27",
+  label = "Week", week, disabled, onChange, jump,
+  weeks, firstWeek = FIRST_CLUSTIE_WEEK, lastWeek,
 }: WeekSelectorProps) {
-  const groups = useMemo(() => weeks ? payrollWeekGroups(weeks, showWeekNumber) : payrollWeekOptions(firstWeek, lastWeek, showWeekNumber),
-    [weeks, firstWeek, lastWeek, showWeekNumber]);
+  const groups = useMemo(() => weeks
+    ? payrollWeekGroups(weeks.filter(date => date >= firstWeek && date <= lastWeek))
+    : payrollWeekOptions(firstWeek, lastWeek), [weeks, firstWeek, lastWeek]);
   const dates = useMemo(() => groups.flatMap(([, options]) => options.map(option => option.date)), [groups]);
   const options = useMemo(() => groups.map(([year, items]) => <optgroup key={year} label={String(year)}>
     {items.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}
@@ -47,7 +49,7 @@ export function WeekSelector({
         <ChevronRight aria-hidden="true" className="h-4 w-4" />
       </button>
     </div>
-    <span className="text-xs tabular-nums text-zinc-400">{showWeekNumber ? payrollWeekLabel(week).year : week.slice(0, 4)}</span>
+    <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
     {jump && <button type="button" className="ui-button shrink-0 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40"
       disabled={disabled || jump.disabled} onClick={jump.onClick}>{jump.label}</button>}
   </div>;

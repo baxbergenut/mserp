@@ -4,7 +4,8 @@ import { ArrowRight } from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import { PageHeader } from "@/app/components/PageHeader";
 import { WeekSelector } from "@/app/components/WeekSelector";
-import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
+import { useCurrentWeek } from "@/app/accounting/components/useLatestPayrollWeek";
+import { clampWeek } from "@/app/accounting/payrollWeek";
 import { fetchCompanyDashboard } from "@/app/lib/api";
 import type { CompanyDashboard, DashboardQuery } from "@/app/lib/dashboardTypes";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -17,13 +18,16 @@ import { addDays } from "@/app/gross-board/board";
 function selectedMonday(date: string) {
   // Dashboard used to accept any day of the week and may still have one saved.
   const day = new Date(`${date}T12:00:00Z`).getUTCDay();
-  return Number.isNaN(day) ? currentChargeWeek() : addDays(date, -((day + 6) % 7));
+  return Number.isNaN(day) ? undefined : addDays(date, -((day + 6) % 7));
 }
 
 export default function DashboardPage() {
   const [view, setView] = useViewState<"weekly" | "current">("dashboard:view", "weekly");
   const [week, setWeek] = useViewState("dashboard:week", "");
-  const query = useMemo<DashboardQuery>(() => ({ preset: "week", dateFrom: week || undefined, view }), [week, view]);
+  const currentWeek = useCurrentWeek();
+  const selectedWeek = clampWeek(selectedMonday(week) ?? currentWeek, currentWeek);
+  const dateFrom = week ? selectedWeek : undefined;
+  const query = useMemo<DashboardQuery>(() => ({ preset: "week", dateFrom, view }), [dateFrom, view]);
   const key = JSON.stringify(query);
   const [snapshot, setSnapshot] = useState<{ key: string; data: CompanyDashboard } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
@@ -72,7 +76,7 @@ export default function DashboardPage() {
       {([["weekly", "Weekly"], ["current", "Right now"]] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={view === id} aria-controls={`dashboard-${id}`} id={`dashboard-tab-${id}`} onClick={() => setView(id)} className="pb-3 text-sm">{label}</button>)}
     </div>
     <div role="tabpanel" id={`dashboard-${view}`} aria-labelledby={`dashboard-tab-${view}`} className="space-y-4">
-    {view === "weekly" && <WeekSelector label="Week of" week={data?.period.dateFrom ?? selectedMonday(week)} showWeekNumber={false}
+    {view === "weekly" && <WeekSelector label="Week of" week={selectedWeek} lastWeek={currentWeek}
       onChange={setWeek} jump={{ label: "This week", onClick: () => setWeek("") }} />}
     {error && <p role="alert" className="text-sm text-amber-400">{error}{data ? " · Showing the last available results." : ""}</p>}
     {hasErrors && <button onClick={() => setRetry(v => v + 1)} className="ui-button">Retry unavailable sections</button>}

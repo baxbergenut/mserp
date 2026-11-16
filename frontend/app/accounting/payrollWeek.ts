@@ -1,3 +1,9 @@
+export const FIRST_CLUSTIE_WEEK = "2026-10-19";
+
+export function clampWeek(week: string, lastWeek: string, firstWeek = FIRST_CLUSTIE_WEEK) {
+  return week < firstWeek ? firstWeek : week > lastWeek ? lastWeek : week;
+}
+
 export function latestPayrollWeek(now = new Date()) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const day = new Date(`${today}T12:00:00Z`);
@@ -14,26 +20,26 @@ export function payrollWeekLabel(monday: string) {
   return { year, label: `Week ${week} - ${monday.slice(5, 7)}/${monday.slice(8, 10)}` };
 }
 
-export function payrollWeekRangeLabel(monday: string, showWeekNumber = true) {
+export function payrollWeekRangeLabel(monday: string) {
   const { year, label } = payrollWeekLabel(monday);
   const sunday = new Date(`${monday}T00:00:00Z`);
   sunday.setUTCDate(sunday.getUTCDate() + 6);
   const end = sunday.toISOString().slice(0, 10);
-  const start = showWeekNumber ? label.replace(" - ", " · ") : monday.slice(5).replace("-", "/");
+  const start = label.replace(" - ", " · ");
   return { year, label: `${start} → ${end.slice(5, 7)}/${end.slice(8, 10)}` };
 }
 
-export function payrollWeekGroups(weeks: string[], showWeekNumber = true) {
+export function payrollWeekGroups(weeks: string[]) {
   const groups = new Map<number, { date: string; label: string }[]>();
   for (const date of Array.from(new Set(weeks)).sort().reverse()) {
-    const { year, label } = payrollWeekRangeLabel(date, showWeekNumber);
+    const { year, label } = payrollWeekRangeLabel(date);
     if (!groups.has(year)) groups.set(year, []);
     groups.get(year)!.push({ date, label });
   }
   return Array.from(groups);
 }
 
-export function payrollWeekOptions(first: string, latest: string, showWeekNumber = true) {
+export function payrollWeekOptions(first: string, latest: string) {
   const weeks: string[] = [];
   const monday = new Date(`${first}T00:00:00Z`);
   const last = Date.parse(`${latest}T00:00:00Z`);
@@ -42,5 +48,5 @@ export function payrollWeekOptions(first: string, latest: string, showWeekNumber
     weeks.push(date);
     monday.setUTCDate(monday.getUTCDate() + 7);
   }
-  return payrollWeekGroups(weeks, showWeekNumber);
+  return payrollWeekGroups(weeks);
 }

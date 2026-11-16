@@ -239,6 +239,10 @@ try {
   await expect(field(page, 'driver rate', secondDay).locator('..')).toBeFocused();
   await page.getByRole('button', { name: 'Next week' }).click();
   await expect(field(page, 'driver rate', '2026-11-09')).toBeEditable();
+  const picker = page.getByRole('combobox', { name: 'Week', exact: true });
+  await expect(page.getByRole('button', { name: 'Next week' })).toBeDisabled();
+  await expect(picker.locator('option').first()).toHaveAttribute('value', '2026-11-09');
+  await expect(picker.locator('option').last()).toHaveAttribute('value', '2026-10-19');
   await page.getByRole('button', { name: 'Previous week' }).click();
   await expect(rate).toHaveAttribute('readonly', '');
   expect(writes.length).toBe(writesBeforeLock);

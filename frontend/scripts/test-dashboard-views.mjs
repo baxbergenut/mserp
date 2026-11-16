@@ -24,7 +24,7 @@ let allowed = [...permissions], theme = 'default-light', revision = 1, fail = fa
 const requested = [];
 const section = (kind, title, items, extra = {}) => ({ kind, title, items, updatedAt: '2026-10-26T20:00:00Z', ...extra });
 function dashboard(query) {
-  const dateFrom = query.get('dateFrom') || '2026-10-19', dateTo = new Date(Date.parse(dateFrom+'T12:00:00Z') + 6*86400000).toISOString().slice(0,10);
+  const dateFrom = query.get('dateFrom') || '2026-11-02', dateTo = new Date(Date.parse(dateFrom+'T12:00:00Z') + 6*86400000).toISOString().slice(0,10);
   const period = { preset: query.get('preset') || 'week', dateFrom, dateTo, compareFrom: '2026-10-12', compareTo: '2026-10-18', bucket: 'day' };
   const sections = {};
   if (empty) return { period, sections };
@@ -54,6 +54,7 @@ let browser;
 try {
   browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await page.clock.setFixedTime(new Date('2026-11-03T14:00:00Z'));
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.route('**/api/**', async route => {
@@ -77,7 +78,9 @@ try {
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
   await expect(grossCard).toContainText('$143,250.00');
   await expect(grossCard).toContainText('11.9% higher');
-  await expect(picker.locator('option:checked')).toHaveText('10/19 → 10/25');
+  await expect(picker.locator('option:checked')).toHaveText('Week 45 · 11/02 → 11/08');
+  await expect(picker.locator('option')).toHaveCount(3);
+  await expect(weekNavigation.getByRole('button', { name: 'Next week' })).toBeDisabled();
   expect((await weekNavigation.boundingBox()).x).toBe((await grossCard.boundingBox()).x);
   await expect(page.getByRole('heading', {name:/2026-10-19|Weekly overview/})).toHaveCount(0);
   await expect(page.getByText(/Compared with|Reconcile totals|provisional rows|conflicting rows|repeated rows|Incomplete \/ review/)).toHaveCount(0);
@@ -127,22 +130,22 @@ try {
   await page.goBack();
   await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
-  await picker.selectOption('2000-01-03');
+  await picker.selectOption('2026-10-19');
   await expect(weekNavigation.getByRole('button', { name: 'Previous week' })).toBeDisabled();
   await weekNavigation.getByRole('button', { name: 'Next week' }).click();
-  await expect.poll(() => requested.some(r => r.path === '/dashboard/summary' && r.query.dateFrom === '2000-01-10')).toBe(true);
-  await picker.selectOption('2026-09-07');
-  await expect.poll(() => requested.some(r => r.path === '/dashboard/summary' && r.query.dateFrom === '2026-09-07' && r.query.preset === 'week' && r.query.view === 'weekly')).toBe(true);
+  await expect.poll(() => requested.some(r => r.path === '/dashboard/summary' && r.query.dateFrom === '2026-10-26')).toBe(true);
+  await picker.selectOption('2026-10-19');
+  await expect.poll(() => requested.some(r => r.path === '/dashboard/summary' && r.query.dateFrom === '2026-10-19' && r.query.preset === 'week' && r.query.view === 'weekly')).toBe(true);
   for (const [path,api,from,to] of [['/fuel','/fuel-transactions','dateFrom','dateTo'],['/tolls','/tolls','postFrom','postTo'],['/weighmytruck','/weighmytruck/transactions','from','to']]) {
     await page.locator(`a[href^="${path}?dashboard=1"]`).first().click();
-    await expect.poll(() => requested.some(r => r.path === api && r.query[from] === '2026-09-07' && r.query[to] === '2026-09-13')).toBe(true);
-    await page.goBack(); await expect(picker).toHaveValue('2026-09-07');
+    await expect.poll(() => requested.some(r => r.path === api && r.query[from] === '2026-10-19' && r.query[to] === '2026-10-25')).toBe(true);
+    await page.goBack(); await expect(picker).toHaveValue('2026-10-19');
   }
-  await expect(categories.getByRole('link').last()).toHaveAttribute('href', /dateFrom=2026-09-07&dateTo=2026-09-13&categoryId=expense-15$/);
+  await expect(categories.getByRole('link').last()).toHaveAttribute('href', /dateFrom=2026-10-19&dateTo=2026-10-25&categoryId=expense-15$/);
   await categories.getByRole('link').last().click();
   await expect(page).toHaveURL(/expenses\?.*categoryId=expense-15/);
   await page.goBack();
-  await expect(picker).toHaveValue('2026-09-07');
+  await expect(picker).toHaveValue('2026-10-19');
   await page.evaluate(() => { sessionStorage.setItem('mserp-navigation-v1:dashboard-fixture:/trucks:view:page:search', JSON.stringify('HIDDEN SAVED FILTER')); });
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
   await page.locator('section').filter({has: page.getByRole('heading',{name:/^Trucks \d/})}).getByRole('link').filter({hasText:'Shop'}).click();
@@ -150,7 +153,7 @@ try {
   await page.goBack();
   await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
-  await expect(picker).toHaveValue('2026-09-07');
+  await expect(picker).toHaveValue('2026-10-19');
 
   await expect(grossCard).toContainText('$143,250.00');
   partial = true; await page.evaluate(() => window.dispatchEvent(new Event('focus')));

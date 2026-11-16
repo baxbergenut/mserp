@@ -15,6 +15,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CalendarRange, Gauge, Route, CloudCheck, Lock, LockOpen } from "lucide-react";
 import { WeekSelector } from "@/app/components/WeekSelector";
+import { useCurrentWeek } from "@/app/accounting/components/useLatestPayrollWeek";
+import { clampWeek } from "@/app/accounting/payrollWeek";
 import { APIError, fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard, setGrossBoardWeekLock } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
 import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, grossLocationKey, reconcileGrossPatches, refreshRejectedSources, type GrossDrafts } from "./drafts";
@@ -50,7 +52,10 @@ export default function GrossBoardPage() {
   const searchParams = useSearchParams();
   const [loadTarget, setLoadTarget] = useState(() => parseBoardLoadTarget(searchParams.toString()));
   const [driverTarget, setDriverTarget] = useState(() => parseBoardDriverTarget(searchParams.toString()));
-  const [week, setWeek] = useState(() => loadTarget?.week ?? driverTarget?.week ?? currentChargeWeek());
+  const currentWeek = useCurrentWeek();
+  const lastWeek = addDays(currentWeek, 7);
+  const [selectedWeek, setWeek] = useState(() => loadTarget?.week ?? driverTarget?.week ?? currentWeek);
+  const week = clampWeek(selectedWeek, lastWeek);
   // Keep the old key so remembered single-dispatcher views become checked choices.
   const [dispatcher, setDispatcher] = useViewState<string[] | null | string>("page:dispatcher", null, loadTarget || driverTarget ? null : undefined);
   const selectedDispatchers = useMemo(() => typeof dispatcher === "string" ? dispatcher === "all" ? null : [dispatcher] : dispatcher, [dispatcher]);
@@ -405,8 +410,8 @@ export default function GrossBoardPage() {
 
       <div className="flex flex-wrap items-center gap-3">
       <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-        <WeekSelector week={week} disabled={loading} onChange={switchWeek}
-          jump={{ label: "This week", onClick: () => switchWeek(currentChargeWeek()) }} />
+        <WeekSelector week={week} lastWeek={lastWeek} disabled={loading} onChange={switchWeek}
+          jump={{ label: "This week", onClick: () => switchWeek(currentWeek) }} />
         <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers, truck units or load numbers…" /></div>
         {canManageWeek && <button type="button" data-locked={weekLocked} className={`${buttonClass} data-[locked=true]:border-blue-500/50 data-[locked=true]:text-blue-300`}
           title={weekLocked ? `Locked by ${board?.weekLock?.lockedBy || "unknown"}` : undefined}

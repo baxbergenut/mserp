@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const week = '2026-10-05';
+const week = '2026-10-26';
 const driver = { id: 'driver', fullName: 'Test Driver', active: true, driverType: 'Company', phone: '' };
 const type = { id: 'fee', name: 'Admin fee', amount: '50.00', amounts: ['50.00'], archived: false, version: 1, eligibility: 'calendar', rules: [] };
 let trucks = [];
@@ -99,6 +99,10 @@ try {
   await expect(page.getByRole('link', { name: 'INACTIVE', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'COMPANY', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'TERMINATED', exact: true })).toHaveCount(0);
+  const weekPicker = page.getByRole('combobox', { name: 'Effective week' });
+  await expect(weekPicker.locator('option').first()).toHaveAttribute('value', week);
+  await expect(weekPicker.locator('option').last()).toHaveAttribute('value', '2026-10-19');
+  await expect(page.getByRole('button', { name: 'Next week', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Previous week', exact: true }).click();
   await expect(page.getByRole('link', { name: 'TERMINATED', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next week', exact: true }).click();

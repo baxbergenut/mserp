@@ -154,7 +154,11 @@ Finalization and reopening republish affected later open weeks. The calculator
 version invalidates old prepared statements; frozen source reports are unchanged.
 The carry row labels the finalized source week using its ISO week number and
 Monday. Older snapshots recover the label from verified prior settlement data.
-Driver and Investor Pay group selectable completed Mondays by ISO week year.
+The shared week selector groups Mondays by ISO week year and starts at
+2026-10-19. Dashboard and Driver Charges end at the current New York week.
+Gross Board includes the following week for planning. Driver, Investor and
+Dispatcher Pay end at the latest completed week and respect later availability
+bounds where applicable.
 
 Driver and Investor Pay export the selected week's saved statements across all
 matching pages using the respective read permissions. The XLSX includes only
