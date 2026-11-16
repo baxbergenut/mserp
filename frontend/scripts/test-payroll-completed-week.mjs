@@ -53,33 +53,40 @@ try {
     const weeks = [];
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url()), path = url.pathname.slice(4);
-      if (path === '/auth/session') return route.fulfill({ json: { user: { id: 'user', username: 'Payroll test', permissions: ['driver_pay.read', 'investor_pay.read', 'dispatcher_pay.read'], theme: 'solarized-dark' }, csrfToken: 'fixture' } });
+      if (path === '/auth/session') return route.fulfill({ json: { user: { id: 'user', username: 'Payroll test', permissions: ['driver_pay.read', 'investor_pay.read', 'investors.read', 'dispatcher_pay.read'], theme: 'solarized-dark' }, csrfToken: 'fixture' } });
       if (path.endsWith('/availability')) return route.fulfill({ json: { firstWeek: '2024-12-23', currentWeek: '2026-10-26', latestWeek: '2026-10-19' } });
       if (path === `/${kind}-pay`) {
         const week = url.searchParams.get('weekStart'); weeks.push(week);
-        return route.fulfill({ json: kind === 'dispatcher' ? { weekStart: week, statements: [], availableWeeks: ['2026-10-05', '2024-12-23', week, '2024-12-30', '2026-10-12', week], rule: null } : { weekStart: week, revision: 'fixture', drivers: [], preparation: { state: 'ready' } } });
+        return route.fulfill({ json: kind === 'dispatcher' ? { weekStart: week, statements: [], availableWeeks: ['2026-10-05', '2024-12-23', week, '2024-12-30', '2026-10-12', '2026-10-19', week], rule: null } : { weekStart: week, revision: 'fixture', drivers: [], preparation: { state: 'ready' } } });
       }
       return route.fulfill({ json: path === '/tasks/count' ? { count: 0 } : [] });
     });
     // A current/future deep link must never request an unfinished week.
     await page.goto(`http://127.0.0.1:${server.address().port}/accounting/${kind}-pay?weekStart=2026-11-02`);
-    await expect.poll(() => weeks.at(-1)).toBe('2026-10-19');
+    await expect.poll(() => weeks.at(-1), { message: `${kind} pay requests the latest completed week` }).toBe('2026-10-19');
     const picker = page.getByRole('combobox', { name: 'Payroll week', exact: true });
+    const navigation = page.getByRole('group', { name: 'Payroll week navigation' });
+    const previous = navigation.getByRole('button', { name: 'Previous week' });
+    const next = navigation.getByRole('button', { name: 'Next week' });
     await expect(picker).toHaveValue('2026-10-19');
     await expect(picker.locator('optgroup[label="2026"] option:checked')).toHaveText('Week 43 · 10/19 → 10/25');
     await expect(picker.locator('option[value="2026-10-26"]')).toHaveCount(0);
     const dates = await picker.locator('option').evaluateAll(options => options.map(option => option.value));
     assert.deepEqual(dates, [...new Set(dates)].sort().reverse(), kind + ' weeks descend across all year groups');
     assert.equal(dates[0], '2026-10-19');
-    await picker.selectOption('2026-10-12');
+    await expect(next).toBeDisabled();
+    await previous.click();
     await expect.poll(() => weeks.at(-1)).toBe('2026-10-12');
     await page.clock.fastForward(61_000);
     // Monday unlocks the newly completed week without a page reload.
     await expect(picker.locator('option[value="2026-10-26"]')).toHaveText('Week 44 · 10/26 → 11/01');
     await expect(picker).toHaveValue('2026-10-12');
     await expect(picker.locator('option').first()).toHaveAttribute('value', '2026-10-26');
-    await picker.selectOption('2026-10-26');
+    await next.click();
+    await expect.poll(() => weeks.at(-1)).toBe('2026-10-19');
+    await next.click();
     await expect.poll(() => weeks.at(-1)).toBe('2026-10-26');
+    await expect(next).toBeDisabled();
     await expect(picker.locator('option[value="2026-11-02"]')).toHaveCount(0);
     assert(weeks.every(week => week <= '2026-10-26'));
     await page.close();

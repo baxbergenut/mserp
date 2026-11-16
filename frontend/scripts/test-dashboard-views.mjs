@@ -75,7 +75,7 @@ try {
   await expect(page.getByRole('heading', {name:'Trailers',exact:true})).toHaveCount(0);
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Weekly profit',exact:true})).toHaveCount(0);
-  await expect(page.getByLabel('Week of')).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Week of', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'Needs attention'})).toBeVisible();
   const truckChart = page.getByRole('img',{name:'Trucks status distribution: 158 total',exact:true});
   const driverChart = page.getByRole('img',{name:'Drivers status distribution: 140 total',exact:true});
@@ -115,12 +115,18 @@ try {
   await page.getByLabel('Load inclusion').selectOption('repeat');
   await expect.poll(() => requested.some(r => r.path === '/dashboard/loads' && r.query.inclusion === 'repeat')).toBe(true);
   await page.getByRole('button', {name:'Close', exact:true}).last().click();
-  await page.getByLabel('Week of').fill('2026-09-07');
+  const picker = page.getByRole('combobox', { name: 'Week of', exact: true });
+  const weekNavigation = page.getByRole('group', { name: 'Week of navigation' });
+  await picker.selectOption('2000-01-03');
+  await expect(weekNavigation.getByRole('button', { name: 'Previous week' })).toBeDisabled();
+  await weekNavigation.getByRole('button', { name: 'Next week' }).click();
+  await expect.poll(() => requested.some(r => r.path === '/dashboard/summary' && r.query.dateFrom === '2000-01-10')).toBe(true);
+  await picker.selectOption('2026-09-07');
   await expect.poll(() => requested.some(r => r.path === '/dashboard/summary' && r.query.dateFrom === '2026-09-07' && r.query.preset === 'week' && r.query.view === 'weekly')).toBe(true);
   for (const [path,api,from,to] of [['/fuel','/fuel-transactions','dateFrom','dateTo'],['/tolls','/tolls','postFrom','postTo'],['/weighmytruck','/weighmytruck/transactions','from','to']]) {
     await page.locator(`a[href^="${path}?dashboard=1"]`).first().click();
     await expect.poll(() => requested.some(r => r.path === api && r.query[from] === '2026-09-07' && r.query[to] === '2026-09-13')).toBe(true);
-    await page.goBack(); await expect(page.getByLabel('Week of')).toHaveValue('2026-09-07');
+    await page.goBack(); await expect(picker).toHaveValue('2026-09-07');
   }
   await page.evaluate(() => { sessionStorage.setItem('mserp-navigation-v1:dashboard-fixture:/trucks:view:page:search', JSON.stringify('HIDDEN SAVED FILTER')); });
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
@@ -129,7 +135,7 @@ try {
   await page.goBack();
   await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
-  await expect(page.getByLabel('Week of')).toHaveValue('2026-09-07');
+  await expect(picker).toHaveValue('2026-09-07');
 
   await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
   partial = true; await page.evaluate(() => window.dispatchEvent(new Event('focus')));

@@ -13,7 +13,8 @@ import { useBackHref, useMarkBack, useViewState } from "@/app/lib/viewMemory";
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CalendarRange, ChevronLeft, ChevronRight, Gauge, Route, CloudCheck, Lock, LockOpen } from "lucide-react";
+import { Banknote, CalendarRange, Gauge, Route, CloudCheck, Lock, LockOpen } from "lucide-react";
+import { WeekSelector } from "@/app/components/WeekSelector";
 import { APIError, fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard, setGrossBoardWeekLock } from "@/app/lib/api";
 import { useGrossLive } from "./useGrossLive";
 import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, grossLocationKey, reconcileGrossPatches, refreshRejectedSources, type GrossDrafts } from "./drafts";
@@ -404,13 +405,8 @@ export default function GrossBoardPage() {
 
       <div className="flex flex-wrap items-center gap-3">
       <HeaderPinButton pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-        <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-card p-1">
-          <button aria-label="Previous week" className={buttonClass} disabled={loading || week <= "2000-01-03"} onClick={() => switchWeek(addDays(week, -7))}><ChevronLeft className="h-4 w-4" /></button>
-          <span className="min-w-36 px-2 text-center font-mono text-sm text-zinc-100" title={`${week} to ${dates[6]}`}>{shortDate(week)} → {shortDate(dates[6])}</span>
-          <button aria-label="Next week" className={buttonClass} disabled={loading || week >= "2100-12-27"} onClick={() => switchWeek(addDays(week, 7))}><ChevronRight className="h-4 w-4" /></button>
-        </div>
-        <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
-        <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
+        <WeekSelector week={week} disabled={loading} onChange={switchWeek}
+          jump={{ label: "This week", onClick: () => switchWeek(currentChargeWeek()) }} />
         <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers, truck units or load numbers…" /></div>
         {canManageWeek && <button type="button" data-locked={weekLocked} className={`${buttonClass} data-[locked=true]:border-blue-500/50 data-[locked=true]:text-blue-300`}
           title={weekLocked ? `Locked by ${board?.weekLock?.lockedBy || "unknown"}` : undefined}

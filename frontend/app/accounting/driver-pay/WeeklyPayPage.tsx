@@ -17,7 +17,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { AlertTriangle, Banknote, ChevronDown, CloudCheck, Download, Ellipsis, UserRound } from "lucide-react";
 import { changeDriverPayMembership, APIError, fetchDriverPay, fetchInvestorOptions, fetchInvestorPay, fetchPayrollAvailability, fetchPaySettlementPreview, fetchPayStatement, fetchPayStatementExport, refreshDriverPayLoads, saveDriverPay, saveInvestorPay, settleDriverPay, settleInvestorPay, acceptPaySystemValues, undoPaySystemValues, transferPayLoadWeek, placeStatementLoad, retryPayPreparation, subscribePayEvents } from "@/app/lib/api";
 import type { DriverPayDriver, DriverPayEdits, DriverPayLoad, DriverPayWeek, EmploymentType, InvestorOption, PayPageFilters, PayrollAvailability } from "@/app/lib/types";
-import { latestPayrollWeek, payrollWeekLabel, payrollWeekOptions } from "../payrollWeek";
+import { latestPayrollWeek } from "../payrollWeek";
+import { WeekSelector } from "@/app/components/WeekSelector";
 import { useLatestPayrollWeek } from "../components/useLatestPayrollWeek";
 import { SkeletonBar, WeeklyTableSkeleton } from "@/app/components/WeeklyTableSkeleton";
 import { FinalizationCard } from "../components/FinalizationCard";
@@ -72,7 +73,6 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
   const week = storedWeek > latestWeek ? latestWeek : storedWeek < firstWeek ? firstWeek : storedWeek;
   const optionsFirst = payrollFirstWeek ?? week;
   const optionsLatest = payrollFirstWeek ? latestWeek : week;
-  const weekOptions = useMemo(() => payrollWeekOptions(optionsFirst, optionsLatest), [optionsFirst, optionsLatest]);
   const [driverFilter, setDriverFilter] = useViewState("page:driverFilter", "", params.has(targetKey) || targetInvestor !== null ? targetId ?? "" : undefined);
   const [investorFilter, setInvestorFilter] = useViewState("page:investorFilter", "", targetInvestor ?? (targetId ? "" : undefined));
   const investorId = investor ? investorFilter : undefined;
@@ -498,13 +498,9 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <HeaderPinButton iconOnly pinned={headerPinned} onToggle={() => setHeaderPinned(value => !value)} />
-        <div className="relative shrink-0"><select aria-label="Payroll week" className={controlClass + " appearance-none !h-8 !w-auto !py-0 !pr-9 font-mono"} value={week} disabled={finalizing || busy} onChange={event => switchWeek(event.target.value)}>
-          {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>
-            {options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}
-          </optgroup>)}
-        </select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" /></div>
-        <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
-        <button type="button" className={payButtonClass} disabled={finalizing || busy} onClick={() => switchWeek(latestPayrollWeek())}>Last week</button>
+        <WeekSelector label="Payroll week" week={week} firstWeek={optionsFirst} lastWeek={optionsLatest}
+          disabled={finalizing || busy} onChange={switchWeek}
+          jump={{ label: "Last week", onClick: () => switchWeek(latestPayrollWeek()), disabled: week === latestWeek }} />
       </div>
       <div className="flex min-w-0 flex-[1_1_22rem] flex-wrap items-center gap-2">
         <div className="min-w-28 flex-1 [&_input]:h-8 [&_input]:py-0"><ManagementSearch value={search} onChange={value => { if (!finalizing) { setSearch(value); setPage(1); } }} placeholder={investor ? "Investor, truck, or load…" : "Driver, truck, or load…"} /></div>

@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import { PageHeader } from "@/app/components/PageHeader";
-import { controlClass } from "@/app/components/management/ManagementUI";
+import { WeekSelector } from "@/app/components/WeekSelector";
+import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
 import { fetchCompanyDashboard } from "@/app/lib/api";
 import type { CompanyDashboard, DashboardQuery } from "@/app/lib/dashboardTypes";
 import { useViewState } from "@/app/lib/viewMemory";
@@ -13,6 +14,12 @@ import { PerformanceCards, PerformanceCharts } from "./Performance";
 const LoadDetails = dynamic(() => import("./LoadDetails").then(m => m.LoadDetails));
 import { FleetStatusPie } from "./FleetStatusPie";
 import { addDays } from "@/app/gross-board/board";
+
+function selectedMonday(date: string) {
+  // Dashboard used to accept any day of the week and may still have one saved.
+  const day = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return Number.isNaN(day) ? currentChargeWeek() : addDays(date, -((day + 6) % 7));
+}
 
 export default function DashboardPage() {
   const [view, setView] = useViewState<"weekly" | "current">("dashboard:view", "weekly");
@@ -70,10 +77,8 @@ export default function DashboardPage() {
       {([["weekly", "Weekly"], ["current", "Right now"]] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={view === id} aria-controls={`dashboard-${id}`} id={`dashboard-tab-${id}`} onClick={() => { setView(id); setDetails(null); }} className="pb-3 text-sm">{label}</button>)}
     </div>
     {view === "weekly" && <header className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-sm font-semibold">{data ? range(data.period.dateFrom, data.period.dateTo) : "Weekly overview"}</h2><div className="flex flex-wrap items-center gap-2">
-      <button aria-label="Previous week" className="ui-button" disabled={!data} onClick={() => data && chooseWeek(addDays(data.period.dateFrom, -7))}><ChevronLeft size={16} /></button>
-      <input aria-label="Week of" type="date" min="2000-01-03" max="2099-12-28" value={data?.period.dateFrom ?? week} onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) chooseWeek(e.target.value); }} className={`${controlClass} !w-auto`} />
-      <button aria-label="Next week" className="ui-button" disabled={!data} onClick={() => data && chooseWeek(addDays(data.period.dateFrom, 7))}><ChevronRight size={16} /></button>
-      <button className="ui-button whitespace-nowrap" onClick={() => chooseWeek("")}>This week</button>
+      <WeekSelector label="Week of" week={data?.period.dateFrom ?? selectedMonday(week)} onChange={chooseWeek}
+        jump={{ label: "This week", onClick: () => chooseWeek("") }} />
     </div></header>}
     <div role="tabpanel" id={`dashboard-${view}`} aria-labelledby={`dashboard-tab-${view}`} className="space-y-4">
     {error && <p role="alert" className="text-sm text-amber-400">{error}{data ? " · Showing the last available results." : ""}</p>}

@@ -14,7 +14,7 @@ import { Modal, Field, controlClass, ErrorBanner } from "@/app/components/manage
 import { payButtonClass } from "../driver-pay/DriverCard";
 import { validChargeWeek } from "./charges";
 import { decimalDisplay, hundredths } from "@/app/gross-board/board";
-import EffectiveWeekPicker from "./EffectiveWeekPicker";
+import { WeekSelector } from "@/app/components/WeekSelector";
 import { TruckTermsDialog } from "./TruckTermsDialog";
 
 export function TruckCharges({ charges, onChanged, onCountChange, actions }: { actions?: ReactNode; charges: ChargeData; onCountChange: (count: number) => void; onChanged: () => Promise<void> }) {
@@ -139,7 +139,7 @@ export function TruckCharges({ charges, onChanged, onCountChange, actions }: { a
   return <div className="space-y-3">
     {!term && error && <ErrorBanner message={error} />}
     {!!failures.length && <ul aria-label="Truck charges that could not be saved" className="max-h-48 overflow-y-auto text-xs text-red-300">{failures.map(f => <li key={`${f.truckId}:${f.typeId}:${f.weekStart}`}>Truck {trucks.find(t => t.id === f.truckId)?.unitNumber ?? f.truckId}: {f.error}</li>)}</ul>}
-    <div><div className="flex flex-wrap items-center gap-2"><EffectiveWeekPicker week={week} currentWeek={charges.currentWeek} disabled={busy} onChange={setWeek} /><input aria-label="Search trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Owner, truck or driver…" className={`${controlClass} !w-40`} />
+    <div><div className="flex flex-wrap items-center gap-2"><WeekSelector label="Effective week" week={week} disabled={busy} onChange={setWeek} jump={{ label: "This week", onClick: () => setWeek(charges.currentWeek) }} /><input aria-label="Search trucks" value={search} onChange={e => setSearch(e.target.value)} placeholder="Owner, truck or driver…" className={`${controlClass} !w-40`} />
         <TableFilters>
           <select aria-label="Filter truck charge type" className={`${controlClass} !w-36`} value={effectiveType} onChange={e => setTypeFilter(e.target.value)}><option value="">All charge types</option>{availableTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Truck inclusion" className={`${controlClass} !w-36`} value={inclusion} onChange={e => setInclusion(e.target.value)}><option value="all">All trucks</option><option value="included">Included trucks</option><option value="excluded">Excluded trucks</option></select><label className="flex items-center gap-2 text-xs text-zinc-400"><input aria-label="Show archived charge types" type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} />Archived types</label>
         </TableFilters><button className={payButtonClass} disabled={busy} onClick={() => void run(async () => {})}>Reload</button><div className="ml-auto">{actions}</div></div></div>

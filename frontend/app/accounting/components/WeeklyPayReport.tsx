@@ -5,7 +5,8 @@ import { ArrowLeft, Banknote, ChevronDown, CircleDollarSign, Headset, Pencil, Pl
 import { useRouter } from "next/navigation";
 import { IntentLink } from "@/app/components/IntentLink";
 import { useViewState } from "@/app/lib/viewMemory";
-import { latestPayrollWeek, payrollWeekGroups, payrollWeekLabel } from "../payrollWeek";
+import { latestPayrollWeek } from "../payrollWeek";
+import { WeekSelector } from "@/app/components/WeekSelector";
 import { useLatestPayrollWeek } from "./useLatestPayrollWeek";
 import { TierMedal } from "./TierMedal";
 import { PageHeader } from "@/app/components/PageHeader";
@@ -32,7 +33,7 @@ export function WeeklyPayReport() {
   const [storedWeek, setWeek] = useViewState("page:week", () => latestPayrollWeek());
   const week = storedWeek > latestWeek ? latestWeek : storedWeek;
   const [availableWeeks, setAvailableWeeks] = useState([week]);
-  const weekOptions = useMemo(() => payrollWeekGroups([...availableWeeks, week, latestWeek]), [availableWeeks, week, latestWeek]);
+  const weeks = useMemo(() => [...availableWeeks, week, latestWeek], [availableWeeks, week, latestWeek]);
   const [opened, setOpened] = useViewState<Set<string>>("page:opened", new Set());
   const [tab, setTab] = useState("pay");
   const [search, setSearch] = useViewState("page:search", "");
@@ -104,11 +105,8 @@ export function WeeklyPayReport() {
     </div>
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative shrink-0"><select aria-label="Payroll week" className={`${controlClass} appearance-none !h-8 !w-auto !py-0 !pr-9 font-mono`} value={week} disabled={busy || loading} onChange={event => switchWeek(event.target.value)}>
-          {weekOptions.map(([year, options]) => <optgroup key={year} label={String(year)}>{options.map(({ date, label }) => <option key={date} value={date}>{label}</option>)}</optgroup>)}
-        </select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" /></div>
-        <span className="text-xs tabular-nums text-zinc-400">{payrollWeekLabel(week).year}</span>
-        <button type="button" className={button} disabled={busy || loading || week === latestWeek} onClick={() => switchWeek(latestWeek)}>Last week</button>
+        <WeekSelector label="Payroll week" week={week} weeks={weeks} disabled={busy || loading} onChange={switchWeek}
+          jump={{ label: "Last week", onClick: () => switchWeek(latestWeek), disabled: week === latestWeek }} />
       </div>
       <div className="flex min-w-0 flex-[1_1_22rem] items-center gap-2">
         {tab === "pay" && <div className="min-w-28 flex-1 [&_input]:h-8 [&_input]:py-0"><ManagementSearch value={search} onChange={setSearch} placeholder="Dispatcher, driver, or truck…" /></div>}

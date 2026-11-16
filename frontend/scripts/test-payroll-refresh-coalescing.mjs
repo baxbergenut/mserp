@@ -20,7 +20,7 @@ try{for(const kind of ['driver','investor']){
  const row={id,fullName:'Alpha',truckUnit:'101',...(kind==='investor'?{investorId:'owner-1'}:{}),payType:'cpm',payRate:'0.75',fuelTotal:'0.00',tollTotal:'0.00',issues:[],loads:[],statementRevision:'revision-1',expenseRevision:'expenses-1',preparationState:'ready',edits:{driverId:id,weekStart:week,version:1,notes:'',comments:{},adjustments:[],fuelOverride:null,tollOverride:null}};
  const snapshot=(selectedWeek=week)=>({weekStart:selectedWeek,revision:'inputs:fixture',drivers:[{...structuredClone(row),fullName:selectedWeek===week?'Alpha':'Next week',edits:{...structuredClone(row.edits),weekStart:selectedWeek}}],preparation:{state:'ready',generation:'generation-1'}});
  await page.route('**/api/**',async route=>{const req=route.request(),path=new URL(req.url()).pathname.slice(4);
-  if(path==='/auth/session')return route.fulfill({json:{user:{id:'user',username:'Test',permissions:[`${kind}_pay.read`,`${kind}_pay.edit`,`${kind}_pay.finalize`,`${kind}_pay.reopen`],theme:'default'},csrfToken:'fixture'}});
+  if(path==='/auth/session')return route.fulfill({json:{user:{id:'user',username:'Test',permissions:[`${kind}_pay.read`,`${kind}_pay.edit`,`${kind}_pay.finalize`,`${kind}_pay.reopen`,...(kind==='investor'?['investors.read']:[])],theme:'default'},csrfToken:'fixture'}});
   if(path.endsWith('/availability'))return route.fulfill({json:{firstWeek:week,currentWeek:week}});
   if(path.endsWith('/outgoing-transfers')){counts.outgoing++;return route.fulfill({json:{transfers:[]}});}
   if(path===`/${kind}-pay`&&req.method()==='PUT'){counts.save++;await sleep(120);row.edits={...req.postDataJSON(),version:row.edits.version+1};row.statementRevision=`revision-${row.edits.version}`;await page.evaluate(()=>window.__payChanged());return route.fulfill({json:{...row.edits,statementRevision:row.statementRevision,committedStatement:structuredClone(row)}});}
@@ -73,8 +73,9 @@ try{for(const kind of ['driver','investor']){
   // old scope is cancelled even if the intercepted server response arrives later.
   maxReadsBeforeNavigation=maxReads;const beforeNavigation=counts.page;holdRead=true;await page.evaluate(()=>window.__payChanged());await expect.poll(()=>counts.page).toBe(beforeNavigation+1);const releasePreviousWeek=releaseRead;
   await page.getByLabel('Payroll week',{exact:true}).selectOption('2026-11-02');
-  await expect(page.getByRole('button',{name:kind==='investor'?'Next week 101':'Next week',exact:true})).toBeVisible();releasePreviousWeek();await sleep(250);
-  await expect(page.getByRole('button',{name:kind==='investor'?'Next week 101':'Next week',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:kind==='investor'?'Alpha 101':'Alpha',exact:true})).toHaveCount(0);
+  const nextStatement = page.getByRole('button',{name:kind==='investor'?'Next week 101':'Next week',exact:true}).and(page.locator('[aria-expanded]'));
+  await expect(nextStatement).toBeVisible();releasePreviousWeek();await sleep(250);
+  await expect(nextStatement).toBeVisible();await expect(page.getByRole('button',{name:kind==='investor'?'Alpha 101':'Alpha',exact:true})).toHaveCount(0);
  }
  metrics.push({kind,baseline,initialPageReads:initial.page,finalizePageReads:finalizeReads,finalizeOutgoingReads:finalizeTransfers,reopenPageReads:reopened.page-finalized.page,savePageReads:saved.page-reopened.page,addPageReads:added.page-saved.page,removePageReads:removed.page-added.page,addDetailReads:added.detail-saved.detail,removeDetailReads:removed.detail-added.detail,eventSources:await sourceCount(),maxConcurrentPageReads:maxReadsBeforeNavigation||maxReads,fixtureFinalizeConfirmedMs:confirmedMs});expect(errors).toEqual([]);await page.close();
 }console.log(JSON.stringify(metrics,null,2));}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
