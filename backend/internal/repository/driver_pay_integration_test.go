@@ -76,7 +76,14 @@ func TestDriverPayDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			reportsMigration, err := os.ReadFile("../../sql/222_reports_read_indexes.sql")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if mode == "migration" {
+				// The legacy fixture removes payroll_settlements; install its read index
+				// only after the owning settlement migration recreates the table.
+				sql = strings.Replace(sql, strings.ReplaceAll(string(reportsMigration), "\r\n", "\n"), "", 1)
 				stopGeocodeMigration, readErr := os.ReadFile("../../sql/216_status_board_stop_geocoding.sql")
 				if readErr != nil {
 					t.Fatal(readErr)
@@ -342,6 +349,11 @@ func TestDriverPayDatabase(t *testing.T) {
 					if _, err = admin.Exec(ctx, string(migration)); err != nil {
 						t.Fatal(err)
 					}
+				}
+			}
+			if mode == "migration" {
+				if _, err := admin.Exec(ctx, string(reportsMigration)); err != nil {
+					t.Fatal(err)
 				}
 			}
 			config, err := pgxpool.ParseConfig(dsn)
