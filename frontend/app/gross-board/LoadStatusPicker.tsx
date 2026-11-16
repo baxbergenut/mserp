@@ -12,8 +12,8 @@ import { BoardDialog } from "./BoardDialog";
 export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
 type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" } | { kind: "manual" } | { kind: "cancel" } | { kind: "custom" };
 
-export function LoadStatusPicker({ entry, label, disabled, weekLocked = false, needsReview, onReview, onChange, onCustomStatus, resetRef, customStatusUnavailable, allowDayStatus = true }: {
-  entry: GrossBoardEntry; label: string; disabled: boolean; weekLocked?: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit; onCustomStatus?: (text: string) => Promise<void>; resetRef?: Ref<() => void>; customStatusUnavailable?: string; allowDayStatus?: boolean;
+export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview, onChange, onCustomStatus, resetRef, customStatusUnavailable, allowDayStatus = true }: {
+  entry: GrossBoardEntry; label: string; disabled: boolean; needsReview: boolean; onReview: () => void; onChange: DayEdit; onCustomStatus?: (text: string) => Promise<void>; resetRef?: Ref<() => void>; customStatusUnavailable?: string; allowDayStatus?: boolean;
 }) {
   const id = useId();
   const userId = useContext(CurrentUserIDContext);
@@ -41,7 +41,7 @@ export function LoadStatusPicker({ entry, label, disabled, weekLocked = false, n
   const [searchError, setSearchError] = useState("");
   const [pendingStatus, setPendingStatus] = useState<GrossBoardDayStatus>("");
   const [position, setPosition] = useState({ left: 0, top: 0, height: 320, width: 288 });
-  const visibleDraft = weekLocked ? null : draftText;
+  const visibleDraft = disabled ? null : draftText;
   const query = (visibleDraft ?? entry.loadNumber).trim();
   const status = visibleDraft === null ? dayStatuses.find((item) => item.value === entry.dayStatus) : undefined;
   const confirmed = visibleDraft === null && entry.loadRecordId !== null && !entry.sourceMissing;
@@ -135,7 +135,7 @@ export function LoadStatusPicker({ entry, label, disabled, weekLocked = false, n
         role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined}
         aria-activedescendant={open && highlightOption && options.length ? `${id}-${activeIndex}` : undefined}
         title={draftText !== null ? (loadIdentifier ? "Load number. Saves on Enter or when you leave the field." : "Choose Add as status/destination to use this text.") : status ? `${status.value} · Day status. Type a load number to replace it.` : confirmed ? `Confirmed system load · ${(entry.sourceStatus || "Status unknown").replace(/[_-]+/g, " ")}. Total gross and miles come from Loads.` : unmatched ? "Unmatched manual load. Not linked to a system load." : "Enter a load number. Use the status/destination alternative for other text."}
-        maxLength={200} value={visibleDraft ?? status?.value ?? entry.loadNumber} readOnly={weekLocked} disabled={!weekLocked && (disabled || savingCustom)}
+        maxLength={200} value={visibleDraft ?? status?.value ?? entry.loadNumber} readOnly={disabled} disabled={savingCustom}
         onFocus={(event) => { setFocused(true); setBrowse(false); setNavigated(false); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); if (status) event.target.select(); }}
         onBlur={() => {
           if (!disabled && draftText !== null && loadIdentifier && !savingCustom) {
@@ -175,7 +175,7 @@ export function LoadStatusPicker({ entry, label, disabled, weekLocked = false, n
       {savingCustom && <span role="status" className="block text-[10px] text-zinc-400">Saving custom status...</span>}
       {recoveryError && <span role="alert" className="block text-[10px] text-amber-300">Keep this page open; draft recovery is unavailable.</span>}
       {confirmed && !needsReview && <Check aria-label="Confirmed load" className="pointer-events-none absolute left-1 top-2 h-4 w-4 text-emerald-400" />}
-        <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" disabled={disabled}
+        <button type="button" tabIndex={-1} aria-label={`Choose day status for ${label}`} title="Choose a day status" hidden={disabled} disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => { input.current?.focus(); setBrowse(true); setFocused(true); setActive(status ? dayStatuses.indexOf(status) + 1 : 0); }}
           className={`absolute right-0 flex h-8 w-6 items-center justify-center rounded text-zinc-400 hover:bg-white/10 hover:text-zinc-100 focus-visible:ring-1 focus-visible:ring-blue-500 ${status ? "top-12" : "top-0"}`}><ChevronDown className="h-3 w-3" /></button>

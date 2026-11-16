@@ -290,9 +290,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
     await viewer.getByLabel('Password', { exact: true }).fill(password);
     await viewer.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(viewer.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();
-    await expect(viewer.getByLabel('Board Cpm · Notes', { exact: true })).toBeDisabled();
+    await expect(viewer.getByLabel('Board Cpm · Notes', { exact: true })).toHaveAttribute('readonly', '');
     await expect(viewer.getByLabel('Board Cpm · ETA', { exact: true })).toBeDisabled();
-    await expect(viewer.getByLabel('Board Cpm · Destination', { exact: true })).toBeDisabled();
+    await expect(viewer.getByLabel('Board Cpm · Destination', { exact: true })).toHaveAttribute('readonly', '');
     const auth = await (await viewer.request.get(`${base}/api/auth/session`)).json();
     remote = (await getBoard()).entries.find(e => e.driverId === id);
     expect((await viewer.request.put(`${base}/api/driver-board`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { entries: [remote] } })).status()).toBe(403);
@@ -304,7 +304,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
     await expect(viewer.getByLabel('Saved board view')).toHaveCount(0);
     expect((await viewer.request.get(`${base}/api/driver-board/history?driverIds=${id}`)).status()).toBe(200);
     expect((await viewer.request.post(`${base}/api/driver-board/history/${history.items[0].id}/undo`, { headers: { 'X-CSRF-Token': auth.csrfToken }, data: { driverId: id, version: remote.version } })).status()).toBe(403);
-    await viewer.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
+    await viewer.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).press('Enter');
     await viewer.getByRole('dialog').getByRole('button', { name: 'History', exact: true }).click();
     await expect(viewer.getByRole('dialog').getByRole('button', { name: /^Undo change/ })).toHaveCount(0);
     await viewer.getByRole('dialog').getByRole('button', { name: 'Loads', exact: true }).click();

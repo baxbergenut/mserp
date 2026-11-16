@@ -355,7 +355,7 @@ try {
 
   // Read-only viewers cannot alter either load entries or custom statuses.
   readOnly = true; await page.reload();
-  for (const input of await page.locator('[data-gross-board-grid]').getByRole('combobox').all()) await expect(input).toBeDisabled();
+  for (const input of await page.locator('[data-gross-board-grid]').getByRole('combobox').all()) await expect(input).toHaveAttribute('readonly', '');
   const before = [loadWrites.length, planningWrites.length];
   await expect(statusButton('2026-11-08').first()).toBeDisabled();
   await cell('2026-11-08').click({ position: { x: 2, y: 2 } });

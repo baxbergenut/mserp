@@ -48,7 +48,7 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); show("menu", true); }}
     onKeyDown={event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); event.stopPropagation(); show("menu", true); } }}
     onMouseEnter={() => { cancel(); if (!open && entry.trailerNote?.trim() && entry.trailerNumber.trim()) show("note"); }} onMouseLeave={leave}>
-    <input type="text" aria-label={`${name} · Trailer`} title={entry.trailerNumber} maxLength={100} disabled={disabled} value={entry.trailerNumber}
+    <input type="text" aria-label={`${name} · Trailer`} title={entry.trailerNumber} maxLength={100} readOnly={disabled} value={entry.trailerNumber}
       onChange={event => edit(entry.driverId, "trailerNumber", event.target.value)}
       className={`block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 ${trailerColor ? "text-inherit focus:bg-black/10" : "text-zinc-200 focus:bg-zinc-800"}`} />
     {entry.trailerNumber.trim() && entry.trailerNote?.trim() && <span role="img" aria-label="Has trailer note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" />}

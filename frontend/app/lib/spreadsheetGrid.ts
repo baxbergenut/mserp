@@ -81,6 +81,12 @@ export function selectGridCell(event: MouseEvent<HTMLElement>) {
   if (position) { event.preventDefault(); focusCell(table, position.row, position.column); }
 }
 
+export function opensGridDetails(event: MouseEvent<HTMLElement>, readOnly: boolean) {
+  // A single mouse click selects a read-only cell. Keep touch and keyboard activation.
+  return !readOnly || event.detail !== 1 ||
+    ("pointerType" in event.nativeEvent && event.nativeEvent.pointerType === "touch");
+}
+
 function editCell(cell: Cell, value?: string) {
   const input = cell.querySelector<HTMLInputElement>(textInputSelector);
   if (!input) {
@@ -121,9 +127,9 @@ export function copyGridCell(event: ClipboardEvent<HTMLElement>) {
   if (target instanceof HTMLInputElement && target.selectionStart !== target.selectionEnd) return;
   // Copy the field itself, excluding reset buttons and source/status badges.
   const input = cell.querySelector<HTMLInputElement>("input");
-  const select = cell.querySelector<HTMLSelectElement>("select");
+  const select = cell.querySelector<HTMLSelectElement>("select:not([data-grid-display]:disabled)");
   const clone = cell.cloneNode(true) as Cell;
-  clone.querySelectorAll("button:not([data-grid-action]),[role=menu],.sr-only").forEach(node => node.remove());
+  clone.querySelectorAll("button:not([data-grid-action],[data-grid-display]),[role=menu],.sr-only").forEach(node => node.remove());
   event.clipboardData.setData("text/plain", input?.value ?? select?.value ?? clone.textContent?.trim() ?? "");
   event.preventDefault();
   event.stopPropagation();
@@ -152,7 +158,7 @@ export function navigateGrid(event: KeyboardEvent<HTMLElement>) {
   const cell = target.closest<Cell>(cellSelector);
   const table = cell?.closest("table");
   if (!cell || !table) return;
-  if (target instanceof HTMLInputElement) {
+  if (target instanceof HTMLInputElement && !target.readOnly) {
     // F2/double-click edits the existing text; replacement typing keeps the
     // spreadsheet arrow navigation available after the new value is entered.
     if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); cell.tabIndex = -1; cell.focus(); return; }
@@ -188,7 +194,7 @@ export function navigateGrid(event: KeyboardEvent<HTMLElement>) {
   focusCell(parentTable, outerRow, outerColumn);
 }
 
-// Opt in only editable grids; ordinary directory/list tables retain native keys.
+// Ordinary directory/list tables retain native keys.
 export const spreadsheetGridEvents = {
   onMouseDown: selectGridCell,
   onDoubleClick: editGridCell,

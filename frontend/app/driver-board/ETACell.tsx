@@ -37,8 +37,8 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
   const freshness = automaticArrival || automaticTravel ? `${automaticArrival ? "Arrival observation" : "ETA"} ${outdated ? "outdated" : "up to date"}` : undefined;
   const showRetry = canRetry && !!onRetry && canRetryAutomaticETA(value, automation);
   const pending = retrying || !!automation?.travelRetryPending;
-  return <div className="flex h-8 w-full min-w-0 items-center">
-    <button type="button" data-grid-action aria-label={`${name} · ETA`} aria-describedby={freshness ? freshnessId : undefined} title={title} disabled={disabled}
+  return <div className="flex h-8 w-full min-w-0 items-center" title={disabled ? title : undefined}>
+    <button type="button" data-grid-action data-grid-display aria-label={`${name} · ETA`} aria-describedby={freshness ? freshnessId : undefined} title={title} disabled={disabled}
       className="block h-8 min-w-0 flex-1 truncate whitespace-nowrap px-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500"
       aria-haspopup="dialog" aria-expanded={expanded} onClick={event => onOpen(event.currentTarget)}>
       {text.schedule && <><span className={automaticArrival ? freshnessColor : undefined}>{parts[0]}</span>{" "}{parts.slice(1).join(" ")}</>}

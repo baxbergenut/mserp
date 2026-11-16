@@ -201,7 +201,7 @@ try {
   await expect(page.getByLabel('Manual pickup time', { exact: true })).toBeEmpty();
   readOnly = true; await page.reload();
   await expect(cell).toBeDisabled();
-  await page.getByRole('button', { name: 'Appointment Driver · Next load', exact: true }).click();
+  await page.getByRole('button', { name: 'Appointment Driver · Next load', exact: true }).press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Appointment Driver · Loads', exact: true });
   const expand = dialog.getByRole('button', { name: '4010927482 · Current load', exact: true });
   await expand.click();

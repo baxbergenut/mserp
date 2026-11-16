@@ -116,7 +116,7 @@ try {
   sql(`DELETE FROM gross_board_planning_entries WHERE driver_id='${alex}' AND service_date='${next}' AND kind='destination'; SELECT pg_notify('mserp_gross_board','');`);
   await page.reload();
   await expect(cell(page).locator('[data-gross-suggested-destination]')).toContainText('Boise, ID');
-  await page.getByRole('textbox', { name: 'Search drivers or load numbers…', exact: true }).fill('Destination Example');
+  await page.getByRole('textbox', { name: 'Search drivers, truck units or load numbers…', exact: true }).fill('Destination Example');
   await page.screenshot({ path: join(dirname(accessFile), 'gross-board-next-day.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await cell(page).getByRole('button', { name: statusLabel, exact: true }).scrollIntoViewIfNeeded();

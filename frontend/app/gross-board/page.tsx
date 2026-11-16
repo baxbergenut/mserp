@@ -204,7 +204,7 @@ export default function GrossBoardPage() {
     const query = search.trim().toLowerCase();
     return rows.filter(driver => (!driverTarget || driver.id === driverTarget.driverId)
       && (selectedDispatchers === null || selectedDispatchers.includes(driver.dispatcherId))
-      && (!query || driver.fullName.toLowerCase().includes(query)
+      && (!query || driver.fullName.toLowerCase().includes(query) || driver.truckUnit?.toLowerCase().includes(query)
         || (entryIndex.byDriver.get(driver.id) ?? []).some(entry => !entry.deleted && !entry.dayStatus
           && driver.dates.includes(entry.date) && entryForDispatcher(entry, driver.dispatcherId, driver)
           && entry.loadNumber.toLowerCase().includes(query))));
@@ -411,7 +411,7 @@ export default function GrossBoardPage() {
         </div>
         <span className="text-xs text-zinc-500">{week.slice(0, 4)}{week.slice(0, 4) !== dates[6].slice(0, 4) ? ` / ${dates[6].slice(0, 4)}` : ""}</span>
         <button className={buttonClass} disabled={loading} onClick={() => switchWeek(currentChargeWeek())}>This week</button>
-        <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers or load numbers…" /></div>
+        <div className="min-w-48 flex-1"><ManagementSearch value={search} onChange={setSearch} placeholder="Search drivers, truck units or load numbers…" /></div>
         {canManageWeek && <button type="button" data-locked={weekLocked} className={`${buttonClass} data-[locked=true]:border-blue-500/50 data-[locked=true]:text-blue-300`}
           title={weekLocked ? `Locked by ${board?.weekLock?.lockedBy || "unknown"}` : undefined}
           disabled={lockPending || loading || board?.weekStart !== week} onClick={toggleWeekLock}>

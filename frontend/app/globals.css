@@ -7,6 +7,12 @@
   outline-offset: -2px;
 }
 
+/* A locked control can still display the cell's value and pass clicks to the grid. */
+.mserp-ui [data-spreadsheet-grid] [data-grid-display]:disabled {
+  opacity: 1;
+  pointer-events: none;
+}
+
 /* Select a complete wordmark so dark surfaces never show the navy fallback. */
 .brand-logo-wordmark {
   background: url("/brand/clustie-logo-dark.png") center / contain no-repeat;

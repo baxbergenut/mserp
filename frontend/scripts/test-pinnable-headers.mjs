@@ -96,7 +96,7 @@ try {
   }
 
   await page.goto(base + '/gross-board');
-  const search = page.getByPlaceholder('Search drivers or load numbers…');
+  const search = page.getByPlaceholder('Search drivers, truck units or load numbers…');
   const rows = page.locator('[data-gross-field="driver"]');
   await search.fill('  abc-009  '); // Second daily slot, partial and case insensitive.
   await expect(rows).toHaveCount(1);

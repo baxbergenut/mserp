@@ -55,7 +55,7 @@ try {
   await page.screenshot({ path: join(dirname(process.env.MSERP_REVIEW_ACCESS_FILE), 'departure-board.png') });
   const gross = await context.newPage();
   await gross.goto(access.base + '/gross-board');
-  await gross.getByPlaceholder('Search drivers or load numbers…').fill('Departure Browser');
+  await gross.getByPlaceholder('Search drivers, truck units or load numbers…').fill('Departure Browser');
   await expect(gross.locator(`[data-gross-driver="${driver}"][data-gross-field="driver"]`)).toHaveCount(1);
   await expect(gross.getByRole('row', { name: 'Departure Dispatch totals' })).toContainText('2,600.00');
   await expect(gross.getByText('Changed dispatcher', { exact: true })).toHaveCount(0);

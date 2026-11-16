@@ -2,12 +2,12 @@
 
 import { useLoadNotes } from "./useLoadNotes";
 
-import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import type { GrossBoardEntry, GrossBoardPlanningEntry } from "@/app/lib/types";
 import { Modal } from "@/app/components/management/ManagementUI";
-import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
+import { opensGridDetails, spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { useDayPlanning } from "./DayPlanning";
 import { DayCell } from "./DayCell";
 import { grossLoadStatusColor, additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
@@ -97,6 +97,10 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, w
       return [...current.filter(entry => !added.some(next => next.slot === entry.slot)), ...added].sort((a, b) => a.slot - b.slot);
     });
   }, [readOnly]);
+  const inspectHint = readOnly ? "Double-click or press Enter to inspect" : undefined;
+  const openDetails = (event: MouseEvent<HTMLButtonElement>) => {
+    if (opensGridDetails(event, readOnly)) openEditor();
+  };
   const editorEntries = weekLocked ? displayed : draft?.filter(entry => !entry.deleted) ?? [];
   const invalid = !readOnly && editorEntries.some(entry => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
   const showBreakdown = (element: HTMLElement) => {
@@ -137,23 +141,23 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, w
     {fullDay ? <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={blank.slot} id={cellId} onKeyDown={event => {
       if (readOnly || event.target !== event.currentTarget || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing || !["Backspace", "Delete"].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation(); clearingSelection.current = true; clear();
-    }} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} onCustomStatus={createCustomStatus} customStatusUnavailable={visible.length ? "Clear this day’s loads or fixed status first." : pendingLoadSave ? "Waiting for load changes to save." : undefined} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} weekLocked={weekLocked} onChange={onChange} onAdd={readOnly || displayed[0].dayStatus ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
+    }} className="h-px border-b border-r border-zinc-800/70 p-0 align-top">{planning}</td> : displayed.length === 1 ? <DayCell planning={planning} onCustomStatus={createCustomStatus} customStatusUnavailable={visible.length ? "Clear this day’s loads or fixed status first." : pendingLoadSave ? "Waiting for load changes to save." : undefined} id={cellId} highlighted={!!selected} entry={displayed[0]} driverName={driverName} disabled={readOnly || !!displayed[0].transferVersion} onChange={onChange} onAdd={readOnly || displayed[0].dayStatus ? undefined : () => openEditor(true)} /> : <td data-gross-driver={driverId} data-gross-date={date} data-gross-slot={-1} {...notes.cellProps} id={cellId} tabIndex={selected ? -1 : undefined} data-highlighted={!!selected || undefined} aria-label={selected ? `Selected load ${selected.loadNumber}, ${driverName}, ${date}, slot ${selected.slot + 1}` : undefined} className={`border-b border-r border-zinc-800/70 p-0 align-top ${selected ? "bg-blue-500/10 outline-2 -outline-offset-2 outline-blue-400" : ""}`}>
       <div className="flex h-6 items-center justify-between border-b border-zinc-800/70 px-1 text-[10px] text-zinc-500"><span>{displayed.length} loads</span>
         {!readOnly && !displayed.some(entry => entry.dayStatus) && displayed.length < 100 && <button type="button" aria-label={`${label}, add another load`} className="rounded p-0.5 hover:bg-zinc-700 hover:text-blue-300" onClick={() => openEditor(true)}><Plus className="h-3 w-3" /></button>}
       </div>
-      <div data-grid-cell data-gross-field="loadNumber" className="relative">{notes.marker}<button data-grid-action type="button" aria-label={`${label}, load numbers and details`} aria-describedby={hover ? tooltipId : undefined}
+      <div data-grid-cell data-gross-field="loadNumber" className="relative">{notes.marker}<button data-grid-action data-grid-select={readOnly || undefined} type="button" aria-label={`${label}, load numbers and details`} aria-describedby={hover ? tooltipId : undefined}
         onMouseEnter={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onMouseLeave={() => setHover(null)} onFocus={event => { if (!displayed.some(entry => entry.note?.trim())) showBreakdown(event.currentTarget); }} onBlur={() => setHover(null)}
-        title={unmatched ? "Contains unmatched manual loads. Open to review each load." : undefined}
-        onClick={() => openEditor()} className={`${field} !justify-start !font-sans ${confirmed ? summaryColor : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
+        title={[unmatched && "Contains unmatched manual loads.", inspectHint].filter(Boolean).join(" ") || undefined}
+        onClick={openDetails} className={`${field} !justify-start !font-sans ${confirmed ? summaryColor : unmatched ? "bg-red-500/15 !text-red-300" : "bg-amber-500/10 !text-amber-200"}`}>
         <span className={selected ? "block overflow-x-auto whitespace-nowrap" : "truncate"}>{displayed.map((entry, index) => <span key={entry.slot} className={!entry.dayStatus && entry.loadNumber.trim() ? (entry.loadRecordId === null || entry.sourceMissing) ? "font-semibold text-red-300" : `rounded px-0.5 ${grossLoadStatusColor(entry.sourceStatus)}` : undefined}>{index > 0 && " / "}{entry.slot === focusSlot ? <mark data-selected-load className={`rounded bg-blue-500/30 px-1 font-semibold ${(entry.loadRecordId === null || entry.sourceMissing) ? "text-red-300" : "text-blue-100"}`}>{entry.loadNumber}</mark> : entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber}</span>)}</span>
       </button></div>
-      {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} className={`${field} ${(name === "driver rate" ? driverNeedsReview : needsReview) ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={() => openEditor()}>{decimalDisplay(value, name !== "miles")}</button></div>)}
+      {([["total gross", sum.original], ["driver rate", sum.driver], ["miles", sum.miles]] as const).map(([name, value]) => <div key={name} data-grid-cell data-gross-field={name === "total gross" ? "originalRate" : name === "driver rate" ? "driverRate" : "miles"}><button data-grid-action data-grid-select={readOnly || undefined} type="button" aria-label={`${label}, ${name === "total gross" ? name : `total ${name}`}`} title={inspectHint} className={`${field} ${(name === "driver rate" ? driverNeedsReview : needsReview) ? "!bg-red-500/15 !text-red-300" : ""}`} onClick={openDetails}>{decimalDisplay(value, name !== "miles")}</button></div>)}
       {planning}
     </td>}
     {planningDialog && createPortal(<div className="mserp-ui">{planningDialog}</div>, document.body)}
     {displayed.length > 1 && notes.popup}
     {hover && createPortal(<div id={tooltipId} role="tooltip" style={hover} className="pointer-events-none fixed z-50 w-[480px] rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 ui-popover">
-      <div className="mb-2 flex justify-between"><span>{driverName} · {date}</span><span className="text-zinc-500">{readOnly ? "Click to inspect" : "Click to edit"}</span></div>
+      <div className="mb-2 flex justify-between"><span>{driverName} · {date}</span><span className="text-zinc-500">{inspectHint ?? "Click to edit"}</span></div>
       <div className="max-h-40 overflow-hidden"><table className="w-full text-left"><thead className="text-[10px] text-zinc-500"><tr><th className="h-7 font-medium">Load</th><th className="text-right font-medium">Total gross</th><th className="text-right font-medium">Driver</th><th className="text-right font-medium">Miles</th></tr></thead><tbody>{displayed.map(entry => <tr key={entry.slot} className="h-7 border-t border-zinc-800"><td className={entry.dayStatus ? dayStatuses.find(status => status.value === entry.dayStatus)?.color : entry.loadRecordId !== null && !entry.sourceMissing ? grossLoadStatusColor(entry.sourceStatus) : entry.loadNumber.trim() ? "font-semibold text-red-300" : "text-zinc-500"}>{entry.transferOut ? `${entry.loadNumber} · moved to next week` : entry.dayStatus || entry.loadNumber}</td>{[entry.originalRate, entry.driverRate, entry.miles].map((value, index) => <td key={index} className="text-right font-mono">{amountDisplay(value, index < 2) || "—"}</td>)}</tr>)}</tbody></table></div>
       {displayed.length > 4 && <p className="mt-2 text-[10px] text-zinc-500">Open to view all {displayed.length} loads.</p>}
     </div>, document.body)}
@@ -163,7 +167,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, w
       {!readOnly && onReturn && <div className="mb-4 flex items-center gap-3"><button type="button" disabled={!!invalid} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-blue-300 disabled:opacity-40" onClick={() => { if (applyDraft()) onReturn(); }}>Apply and return to Driver Pay</button><span className="text-xs text-zinc-500">Changes save before returning to your place.</span></div>}
       <div ref={dailyEditor} data-gross-editor-day={`${driverId}:${date}`} className="overflow-x-auto pb-32"><table {...spreadsheetGridEvents} data-spreadsheet-grid className="w-full table-fixed border-collapse"><colgroup><col style={{ width: 80 }} />{editorEntries.map(entry => <col key={entry.slot} style={{ width: 220 }} />)}</colgroup><tbody><tr>
         <td className="p-0 align-top text-[11px] text-zinc-500"><div className="h-6" />{["Load #", "Total gross", "Driver", "Miles"].map(name => <div key={name} className="flex h-8 items-center">{name}</div>)}</td>
-        {editorEntries.map(entry => <DayCell onCustomStatus={createCustomStatus} customStatusUnavailable="Apply cleared loads before adding a custom status on the board." allowDayStatus={!draft.some(other => other.slot !== entry.slot && !other.deleted && hasDayContent(other))} key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} weekLocked={weekLocked} onChange={editDraft} />)}
+        {editorEntries.map(entry => <DayCell onCustomStatus={createCustomStatus} customStatusUnavailable="Apply cleared loads before adding a custom status on the board." allowDayStatus={!draft.some(other => other.slot !== entry.slot && !other.deleted && hasDayContent(other))} key={entry.slot} highlighted={entry.slot === focusSlot} entry={entry} driverName={driverName} disabled={readOnly || !!entry.transferVersion} onChange={editDraft} />)}
       </tr></tbody></table></div>
       <button type="button" hidden={readOnly} disabled={readOnly || draft.some(entry => !entry.deleted && !!entry.dayStatus) || draft.filter(entry => !entry.deleted).length >= 100} onClick={() => addDraft(driverId, date)} className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-3 py-2 text-xs text-blue-300"><Plus className="h-3 w-3" />Add load</button>
       {draftError && <p role="alert" className="mt-3 text-xs text-red-300">{draftError}</p>}

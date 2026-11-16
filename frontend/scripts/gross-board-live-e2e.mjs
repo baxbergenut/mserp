@@ -195,7 +195,7 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await viewer.getByRole('button',{name:'Sign in',exact:true}).click();
     await expect(viewer.getByRole('heading',{name:'Gross Board',exact:true})).toBeVisible();
     await expect(viewer.getByText('Live',{exact:true})).toBeVisible();
-    await expect(field(viewer)).toBeDisabled();
+    await expect(field(viewer)).toHaveAttribute('readonly', '');
     await viewer.locator(`[data-gross-driver="${id}"][data-gross-field="truck"]`).click();
     await expect(page.locator('[data-gross-presence="Gross Viewer"]')).toHaveAttribute('aria-label',/truck/);
     const viewerAuth=await(await viewer.request.get(base+'/api/auth/session')).json();
@@ -293,7 +293,7 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await viewer.getByRole('button',{name:'Previous week',exact:true}).click();
     await expect.poll(()=>numeric(field(viewer))).toBe(1999);
     // Presence from Daily loads identifies the exact load slot and field.
-    await viewer.getByLabel(`Gross Live A, ${add(1)}, load numbers and details`,{exact:true}).click();
+    await viewer.getByLabel(`Gross Live A, ${add(1)}, load numbers and details`,{exact:true}).press('Enter');
     const viewerDialog=viewer.getByRole('dialog',{name:'Daily loads',exact:true});
     await viewerDialog.locator('[data-gross-slot="1"] [data-gross-field="driverRate"]').click();
     await expect(cursor).toHaveAttribute('aria-label',/driverRate.*Load 2/);

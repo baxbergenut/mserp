@@ -167,8 +167,9 @@ try {
   await apply(); await expect.poll(()=>saved(week).driverRate).toBe('750.00');
   expect(saved(week).originalRate).toBe('1000.00'); expect(saved(week).miles).toBe('500.00');
   saved(week).originalRate = '900.00'; saved(week).enteredOriginalRate = '900.00';
-  readOnly = true; await page.reload(); await open();
-  await expect(field(week, 'driver rate')).toBeDisabled();
+  readOnly = true; await page.reload();
+  await page.getByRole('button', { name: `Daily Driver, ${week}, load numbers and details`, exact: true }).press('Enter');
+  await expect(field(week, 'driver rate')).toHaveAttribute('readonly', '');
   await daily.getByRole('button', { name: `Review rate and miles for Daily Driver, ${week}`, exact: true }).first().click();
   await expect(review).toBeVisible();
   await expect(review.getByRole('button', { name: 'Accept system values', exact: true })).toHaveCount(0);

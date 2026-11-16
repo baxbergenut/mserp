@@ -395,7 +395,7 @@ try {
   await expect(panel.getByRole('button', { name: /NEXT.*Current load/ })).toBeVisible();
   editable = false;
   await page.reload();
-  await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
+  await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).press('Enter');
   await panel.getByRole('button', { name: '84V7859', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toHaveCount(0);
   // Dispatcher uses the same edit capability, with no administrator flag.

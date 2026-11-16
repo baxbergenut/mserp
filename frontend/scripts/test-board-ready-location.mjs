@@ -77,7 +77,7 @@ try {
   loads.automation.readyLocationAddress = '456 Lake Street, Chicago, IL 60602';
   await page.reload();
   await expect(destination).toHaveValue(loads.automation.readyLocationAddress);
-  await expect(destination).toBeDisabled();
+  await expect(destination).toHaveAttribute('readonly', '');
   await expect(eta).toHaveText('');
   expect(retryCount).toBe(0);
   expect(errors).toEqual([]);

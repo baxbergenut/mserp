@@ -23,8 +23,10 @@ const load = (driverId, date, slot = 0) => ({ driverId, date, slot, deleted: fal
 let statusEntries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: 'OLD', status: '', destination: 'Chicago', eta: '', notes: 'Existing note', homeTime: '', version: 1 }));
 let grossEntries = drivers.flatMap(d => [load(d.id, week), load(d.id, '2026-10-13'), load(d.id, '2026-10-14'), load(d.id, '2026-10-14', 1)]);
 const emptyLoads = { current: null, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: week, revision: 'fixture', customOrder: false };
+const upcoming = { planId: 'next', loadId: 17, number: 'NEXT-17', stops: [{ key: 'pickup', type: 'pickup', location: 'Chicago, IL', schedule: { label: 'PU 14:00', detail: 'Pickup at 14:00' } }] };
 let readOnly = false;
 let saves = 0;
+const viewerWrites = [];
 const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
@@ -33,7 +35,11 @@ try {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname.replace('/lookups/','/').slice(4);
-    if (request.method() === 'PUT') {
+    if (readOnly && ['PUT', 'POST', 'PATCH', 'DELETE'].includes(request.method()) && /^(\/gross-board|\/driver-board)(\/|$)/.test(path) && !path.includes('/presence')) {
+      viewerWrites.push([request.method(), path]);
+      return route.fulfill({ status: 403, json: { error: 'Read only' } });
+    }
+    if (request.method() === 'PUT' && ['/driver-board', '/gross-board'].includes(path)) {
       const input = request.postDataJSON();
       const committed = input.entries.map(e => ({ ...e, version: e.version + 1 }));
       if (path === '/driver-board') statusEntries = statusEntries.map(e => committed.find(c => c.driverId === e.driverId) ?? e);
@@ -42,8 +48,8 @@ try {
       return route.fulfill({ json: committed });
     }
     const fixtures = {
-      '/auth/session': { user: { id: 'grid-user', username: 'Grid Test', theme: 'original', permissions: ['driver_board.read', 'board.read', 'board.write', 'loads.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['driver_board.write'])] }, csrfToken: 'fixture' },
-      '/driver-board': { weekStart: week, drivers, entries: statusEntries, grossEntries, loads: Object.fromEntries(drivers.map(d => [d.id, emptyLoads])), eld: { configured: false, unmatched: 0, ambiguous: 0, invalid: 0 } },
+      '/auth/session': { user: { id: 'grid-user', username: 'Grid Test', theme: 'original', permissions: ['driver_board.read', 'board.read', 'loads.read', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read', ...(readOnly ? [] : ['driver_board.write', 'board.write'])] }, csrfToken: 'fixture' },
+      '/driver-board': { weekStart: week, drivers, entries: statusEntries, grossEntries, loads: Object.fromEntries(drivers.map((d, i) => [d.id, i ? emptyLoads : { ...emptyLoads, next: [upcoming] }])), eld: { configured: false, unmatched: 0, ambiguous: 0, invalid: 0 } },
       '/gross-board': { weekStart: url.searchParams.get('weekStart') ?? week, drivers, entries: grossEntries, balances: [] },
       '/gross-board/loads': [],
       '/loads': { items: [{ ID: 1, LoadID: 'LIST-1', ShipmentID: 'Shipment', Status: 'DELIVERED', CustomerName: 'List customer', DriverName: 'Alice Grid', TruckUnit: 'T0', PickupTime: week, DeliveryTime: week, TotalMiles: '90', PerMileRevenue: '4', TotalPay: '400' }], total: 1, page: 1, pageSize: 25, totalPages: 1, options: { statuses: [], customers: [], dispatchers: [], drivers: [] } },
@@ -103,18 +109,41 @@ try {
   await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-grid.png'), fullPage: true });
 
   drivers[0].location.reportedAt = '2026-10-13T09:00:00Z';
+  statusEntries[0].eta = '12:30';
   readOnly = true; await page.reload();
   await expect(field('Copy current location')).toHaveClass(/\btext-orange-400\b/);
   await expect(field('Copy current location')).toHaveAttribute('title', /Location may be outdated/);
   const beforeSaves = saves;
-  await expect(trailer).toBeDisabled(); await trailerCell.click(); await page.keyboard.type('NO');
+  await expect(trailer).toHaveAttribute('readonly', '');
+  await trailer.click(); await expect(trailerCell).toBeFocused(); await page.keyboard.type('NO');
   await page.evaluate(() => navigator.clipboard.writeText('NO'));
   await page.keyboard.press('Control+v');
   await expect(trailer).toHaveValue('NEXW'); expect(saves).toBe(beforeSaves);
+  await page.keyboard.press('ArrowDown'); await expect(field('Trailer', 'Bob Grid').locator('..')).toBeFocused();
+  const eta = field('ETA');
+  await expect(eta).toBeDisabled();
+  await expect(eta).toHaveCSS('opacity', '1');
+  await eta.locator('../..').click();
+  await page.keyboard.press('Control+c');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('ETA 12:30');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const pickup = field('Next pickup time'), next = field('Next load');
+  await expect(pickup).toBeDisabled();
+  await expect(pickup).toHaveCSS('opacity', '1');
+  await page.keyboard.press('ArrowRight');
+  await expect(next.locator('../..')).toBeFocused();
+  await next.click();
+  await expect(next.locator('../..')).toBeFocused();
+  await page.keyboard.press('Control+c');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('NEXT-17 PU 14:00');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Alice Grid · Loads', exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1800, height: 1000 });
 
+  readOnly = false;
   await page.goto(`${base}/gross-board?weekStart=${week}&driverId=driver-0&date=${week}&slot=0`);
   const amount = (date, field = 'total gross') => page.getByLabel(`Alice Grid, ${date}, ${field}`, { exact: true });
   const original = amount(week);
@@ -146,6 +175,40 @@ try {
   await expect.poll(() => grossEntries.find(e => e.driverId === 'driver-0' && e.date === '2026-10-14' && e.slot === 1)?.originalRate, { timeout: 10000 }).toBe('333');
   expect(grossEntries.find(e => e.driverId === 'driver-0' && e.date === week).originalRate).toBe('123');
   await page.screenshot({ path: join(tmpdir(), 'mserp-gross-board-grid.png'), fullPage: true });
+  readOnly = true;
+  await page.goto(`${base}/gross-board?weekStart=${week}`);
+  const search = page.getByRole('textbox', { name: /Search drivers, truck units/ });
+  const driverLink = name => page.locator('[data-gross-board-grid]').getByRole('link', { name, exact: true });
+  await expect(driverLink('Bob Grid')).toBeVisible();
+  await search.fill(' t0 ');
+  await expect(driverLink('Alice Grid')).toBeVisible();
+  await expect(driverLink('Bob Grid')).toHaveCount(0);
+  await search.fill('T1');
+  await expect(driverLink('Bob Grid')).toBeVisible();
+  await expect(driverLink('Alice Grid')).toHaveCount(0);
+  await search.clear();
+
+  await expect(original).toHaveAttribute('readonly', '');
+  await expect(original).toHaveCSS('opacity', '1');
+  await original.click(); await expect(original.locator('..')).toBeFocused();
+  await page.keyboard.press('Control+c');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('$123.00');
+  await page.evaluate(() => navigator.clipboard.writeText('999'));
+  await page.keyboard.press('Control+v');
+  await page.keyboard.press('Delete');
+  await page.keyboard.type('4');
+  await expect(original).toHaveValue('$123.00');
+  await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-13').locator('..')).toBeFocused();
+  const summaryAmount = page.getByRole('button', { name: 'Alice Grid, 2026-10-14, total gross', exact: true });
+  await summaryAmount.click(); await expect(summaryAmount.locator('..')).toBeFocused();
+  await page.keyboard.press('Control+c');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('$555.00');
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  await expect(modalAmounts.first()).toHaveAttribute('readonly', '');
+  await expect(dialog.getByRole('button', { name: 'Apply changes', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).last().click();
+  expect(viewerWrites).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // Ordinary list tables must retain native selection and arrow behavior.

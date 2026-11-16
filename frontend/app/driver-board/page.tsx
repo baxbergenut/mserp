@@ -19,7 +19,7 @@ import { controlClass, Modal, Field } from "@/app/components/management/Manageme
 import { IntentLink as Link } from "@/app/components/IntentLink";
 import { readMemory, ViewMemoryContext, useViewState } from "@/app/lib/viewMemory";
 import { canCreateDriver, usePermissions } from "@/app/lib/access";
-import { spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
+import { opensGridDetails, spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
 import { LocationCell, formatCoordinates } from "./LocationCell";
@@ -73,7 +73,7 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
   label: string; limit: number; disabled: boolean;
   edit: (id: string, field: keyof DriverBoardEntry, value: string) => void;
 }) {
-  return <input type="text" aria-label={label} title={entry[field]} maxLength={limit} disabled={disabled}
+  return <input type="text" aria-label={label} title={entry[field]} maxLength={limit} readOnly={disabled}
     value={entry[field]} onChange={event => edit(entry.driverId, field, event.target.value)}
     className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none placeholder:text-zinc-700 focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" />;
 });
@@ -407,6 +407,13 @@ export default function DriverBoardPage() {
             const next = loads?.next[0];
             const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
             const nextPickup = nextStop?.schedule;
+            const nextLoadTitle = next ? [
+              next.number,
+              next.overdue ? (next.loadId === null ? `Overdue · Gross Board ${next.date}` : "Overdue · Pickup end time has passed") : "",
+              nextPickup?.detail,
+            ].filter(Boolean).join(" · ") : "Open load plans";
+            const pickupDisabled = disabled || next?.loadId === null;
+            const homeTimeTitle = leavePlanDetails(entry.leavePlan) || entry.homeTime;
             const cells: Record<BoardColumn, ReactElement> = {
               currentLoad: <td key="currentLoad" data-board-column="currentLoad" className={`${cellClass} bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={value => edit(d.id, "currentLoad", value)} /></td>,
               driver: <th key="driver" data-board-column="driver" scope="row" title={d.fullName} className={`${cellClass} bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
@@ -446,16 +453,30 @@ export default function DriverBoardPage() {
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>,
               destination: <td key="destination" data-board-column="destination" className={cellClass}><div className="flex h-8 items-center">
-                  <input type="text" aria-label={d.fullName + " · Destination"} maxLength={500} disabled={disabled}
+                  <input type="text" aria-label={d.fullName + " · Destination"} maxLength={500} readOnly={disabled}
                     title={destination.title} value={destination.value}
                     placeholder={entry.status === "READY" ? "Current location unavailable" : "Destination"} onChange={event => edit(d.id, "destination", event.target.value)}
                     className={"h-8 w-full min-w-0 text-ellipsis bg-transparent px-1.5 text-[11px] outline-none focus:text-clip focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + destination.color} />
                   {destination.showStop && stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
                 </div></td>,
               eta: <td key="eta" data-board-column="eta" className={cellClass}>{entry.status === "READY" ? <span aria-label={`${d.fullName} - No ETA while ready`} className="block h-8" /> : <ETACell name={d.fullName} canRetry={canEdit} retryDisabled={disabled || saving || dirty} retrying={!!etaRetrying[d.id]} onRetry={() => void retryETA(d.id, d.fullName, loads?.automation?.context ?? "")} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} />}</td>,
-              loadPlan: <td key="loadPlan" data-board-column="loadPlan" className={cellClass}><div className="flex h-8 w-full items-center gap-2"><button aria-label={`${d.fullName} · Next load`} title={next ? [next.number, next.overdue ? (next.loadId === null ? `Overdue · Gross Board ${next.date}` : "Overdue · Pickup end time has passed") : "", nextPickup?.detail].filter(Boolean).join(" · ") : "Open load plans"} disabled={!loads} className="group h-full shrink-0 px-1.5 text-left text-[11px] text-zinc-200" onClick={() => setLoadDriver({ id: d.id, name: d.fullName })}>{next ? <span className={next.loadId === null || next.sourceMissing ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}{next.overdue && <span className="ml-1.5 text-[10px] font-medium text-amber-300">Overdue</span>}</span> : "—"}</button>{next && nextStop && <button type="button" data-grid-action aria-label={`${d.fullName} · Next pickup time`} title={canEdit ? "Edit next pickup time" : nextPickup?.detail} disabled={!canEdit || disabled || next.loadId === null} aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id} className="mr-1 shrink-0 rounded px-1 py-1 text-left text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500" onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}</div></td>,
+              loadPlan: <td key="loadPlan" data-board-column="loadPlan" className={cellClass} title={pickupDisabled ? nextPickup?.detail : undefined}>
+                <div className="flex h-8 w-full items-center gap-2">
+                  <button type="button" data-grid-display data-grid-select={!canEdit || undefined} data-grid-action={!canEdit || undefined}
+                    aria-label={`${d.fullName} · Next load`} title={canEdit ? nextLoadTitle : `${nextLoadTitle} · Double-click or press Enter to inspect`}
+                    disabled={!loads} className="group h-full shrink-0 px-1.5 text-left text-[11px] text-zinc-200"
+                    onClick={event => { if (opensGridDetails(event, !canEdit)) setLoadDriver({ id: d.id, name: d.fullName }); }}>
+                    {next ? <span className={next.loadId === null || next.sourceMissing ? "text-red-300" : "text-zinc-300 group-hover:text-blue-200"}>{next.number}{next.overdue && <span className="ml-1.5 text-[10px] font-medium text-amber-300"> Overdue</span>}</span> : "—"}
+                  </button>{" "}
+                  {next && nextStop && <button type="button" data-grid-action data-grid-display aria-label={`${d.fullName} · Next pickup time`}
+                    title={pickupDisabled ? nextPickup?.detail : "Edit next pickup time"} disabled={pickupDisabled}
+                    aria-haspopup="dialog" aria-expanded={pickupEditor?.id === d.id}
+                    className="mr-1 shrink-0 rounded px-1 py-1 text-left text-[11px] text-zinc-200 transition-colors enabled:hover:bg-blue-500/20 enabled:hover:text-blue-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                    onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}
+                </div>
+              </td>,
               notes: <td key="notes" data-board-column="notes" className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>,
-              homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass}><button type="button" aria-label={`${d.fullName} · Home time`} title={leavePlanDetails(entry.leavePlan) || entry.homeTime} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,
+              homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass} title={disabled ? homeTimeTitle : undefined}><button type="button" data-grid-display aria-label={`${d.fullName} · Home time`} title={homeTimeTitle} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,
               driverAddress: <td key="driverAddress" data-board-column="driverAddress" className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>,
             };
             return <ProgressiveBoardRow key={d.id} immediate={i < 24 || rowDrag.active} columns={columns.length} height={33} label={d.fullName}><tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
