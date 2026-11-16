@@ -12,6 +12,7 @@ No migration or additional environment variable is required.
 - The UI separates **Weekly** financial results from **Right now** fleet and
   attention cards. Week navigation uses `preset=week`, a full Monday-Sunday
   reporting window (including recorded plans), compared with the preceding week.
+  The date range appears in the week selector on the left.
   An optional `dateFrom` is normalized to Monday; an omitted date uses New York's
   current week. The older date-range presets remain API-compatible.
 - The API resolves business dates in `America/New_York`. This week/month runs
@@ -20,8 +21,8 @@ No migration or additional environment variable is required.
   periods. Custom dates are inclusive, at most 366 days, and compare with the
   immediately preceding equal-length period. Trends use daily buckets up to 90
   days and calendar weeks beyond that; boundary weeks can be partial.
-- Original Gross is the headline. Driver Gross is not displayed on the dashboard
-  or its reconciliation table; the existing API fields and conflict rules remain
+- Original Gross is the headline. Driver Gross is not displayed on the dashboard;
+  the existing API fields and conflict rules remain
   compatible. Gross Board service dates determine the reporting period. Planned
   rows are included and gross is not represented as collected revenue.
 - Exact load identity and effective original/mileage overrides follow Gross
@@ -33,12 +34,13 @@ No migration or additional environment variable is required.
   once, across drivers/slots/dates. Different drivers or differing gross,
   Driver Gross, or miles (including known/unknown differences) make all matching
   rows conflicting. Unresolved/ambiguous identities are provisional. Conflicts,
-  repeats and provisional rows are excluded from headlines and shown separately
-  in reconciliation, including their amounts. Later corrections can restate prior
+  repeats and provisional rows are excluded from headlines. The API retains
+  exclusion details and amounts; the dashboard shows the resulting numbers.
+  Later corrections can restate prior
   periods; this is an operational report, not a frozen accounting statement.
 - RPM is summed Original Gross divided by summed positive miles for counted
-  loads having both values. Missing values, excluded rows and coverage counts are
-  visible; a missing/zero comparison baseline has no percentage change.
+  loads having both values. A missing or zero comparison baseline has no
+  percentage change.
 - Dispatcher attribution uses the existing daily historical assignment rule,
   with an explicit Unassigned group. No truck denominator or productivity ranking
   is introduced. Current fleet and attention counts are independent of dates.
@@ -58,7 +60,8 @@ No migration or additional environment variable is required.
   visible expense categories by expense date. These all-truck source cards can
   overlap and are not a company net-profit calculation.
   Fuel drill-down shows whole transactions, which may also contain DEF/other
-  purchases. Unknown source coverage is not asserted to be complete.
+  purchases. Expense category amounts appear in a compact grid with links to
+  the selected dates. Unknown source coverage is not asserted to be complete.
 
 The revenue waterfall, its payroll calculation and exclusive cost-review dialogs
 and endpoint have been removed. Source accounting and payroll records are unchanged.
@@ -87,7 +90,7 @@ boundary, the response also omits unauthorized sections entirely:
 | Service programs | `expenses.read` and Maintenance category view access |
 | Tasks | `tasks.read`, existing task viewer visibility and directory access |
 
-`GET /dashboard/loads` additionally requires `board.read`, accepts the same dates plus
+`GET /dashboard/loads` remains available to API clients. It additionally requires `board.read`, accepts the same dates plus
 `dispatcherId` (UUID or `unassigned`), `inclusion` (included/provisional/conflict/
 repeat), `page`, and `pageSize`. Count and page share a database snapshot.
 Money is returned as decimal strings. All dashboard responses are `no-store`.

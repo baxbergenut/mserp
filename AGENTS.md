@@ -1015,11 +1015,13 @@ status while background source evidence refreshes.
   Active/Home/Vacation, with New driver grouped under Active. Directory drill-down
   uses the validated `active_or_new` availability filter; profiles stay unchanged.
   Totals and percentages use those displayed statuses.
-  Driver Gross is hidden on the dashboard and reconciliation table.
-  Resolved loads count once across dates; provisional/conflicting/repeated rows
-  remain visible in reconciliation. No provider calls.
+  The dashboard shows headline numbers and weekly changes without reconciliation
+  controls. Resolved loads count once across dates; exclusion evidence remains
+  available in the API. No provider calls.
   Weekly and Right now tabs request separate section projections. Weekly uses
-  full Monday-Sunday periods. The revenue waterfall and its exclusive review
+  full Monday-Sunday periods with a date range selector on the left.
+  Expense categories use a compact grid within Recorded costs.
+  The revenue waterfall and its exclusive review
   dialogs/API/calculation are retired; dashboard reads no longer calculate payroll.
   Dashboard links clear unrelated saved filters via `dashboard=1`; dates use New York.
   See `docs/DASHBOARD.md` for metric contracts, access, failures and test commands.

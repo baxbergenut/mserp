@@ -5,7 +5,6 @@ import type { DashboardSection } from "@/app/lib/dashboardTypes";
 
 export const money = (v?: string | null) => v == null ? "—" : amountDisplay(v, true);
 export const number = (v?: string | number | null) => v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
-export const range = (from: string, to: string) => `${from} → ${to}`;
 export function Change({ current, previous }: { current: string | number | null; previous: string | number | null }) {
   if (current == null || previous == null || Number(previous) === 0) return <span className="text-xs text-zinc-500">No comparable baseline</span>;
   const delta = (Number(current) - Number(previous)) / Math.abs(Number(previous)) * 100;

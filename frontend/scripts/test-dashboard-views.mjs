@@ -17,7 +17,6 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const metrics = { gross: '143250.00', driverGross: '128000.00', miles: '51240.00', rpm: '2.80', loads: 64, pairedLoads: 61, missingGross: 0, missingDriverGross: 0, missingMiles: 3, provisional: 2, provisionalGross: '4500.00', conflicts: 2, conflictGross: '6000.00', repeats: 1, repeatedGross: '2500.00', rawGross: '156250.00' };
-const driver = '00000000-0000-0000-0000-000000000001';
 const dispatcher = '00000000-0000-0000-0000-000000000010';
 const permissions = ['board.read', 'trucks.read', 'drivers.read', 'trailers.read', 'fuel.read', 'tolls.read', 'weighmytruck.read', 'expenses.read', 'tasks.read', 'driver_pay.read', 'investor_pay.read'];
 let administrator = true;
@@ -40,6 +39,13 @@ function dashboard(query) {
   for (const kind of ['trucks','drivers','trailers']) if (sections[kind] && fleetMode !== 'normal') {
     sections[kind].items = sections[kind].items.map(item => ({...item, count: fleetMode === 'single' && ['active','in_use'].includes(item.id) ? 5 : 0}));
   }
+  if (sections.expenses) {
+    const [sample] = sections.expenses.items;
+    for (let i = 1; i <= 15; i++) sections.expenses.items.push({
+      ...sample, id: `expense-${i}`, label: `Expense category ${i}`,
+      href: sample.href.replace('categoryId=maintenance', `categoryId=expense-${i}`),
+    });
+  }
   for (const [key,value] of Object.entries(sections)) if (query.get('view') === 'weekly' ? ['fleet','attention'].includes(value.kind) : query.get('view') === 'current' && !['fleet','attention'].includes(value.kind)) delete sections[key];
   if(query.has("sections")) for(const key of Object.keys(sections)) if(!query.get("sections").split(",").includes(key)) delete sections[key];
   return { period, sections };
@@ -54,7 +60,6 @@ try {
     const url = new URL(route.request().url()); const path = url.pathname.slice(4); requested.push({ path, query: Object.fromEntries(url.searchParams) });
     if (path === '/auth/session' || path === '/auth/login') return route.fulfill({ json: { user: { administrator, id: 'dashboard-fixture', username: 'Dashboard review', theme, accessRevision: revision, permissions: allowed, expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true }] }, csrfToken: 'fixture' } });
     if (path === '/dashboard/summary') {return route.fulfill(fail ? { status: 500, json: { error: 'Synthetic connection failure' } } : { json: dashboard(url.searchParams) });}
-    if (path === '/dashboard/loads') return route.fulfill({ json: { items: [{ driverId: driver, driverName: 'Example Driver', date: '2026-10-20', slot: 0, loadNumber: 'LOAD-101', loadRecordId: 101, gross: '2500.00', driverGross: '2200.00', miles: '800.00', dispatcherId: dispatcher, dispatcherName: 'Dispatch East', inclusion: url.searchParams.get('inclusion') || 'included' }], total: 1, page: 1, pageSize: 25, totalPages: 1 } });
     if (path === '/trucks') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, statusCounts: {ready:12,in_use:136,shop:8,out_of_service:2,terminated:14}, gpsAlertCounts: {overdue:3,missing:0} } });
     if (path === '/driver-directory') return route.fulfill({json:{items:[],total:0,page:1,pageSize:25,totalPages:1}});
     if (path === '/fuel-transactions') return route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 25, totalPages: 1, options: {drivers:[],states:[]}, summary: {spend:0,saved:0,gallons:0} } });
@@ -65,9 +70,23 @@ try {
     return route.fulfill({ json: data[path] ?? [] });
   });
   await page.goto(`${base}/dashboard`);
+  const picker = page.getByRole('combobox', { name: 'Week of', exact: true });
+  const weekNavigation = page.getByRole('group', { name: 'Week of navigation' });
+  const grossCard = page.locator('dl > div').filter({has: page.getByText('Original Gross', {exact:true})});
   await expect(page.getByRole('heading',{name:'Weekly profit',exact:true})).toHaveCount(0);
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
+  await expect(grossCard).toContainText('$143,250.00');
+  await expect(grossCard).toContainText('11.9% higher');
+  await expect(picker.locator('option:checked')).toHaveText('10/19 → 10/25');
+  expect((await weekNavigation.boundingBox()).x).toBe((await grossCard.boundingBox()).x);
+  await expect(page.getByRole('heading', {name:/2026-10-19|Weekly overview/})).toHaveCount(0);
+  await expect(page.getByText(/Compared with|Reconcile totals|provisional rows|conflicting rows|repeated rows|Incomplete \/ review/)).toHaveCount(0);
+  await expect(grossCard.getByRole('button')).toHaveCount(0);
+  await expect(page.getByRole('cell', {name:'Dispatch East'}).getByRole('button')).toHaveCount(0);
+  const categories = page.getByRole('region', {name:'Expenses by category'});
+  await expect(categories.getByRole('link')).toHaveCount(16);
+  expect(await categories.evaluate(el => el.clientHeight <= 224 && el.scrollHeight > el.clientHeight)).toBe(true);
+  expect((await categories.getByRole('link').nth(1).boundingBox()).y).toBe((await categories.getByRole('link').first().boundingBox()).y);
   await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Recorded costs' })).toBeVisible();
@@ -108,15 +127,6 @@ try {
   await page.goBack();
   await expect(page.getByLabel('Drivers status labels')).toBeVisible();
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
-  await page.getByRole('button', { name: 'Reconcile totals →' }).click();
-  await expect(page.getByRole('dialog')).toContainText('Raw load-row gross');
-  await expect(page.getByRole('dialog')).toContainText('LOAD-101');
-  await expect(page.getByRole('dialog').getByRole('columnheader',{name:'Driver Gross',exact:true})).toHaveCount(0);
-  await page.getByLabel('Load inclusion').selectOption('repeat');
-  await expect.poll(() => requested.some(r => r.path === '/dashboard/loads' && r.query.inclusion === 'repeat')).toBe(true);
-  await page.getByRole('button', {name:'Close', exact:true}).last().click();
-  const picker = page.getByRole('combobox', { name: 'Week of', exact: true });
-  const weekNavigation = page.getByRole('group', { name: 'Week of navigation' });
   await picker.selectOption('2000-01-03');
   await expect(weekNavigation.getByRole('button', { name: 'Previous week' })).toBeDisabled();
   await weekNavigation.getByRole('button', { name: 'Next week' }).click();
@@ -128,6 +138,11 @@ try {
     await expect.poll(() => requested.some(r => r.path === api && r.query[from] === '2026-09-07' && r.query[to] === '2026-09-13')).toBe(true);
     await page.goBack(); await expect(picker).toHaveValue('2026-09-07');
   }
+  await expect(categories.getByRole('link').last()).toHaveAttribute('href', /dateFrom=2026-09-07&dateTo=2026-09-13&categoryId=expense-15$/);
+  await categories.getByRole('link').last().click();
+  await expect(page).toHaveURL(/expenses\?.*categoryId=expense-15/);
+  await page.goBack();
+  await expect(picker).toHaveValue('2026-09-07');
   await page.evaluate(() => { sessionStorage.setItem('mserp-navigation-v1:dashboard-fixture:/trucks:view:page:search', JSON.stringify('HIDDEN SAVED FILTER')); });
   await page.getByRole('tab',{name:'Right now',exact:true}).click();
   await page.locator('section').filter({has: page.getByRole('heading',{name:/^Trucks \d/})}).getByRole('link').filter({hasText:'Shop'}).click();
@@ -137,17 +152,17 @@ try {
   await page.getByRole('tab',{name:'Weekly',exact:true}).click();
   await expect(picker).toHaveValue('2026-09-07');
 
-  await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
+  await expect(grossCard).toContainText('$143,250.00');
   partial = true; await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(/Last result:/)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toContainText('$143,250.00');
+  await expect(grossCard).toContainText('$143,250.00');
   partial = false; fail = true; await page.getByRole('button',{name:'Retry unavailable sections'}).click();
   await expect(page.getByRole('alert').filter({hasText:'Synthetic connection failure'})).toBeVisible();
   fail = false; await page.getByRole('button',{name:'Retry unavailable sections'}).click();
   await expect(page.getByText('Synthetic connection failure', {exact:true})).toHaveCount(0);
   theme = 'default'; await page.reload(); await expect(page.locator('html')).toHaveAttribute('data-theme','default');
   await expect(page.getByRole('heading',{name:'Weekly profit',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Original Gross/ }).first()).toBeVisible();
+  await expect(grossCard).toBeVisible();
   await page.locator('main').dispatchEvent('pointerdown'); await page.locator('main').evaluate(el => el.scrollTo(0,0));
   await page.screenshot({ path: join(output, 'dashboard-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 }); await expect(page.getByRole('button',{name:'Expand sidebar'})).toBeVisible(); await expect.poll(() => page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true); await page.screenshot({ path: join(output,'dashboard-mobile.png'), fullPage: true });
@@ -168,7 +183,7 @@ try {
   fleetMode = 'normal';
   allowed = ['trucks.read']; revision++; await page.reload();
   await expect(page.getByRole('heading',{name:/^Trucks \d/})).toBeVisible();
-  await expect(page.getByRole('button',{name:/Original Gross/})).toHaveCount(0); await expect(page.getByRole('heading',{name:'Recorded costs'})).toHaveCount(0);
+  await expect(grossCard).toHaveCount(0); await expect(page.getByRole('heading',{name:'Recorded costs'})).toHaveCount(0);
   await expect(page.getByRole('heading',{name:/^Trailers \d/})).toHaveCount(0);
   allowed = []; revision++; await page.reload(); await expect(page.getByText(/No dashboard sections are available/)).toBeVisible();
   await page.goto(`${base}/`); await expect(page).toHaveURL(/\/dashboard$/);
@@ -189,7 +204,7 @@ try {
   administrator = true; revision++; await page.goto(`${base}/`);
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('link',{name:'Dashboard',exact:true})).toBeVisible();
-  expect(requested.filter(r => r.query.sections?.split(',').includes('waterfall') || r.path === '/dashboard/cost-review')).toEqual([]);
+  expect(requested.filter(r => r.query.sections?.split(',').includes('waterfall') || ['/dashboard/loads', '/dashboard/cost-review'].includes(r.path))).toEqual([]);
   await expect(page.getByRole('img',{name:'Gross to profit waterfall'})).toHaveCount(0);
   expect(errors).toEqual([]);
   console.log(`Dashboard browser checks passed. Screenshots: ${output}`);
