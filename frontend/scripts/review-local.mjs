@@ -73,6 +73,19 @@ try {
     INSERT INTO expense_payments(expense_id,week_start,amount) SELECT id,'2026-10-05',100 FROM expenses;
   `);
   seedProfileFixture(sql, schema);
+  if (process.env.MSERP_REVIEW_REPORTS_WEEK) {
+    const week = process.env.MSERP_REVIEW_REPORTS_WEEK;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week) || new Date(week).getUTCDay() !== 1) throw new Error('Reports fixture requires a Monday');
+    const offset = new Date(week).getTime() - new Date('2026-10-12').getTime();
+    const fixture = (await readFile(join(backend, 'internal/repository/testdata/reports_closed_week.sql'), 'utf8'))
+      .replace(/2026-10-\d{2}/g, date => new Date(new Date(date).getTime()+offset).toISOString().slice(0,10));
+    sql(`SET search_path TO ${schema},public;\n${fixture}`);
+    if (process.env.MSERP_REVIEW_REPORTS_SCALE === '1') {
+      const scale = (await readFile(join(backend, 'internal/repository/testdata/reports_scale.sql'), 'utf8'))
+        .replace(/2026-10-\d{2}/g, date => new Date(new Date(date).getTime()+offset).toISOString().slice(0,10));
+      sql(`SET search_path TO ${schema},public;\n${scale}`);
+    }
+  }
  }
   const binary = join(temp, process.platform === 'win32' ? 'api.exe' : 'api');
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });

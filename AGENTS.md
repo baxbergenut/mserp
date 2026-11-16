@@ -78,6 +78,18 @@ conversion used that faulty check and created duplicate slots.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
+## Reports
+
+Reports v1 (`/reports`) uses delivery-date Loads revenue, native service-day
+assignments and finalized Driver Pay evidence. Operator carrier fees exclude the
+dispatch adjustment balance. Migration 222 adds read indexes without changing
+financial records or the payroll protocol. Summaries, lazy sources and CSV share
+report permissions; repeatable snapshots fence the bounded period cache with
+source/financial revisions and missing-load evidence. See `docs/REPORTS.md`;
+validate TestReportsClosedWeekDatabase, TestReportsFleetScaleDatabase and
+frontend/scripts/test-reports-e2e.mjs. Never claim the browser latency target from
+an API-only or cached-only measurement.
+
 ## Sensitive investor access
 
 Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisite for Investor Pay and investor agreements. API JSON and board SSE project owner names to Investor without this grant, including operational lookups, expenses, maintenance, charges, escrow, Scale and FleetScope snapshots. Operational IDs/driver-owner relationships remain for expense routing; projections never modify caches or financial snapshots. Install the matching deploy helper before the quiesced cutover; it blocks rollback to releases without the privacy migration. The one-time migration grants investor visibility only to Administrator and Accountant/Accountants roles, audits changes and revokes sessions. Later explicit grants remain configurable. Validate `TestSensitiveInvestorAccessMigration` and `frontend/scripts/test-investor-access.mjs`; see `docs/ACCESS_CONTROL.md`.
