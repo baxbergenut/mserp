@@ -18,7 +18,7 @@ type reportCost struct {
 var reportsCostsSQL = `
 WITH aliases AS (
  SELECT unit_key,(array_agg(DISTINCT truck_id))[1] truck FROM truck_unit_aliases GROUP BY unit_key HAVING count(DISTINCT truck_id)=1
- ), costs AS (
+ ), costs AS MATERIALIZED (
  SELECT 'Fuel' kind,f.id::text id,coalesce(nullif(f.relay_transaction_id,''),f.id::text) label,
  f.purchased_on cost_day,f.purchased_on ownership_day,a.truck,f.driver_id driver,sum(i.total_amount_paid) amount,'' payer
  FROM fuel_transactions f JOIN fuel_transaction_items i ON i.fuel_transaction_id=f.id AND i.item_kind='fuel'
@@ -41,14 +41,22 @@ WITH aliases AS (
  FROM expenses e WHERE e.expense_date BETWEEN $1::date AND $2::date
  AND (EXISTS(SELECT 1 FROM maintenance_configuration m WHERE m.category_id=e.category_id)
  OR lower(btrim(e.expense_type)) IN ('equipment','equipment lease','equipment rental','truck lease','truck rental','trailer lease','trailer rental'))
+ ), ownership_days AS (SELECT DISTINCT truck,ownership_day FROM costs WHERE truck IS NOT NULL),
+ ownership AS MATERIALIZED (
+ SELECT c.truck,c.ownership_day,(array_agg(DISTINCT h.owner_id))[1] owner_id
+ FROM ownership_days c JOIN truck_ownership_history h ON h.truck_id=c.truck
+ AND (NOT h.start_known OR h.assigned_at<((c.ownership_day+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (h.unassigned_at IS NULL OR h.unassigned_at>=((c.ownership_day+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (NOT h.start_known OR h.unassigned_at IS NULL OR h.assigned_at<h.unassigned_at)
+ GROUP BY c.truck,c.ownership_day HAVING count(DISTINCT h.owner_id)=1
  )
  SELECT c.kind,c.id,c.label,c.cost_day::text,(c.amount*100)::float8,coalesce(c.truck::text,''),coalesce(t.unit_number,''),
  coalesce(coalesce(c.driver,active.driver)::text,''),coalesce(d.full_name,''),
  coalesce(dispatch.dispatcher_id::text,''),coalesce(dispatch.dispatcher_name,''),
  CASE WHEN own.is_company THEN 'company' WHEN own.driver_id=active.driver THEN 'owner_operator'
-  WHEN own.owner_id IS NOT NULL AND active.driver IS NOT NULL THEN 'investor_driver' ELSE 'unassigned' END,
+  WHEN own.id IS NOT NULL AND active.driver IS NOT NULL THEN 'investor_driver' ELSE 'unassigned' END,
  CASE WHEN c.payer<>'' THEN c.payer WHEN own.is_company THEN 'company'
-  WHEN own.owner_id IS NOT NULL AND active.driver IS NOT NULL THEN 'operator' ELSE 'review' END
+  WHEN own.id IS NOT NULL AND active.driver IS NOT NULL THEN 'operator' ELSE 'review' END
  FROM costs c LEFT JOIN trucks t ON t.id=c.truck
  LEFT JOIN LATERAL (
  SELECT (array_agg(DISTINCT a.driver_id))[1] driver FROM truck_driver_assignments a
@@ -63,7 +71,9 @@ WITH aliases AS (
  AND (NOT h.start_known OR h.assigned_at<((c.ownership_day+1)::timestamp AT TIME ZONE 'America/New_York'))
  AND (h.unassigned_at IS NULL OR h.unassigned_at>=((c.ownership_day+1)::timestamp AT TIME ZONE 'America/New_York'))
  ORDER BY h.assigned_at DESC LIMIT 1
- ) dispatch ON true` + reportsOwnershipSQL("c.truck", "c.ownership_day")
+ ) dispatch ON true
+ LEFT JOIN ownership h ON h.truck=c.truck AND h.ownership_day=c.ownership_day
+ LEFT JOIN investors own ON own.id=h.owner_id`
 
 func (s *reportRead) addFinancial(ctx context.Context, groups reportGroups, loads []reportLoad, from, to string) error {
 	rows, err := s.tx.Query(ctx, reportsCostsSQL, from, to)

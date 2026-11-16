@@ -104,6 +104,18 @@ func NewReportsRepository(pool *pgxpool.Pool) *ReportsRepository {
 	return &ReportsRepository{pool: pool, cache: map[string]reportsCacheEntry{}, inFlight: map[string]chan struct{}{}}
 }
 
+// Reports shares payroll's audited operational exclusions, except maintenance
+// category configuration, which determines whether an expense is a P&L cost.
+var reportsUnrelatedTables = func() []string {
+	var result []string
+	for _, table := range payrollUnrelatedTables {
+		if table != "maintenance_configuration" {
+			result = append(result, table)
+		}
+	}
+	return result
+}()
+
 func (r *ReportsRepository) Read(ctx context.Context, q ReportsQuery) (ReportsResult, error) {
 	result := ReportsResult{Period: q.Period}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -113,17 +125,17 @@ func (r *ReportsRepository) Read(ctx context.Context, q ReportsQuery) (ReportsRe
 	defer tx.Rollback(ctx)
 	// The reporting queries join bounded source cohorts. Avoid paying PostgreSQL
 	// JIT compilation costs for each interactive period and its comparison.
-	if _, err = tx.Exec(ctx, "SET LOCAL jit = off"); err != nil {
+	if _, err = tx.Exec(ctx, "SET LOCAL jit = off; SET LOCAL join_collapse_limit = 1; SET LOCAL from_collapse_limit = 1"); err != nil {
 		return result, err
 	}
 	state := reportRead{tx: tx, query: q, trucks: map[string]string{}, drivers: map[string]string{}, dispatchers: map[string]string{}, payroll: map[string][]DriverPayDriver{}}
-	// Include every registered source counter, including operational availability
-	// and maintenance classification excluded by payroll's narrower cache. Resource
+	// Include source counters and maintenance classification, excluding audited
+	// operational state such as presence and provider delivery bookkeeping. Resource
 	// finalizations carry their committed financial epochs. Read in this snapshot.
 	var revision string
-	err = tx.QueryRow(ctx, `SELECT md5(payroll_financial_snapshot(coalesce(string_agg(table_name||':'||revision::text,',' ORDER BY table_name),''))
+	err = tx.QueryRow(ctx, `SELECT md5(payroll_financial_snapshot(coalesce(string_agg(table_name||':'||revision::text,',' ORDER BY table_name) FILTER (WHERE NOT table_name=ANY($1::text[])),''))
 	 || (SELECT coalesce(first_week::text,'') FROM payroll_projection_control WHERE singleton)
-     || (SELECT coalesce(string_agg(load_id::text,',' ORDER BY load_id),'') FROM load_source_availability WHERE NOT present)) FROM payroll_cache_revisions`).Scan(&revision)
+     || (SELECT coalesce(string_agg(load_id::text,',' ORDER BY load_id),'') FROM load_source_availability WHERE NOT present)) FROM payroll_cache_revisions`, reportsUnrelatedTables).Scan(&revision)
 	if err != nil {
 		return result, err
 	}

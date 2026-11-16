@@ -64,6 +64,9 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   The cache is bounded to 32 periods / 16 MiB / five minutes, stores independent
   serialized values and coalesces identical in-flight reads. Changed sources never
   serve a stale cached period. There is no browser cache of financial data.
+  The digest shares payroll's audited operational exclusions, so board presence,
+  provider delivery bookkeeping, telemetry and derived preparation do not evict
+  unchanged reports. Maintenance classification stays explicitly included.
   Drilldowns and exports carry the displayed source revision and reject changes
   with a refresh instruction. Returning to the page refreshes its snapshot.
 - Tables render at most 50 groups at once; source rows are lazy. Measurements must
@@ -115,6 +118,20 @@ switches p95 60 ms (12 samples). Timings end after data renders and two animatio
 frames. The user accepted the 344 ms fresh-document result. These measurements
 do not establish a production latency guarantee; reconcile a real closed company
 and owner-operator week and measure the deployed environment before rollout.
+
+Production read-only verification on November 16 reconciled November 2–8 for
+company truck 049 (Loads $5,963.32 / 2,079.01 miles, earned pay $1,455.31,
+carrier costs $3,714.18, contribution $793.83) and owner-operator truck 001
+(Loads $9,881.00 / 3,176.49 miles, carrier fees/contribution $1,156.92, separate
+dispatch balance $240.00 and settlement net $6,616.77). Independent raw Loads,
+cost and frozen-pay reads matched, with 12 company and 8 operator checks.
+
+Initial live profiling found collaboration and integration bookkeeping invalidated
+the broad digest continuously. The operational exclusion fix and bounded SQL join
+planning reduced same-period repeated repository reads to 13–53 ms in a read-only
+production check. Uncached default-period reads were 342–827 ms; the earlier
+operator week took 1,178 ms. These are server repository timings, not browser
+measurements, and do not prove the local 344 ms opening time in production.
 
 ## Next reports
 
