@@ -85,4 +85,7 @@ func TestReportsPermissionsAndCSV(t *testing.T) {
 	if !slices.Contains(records[0], "Profit (USD)") || !slices.Contains(records[0], "RPM (USD)") {
 		t.Fatal("CSV labels differ from report", records[0])
 	}
+	if records[0][len(records[0])-1] != "Profit (USD)" || slices.Index(records[0], "CPM (USD)") != slices.Index(records[0], "RPM (USD)")+1 || slices.Index(records[0], "miles") != slices.Index(records[0], "gross (USD)")+1 {
+		t.Fatal("CSV column order differs from report", records[0])
+	}
 }

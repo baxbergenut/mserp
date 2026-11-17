@@ -1952,6 +1952,7 @@ export type ReportEvidence = {
 export type ReportRow = {
   id: string;
   name: string;
+  assignedDrivers?: { id: string; name: string }[];
   metrics: Record<string, number | undefined>;
   sources?: ReportEvidence[];
   sourceCount: number;
