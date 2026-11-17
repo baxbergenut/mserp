@@ -58,6 +58,8 @@ try {
   expect(headers[headers.indexOf('RPM')+1]).toBe('CPM');
   expect(headers.slice(0,2)).toEqual(['Truck','Assigned driver']);
   const companyRow = companyTable.locator('[data-report-row]').filter({hasText:'COMPANY-RPT'});
+  await expect(companyRow.getByRole('cell',{name:'$375.00',exact:true})).toBeVisible();
+  await expect(companyRow.getByRole('cell',{name:'$430.00',exact:true})).toBeVisible();
   await expect(companyRow.getByRole('link',{name:'COMPANY-RPT',exact:true})).toHaveAttribute('href','/trucks/detail?id=61000000-0000-0000-0000-000000000004');
   await expect(companyRow.getByRole('link',{name:'Company Driver',exact:true})).toHaveAttribute('href','/drivers/detail?id=61000000-0000-0000-0000-000000000001');
   // A value cell expands the row, not just its chevron. Links navigate without expanding.
@@ -132,7 +134,8 @@ try {
   console.log(JSON.stringify({firstNavigationMs,coldDocumentMs:coldDocument,coldViews,samples}));
   await page.getByRole('button',{name:'Source records for COMPANY-RPT',exact:true}).click();
   await expect(page.locator('caption').filter({hasText:'Source records'})).toBeVisible();
-  await expect(page.getByText('MANUAL',{exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'MANUAL',exact:true})).toHaveCount(2);
+  await expect(page.getByText('Calculated from Driver Pay tariff',{exact:true})).toBeVisible();
   const beforeFocus=requests.length;
   await page.evaluate(()=>{window.dispatchEvent(new Event('blur'));window.dispatchEvent(new Event('focus'));});
   await page.waitForTimeout(250);

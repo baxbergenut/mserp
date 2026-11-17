@@ -365,9 +365,6 @@ func (s *reportRead) period(ctx context.Context, from, to string) ([]ReportRow, 
 		}
 		evidence := l.evidence()
 		g := groups.add(id, name, l.reportIdentity, evidence)
-		if financial && l.state == "provisional" {
-			g.missingPay = true
-		}
 		if evidence.State == "review" {
 			g.missingGross, g.missingMiles, g.missingPay = true, true, true
 		}

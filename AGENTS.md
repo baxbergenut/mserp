@@ -82,7 +82,9 @@ conversion used that faulty check and created duplicate slots.
 
 Reports v1 (`/reports`) includes only active Gross Board load entries and selected
 trips, using Gross Board displayed revenue/miles (including entered overrides) by delivery date, native service-day
-assignments and finalized Driver Pay evidence. Operator carrier fees exclude the
+assignments and exact Driver Pay tariff calculations for open loads. Matched
+finalized load fees take precedence; reopening restores the current tariff basis.
+Manual Gross Board entries use their entered pay basis too. Operator carrier fees exclude the
 dispatch adjustment balance. Owner-operator Profit includes finalized recurring
 charge deductions as RC, honoring actual source choices and excluding credits,
 installments and escrow. Only attributable company-paid costs participate. Reports

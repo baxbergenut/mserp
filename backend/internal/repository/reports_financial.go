@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -150,10 +151,10 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 	required := map[string]reportLoad{}
 	for _, l := range loads {
 		_, _, ok := s.groupIdentity(l.reportIdentity)
-		if l.state != "confirmed" || !ok || l.truck == "" || l.employment == "unassigned" || !s.includes(l.reportIdentity) {
+		if (l.state != "confirmed" && l.state != "provisional") || !ok || l.truck == "" || l.employment == "unassigned" || !s.includes(l.reportIdentity) {
 			continue
 		}
-		required[l.parent+"/"+l.trip] = l
+		required[l.payKey()] = l
 		weeks[reportMonday(l.serviceDate)] = true
 		weeks[reportMonday(l.date)] = true
 		if l.note != "" && strings.HasPrefix(l.note, "Gross Board transfer to ") {
@@ -169,7 +170,9 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 	// Include frozen placements outside the service week by exact Loads identity.
 	parents := make([]string, 0, len(required))
 	for _, l := range required {
-		parents = append(parents, l.parent)
+		if l.parent != "" {
+			parents = append(parents, l.parent)
+		}
 	}
 	if len(parents) > 0 {
 		rows, err := s.tx.Query(ctx, reportsFrozenWeeksSQL, parents)
@@ -224,10 +227,7 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 	for _, record := range cards {
 		d, week := record.card, record.week
 		for _, pay := range d.Loads {
-			if pay.LoadRecordID == nil {
-				continue
-			}
-			key := fmt.Sprint(*pay.LoadRecordID) + "/" + reportTripID(pay.LoadTripID)
+			key := reportFrozenPayKey(d.ID, pay)
 			l, ok := required[key]
 			if !ok {
 				continue
@@ -240,7 +240,7 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 			}
 			g := groups.add(l.truck, l.unit, l.reportIdentity, ReportEvidence{Kind: "Driver Pay", ID: d.ID + "/" + week + "/" + key, Label: l.number, Date: l.date,
 				State: "finalized", Note: "Statement week " + week, Values: metrics})
-			if feeErr != nil || paid[key] > 1 {
+			if feeErr != nil || pay.Fee == "" || paid[key] > 1 {
 				g.missingPay = true
 				continue
 			}
@@ -267,10 +267,58 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 	}
 	for key, l := range required {
 		if paid[key] == 0 {
-			groups.add(l.truck, l.unit, l.reportIdentity, ReportEvidence{Kind: "Loads", ID: l.parent, Label: l.number, Date: l.date, State: "review", Note: "No matching finalized Driver Pay load"}).missingPay = true
+			basis := l.driverGross
+			if l.payType == "cpm" {
+				basis = l.payMiles
+			}
+			amount := driverPayFee(l.payType, l.payRate, basis)
+			fee, err := chargeCents(amount)
+			evidence := ReportEvidence{Kind: "Driver Pay", ID: l.payDriver + "/" + reportMonday(l.serviceDate) + "/tariff/" + key,
+				Label: l.number, Date: l.date, State: "calculated", Note: "Calculated from Driver Pay tariff", Values: map[string]float64{}}
+			g := groups.add(l.truck, l.unit, l.reportIdentity, evidence)
+			if amount == "" || err != nil {
+				g.Sources[len(g.Sources)-1].Note = "Pay needs a valid tariff and Gross Board " + map[bool]string{true: "mileage", false: "driver gross"}[l.payType == "cpm"]
+				g.missingPay = true
+				continue
+			}
+			evidence.Values["earnedPay"] = float64(fee)
+			g.Metrics["earnedPay"] += float64(fee)
+			if s.query.View == ReportOperator {
+				gross, err := chargeCents(l.driverGross)
+				if l.driverGross == "" || err != nil {
+					g.missingPay = true
+					continue
+				}
+				evidence.Values["carrierFees"] = float64(gross - fee)
+				g.Metrics["carrierFees"] += float64(gross - fee)
+				if l.gross != nil {
+					g.Metrics["dispatchBalance"] += *l.gross - float64(gross)
+				}
+			}
 		}
 	}
 	return nil
+}
+
+func (l reportLoad) payKey() string {
+	if l.parent != "" {
+		return l.parent + "/" + l.trip
+	}
+	return "board:" + l.driver + "/" + l.serviceDate + "/" + l.boardSlot
+}
+
+func reportFrozenPayKey(driver string, pay DriverPayLoad) string {
+	if pay.LoadRecordID != nil {
+		return fmt.Sprint(*pay.LoadRecordID) + "/" + reportTripID(pay.LoadTripID)
+	}
+	date, slot := pay.SourceDate, pay.SourceSlot
+	if date == "" {
+		date, slot = pay.Date, pay.Slot
+	}
+	if pay.SourceDriverID != "" {
+		driver = pay.SourceDriverID
+	}
+	return "board:" + driver + "/" + date + "/" + strconv.Itoa(slot)
 }
 
 // Recurring revenue is the amount actually deducted in a frozen statement,
