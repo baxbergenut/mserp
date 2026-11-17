@@ -45,7 +45,7 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		if len(company.Current) != 1 {
 			t.Fatalf("company: %+v", company.Current)
 		}
-		check(company.Current[0], map[string]float64{"gross": 119900, "miles": 400, "maintenance": 8000, "fuel": 20000, "tolls": 4000, "scales": 1400, "equipment": 6000, "completedLoads": 2})
+		check(company.Current[0], map[string]float64{"gross": 119900, "miles": 400, "maintenance": 8000, "fuel": 20000, "tolls": 4000, "scales": 1400, "equipment": 6000, "completedLoads": 2, "earnedPay": 37500, "contribution": 43000})
 		if crew := company.Current[0].AssignedDrivers; len(crew) != 1 || crew[0].Name != "Company Driver" || crew[0].ID != "61000000-0000-0000-0000-000000000001" {
 			t.Fatalf("missing dated driver identity: %+v", crew)
 		}
@@ -128,9 +128,7 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		unfinalized := read(ReportCompany, "2026-10-12", "2026-10-18").Current[0]
-		if _, ok := unfinalized.Metrics["contribution"]; ok {
-			t.Fatal("unfinalized pay counted as zero")
-		}
+		check(unfinalized, map[string]float64{"earnedPay": 22500, "contribution": 38000})
 		if _, err = admin.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,driver_id,truck_id,delivery_time,raw_payload)
  VALUES(61999,'UNPLANNED','delivered',500,500,100,'61000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000004','2026-10-15 15:00Z','{}')`); err != nil {
 			t.Fatal(err)
@@ -147,6 +145,75 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 					}
 				}
 			}
+		}
+	})
+}
+
+func TestReportsTariffProfitDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		fixture, err := os.ReadFile("testdata/reports_closed_week.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = admin.Exec(ctx, string(fixture)); err != nil {
+			t.Fatal(err)
+		}
+		exec := func(sql string) {
+			t.Helper()
+			if _, err := admin.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+		repo := NewReportsRepository(pool)
+		period, _ := ResolveReportsPeriod("2026-10-12", "2026-10-18", "", "", time.Now())
+		read := func(view string, pay, profit float64) ReportRow {
+			t.Helper()
+			result, err := repo.Read(ctx, ReportsQuery{View: view, Period: period, CurrentOnly: true})
+			if err != nil || len(result.Current) != 1 {
+				t.Fatalf("report: %+v %v", result, err)
+			}
+			row := result.Current[0]
+			if row.Metrics["earnedPay"] != pay || row.Metrics["contribution"] != profit {
+				t.Fatalf("pay/profit: %+v", row.Metrics)
+			}
+			return row
+		}
+		exec(`UPDATE payroll_settlements SET finalized=false`)
+		// Gross Board mileage overrides + manual entries, not provider miles.
+		read(ReportCompany, 30000, 50500)
+		owner := read(ReportOperator, 136000, 29000)
+		if owner.Metrics["carrierFees"] != 34000 || owner.Metrics["dispatchBalance"] != 29900 {
+			t.Fatal(owner.Metrics)
+		}
+		if _, exists := owner.Metrics["netPayable"]; exists {
+			t.Fatal("tariff estimate created a finalized settlement")
+		}
+		// Tariff and Gross Board edits invalidate the cache without finalization.
+		exec(`UPDATE drivers SET pay_rate=1.25 WHERE full_name='Company Driver'; UPDATE drivers SET pay_rate=83.3333 WHERE full_name='Owner Driver'`)
+		read(ReportCompany, 50000, 30500)
+		read(ReportOperator, 141667, 23333)
+		exec(`UPDATE gross_board_entries SET entered_miles=301.01 WHERE load_number='REPORT-1'`)
+		read(ReportCompany, 50126, 30374)
+		// Percentage payroll uses driver gross, not the higher displayed load gross.
+		exec(`UPDATE drivers SET pay_type='gross_percentage',pay_rate=25 WHERE full_name='Company Driver'`)
+		read(ReportCompany, 27500, 53000)
+		// Finalized load fees override the current tariff and aren't added twice.
+		exec(`UPDATE payroll_settlements SET finalized=true`)
+		read(ReportCompany, 32500, 48000)
+		read(ReportOperator, 136000, 29000)
+		// Frozen manual rows match their native board identity as well.
+		exec(`UPDATE payroll_settlements SET report=jsonb_set(report,'{loads}',report->'loads'||'[{"loadNumber":"MANUAL","sourceDate":"2026-10-14","sourceSlot":0,"fee":"90.00"}]'::jsonb) WHERE driver_id='61000000-0000-0000-0000-000000000001'`)
+		read(ReportCompany, 39000, 41500)
+		exec(`UPDATE payroll_settlements SET finalized=false WHERE driver_id='61000000-0000-0000-0000-000000000001'`)
+		read(ReportCompany, 27500, 53000)
+		// Genuine missing input stays unavailable, never silently becomes zero pay.
+		exec(`UPDATE drivers SET pay_rate=0 WHERE full_name='Company Driver'`)
+		result, err := repo.Read(ctx, ReportsQuery{View: ReportCompany, Period: period, CurrentOnly: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, exists := result.Current[0].Metrics["contribution"]; exists {
+			t.Fatal("missing tariff became zero pay")
 		}
 	})
 }

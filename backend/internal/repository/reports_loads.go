@@ -15,6 +15,7 @@ type reportLoad struct {
 	gross, miles, loaded, empty                                                               *float64
 	pickupOnTime, deliveryOnTime                                                              *bool
 	pickupActual, pickupScheduled, deliveryActual, deliveryScheduled                          string
+	payDriver, payType, payRate, driverGross, payMiles                                        string
 }
 
 func (l reportLoad) evidence() ReportEvidence {
@@ -46,7 +47,8 @@ func readReportLoads(ctx context.Context, tx pgx.Tx, view, from, to string) ([]r
 		var l reportLoad
 		if err = rows.Scan(&l.parent, &l.trip, &l.number, &l.date, &l.serviceDate, &l.pickupDate, &l.deliveryDate, &l.boardSlot, &l.state, &l.note,
 			&l.gross, &l.miles, &l.loaded, &l.empty, &l.pickupOnTime, &l.deliveryOnTime, &l.pickupActual, &l.pickupScheduled, &l.deliveryActual, &l.deliveryScheduled,
-			&l.truck, &l.unit, &l.driver, &l.name, &l.dispatcher, &l.dispatcherName, &l.employment); err != nil {
+			&l.truck, &l.unit, &l.driver, &l.name, &l.dispatcher, &l.dispatcherName, &l.employment,
+			&l.payDriver, &l.payType, &l.payRate, &l.driverGross, &l.payMiles); err != nil {
 			return nil, err
 		}
 		loads = append(loads, l)
@@ -83,7 +85,7 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
  ),
  allocations AS (
  SELECT l.*,e.load_trip_id board_trip_id,e.service_date,e.slot,e.conflict,e.driver_id board_driver,
-  e.transfer_truck,e.credited_id,e.credited_name,e.dispatch_date,trip_source.review trip_review,
+  e.transfer_truck,e.credited_id,e.credited_name,e.dispatch_date,e.driver_rate,trip_source.review trip_review,
   CASE WHEN trip_source.review THEN NULL WHEN trip_source.reviewed THEN trip_source.original
    ELSE coalesce(e.entered_original_rate,trip_source.original) END gross,
   CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles) END miles,
@@ -107,7 +109,7 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
    WHEN a.trip_review THEN 'Unverified Loads trip allocation'
    WHEN a.conflict THEN 'Conflicting Gross Board assignments'
    WHEN a.dispatch_date IS NOT NULL THEN 'Gross Board transfer to '||a.dispatch_date::text ELSE '' END note,
-  a.gross,a.miles,a.loaded,a.empty,
+  a.gross,a.miles,a.loaded,a.empty,a.driver_rate,
   CASE WHEN NOT a.conflict THEN a.board_driver END driver,
   NULL::uuid provider_truck,
   CASE WHEN NOT a.conflict THEN a.transfer_truck END transfer_truck,
@@ -117,7 +119,7 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
  UNION ALL
  SELECT '','',e.load_number,e.service_date,e.service_date,
   NULL,NULL,NULL,NULL,e.slot,'provisional','Unmatched manual Gross Board entry',
-  coalesce(e.entered_original_rate,e.original_rate),coalesce(e.entered_miles,e.miles),NULL,NULL,
+  coalesce(e.entered_original_rate,e.original_rate),coalesce(e.entered_miles,e.miles),NULL,NULL,e.driver_rate,
   e.driver_id,NULL,e.transfer_truck,e.credited_id,e.credited_name FROM board e WHERE e.matched IS NULL
  ),
  in_period AS MATERIALIZED (SELECT x.* FROM sourced x,bounds b WHERE x.report_date BETWEEN b.first AND b.last),
@@ -148,8 +150,11 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
   coalesce(p.truck::text,''),coalesce(t.unit_number,''),coalesce(p.driver::text,''),coalesce(d.full_name,''),
   CASE WHEN p.dispatcher='' AND p.dispatcher_name NOT IN ('','Unassigned') THEN 'historical:'||p.dispatcher_name ELSE p.dispatcher END,p.dispatcher_name,
   CASE WHEN own.is_company THEN 'company' WHEN own.driver_id=payroll_driver_at(p.driver,p.service) THEN 'owner_operator'
-   WHEN own.id IS NOT NULL AND p.driver IS NOT NULL THEN 'investor_driver' ELSE 'unassigned' END
+   WHEN own.id IS NOT NULL AND p.driver IS NOT NULL THEN 'investor_driver' ELSE 'unassigned' END,
+  coalesce(tariff.id::text,''),coalesce(tariff.pay_type,''),coalesce(tariff.pay_rate::text,''),
+  coalesce(p.driver_rate::text,''),coalesce(p.miles::text,'')
  FROM linked p LEFT JOIN trucks t ON t.id=p.truck LEFT JOIN drivers d ON d.id=p.driver
+ LEFT JOIN drivers tariff ON tariff.id=payroll_driver_at(p.driver,p.service)
  LEFT JOIN ownership h ON h.truck=p.truck AND h.service=p.service LEFT JOIN investors own ON own.id=h.owner_id`
 
 // Use the same half-open New York ownership boundaries as CAT Scale.

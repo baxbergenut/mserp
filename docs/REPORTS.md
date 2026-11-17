@@ -43,10 +43,16 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   and broker charges and unassigned costs are excluded from costs and drilldowns.
   Company reimbursements remain company costs. Equipment and carrier-cost columns
   are hidden; attributable company costs still participate in Profit.
-  Missing payroll earnings leave pay-dependent metrics blank.
-- Driver earnings use finalized Driver Pay matched by exact load/trip identity,
-  including cross-week statement placement. Owner-operator carrier fees are
-  the frozen settlement driver-gross basis less matched operator load earnings.
+  A genuinely missing tariff or required pay basis leaves pay-dependent metrics blank.
+- Driver earnings use the same exact decimal calculation as Driver Pay: current
+  configured CPM times Gross Board miles, or current percentage times Gross Board
+  driver gross. Dated team membership selects the main driver's tariff; manual
+  Gross Board entries also qualify. This bounded source calculation does not run
+  payroll preparation or write statements. Finalized Driver Pay fees take precedence
+  when matched by exact load/trip identity (including cross-week placement), or
+  native source driver/date/slot for manual entries. Reopening restores calculated
+  pay; source and tariff edits invalidate the report cache. Owner-operator carrier fees are
+  the driver-gross basis less matched operator load earnings (frozen values when finalized).
   The difference between Gross Board gross and that basis is shown separately
   as Dispatch adjustment balance and does not become carrier income. Owner-operator Profit is carrier fees plus RC less attributable company-paid costs.
   RC (recurring charges) sums actual negative recurring deductions in the selected
@@ -97,12 +103,12 @@ synthetic records, not production accounting sign-off.
 | --- | ---: | ---: |
 | Gross Board revenue | $1,199 | $1,999 |
 | Gross Board miles | 400 | 500 |
-| Matched frozen load earnings | $300; manual entry unmatched | $1,360 |
+| Driver earnings | $300 frozen + $75 manual entry tariff | $1,360 frozen |
 | Fuel / tolls / scales | $200 / $40 / $14 | — |
 | Company maintenance / equipment | $80 / $60 | $0 / $50 |
 | Carrier fee (settlement gross $1,700 less $1,360) | — | $340 |
 | Dispatch adjustment balance (separate) | — | $299 |
-| Profit | blank until manual entry has payroll evidence | $290 |
+| Profit | $430 | $290 |
 
 Gross Board's $999 / 300-mile override and $200 / 100-mile manual entry give
 company revenue $1,199 / 400 miles. Removing the unmatched manual entry yields
@@ -115,11 +121,11 @@ The recurring-charge fixture deducts $125 insurance (base $200 / due $450) and
 $25 legacy recurring fees. A waived $75 fee, $50 credit, $40 installment and
 escrow movements do not add RC. RC is $150, Profit $440, and settlement net $1,180.
 
-Checks: TestReportsClosedWeekDatabase, TestReportsRecurringChargesDatabase and TestReportsGrossBoardCohortDatabase
+Checks: TestReportsClosedWeekDatabase, TestReportsTariffProfitDatabase, TestReportsRecurringChargesDatabase and TestReportsGrossBoardCohortDatabase
 (fresh/incremental), TestReportsCutoff,
 TestReportsFleetScaleDatabase, TestReportsPermissionsAndCSV and
 frontend/scripts/test-reports-e2e.mjs. The database tests also verify source-edit
-cache invalidation, provider-missing transitions, missing finalized pay, native
+cache invalidation, provider-missing transitions, tariff/finalized/reopened pay, native
 assignment authority, unavailable timing, permissions and CSV formula escaping.
 
 For the local production-build preview, use review-local.mjs with
