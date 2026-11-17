@@ -50,7 +50,14 @@ func TestReportsPermissionsAndCSV(t *testing.T) {
 	if fixture.calls != 0 {
 		t.Fatal("denied request reached data source")
 	}
-	query := "?from=2026-10-12&to=2026-10-18&compareFrom=2026-09-01&compareTo=2026-09-07"
+	query := "?week=2026-10-19"
+	for _, invalid := range []string{"2026-10-12", "2026-10-20", "2099-01-05", "invalid"} {
+		for _, path := range []string{"/reports/company", "/reports/company/sources", "/reports/company/export.csv"} {
+			if out := request(path+"?week="+invalid, "reports.read"); out.Code != 400 {
+				t.Fatalf("%s accepted invalid week %s: %d", path, invalid, out.Code)
+			}
+		}
+	}
 	for _, path := range []string{"/reports/company/sources", "/reports/company/export.csv"} {
 		if out := request(path+query+"&revision=obsolete", "reports.read"); out.Code != 409 {
 			t.Fatalf("%s accepted changed source records: %d", path, out.Code)
@@ -69,5 +76,13 @@ func TestReportsPermissionsAndCSV(t *testing.T) {
 	}
 	if records[1][3] != "'=SpreadsheetFormula" || records[2][7] != "'@Load" || records[2][slices.Index(records[0], "gross (USD)")] != "12.5" {
 		t.Fatalf("CSV lost values or formula escaping: %v", records)
+	}
+	for _, excluded := range []string{"equipment (USD)", "unassignedCost (USD)", "carrierCosts (USD)", "contribution (USD)", "revenuePerMile (USD)"} {
+		if slices.Contains(records[0], excluded) {
+			t.Fatalf("removed column in CSV: %s", excluded)
+		}
+	}
+	if !slices.Contains(records[0], "Profit (USD)") || !slices.Contains(records[0], "RPM (USD)") {
+		t.Fatal("CSV labels differ from report", records[0])
 	}
 }

@@ -1925,12 +1925,8 @@ export interface DriverPayEscrowEditor {
 export type ReportView = "company" | "owner-operator" | "dispatcher" | "driver";
 
 export type ReportsQuery = {
-	 revision?: string;
-  includeComparison?: boolean;
-  from?: string;
-  to?: string;
-  compareFrom?: string;
-  compareTo?: string;
+  revision?: string;
+  week?: string;
   truck?: string;
   driver?: string;
   dispatcher?: string;

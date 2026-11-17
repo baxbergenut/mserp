@@ -42,21 +42,21 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 			}
 		}
 		company := read(ReportCompany, "2026-10-12", "2026-10-18")
-		if len(company.Current) != 2 {
+		if len(company.Current) != 1 {
 			t.Fatalf("company: %+v", company.Current)
 		}
-		check(company.Current[0], map[string]float64{"gross": 110000, "miles": 400, "earnedPay": 30000, "maintenance": 8000, "fuel": 20000, "tolls": 4000, "scales": 1400, "equipment": 6000, "contribution": 40600, "completedLoads": 1, "provisionalGross": 20000})
+		check(company.Current[0], map[string]float64{"gross": 119900, "miles": 400, "maintenance": 8000, "fuel": 20000, "tolls": 4000, "scales": 1400, "equipment": 6000, "completedLoads": 2})
 		operator := read(ReportOperator, "2026-10-12", "2026-10-18")
-		if len(operator.Current) != 2 {
+		if len(operator.Current) != 1 {
 			t.Fatalf("operator: %+v", operator.Current)
 		}
-		check(operator.Current[0], map[string]float64{"gross": 180000, "carrierFees": 34000, "carrierCosts": 5000, "contribution": 29000,
+		check(operator.Current[0], map[string]float64{"gross": 199900, "carrierFees": 34000, "carrierCosts": 5000, "contribution": 29000,
 			"settlementEarnings": 136000, "reimbursements": 2500, "escrowWithheld": 2000, "escrowReturned": 500, "escrowApplied": 1000, "deductions": 5000, "netPayable": 132000})
 		performance := read(ReportDriver, "2026-10-12", "2026-10-18")
 		if len(performance.Current) != 2 {
 			t.Fatalf("driver: %+v", performance.Current)
 		}
-		check(performance.Current[0], map[string]float64{"activeDays": 2, "pickupOnTime": 100, "pickupCoverage": 100, "deliveryOnTime": 0, "deliveryCoverage": 100})
+		check(performance.Current[0], map[string]float64{"pickupOnTime": 100, "pickupCoverage": 100, "deliveryOnTime": 0, "deliveryCoverage": 100})
 		check(performance.Current[1], map[string]float64{"pickupCoverage": 0, "deliveryCoverage": 0})
 		if _, ok := performance.Current[1].Metrics["pickupOnTime"]; ok {
 			t.Error("unknown on-time rate displayed")
@@ -70,11 +70,27 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		if len(dispatch.Current) != 2 || dispatch.Current[1].Name != "Original Dispatcher" {
 			t.Fatalf("transferred dispatch: %+v", dispatch.Current)
 		}
-		check(dispatch.Current[1], map[string]float64{"gross": 180000, "truckWeeks": 1, "grossPerTruckWeek": 180000})
-		check(operator.Current[0], map[string]float64{"dispatchBalance": 10000})
+		check(dispatch.Current[1], map[string]float64{"gross": 199900, "truckWeeks": 1, "grossPerTruckWeek": 199900})
+		check(operator.Current[0], map[string]float64{"dispatchBalance": 29900})
+		if _, err = admin.Exec(ctx, `INSERT INTO expenses(truck_id,driver_id,category,category_id,expense_date,amount,expense_type,payment_type,covered_by)
+ SELECT '61000000-0000-0000-0000-000000000004'::uuid,'61000000-0000-0000-0000-000000000001'::uuid,name,id,'2026-10-13'::date,500,'Driver repair','Card','Driver' FROM expense_settings WHERE kind='category' AND name='Maintenance'
+ UNION ALL SELECT NULL,'61000000-0000-0000-0000-000000000001'::uuid,name,id,'2026-10-13'::date,700,'Unassigned driver repair','Card','Driver' FROM expense_settings WHERE kind='category' AND name='Maintenance'`); err != nil {
+			t.Fatal(err)
+		}
+		costs := read(ReportCompany, "2026-10-12", "2026-10-18")
+		if len(costs.Current) != 1 {
+			t.Fatal("excluded expense created a report group", costs.Current)
+		}
+		check(costs.Current[0], map[string]float64{"maintenance": 8000, "carrierCosts": 39400})
+		for _, source := range costs.Current[0].Sources {
+			if source.Label == "Driver repair" || source.Label == "Unassigned driver repair" {
+				t.Fatal("driver charge exposed as company cost", source)
+			}
+		}
+		company.Revision = costs.Revision
 		// Repeat reads must reuse evidence without sharing mutable result objects.
 		company.Current[0].Metrics["gross"] = -1
-		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 110000})
+		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 119900})
 		// Collaboration heartbeats must not evict unchanged financial snapshots.
 		if _, err = admin.Exec(ctx, `UPDATE payroll_cache_revisions SET revision=revision+1 WHERE table_name IN ('driver_board_presence','gross_board_presence','fleetscope_sync_state','maintenance_odometer_readings','payroll_statement_current')`); err != nil {
 			t.Fatal(err)
@@ -91,21 +107,20 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		if _, err = admin.Exec(ctx, `UPDATE loads SET total_pay=1200 WHERE id=61001`); err != nil {
 			t.Fatal(err)
 		}
-		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 120000, "contribution": 50600})
+		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 119900})
 		// Provider availability is intentionally outside payroll revision capture.
 		if _, err = admin.Exec(ctx, `INSERT INTO load_source_availability(load_id,present) VALUES(61001,false)`); err != nil {
 			t.Fatal(err)
 		}
-		missing := read(ReportCompany, "2026-10-12", "2026-10-18").Current[0]
-		for _, key := range []string{"gross", "contribution", "miles", "costPerMile"} {
-			if _, ok := missing.Metrics[key]; ok {
-				t.Errorf("unavailable %s fabricated: %v", key, missing.Metrics)
-			}
-		}
+		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 119900, "miles": 400})
 		if _, err = admin.Exec(ctx, `UPDATE load_source_availability SET present=true WHERE load_id=61001`); err != nil {
 			t.Fatal(err)
 		}
-		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 120000})
+		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 119900})
+		if _, err = admin.Exec(ctx, `DELETE FROM gross_board_entries WHERE load_number='MANUAL'`); err != nil {
+			t.Fatal(err)
+		}
+		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 99900, "miles": 300, "earnedPay": 30000, "contribution": 30500})
 		if _, err = admin.Exec(ctx, `UPDATE payroll_settlements SET finalized=false WHERE driver_id='61000000-0000-0000-0000-000000000001'`); err != nil {
 			t.Fatal(err)
 		}
@@ -129,6 +144,56 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 					}
 				}
 			}
+		}
+	})
+}
+
+func TestReportsRecurringChargesDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		fixture, err := os.ReadFile("testdata/reports_closed_week.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = admin.Exec(ctx, string(fixture)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = admin.Exec(ctx, `UPDATE payroll_settlements SET report=jsonb_set(jsonb_set(jsonb_set(report,
+ '{autoCharges}',report->'autoCharges'||'[
+ {"name":"Insurance","source":"truck_charge:61000000-0000-0000-0000-000000000005:insurance","amount":"-125.00"},
+ {"name":"Waived","source":"truck_charge:61000000-0000-0000-0000-000000000005:waived","amount":"0.00"},
+ {"name":"Credit","source":"truck_charge:61000000-0000-0000-0000-000000000005:credit","amount":"50.00"}]'::jsonb),
+ '{edits,sourceCharges}','[
+ {"source":"truck_charge:61000000-0000-0000-0000-000000000005:insurance","base":"-200.00","due":"-450.00","amount":"-125.00"},
+ {"source":"truck_charge:61000000-0000-0000-0000-000000000005:waived","amount":"0.00"}]'),
+ '{edits,generatedCharges}','[
+ {"kind":"installment","scheduleId":"loan","amount":"-40.00"},
+ {"kind":"recurring","scheduleId":"legacy-fee","name":"Legacy fee","amount":"-25.00"}]')
+ WHERE driver_id='61000000-0000-0000-0000-000000000002'`); err != nil {
+			t.Fatal(err)
+		}
+		period, _ := ResolveReportsPeriod("2026-10-12", "2026-10-18", "", "", time.Now())
+		repo := NewReportsRepository(pool)
+		result, err := repo.Read(ctx, ReportsQuery{View: ReportOperator, Period: period, CurrentOnly: true})
+		if err != nil || len(result.Current) != 1 {
+			t.Fatal(result, err)
+		}
+		row := result.Current[0]
+		if row.Metrics["recurringCharges"] != 15000 || row.Metrics["contribution"] != 44000 || row.Metrics["netPayable"] != 118000 {
+			t.Fatal("recurring deductions or profit do not reconcile", row.Metrics)
+		}
+		var evidence float64
+		for _, source := range row.Sources {
+			evidence += source.Values["recurringCharges"]
+		}
+		if evidence != row.Metrics["recurringCharges"] {
+			t.Fatal("recurring source evidence does not reconcile", evidence)
+		}
+		if _, err = admin.Exec(ctx, `UPDATE payroll_settlements SET finalized=false WHERE driver_id='61000000-0000-0000-0000-000000000002'`); err != nil {
+			t.Fatal(err)
+		}
+		result, err = repo.Read(ctx, ReportsQuery{View: ReportOperator, Period: period, CurrentOnly: true})
+		if err != nil || result.Current[0].Metrics["recurringCharges"] != 0 {
+			t.Fatal("unfinalized recurring charges counted as income", result, err)
 		}
 	})
 }
@@ -175,7 +240,7 @@ func TestReportsGrossBoardCohortDatabase(t *testing.T) {
 		exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,entered_original_rate,entered_miles)
  VALUES('61000000-0000-0000-0000-000000000001','2026-10-05','BOARD-ONLY',61999,999,999)`)
 		rows := read()
-		if len(rows) != 1 || rows[0].gross == nil || *rows[0].gross != 60000 || rows[0].miles == nil || *rows[0].miles != 150 || rows[0].serviceDate != "2026-10-05" {
+		if len(rows) != 1 || rows[0].gross == nil || *rows[0].gross != 99900 || rows[0].miles == nil || *rows[0].miles != 999 || rows[0].serviceDate != "2026-10-05" {
 			t.Fatal("linked source/date mismatch", rows)
 		}
 		// Number-only entries still resolve only a unique source.
@@ -183,7 +248,7 @@ func TestReportsGrossBoardCohortDatabase(t *testing.T) {
 		if rows := read(); len(rows) != 1 {
 			t.Fatal("unique number link lost", rows)
 		}
-		exec(`UPDATE gross_board_entries SET load_record_id=61999,load_trip_id=51 WHERE load_number='BOARD-ONLY';
+		exec(`UPDATE gross_board_entries SET load_record_id=61999,load_trip_id=51,entered_original_rate=NULL,entered_miles=NULL WHERE load_number='BOARD-ONLY';
  UPDATE loads SET split_expected=true,raw_payload='{"trips":[{"id":51,"driver__full_name":"Company Driver","total_load_pay":200,"mile":40,"empty_mile":10},{"id":52,"driver__full_name":"Owner Driver","total_load_pay":400,"mile":80,"empty_mile":20}]}' WHERE id=61999;
  INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,load_record_id,load_trip_id)
  VALUES('61000000-0000-0000-0000-000000000001','2026-10-05',1,'BOARD-ONLY',61999,51)`)
@@ -255,7 +320,7 @@ func TestReportsFleetScaleDatabase(t *testing.T) {
 				t.Fatal("cache changed row coverage")
 			}
 			t.Logf("%s: %d rows; cold %s; cached %s", view, len(cold.Current), coldTime, warmTime)
-			if view == ReportCompany && len(cold.Current) != 122 {
+			if view == ReportCompany && len(cold.Current) != 121 {
 				t.Fatal("scale fixture lost trucks")
 			}
 		}

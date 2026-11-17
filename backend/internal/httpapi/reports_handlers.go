@@ -34,12 +34,12 @@ func registerReportsRoutes(r chi.Router, logger *slog.Logger, reports reportsSou
 			if !requireCapabilities(w, r, permission) {
 				return
 			}
-			period, err := repository.ResolveReportsPeriod(q.Get("from"), q.Get("to"), q.Get("compareFrom"), q.Get("compareTo"), time.Now())
+			period, err := repository.ResolveReportsWeek(q.Get("week"), time.Now())
 			if err != nil {
 				writeAPIError(w, 400, err.Error())
 				return
 			}
-			filter := repository.ReportsQuery{View: view, Period: period, Truck: q.Get("truck"), Driver: q.Get("driver"), Dispatcher: q.Get("dispatcher"), CurrentOnly: !export && q.Get("includeComparison") != "true" && q.Get("period") != "comparison"}
+			filter := repository.ReportsQuery{View: view, Period: period, Truck: q.Get("truck"), Driver: q.Get("driver"), Dispatcher: q.Get("dispatcher"), CurrentOnly: true}
 			if (filter.Truck != "" && !isUUID(filter.Truck)) || (filter.Driver != "" && !isUUID(filter.Driver)) ||
 				(filter.Dispatcher != "" && !isUUID(filter.Dispatcher) &&
 					(!strings.HasPrefix(filter.Dispatcher, "historical:") || len(filter.Dispatcher) > 512 || filter.Dispatcher == "historical:")) {
@@ -61,9 +61,6 @@ func registerReportsRoutes(r chi.Router, logger *slog.Logger, reports reportsSou
 			}
 			if strings.HasSuffix(r.URL.Path, "/sources") {
 				rows := result.Current
-				if q.Get("period") == "comparison" {
-					rows = result.Comparison
-				}
 				for _, row := range rows {
 					if row.ID == q.Get("group") {
 						writeJSON(w, 200, row.Sources)
@@ -105,19 +102,20 @@ func reportCSVText(value string) string {
 }
 
 var reportCSVMoney = map[string]bool{
-	"gross": true, "provisionalGross": true, "grossPerTruckWeek": true, "loadedRPM": true,
+	"gross": true, "grossPerTruckWeek": true, "loadedRPM": true,
 	"revenuePerMile": true, "costPerMile": true, "earnedPay": true, "fuel": true, "tolls": true, "scales": true,
-	"maintenance": true, "equipment": true, "carrierCosts": true, "carrierFees": true, "contribution": true,
+	"maintenance": true, "carrierFees": true, "contribution": true,
 	"settlementEarnings": true, "reimbursements": true, "deductions": true, "escrowReturned": true,
-	"escrowApplied": true, "escrowWithheld": true, "netPayable": true, "unassignedCost": true, "amount": true,
-	"dispatchBalance": true,
+	"escrowApplied": true, "escrowWithheld": true, "netPayable": true, "amount": true,
+	"dispatchBalance":  true,
+	"recurringCharges": true,
 }
 
 var reportCSVColumns = map[string][]string{
-	repository.ReportCompany:    {"gross", "earnedPay", "fuel", "tolls", "scales", "maintenance", "equipment", "contribution", "margin", "miles", "revenuePerMile", "costPerMile", "provisionalGross", "unassignedCost"},
-	repository.ReportOperator:   {"gross", "carrierFees", "dispatchBalance", "carrierCosts", "contribution", "provisionalGross", "unassignedCost", "settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable"},
-	repository.ReportDispatcher: {"completedLoads", "gross", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct", "provisionalLoads"},
-	repository.ReportDriver:     {"completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency", "provisionalLoads"},
+	repository.ReportCompany:    {"gross", "earnedPay", "fuel", "tolls", "scales", "maintenance", "contribution", "margin", "miles", "revenuePerMile", "costPerMile"},
+	repository.ReportOperator:   {"gross", "carrierFees", "dispatchBalance", "recurringCharges", "contribution", "settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable"},
+	repository.ReportDispatcher: {"completedLoads", "gross", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct"},
+	repository.ReportDriver:     {"completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency"},
 }
 
 func writeReportsCSV(w *csv.Writer, view string, result repository.ReportsResult) error {
@@ -139,12 +137,27 @@ func writeReportsCSV(w *csv.Writer, view string, result repository.ReportsResult
 	}
 	keys := make([]string, 0, len(columns))
 	for key := range columns {
+		if key == "equipment" || key == "unassignedCost" || key == "carrierCosts" || key == "provisionalGross" || key == "provisionalLoads" {
+			continue
+		}
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	header := []string{"Period", "From", "Through", "Group", "Record type", "Source", "Source ID", "Record", "Date", "Truck", "Driver", "Dispatcher", "Status", "Note", "Pickup actual", "Pickup scheduled", "Delivery actual", "Delivery scheduled"}
 	for _, key := range keys {
 		label := key
+		if key == "recurringCharges" {
+			label = "RC (recurring charges)"
+		}
+		if key == "contribution" {
+			label = "Profit"
+		}
+		if key == "revenuePerMile" {
+			label = "RPM"
+		}
+		if key == "loadedRPM" {
+			label = "Loaded RPM"
+		}
 		if reportCSVMoney[key] {
 			label += " (USD)"
 		}
