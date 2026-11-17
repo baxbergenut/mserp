@@ -87,7 +87,10 @@ dispatch adjustment balance. Owner-operator Profit includes finalized recurring
 charge deductions as RC, honoring actual source choices and excluding credits,
 installments and escrow. Only attributable company-paid costs participate. Reports
 uses the shared completed-week selector from 2026-10-19, enforces the same bounds
-on summaries/sources/CSV, and never refetches solely on window focus. Migration 222 adds read indexes without changing
+on summaries/sources/CSV, and never refetches solely on window focus. Weekly truck
+rows include native dated drivers and team members; profile links retain page
+permissions. Headers sort locally before pagination with reduced-motion-aware
+row transitions. Migration 222 adds read indexes without changing
 financial records or the payroll protocol. Summaries, lazy sources and CSV share
 report permissions; repeatable snapshots fence the bounded period cache with
 source/financial revisions and missing-load evidence. See `docs/REPORTS.md`;

@@ -82,12 +82,13 @@ type ReportEvidence struct {
 }
 
 type ReportRow struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Metrics     map[string]float64 `json:"metrics"`
-	Sources     []ReportEvidence   `json:"sources,omitempty"`
-	SourceCount int                `json:"sourceCount"`
-	ReviewCount int                `json:"reviewCount"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	AssignedDrivers []PayPerson        `json:"assignedDrivers,omitempty"`
+	Metrics         map[string]float64 `json:"metrics"`
+	Sources         []ReportEvidence   `json:"sources,omitempty"`
+	SourceCount     int                `json:"sourceCount"`
+	ReviewCount     int                `json:"reviewCount"`
 }
 
 type ReportOptions struct {
@@ -417,6 +418,11 @@ func (s *reportRead) period(ctx context.Context, from, to string) ([]ReportRow, 
 			}
 		}
 	}
+	if financial {
+		if err := s.addWeeklyDrivers(ctx, groups, from, to); err != nil {
+			return nil, err
+		}
+	}
 	result := make([]ReportRow, 0, len(groups))
 	for _, g := range groups {
 		g.finish(s.query.View)
@@ -449,6 +455,47 @@ func (s *reportRead) period(ctx context.Context, from, to string) ([]ReportRow, 
 		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 	})
 	return result, nil
+}
+
+// Label existing truck rows from native dated assignments, including team members
+// and changes within the selected week. This never substitutes today's crew or
+// changes source attribution. One bounded query serves the entire report.
+func (s *reportRead) addWeeklyDrivers(ctx context.Context, groups reportGroups, from, to string) error {
+	trucks := make([]string, 0, len(groups))
+	for id := range groups {
+		if id != "unassigned" {
+			trucks = append(trucks, id)
+		}
+	}
+	if len(trucks) == 0 {
+		return nil
+	}
+	rows, err := s.tx.Query(ctx, `WITH days AS (
+ SELECT $2::date+n AS service_day FROM generate_series(0,$3::date-$2::date) n
+), assigned AS MATERIALIZED (
+ SELECT DISTINCT a.truck_id,a.driver_id,d.service_day FROM days d JOIN truck_driver_assignments a
+ ON a.truck_id=ANY($1::uuid[]) AND a.assigned_at<((d.service_day+1)::timestamp AT TIME ZONE 'America/New_York')
+ AND (a.unassigned_at IS NULL OR a.unassigned_at>=((d.service_day+1)::timestamp AT TIME ZONE 'America/New_York'))
+ AND (a.unassigned_at IS NULL OR a.assigned_at<a.unassigned_at)
+), crew AS (
+ SELECT truck_id,driver_id FROM assigned
+ UNION SELECT a.truck_id,t.team_driver_id FROM assigned a JOIN driver_teams t
+ ON t.main_driver_id=a.driver_id AND t.start_week<=a.service_day AND (t.end_week IS NULL OR a.service_day<t.end_week)
+) SELECT c.truck_id::text,d.id::text,d.full_name FROM crew c JOIN drivers d ON d.id=c.driver_id
+ ORDER BY lower(d.full_name),d.id`, trucks, from, to)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var truck string
+		var driver PayPerson
+		if err := rows.Scan(&truck, &driver.ID, &driver.Name); err != nil {
+			return err
+		}
+		groups[truck].AssignedDrivers = append(groups[truck].AssignedDrivers, driver)
+	}
+	return rows.Err()
 }
 
 func (g *reportGroup) addTiming(l reportLoad) {

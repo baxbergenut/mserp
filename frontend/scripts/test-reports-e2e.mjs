@@ -51,6 +51,59 @@ try {
   expect(summary.current.every(row => !row.sources)).toBeTruthy();
   expect(summary.comparison).toHaveLength(0);
   expect(requests.some(url => url.includes('/sources'))).toBeFalsy();
+  const companyTable = page.getByRole('table', {name:'Truck report',exact:true});
+  const headers = await companyTable.getByRole('columnheader').allTextContents();
+  expect(headers.at(-1)).toBe('Profit');
+  expect(headers[headers.indexOf('Load gross')+1]).toBe('Miles');
+  expect(headers[headers.indexOf('RPM')+1]).toBe('CPM');
+  expect(headers.slice(0,2)).toEqual(['Truck','Assigned driver']);
+  const companyRow = companyTable.locator('[data-report-row]').filter({hasText:'COMPANY-RPT'});
+  await expect(companyRow.getByRole('link',{name:'COMPANY-RPT',exact:true})).toHaveAttribute('href','/trucks/detail?id=61000000-0000-0000-0000-000000000004');
+  await expect(companyRow.getByRole('link',{name:'Company Driver',exact:true})).toHaveAttribute('href','/drivers/detail?id=61000000-0000-0000-0000-000000000001');
+  // A value cell expands the row, not just its chevron. Links navigate without expanding.
+  await companyRow.getByRole('cell').filter({hasText:'$1,199.00'}).click();
+  await expect(page.locator('caption').filter({hasText:'Source records'})).toBeVisible();
+  const sourceTable=page.getByRole('table').filter({has:page.locator('caption')});
+  await sourceTable.getByRole('button',{name:'Date',exact:true}).click();
+  await expect(sourceTable.getByRole('columnheader',{name:'Date',exact:true})).toHaveAttribute('aria-sort','ascending');
+  await companyRow.getByRole('cell').filter({hasText:'$1,199.00'}).click();
+  const driverNavigation=page.waitForURL('**/drivers/detail?id=61000000-0000-0000-0000-000000000001');
+  await companyRow.getByRole('link',{name:'Company Driver',exact:true}).click(); await driverNavigation;
+  await page.goBack(); await expect(page.locator('[data-report-ready="true"]')).toBeVisible();
+  await companyRow.getByRole('link',{name:'COMPANY-RPT',exact:true}).click();
+  await page.waitForURL('**/trucks/detail?id=61000000-0000-0000-0000-000000000004');
+  await page.goBack(); await expect(page.locator('[data-report-ready="true"]')).toBeVisible();
+  const beforeSort=requests.length;
+  await companyTable.getByRole('button',{name:'Load gross',exact:true}).click();
+  await expect(companyTable.getByRole('columnheader',{name:'Load gross',exact:true})).toHaveAttribute('aria-sort','ascending');
+  const expectedAscending=[...summary.current].sort((a,b)=>(a.metrics.gross??Infinity)-(b.metrics.gross??Infinity)).slice(0,50).map(row=>row.id);
+  expect(await companyTable.locator('[data-report-row]').evaluateAll(rows=>rows.map(row=>row.dataset.reportRow))).toEqual(expectedAscending);
+  await page.waitForTimeout(350);
+  const animationCount = await companyTable.evaluate(table => new Promise(resolve => {
+    [...table.querySelectorAll('thead button')].find(button=>button.textContent==='Load gross').click();
+    requestAnimationFrame(()=>resolve([...table.querySelectorAll('[data-report-row]')].filter(row=>row.getAnimations().some(animation=>animation.effect.getTiming().duration===300)).length));
+  }));
+  expect(animationCount).toBeGreaterThan(0);
+  const expectedDescending=[...summary.current].sort((a,b)=>(b.metrics.gross??-Infinity)-(a.metrics.gross??-Infinity)).slice(0,50).map(row=>row.id);
+  expect(await companyTable.locator('[data-report-row]').evaluateAll(rows=>rows.map(row=>row.dataset.reportRow))).toEqual(expectedDescending);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await companyTable.getByRole('button',{name:'Load gross',exact:true}).click();
+  expect(await companyTable.locator('[data-report-row]').evaluateAll(rows=>rows.flatMap(row=>row.getAnimations()).length)).toBe(0);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await companyTable.getByRole('button',{name:'Earned driver pay',exact:true}).click();
+  await companyTable.getByRole('button',{name:'Earned driver pay',exact:true}).click();
+  expect(await companyTable.locator('[data-report-row]').evaluateAll(rows=>rows.map(row=>row.dataset.reportRow))).not.toContain('61000000-0000-0000-0000-000000000004');
+  expect(requests.length).toBe(beforeSort);
+  // Sort the full cohort, not just the visible page; sorting returns to page one.
+  await page.getByRole('button',{name:'Next',exact:true}).click();
+  await companyTable.getByRole('button',{name:'Truck',exact:true}).click();
+  await expect(companyRow).toBeVisible();
+  await expect(page.getByRole('button',{name:'Previous',exact:true})).toBeDisabled();
+  for (const header of await companyTable.getByRole('columnheader').all()) {
+    await header.getByRole('button').click();
+    expect(await header.getAttribute('aria-sort')).not.toBe('none');
+  }
+  await companyTable.getByRole('button',{name:'Load gross',exact:true}).click();
   await page.screenshot({ path: join(output,'company.png'), fullPage: true });
   const samples = [];
   async function switchView(label) {
@@ -77,7 +130,7 @@ try {
   }
   for(let n=0;n<3;n++) for(const label of labels) samples.push({view:label,ms:await switchView(label)});
   console.log(JSON.stringify({firstNavigationMs,coldDocumentMs:coldDocument,coldViews,samples}));
-  await page.getByRole('button',{name:/COMPANY-RPT/}).click();
+  await page.getByRole('button',{name:'Source records for COMPANY-RPT',exact:true}).click();
   await expect(page.locator('caption').filter({hasText:'Source records'})).toBeVisible();
   await expect(page.getByText('MANUAL',{exact:true})).toBeVisible();
   const beforeFocus=requests.length;

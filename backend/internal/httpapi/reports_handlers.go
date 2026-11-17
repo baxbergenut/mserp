@@ -112,9 +112,9 @@ var reportCSVMoney = map[string]bool{
 }
 
 var reportCSVColumns = map[string][]string{
-	repository.ReportCompany:    {"gross", "earnedPay", "fuel", "tolls", "scales", "maintenance", "contribution", "margin", "miles", "revenuePerMile", "costPerMile"},
-	repository.ReportOperator:   {"gross", "carrierFees", "dispatchBalance", "recurringCharges", "contribution", "settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable"},
-	repository.ReportDispatcher: {"completedLoads", "gross", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct"},
+	repository.ReportCompany:    {"gross", "miles", "earnedPay", "fuel", "tolls", "scales", "maintenance", "margin", "revenuePerMile", "costPerMile", "contribution"},
+	repository.ReportOperator:   {"gross", "miles", "carrierFees", "dispatchBalance", "recurringCharges", "settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable", "contribution"},
+	repository.ReportDispatcher: {"completedLoads", "gross", "miles", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct"},
 	repository.ReportDriver:     {"completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency"},
 }
 
@@ -136,13 +136,26 @@ func writeReportsCSV(w *csv.Writer, view string, result repository.ReportsResult
 		}
 	}
 	keys := make([]string, 0, len(columns))
+	for _, key := range reportCSVColumns[view] {
+		if key != "revenuePerMile" && key != "costPerMile" && key != "contribution" {
+			keys = append(keys, key)
+			delete(columns, key)
+		}
+	}
+	extra := []string{}
 	for key := range columns {
-		if key == "equipment" || key == "unassignedCost" || key == "carrierCosts" || key == "provisionalGross" || key == "provisionalLoads" {
+		if key == "equipment" || key == "unassignedCost" || key == "carrierCosts" || key == "provisionalGross" || key == "provisionalLoads" || key == "revenuePerMile" || key == "costPerMile" || key == "contribution" {
 			continue
 		}
-		keys = append(keys, key)
+		extra = append(extra, key)
 	}
-	sort.Strings(keys)
+	sort.Strings(extra)
+	keys = append(keys, extra...)
+	for _, key := range []string{"revenuePerMile", "costPerMile", "contribution"} {
+		if columns[key] {
+			keys = append(keys, key)
+		}
+	}
 	header := []string{"Period", "From", "Through", "Group", "Record type", "Source", "Source ID", "Record", "Date", "Truck", "Driver", "Dispatcher", "Status", "Note", "Pickup actual", "Pickup scheduled", "Delivery actual", "Delivery scheduled"}
 	for _, key := range keys {
 		label := key
@@ -154,6 +167,9 @@ func writeReportsCSV(w *csv.Writer, view string, result repository.ReportsResult
 		}
 		if key == "revenuePerMile" {
 			label = "RPM"
+		}
+		if key == "costPerMile" {
+			label = "CPM"
 		}
 		if key == "loadedRPM" {
 			label = "Loaded RPM"
@@ -175,7 +191,11 @@ func writeReportsCSV(w *csv.Writer, view string, result repository.ReportsResult
 	} {
 		for _, row := range period.rows {
 			base := []string{period.label, period.from, period.to, reportCSVText(row.Name)}
-			if err := writeReportCSVRow(w, append(append([]string{}, base...), "Summary", "", "", "", "", "", "", "", "", "", "", "", "", ""), keys, row.Metrics); err != nil {
+			drivers := make([]string, 0, len(row.AssignedDrivers))
+			for _, driver := range row.AssignedDrivers {
+				drivers = append(drivers, driver.Name)
+			}
+			if err := writeReportCSVRow(w, append(append([]string{}, base...), "Summary", "", "", "", "", "", reportCSVText(strings.Join(drivers, " · ")), "", "", "", "", "", "", ""), keys, row.Metrics); err != nil {
 				return err
 			}
 			for _, source := range row.Sources {

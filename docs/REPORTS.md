@@ -79,6 +79,13 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   to week/view/filter load a snapshot; the calendar hook only changes it on week rollover.
 - Tables render at most 50 groups at once; source rows are lazy. Measurements must
   include loaded data and two animation frames, not just the page heading.
+- Every table header sorts locally before pagination, with blanks last and a
+  300ms row movement matching Dashboard (disabled for reduced motion). Profit is
+  last, RPM and CPM are adjacent, and Miles follows Load gross. Truck rows show
+  all drivers assigned on the selected week's native New York service days,
+  including dated team members and midweek changes, not today's crew. Units and
+  driver names link to permission-checked profiles; the rest of the row expands
+  sources. Weekly crew labels do not change revenue or cost attribution.
 
 ## Closed-week reconciliation
 

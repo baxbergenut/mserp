@@ -46,6 +46,9 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 			t.Fatalf("company: %+v", company.Current)
 		}
 		check(company.Current[0], map[string]float64{"gross": 119900, "miles": 400, "maintenance": 8000, "fuel": 20000, "tolls": 4000, "scales": 1400, "equipment": 6000, "completedLoads": 2})
+		if crew := company.Current[0].AssignedDrivers; len(crew) != 1 || crew[0].Name != "Company Driver" || crew[0].ID != "61000000-0000-0000-0000-000000000001" {
+			t.Fatalf("missing dated driver identity: %+v", crew)
+		}
 		operator := read(ReportOperator, "2026-10-12", "2026-10-18")
 		if len(operator.Current) != 1 {
 			t.Fatalf("operator: %+v", operator.Current)
@@ -142,6 +145,53 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 					if source.Kind == "Loads" && source.ID == "61999" {
 						t.Fatalf("%s included a load absent from Gross Board", view)
 					}
+				}
+			}
+		}
+	})
+}
+
+func TestReportsWeeklyDriversDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		_, err := admin.Exec(ctx, `INSERT INTO drivers(id,full_name,normalized_name,hire_date,pay_type,pay_rate) VALUES
+ ('62000000-0000-0000-0000-000000000001','First Driver','first driver','2026-01-01','cpm',0.75),
+ ('62000000-0000-0000-0000-000000000002','Second Driver','second driver','2026-01-01','cpm',0.75),
+ ('62000000-0000-0000-0000-000000000003','Future Driver','future driver','2026-01-01','cpm',0.75),
+ ('62000000-0000-0000-0000-000000000004','Team Driver','team driver','2026-01-01','cpm',0.75);
+ INSERT INTO trucks(id,unit_number) VALUES ('62000000-0000-0000-0000-000000000005','WEEK-CREW');
+ INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at,unassigned_at) VALUES
+ ('62000000-0000-0000-0000-000000000005','62000000-0000-0000-0000-000000000001','2026-10-12 04:00Z','2026-10-15 04:00Z'),
+ ('62000000-0000-0000-0000-000000000005','62000000-0000-0000-0000-000000000002','2026-10-15 04:00Z','2026-10-19 04:00Z'),
+ ('62000000-0000-0000-0000-000000000005','62000000-0000-0000-0000-000000000003','2026-10-19 04:00Z',NULL);
+ INSERT INTO driver_teams(main_driver_id,team_driver_id,start_week,end_week) VALUES
+ ('62000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000004','2026-10-12','2026-10-19');`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		s := reportRead{tx: tx}
+		for _, week := range []struct {
+			from, to string
+			names    []string
+		}{
+			{"2026-10-12", "2026-10-18", []string{"First Driver", "Second Driver", "Team Driver"}},
+			{"2026-10-19", "2026-10-25", []string{"Future Driver"}},
+		} {
+			groups := reportGroups{"62000000-0000-0000-0000-000000000005": &reportGroup{}}
+			if err := s.addWeeklyDrivers(ctx, groups, week.from, week.to); err != nil {
+				t.Fatal(err)
+			}
+			crew := groups["62000000-0000-0000-0000-000000000005"].AssignedDrivers
+			if len(crew) != len(week.names) {
+				t.Fatalf("%s crew: %+v", week.from, crew)
+			}
+			for i, name := range week.names {
+				if crew[i].Name != name {
+					t.Fatalf("%s crew: %+v", week.from, crew)
 				}
 			}
 		}
