@@ -19,7 +19,7 @@ type reportsFixture struct{ calls int }
 func (f *reportsFixture) Read(_ context.Context, q repository.ReportsQuery) (repository.ReportsResult, error) {
 	f.calls++
 	return repository.ReportsResult{Revision: "fixture", Period: q.Period, Current: []repository.ReportRow{
-		{ID: "company", Name: "=SpreadsheetFormula", Metrics: map[string]float64{"gross": 1250}, Sources: []repository.ReportEvidence{
+		{ID: "company", Name: "=SpreadsheetFormula", Metrics: map[string]float64{"gross": 1250, "earnedPay": 500}, Estimated: map[string]bool{"earnedPay": true}, Sources: []repository.ReportEvidence{
 			{Kind: "Loads", ID: "11", Label: "@Load", Date: q.Period.DateFrom, Values: map[string]float64{"gross": 1250}},
 		}},
 	}}, nil
@@ -76,6 +76,9 @@ func TestReportsPermissionsAndCSV(t *testing.T) {
 	}
 	if records[1][3] != "'=SpreadsheetFormula" || records[2][7] != "'@Load" || records[2][slices.Index(records[0], "gross (USD)")] != "12.5" {
 		t.Fatalf("CSV lost values or formula escaping: %v", records)
+	}
+	if records[1][slices.Index(records[0], "Driver fee (USD)")] != "5" || records[1][slices.Index(records[0], "Note")] != "Estimated: earnedPay" {
+		t.Fatal("CSV lost driver fee label or estimate status", records)
 	}
 	for _, excluded := range []string{"equipment (USD)", "unassignedCost (USD)", "carrierCosts (USD)", "contribution (USD)", "revenuePerMile (USD)"} {
 		if slices.Contains(records[0], excluded) {

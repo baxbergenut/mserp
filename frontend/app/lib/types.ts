@@ -1954,6 +1954,7 @@ export type ReportRow = {
   name: string;
   assignedDrivers?: { id: string; name: string }[];
   metrics: Record<string, number | undefined>;
+  estimated?: Record<string, boolean>;
   sources?: ReportEvidence[];
   sourceCount: number;
   reviewCount: number;

@@ -260,9 +260,6 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 		}
 		if week >= reportMonday(from) && week <= to {
 			s.addReportStatement(groups, d, week, from, to, assigned)
-			if s.query.View == ReportOperator && week >= from {
-				s.addReportRecurring(groups, d, week, assigned)
-			}
 		}
 	}
 	for key, l := range required {
@@ -282,6 +279,7 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 				continue
 			}
 			evidence.Values["earnedPay"] = float64(fee)
+			g.Estimated["earnedPay"] = true
 			g.Metrics["earnedPay"] += float64(fee)
 			if s.query.View == ReportOperator {
 				gross, err := chargeCents(l.driverGross)
@@ -290,9 +288,19 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 					continue
 				}
 				evidence.Values["carrierFees"] = float64(gross - fee)
+				g.Estimated["carrierFees"] = true
 				g.Metrics["carrierFees"] += float64(gross - fee)
 				if l.gross != nil {
 					g.Metrics["dispatchBalance"] += *l.gross - float64(gross)
+				}
+			}
+		}
+	}
+	if s.query.View == ReportOperator {
+		for week := reportMonday(from); week <= to; week = reportAddDays(week, 7) {
+			if week >= from {
+				if err := s.addReportRecurringWeek(ctx, groups, week, assigned); err != nil {
+					return err
 				}
 			}
 		}
@@ -323,8 +331,7 @@ func reportFrozenPayKey(driver string, pay DriverPayLoad) string {
 
 // Recurring revenue is the amount actually deducted in a frozen statement,
 // including partial/zero source choices, never the scheduled base or due balance.
-func (s *reportRead) addReportRecurring(groups reportGroups, d DriverPayDriver, week string, assigned map[reportAssignmentKey]reportIdentity) {
-	identities := map[string]reportIdentity{}
+func (s *reportRead) addReportRecurring(groups reportGroups, d DriverPayDriver, week string, assigned map[reportAssignmentKey]reportIdentity, identities map[string]reportIdentity) {
 	for day := 0; day < 7; day++ {
 		i := assigned[reportAssignmentKey{d.ID, reportAddDays(week, day)}]
 		if i.truck != "" && i.employment == "owner_operator" {
@@ -347,7 +354,7 @@ func (s *reportRead) addReportRecurring(groups reportGroups, d DriverPayDriver, 
 			return
 		}
 		paid, err := chargeCents(amount)
-		if err != nil || paid >= 0 {
+		if err != nil || paid > 0 {
 			return
 		}
 		g := groups.add(i.truck, i.unit, i, ReportEvidence{Kind: "Driver Pay", ID: d.ID + "/" + week + "/" + source, Label: label, Date: week,
@@ -543,6 +550,26 @@ func (g *reportGroup) finishFinancial(view string) {
 		m["carrierFees"] += 0
 		if !g.missingCosts {
 			m["contribution"] = m["carrierFees"] + m["recurringCharges"] - costs
+		}
+	}
+	if g.Estimated == nil {
+		g.Estimated = map[string]bool{}
+	}
+	if view == ReportCompany && g.Estimated["earnedPay"] {
+		for _, key := range []string{"contribution", "margin", "costPerMile"} {
+			if _, ok := m[key]; ok {
+				g.Estimated[key] = true
+			}
+		}
+	}
+	if view == ReportOperator && (g.Estimated["carrierFees"] || g.Estimated["recurringCharges"]) {
+		if _, ok := m["contribution"]; ok {
+			g.Estimated["contribution"] = true
+		}
+	}
+	for key := range g.Estimated {
+		if _, ok := m[key]; !ok {
+			delete(g.Estimated, key)
 		}
 	}
 }
