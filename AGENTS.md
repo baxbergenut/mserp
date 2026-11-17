@@ -80,7 +80,8 @@ conversion used that faulty check and created duplicate slots.
 
 ## Reports
 
-Reports v1 (`/reports`) uses delivery-date Loads revenue, native service-day
+Reports v1 (`/reports`) includes only active Gross Board load entries and selected
+trips, using linked Loads revenue/miles by delivery date, native service-day
 assignments and finalized Driver Pay evidence. Operator carrier fees exclude the
 dispatch adjustment balance. Migration 222 adds read indexes without changing
 financial records or the payroll protocol. Summaries, lazy sources and CSV share

@@ -75,47 +75,48 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
  FROM board_candidates e ` + grossBoardResolvedLoad + `
  LEFT JOIN gross_board_transfers g ON g.active AND (g.driver_id,g.source_date,g.source_slot)=(e.driver_id,e.service_date,e.slot)
  ),
- allocations AS (
- SELECT l.*,s.trip_id,s.loaded,s.empty,s.gross,s.miles,s.is_split
- FROM selected l CROSS JOIN LATERAL (` + loadTripValidationSQL + `
- SELECT x.id trip_id, l.split_expected OR stats.n>1 is_split,
-  CASE WHEN x.id IS NOT NULL THEN x.gross WHEN NOT l.split_expected AND stats.n<=1 AND (l.total_pay<>0 OR l.raw_payload->>'total_pay' ~ '^-?0+(\.0+)?$') THEN l.total_pay END gross,
-  CASE WHEN x.id IS NOT NULL THEN x.loaded+x.empty WHEN NOT l.split_expected AND stats.n<=1 THEN l.total_miles END miles,
-  CASE WHEN x.id IS NOT NULL THEN x.loaded WHEN NOT l.split_expected AND stats.n<=1
-   AND single.v->>'mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (single.v->>'mile')::numeric END loaded,
-  CASE WHEN x.id IS NOT NULL THEN x.empty WHEN NOT l.split_expected AND stats.n<=1
-   AND single.v->>'empty_mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (single.v->>'empty_mile')::numeric END empty
- FROM stats LEFT JOIN trips x ON stats.valid AND stats.n>1
- CROSS JOIN LATERAL (SELECT coalesce(l.raw_payload->'trips'->0,l.raw_payload->'trip') v) single) s
- ),
  board_ranked AS MATERIALIZED (
  SELECT e.*,count(*) OVER (PARTITION BY e.matched,e.load_trip_id)<>count(*) OVER (PARTITION BY e.matched,e.load_trip_id,e.driver_id)
   OR count(*) OVER (PARTITION BY e.matched,e.load_trip_id)<>count(*) OVER (PARTITION BY e.matched,e.load_trip_id,e.dispatch_date) conflict,
   row_number() OVER (PARTITION BY e.matched,e.load_trip_id ORDER BY e.service_date,e.slot,e.driver_id) ordinal
  FROM board e JOIN selected l ON l.id=e.matched
  ),
+ allocations AS (
+ SELECT l.*,b.load_trip_id board_trip_id,b.service_date,b.slot,b.conflict,b.driver_id board_driver,
+  b.transfer_truck,b.credited_id,b.credited_name,b.dispatch_date,s.trip_id,s.loaded,s.empty,s.gross,s.miles,s.is_split
+ FROM selected l JOIN board_ranked b ON l.id=b.matched AND b.ordinal=1
+ CROSS JOIN LATERAL (` + loadTripValidationSQL + `
+ SELECT x.id trip_id, l.split_expected OR stats.n>1 OR b.load_trip_id IS NOT NULL is_split,
+  CASE WHEN x.id IS NOT NULL THEN x.gross WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL AND (l.total_pay<>0 OR l.raw_payload->>'total_pay' ~ '^-?0+(\.0+)?$') THEN l.total_pay END gross,
+  CASE WHEN x.id IS NOT NULL THEN x.loaded+x.empty WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL THEN l.total_miles END miles,
+  CASE WHEN x.id IS NOT NULL THEN x.loaded WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL
+   AND single.v->>'mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (single.v->>'mile')::numeric END loaded,
+  CASE WHEN x.id IS NOT NULL THEN x.empty WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL
+   AND single.v->>'empty_mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (single.v->>'empty_mile')::numeric END empty
+ FROM stats LEFT JOIN trips x ON stats.valid AND stats.n>1 AND x.id=b.load_trip_id
+ CROSS JOIN LATERAL (SELECT coalesce(l.raw_payload->'trips'->0,l.raw_payload->'trip') v) single) s
+ ),
  sourced AS (
- SELECT a.id::text parent,coalesce(a.trip_id::text,'') trip_id,a.load_id,
-  coalesce(b.service_date,(a.delivery_time AT TIME ZONE 'America/New_York')::date,
+ SELECT a.id::text parent,coalesce(a.board_trip_id::text,'') trip_id,a.load_id,
+  coalesce(a.service_date,(a.delivery_time AT TIME ZONE 'America/New_York')::date,
    (coalesce(a.delivery_appointment_time,a.pickup_time,a.created_datetime) AT TIME ZONE 'America/New_York')::date) service,
-  coalesce((a.delivery_time AT TIME ZONE 'America/New_York')::date,b.service_date,
+  coalesce((a.delivery_time AT TIME ZONE 'America/New_York')::date,a.service_date,
    (coalesce(a.delivery_appointment_time,a.pickup_time,a.created_datetime) AT TIME ZONE 'America/New_York')::date) report_date,
-  a.pickup_time,a.delivery_time,a.pickup_appointment_time,a.delivery_appointment_time,coalesce(b.slot,0) slot,
+  a.pickup_time,a.delivery_time,a.pickup_appointment_time,a.delivery_appointment_time,a.slot,
   CASE WHEN availability.present=false OR a.delivery_time IS NULL OR (a.is_split AND a.trip_id IS NULL)
    THEN 'review' ELSE 'confirmed' END state,
   CASE WHEN availability.present=false THEN 'Load source missing'
    WHEN a.delivery_time IS NULL THEN 'Missing actual delivery time'
    WHEN a.is_split AND a.trip_id IS NULL THEN 'Unverified Loads trip allocation'
-   WHEN b.conflict THEN 'Conflicting Gross Board assignments'
-   WHEN b.dispatch_date IS NOT NULL THEN 'Gross Board transfer to '||b.dispatch_date::text ELSE '' END note,
+   WHEN a.conflict THEN 'Conflicting Gross Board assignments'
+   WHEN a.dispatch_date IS NOT NULL THEN 'Gross Board transfer to '||a.dispatch_date::text ELSE '' END note,
   a.gross,a.miles,a.loaded,a.empty,
-  CASE WHEN NOT coalesce(b.conflict,false) THEN b.driver_id END driver,
+  CASE WHEN NOT a.conflict THEN a.board_driver END driver,
   NULL::uuid provider_truck,
-  CASE WHEN NOT coalesce(b.conflict,false) THEN b.transfer_truck END transfer_truck,
-  CASE WHEN NOT coalesce(b.conflict,false) THEN b.credited_id END credited_id,
-  CASE WHEN NOT coalesce(b.conflict,false) THEN b.credited_name END credited_name
+  CASE WHEN NOT a.conflict THEN a.transfer_truck END transfer_truck,
+  CASE WHEN NOT a.conflict THEN a.credited_id END credited_id,
+  CASE WHEN NOT a.conflict THEN a.credited_name END credited_name
  FROM allocations a LEFT JOIN load_source_availability availability ON availability.load_id=a.id
- LEFT JOIN board_ranked b ON b.matched=a.id AND b.load_trip_id IS NOT DISTINCT FROM a.trip_id AND b.ordinal=1
  UNION ALL
  SELECT '','',e.load_number,e.service_date,e.service_date,
   NULL,NULL,NULL,NULL,e.slot,'provisional','Unmatched manual Gross Board entry',
