@@ -82,19 +82,17 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
  FROM board e JOIN selected l ON l.id=e.matched
  ),
  allocations AS (
- SELECT l.*,b.load_trip_id board_trip_id,b.service_date,b.slot,b.conflict,b.driver_id board_driver,
-  b.transfer_truck,b.credited_id,b.credited_name,b.dispatch_date,s.trip_id,s.loaded,s.empty,s.gross,s.miles,s.is_split
- FROM selected l JOIN board_ranked b ON l.id=b.matched AND b.ordinal=1
- CROSS JOIN LATERAL (` + loadTripValidationSQL + `
- SELECT x.id trip_id, l.split_expected OR stats.n>1 OR b.load_trip_id IS NOT NULL is_split,
-  CASE WHEN x.id IS NOT NULL THEN x.gross WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL AND (l.total_pay<>0 OR l.raw_payload->>'total_pay' ~ '^-?0+(\.0+)?$') THEN l.total_pay END gross,
-  CASE WHEN x.id IS NOT NULL THEN x.loaded+x.empty WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL THEN l.total_miles END miles,
-  CASE WHEN x.id IS NOT NULL THEN x.loaded WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL
-   AND single.v->>'mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (single.v->>'mile')::numeric END loaded,
-  CASE WHEN x.id IS NOT NULL THEN x.empty WHEN NOT l.split_expected AND stats.n<=1 AND b.load_trip_id IS NULL
-   AND single.v->>'empty_mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$' THEN (single.v->>'empty_mile')::numeric END empty
- FROM stats LEFT JOIN trips x ON stats.valid AND stats.n>1 AND x.id=b.load_trip_id
- CROSS JOIN LATERAL (SELECT coalesce(l.raw_payload->'trips'->0,l.raw_payload->'trip') v) single) s
+ SELECT l.*,e.load_trip_id board_trip_id,e.service_date,e.slot,e.conflict,e.driver_id board_driver,
+  e.transfer_truck,e.credited_id,e.credited_name,e.dispatch_date,trip_source.review trip_review,
+  CASE WHEN trip_source.review THEN NULL WHEN trip_source.reviewed THEN trip_source.original
+   ELSE coalesce(e.entered_original_rate,trip_source.original) END gross,
+  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles) END miles,
+  CASE WHEN NOT trip_source.review AND coalesce(trip_source.selected_trip,single.v)->>'mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$'
+   THEN (coalesce(trip_source.selected_trip,single.v)->>'mile')::numeric END loaded,
+  CASE WHEN NOT trip_source.review AND coalesce(trip_source.selected_trip,single.v)->>'empty_mile' ~ '^[0-9]{1,10}(\.[0-9]{1,2})?$'
+   THEN (coalesce(trip_source.selected_trip,single.v)->>'empty_mile')::numeric END empty
+ FROM selected l JOIN board_ranked e ON l.id=e.matched AND e.ordinal=1 ` + loadTripSourceSQL + `
+ CROSS JOIN LATERAL (SELECT coalesce(l.raw_payload->'trips'->0,l.raw_payload->'trip') v) single
  ),
  sourced AS (
  SELECT a.id::text parent,coalesce(a.board_trip_id::text,'') trip_id,a.load_id,
@@ -103,11 +101,10 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
   coalesce((a.delivery_time AT TIME ZONE 'America/New_York')::date,a.service_date,
    (coalesce(a.delivery_appointment_time,a.pickup_time,a.created_datetime) AT TIME ZONE 'America/New_York')::date) report_date,
   a.pickup_time,a.delivery_time,a.pickup_appointment_time,a.delivery_appointment_time,a.slot,
-  CASE WHEN availability.present=false OR a.delivery_time IS NULL OR (a.is_split AND a.trip_id IS NULL)
-   THEN 'review' ELSE 'confirmed' END state,
+  CASE WHEN a.trip_review THEN 'review' ELSE 'confirmed' END state,
   CASE WHEN availability.present=false THEN 'Load source missing'
    WHEN a.delivery_time IS NULL THEN 'Missing actual delivery time'
-   WHEN a.is_split AND a.trip_id IS NULL THEN 'Unverified Loads trip allocation'
+   WHEN a.trip_review THEN 'Unverified Loads trip allocation'
    WHEN a.conflict THEN 'Conflicting Gross Board assignments'
    WHEN a.dispatch_date IS NOT NULL THEN 'Gross Board transfer to '||a.dispatch_date::text ELSE '' END note,
   a.gross,a.miles,a.loaded,a.empty,

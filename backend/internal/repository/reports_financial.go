@@ -39,6 +39,7 @@ WITH aliases AS (
  CASE WHEN lower(btrim(e.covered_by))='company' THEN 'company'
  WHEN lower(btrim(e.covered_by)) IN ('driver','truck owner','broker') THEN lower(btrim(e.covered_by)) ELSE 'review' END
  FROM expenses e WHERE e.expense_date BETWEEN $1::date AND $2::date
+ AND lower(btrim(e.covered_by))='company' AND e.charge_driver_id IS NULL
  AND (EXISTS(SELECT 1 FROM maintenance_configuration m WHERE m.category_id=e.category_id)
  OR lower(btrim(e.expense_type)) IN ('equipment','equipment lease','equipment rental','truck lease','truck rental','trailer lease','trailer rental'))
  ), ownership_days AS (SELECT DISTINCT truck,ownership_day FROM costs WHERE truck IS NOT NULL),
@@ -89,39 +90,17 @@ func (s *reportRead) addFinancial(ctx context.Context, groups reportGroups, load
 		if c.dispatcher == "" && c.dispatcherName != "" {
 			c.dispatcher = "historical:" + c.dispatcherName
 		}
+		// Reports contains attributable company costs only. Driver/operator charges
+		// and unresolved cost identities must not appear as company expenses.
+		if c.payer != "company" || c.truck == "" || c.employment == "unassigned" || c.amount == nil {
+			continue
+		}
 		id, name, ok := s.groupIdentity(c.reportIdentity)
 		if !ok || !s.includes(c.reportIdentity) {
 			continue
 		}
-		state := c.payer
-		note := ""
-		if c.truck == "" || c.employment == "unassigned" || c.payer == "review" || c.amount == nil {
-			id, name, state = "", "", "review"
-			switch {
-			case c.truck == "":
-				note = "No verified truck"
-			case c.employment == "unassigned":
-				note = "Truck ownership or operator needs review"
-			case c.amount == nil:
-				note = "No recorded amount"
-			default:
-				note = "Cost responsibility or source needs review"
-			}
-			if c.truck != "" && c.employment != "unassigned" && c.payer != "operator" {
-				groups.add(c.truck, c.unit, c.reportIdentity, ReportEvidence{Kind: c.kind, ID: c.id, Label: c.label, Date: c.date, State: "review", Note: "Cost needs review"}).missingCosts = true
-			}
-		}
-		values := map[string]float64{}
-		if c.amount != nil {
-			values["amount"] = *c.amount
-		}
-		g := groups.add(id, name, c.reportIdentity, ReportEvidence{Kind: c.kind, ID: c.id, Label: c.label, Date: c.date, State: state, Note: note, Values: values})
-		if state == "company" {
-			g.Metrics[strings.ToLower(c.kind)] += *c.amount
-		}
-		if state == "review" && c.amount != nil {
-			g.Metrics["unassignedCost"] += *c.amount
-		}
+		g := groups.add(id, name, c.reportIdentity, ReportEvidence{Kind: c.kind, ID: c.id, Label: c.label, Date: c.date, State: "company", Values: map[string]float64{"amount": *c.amount}})
+		g.Metrics[strings.ToLower(c.kind)] += *c.amount
 	}
 	err = rows.Err()
 	rows.Close()
@@ -281,6 +260,9 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 		}
 		if week >= reportMonday(from) && week <= to {
 			s.addReportStatement(groups, d, week, from, to, assigned)
+			if s.query.View == ReportOperator && week >= from {
+				s.addReportRecurring(groups, d, week, assigned)
+			}
 		}
 	}
 	for key, l := range required {
@@ -289,6 +271,63 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 		}
 	}
 	return nil
+}
+
+// Recurring revenue is the amount actually deducted in a frozen statement,
+// including partial/zero source choices, never the scheduled base or due balance.
+func (s *reportRead) addReportRecurring(groups reportGroups, d DriverPayDriver, week string, assigned map[reportAssignmentKey]reportIdentity) {
+	identities := map[string]reportIdentity{}
+	for day := 0; day < 7; day++ {
+		i := assigned[reportAssignmentKey{d.ID, reportAddDays(week, day)}]
+		if i.truck != "" && i.employment == "owner_operator" {
+			i.driver, i.name = d.ID, d.FullName
+			identities[i.truck] = i
+		}
+	}
+	choices := map[string]string{}
+	for _, choice := range d.Edits.SourceCharges {
+		choices[choice.Source] = choice.Amount
+	}
+	seen := map[string]bool{}
+	add := func(source, label, amount, truck string) {
+		if seen[source] {
+			return
+		}
+		seen[source] = true
+		i, ok := identities[truck]
+		if !ok || !s.includes(i) {
+			return
+		}
+		paid, err := chargeCents(amount)
+		if err != nil || paid >= 0 {
+			return
+		}
+		g := groups.add(i.truck, i.unit, i, ReportEvidence{Kind: "Driver Pay", ID: d.ID + "/" + week + "/" + source, Label: label, Date: week,
+			State: "finalized", Note: "Recurring charge deducted", Values: map[string]float64{"recurringCharges": float64(-paid)}})
+		g.Metrics["recurringCharges"] += float64(-paid)
+	}
+	for _, charge := range d.AutoCharges {
+		parts := strings.Split(charge.Source, ":")
+		if len(parts) != 3 || parts[0] != "truck_charge" {
+			continue
+		}
+		amount := charge.Amount
+		if selected, exists := choices[charge.Source]; exists {
+			amount = selected
+		}
+		add(charge.Source, charge.Name, amount, parts[1])
+	}
+	// Older frozen statements may contain driver-based recurring occurrences.
+	// Without one dated owner-operated truck, those cannot be assigned safely.
+	if len(identities) == 1 {
+		for truck := range identities {
+			for _, charge := range d.Edits.GeneratedCharges {
+				if charge.Kind == "recurring" {
+					add("recurring:"+charge.ScheduleID, charge.Name, charge.Amount, truck)
+				}
+			}
+		}
+	}
 }
 
 func reportAddDays(date string, days int) string {
@@ -397,7 +436,7 @@ func (s *reportRead) addReportStatement(groups reportGroups, d DriverPayDriver, 
 			}
 		}
 		net := d.NetPayCents()
-		values = map[string]float64{"settlementEarnings": float64(earned), "reimbursements": float64(reimb),
+		values = map[string]float64{"recurringCharges": 0, "settlementEarnings": float64(earned), "reimbursements": float64(reimb),
 			"deductions": float64(earned + reimb + returned - withheld - net), "escrowReturned": float64(returned),
 			"escrowApplied": float64(applied), "escrowWithheld": float64(withheld), "netPayable": float64(net)}
 		note = "Whole statement week"
@@ -455,7 +494,7 @@ func (g *reportGroup) finishFinancial(view string) {
 	} else if !g.missingPay && known {
 		m["carrierFees"] += 0
 		if !g.missingCosts {
-			m["contribution"] = m["carrierFees"] - costs
+			m["contribution"] = m["carrierFees"] + m["recurringCharges"] - costs
 		}
 	}
 }

@@ -20,7 +20,23 @@ const (
 	ReportOperator   = "owner-operator"
 	ReportDispatcher = "dispatcher"
 	ReportDriver     = "driver"
+	ReportsFirstWeek = "2026-10-19"
 )
+
+func ResolveReportsWeek(week string, now time.Time) (DashboardPeriod, error) {
+	latest, err := ResolveDashboardPeriod("lastWeek", "", "", now)
+	if err != nil {
+		return latest, err
+	}
+	if week == "" {
+		week = latest.DateFrom
+	}
+	day, err := time.Parse(time.DateOnly, week)
+	if err != nil || day.Weekday() != time.Monday || week < ReportsFirstWeek || week > latest.DateFrom {
+		return DashboardPeriod{}, fmt.Errorf("Choose a completed week from %s through %s", ReportsFirstWeek, latest.DateFrom)
+	}
+	return ResolveReportsPeriod(week, reportAddDays(week, 6), "", "", now)
+}
 
 type ReportsQuery struct {
 	View, Truck, Driver, Dispatcher string
@@ -348,22 +364,23 @@ func (s *reportRead) period(ctx context.Context, from, to string) ([]ReportRow, 
 		}
 		evidence := l.evidence()
 		g := groups.add(id, name, l.reportIdentity, evidence)
+		if financial && l.state == "provisional" {
+			g.missingPay = true
+		}
 		if evidence.State == "review" {
 			g.missingGross, g.missingMiles, g.missingPay = true, true, true
-		}
-		if evidence.State == "provisional" {
-			g.Metrics["provisionalLoads"]++
-			if l.gross != nil {
-				g.Metrics["provisionalGross"] += *l.gross
-			}
 		}
 		if l.state == "confirmed" || l.note == "Missing actual delivery time" {
 			g.addTiming(l)
 		}
-		if l.state != "confirmed" {
+		if l.state != "confirmed" && l.state != "provisional" {
 			continue
 		}
-		g.loads[l.parent] = true
+		loadKey := l.parent
+		if loadKey == "" {
+			loadKey = evidence.ID
+		}
+		g.loads[loadKey] = true
 		if l.gross != nil {
 			g.Metrics["gross"] += *l.gross
 		} else {

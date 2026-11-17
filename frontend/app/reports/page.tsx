@@ -1,9 +1,12 @@
 "use client";
 
-import { createContext, Fragment, useContext, useEffect, useState } from "react";
-import { CalendarDays, ChartNoAxesCombined, ChevronDown, Download, RefreshCw } from "lucide-react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useState } from "react";
+import { ChartNoAxesCombined, ChevronDown, Download, RefreshCw } from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import { MetricCard } from "@/app/components/MetricCard";
+import { WeekSelector } from "@/app/components/WeekSelector";
+import { useLatestPayrollWeek } from "@/app/accounting/components/useLatestPayrollWeek";
+import { clampWeek } from "@/app/accounting/payrollWeek";
 import { PageHeader } from "@/app/components/PageHeader";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { usePermissions } from "@/app/lib/access";
@@ -11,30 +14,31 @@ import { exportReport, fetchReport, fetchReportSources } from "@/app/lib/api";
 import type { ReportEvidence, ReportRow, ReportsQuery, ReportsResult, ReportView } from "@/app/lib/types";
 
 const views: { id: ReportView; label: string; access: string; columns: string[] }[] = [
-  { id: "company", label: "Company Truck P&L", access: "reports.read", columns: ["gross", "earnedPay", "fuel", "tolls", "scales", "maintenance", "equipment", "contribution", "margin", "miles", "revenuePerMile", "costPerMile", "provisionalGross", "unassignedCost"] },
-  { id: "owner-operator", label: "Owner-Operator Truck P&L", access: "reports.read", columns: ["gross", "carrierFees", "dispatchBalance", "carrierCosts", "contribution", "provisionalGross", "unassignedCost"] },
-  { id: "dispatcher", label: "Dispatcher Performance", access: "reports.performance", columns: ["completedLoads", "gross", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct", "provisionalLoads"] },
-  { id: "driver", label: "Driver Performance", access: "reports.performance", columns: ["completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency", "provisionalLoads"] },
+  { id: "company", label: "Company Truck P&L", access: "reports.read", columns: ["gross", "earnedPay", "fuel", "tolls", "scales", "maintenance", "contribution", "margin", "miles", "revenuePerMile", "costPerMile"] },
+  { id: "owner-operator", label: "Owner-Operator Truck P&L", access: "reports.read", columns: ["gross", "carrierFees", "dispatchBalance", "recurringCharges", "contribution"] },
+  { id: "dispatcher", label: "Dispatcher Performance", access: "reports.performance", columns: ["completedLoads", "gross", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct"] },
+  { id: "driver", label: "Driver Performance", access: "reports.performance", columns: ["completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency"] },
 ];
 
 const settlementColumns = ["settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable"];
 
 const labels: Record<string, string> = {
   gross: "Load gross", earnedPay: "Earned driver pay", fuel: "Fuel", tolls: "Tolls", scales: "Scales", maintenance: "Maintenance",
-  equipment: "Equipment", contribution: "Contribution", margin: "Margin", miles: "Miles", revenuePerMile: "Revenue per mile",
+  equipment: "Equipment", contribution: "Profit", margin: "Margin", miles: "Miles", revenuePerMile: "RPM",
   costPerMile: "Cost per mile", provisionalGross: "Provisional gross", provisionalLoads: "Provisional entries", unassignedCost: "Unassigned costs",
   dispatchBalance: "Dispatch adjustment balance", carrierFees: "Carrier fees", carrierCosts: "Carrier-borne costs", settlementEarnings: "Earnings", reimbursements: "Reimbursements", deductions: "Deductions",
-  escrowWithheld: "Escrow withheld", escrowReturned: "Escrow returned", escrowApplied: "Escrow applied", netPayable: "Net payable", completedLoads: "Completed loads",
-  truckWeeks: "Active truck-weeks", grossPerTruckWeek: "Gross per active truck-week", loadedRPM: "Loaded revenue per mile", deadheadPct: "Deadhead",
+  escrowWithheld: "Escrow withheld", escrowReturned: "Escrow returned", escrowApplied: "Escrow applied", netPayable: "Net payable", completedLoads: "Loads",
+  truckWeeks: "Active truck-weeks", grossPerTruckWeek: "Gross per active truck-week", loadedRPM: "Loaded RPM", deadheadPct: "Deadhead",
   activeDays: "Active days", pickupOnTime: "On-time pickup", pickupCoverage: "Pickup timestamp coverage", deliveryOnTime: "On-time delivery",
   deliveryCoverage: "Delivery timestamp coverage", fuelEfficiency: "Fuel efficiency (MPG)", loadedMiles: "Loaded miles", deadheadMiles: "Deadhead miles",
   amount: "Amount",
+  recurringCharges: "RC (recurring charges)",
 };
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const percents = new Set(["margin", "deadheadPct", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage"]);
-const units = new Set(["completedLoads", "truckWeeks", "miles", "activeDays", "fuelEfficiency", "loadedMiles", "deadheadMiles", "provisionalLoads"]);
+const units = new Set(["completedLoads", "truckWeeks", "miles", "activeDays", "fuelEfficiency", "loadedMiles", "deadheadMiles"]);
 
 function formatMetric(key: string, value?: number) {
   if (value === undefined) return "";
@@ -49,7 +53,7 @@ const filterFields = [
 ] as const;
 const cell = "border-b border-zinc-500/25 px-3 py-2";
 const blankFilters: ReportsQuery = {};
-const SourceContext = createContext<{ view: ReportView; query: ReportsQuery; period: string; revision?: string }>({ view: "company", query: {}, period: "current" });
+const SourceContext = createContext<{ view: ReportView; query: ReportsQuery; revision?: string }>({ view: "company", query: {} });
 
 export default function ReportsPage() {
   const permissions = usePermissions();
@@ -57,17 +61,18 @@ export default function ReportsPage() {
   const [selected, setSelected] = useState<ReportView>("company");
   const view = available.find(item => item.id === selected) ?? available[0];
   const id = view?.id;
-  const [query, setQuery] = useState<ReportsQuery>(blankFilters);
-  const [dates, setDates] = useState<ReportsQuery>({});
-  const [editingDates, setEditingDates] = useState(false);
+  const [filters, setQuery] = useState<ReportsQuery>(blankFilters);
+  const latestWeek = useLatestPayrollWeek();
+  const [selectedWeek, setWeek] = useState("");
+  const week = clampWeek(selectedWeek || latestWeek, latestWeek);
+  const query = useMemo<ReportsQuery>(() => ({ ...filters, week }), [filters, week]);
   const [result, setResult] = useState<{ key: string; data: ReportsResult }>();
   const [error, setError] = useState<{ key: string; message: string }>();
   const [exportError, setExportError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [comparison, setComparison] = useState(false);
   const [expanded, setExpanded] = useState("");
-  const key = JSON.stringify([id, query, comparison, retry]);
+  const key = JSON.stringify([id, query, retry]);
   const data = result?.key === key ? result.data : undefined;
   const previousData = result?.data;
   const currentError = error?.key === key ? error.message : "";
@@ -75,22 +80,15 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!id) return;
     const abort = new AbortController();
-    fetchReport(id, { ...query, includeComparison: comparison }, abort.signal).then(
+    fetchReport(id, query, abort.signal).then(
       data => { if (!abort.signal.aborted) setResult({ key, data }); },
       reason => { if (!abort.signal.aborted) setError({ key, message: reason.message }); },
     );
     return () => abort.abort();
-  }, [id, query, key, comparison]);
-
-  useEffect(() => {
-    const refresh = () => {setExpanded("");setRetry(n=>n+1);};
-    window.addEventListener("focus",refresh);
-    return () => window.removeEventListener("focus",refresh);
-  }, []);
+  }, [id, query, key]);
 
   if (!view) return null;
-  const period = previousData?.period;
-  const rows = comparison ? data?.comparison : data?.current;
+  const rows = data?.current;
 
 
   function updateFilter(field: "truck" | "driver" | "dispatcher", value: string) {
@@ -103,8 +101,8 @@ export default function ReportsPage() {
     setExporting(true);
     setExportError("");
     try {
-      const { dateFrom: from, dateTo: to, compareFrom, compareTo } = data.period;
-      const blob = await exportReport(view.id, { ...query, from, to, compareFrom, compareTo, revision: data.revision });
+      const { dateFrom: from } = data.period;
+      const blob = await exportReport(view.id, { ...query, revision: data.revision });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -121,11 +119,11 @@ export default function ReportsPage() {
   const hasFilters = Boolean(query.truck || query.driver || query.dispatcher);
 
   function clearFilters() {
-    setQuery(({ from, to, compareFrom, compareTo }) => ({ from, to, compareFrom, compareTo }));
+    setQuery({});
     setExpanded("");
   }
 
-  return <SourceContext.Provider value={{ view: view.id, query, revision:data?.revision, period: comparison ? "comparison" : "current" }}><section className="min-w-0 space-y-4" data-report-ready={Boolean(data)}>
+  return <SourceContext.Provider value={{ view: view.id, query, revision:data?.revision }}><section className="min-w-0 space-y-4" data-report-ready={Boolean(data)}>
     <PageHeader>
       <div className="flex items-center gap-3">
         <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5 text-zinc-500" />
@@ -143,16 +141,8 @@ export default function ReportsPage() {
 
     <ReportSummary rows={rows} financial={view.id === "company" || view.id === "owner-operator"} loading={!data && !currentError} />
     <div role="group" aria-label="Report controls" className="flex flex-wrap items-center gap-2">
-      <div role="group" aria-label="Displayed period" className="inline-flex rounded-lg border border-zinc-500/35 p-0.5">
-        <PeriodButton active={!comparison} onClick={() => { setComparison(false); setExpanded(""); }}>
-          {query.from || query.to ? "Custom period" : "Last week"}
-        </PeriodButton>
-        <PeriodButton active={comparison} onClick={() => { setComparison(true); setExpanded(""); }}>Comparison</PeriodButton>
-      </div>
-      <button type="button" className="ui-button" aria-expanded={editingDates} aria-controls="report-dates"
-        aria-label="Change dates" onClick={() => setEditingDates(open => !open)}>
-        <CalendarDays aria-hidden="true" className="h-4 w-4" /> {period ? (comparison ? period.compareFrom + " – " + period.compareTo : period.dateFrom + " – " + period.dateTo) : "Change dates"}
-      </button>
+      <WeekSelector week={week} lastWeek={latestWeek} onChange={value => { setWeek(value); setExpanded(""); }}
+        jump={{ label: "Last completed week", onClick: () => { setWeek(""); setExpanded(""); }, disabled: week === latestWeek }} />
       {filterFields.map(([field, label, options]) =>
         <select key={field} aria-label={label} className={controlClass + " !w-auto max-w-full sm:max-w-60"}
           value={query[field] ?? ""} onChange={event => updateFilter(field, event.target.value)}>
@@ -167,36 +157,6 @@ export default function ReportsPage() {
       </button>
     </div>
 
-    <form id="report-dates" hidden={!editingDates} className="rounded-lg border border-zinc-500/30 p-3"
-      onSubmit={event => {
-        event.preventDefault();
-        setQuery(q => ({ ...q, from: dates.from ?? period?.dateFrom, to: dates.to ?? period?.dateTo, compareFrom: dates.compareFrom || undefined, compareTo: dates.compareTo || undefined }));
-        setEditingDates(false);
-        setComparison(false);
-        setExpanded("");
-      }}>
-      <div className="flex flex-wrap items-end gap-3">
-        <fieldset className="min-w-0">
-          <legend className="mb-1 text-xs font-medium">Current period</legend>
-          <div className="flex flex-wrap gap-2">
-            <DateInput label="From" required value={dates.from ?? period?.dateFrom ?? ""} onChange={value => setDates(d => ({ ...d, from: value }))} />
-            <DateInput label="Through" required value={dates.to ?? period?.dateTo ?? ""} onChange={value => setDates(d => ({ ...d, to: value }))} />
-          </div>
-        </fieldset>
-        <fieldset className="min-w-0">
-          <legend className="mb-1 text-xs font-medium">Custom comparison</legend>
-          <div className="flex flex-wrap gap-2">
-            <DateInput label="Compare from" caption="From" required={Boolean(dates.compareTo)} value={dates.compareFrom ?? ""} onChange={value => setDates(d => ({ ...d, compareFrom: value }))} />
-            <DateInput label="Compare through" caption="Through" required={Boolean(dates.compareFrom)} value={dates.compareTo ?? ""} onChange={value => setDates(d => ({ ...d, compareTo: value }))} />
-          </div>
-        </fieldset>
-        <button type="submit" className="ui-button ui-button-primary">Apply dates</button>
-        <button type="button" className="ui-button" onClick={() => {
-          setDates({}); setQuery(q => ({ truck: q.truck, driver: q.driver, dispatcher: q.dispatcher })); setExpanded(""); setComparison(false);
-        }}>Last completed week</button>
-      </div>
-    </form>
-
     {currentError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{currentError}{" "}
       <button className="underline" onClick={() => setRetry(value => value + 1)}>Retry</button></p>}
     {exportError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{exportError}</p>}
@@ -204,38 +164,22 @@ export default function ReportsPage() {
     {data && <>
       {!rows?.length ? <p className="rounded-md border border-zinc-500/30 p-4 text-sm">No source records match this period and filters.</p> :
         <ReportTable key={key} name={view.id === "dispatcher" ? "Dispatcher" : view.id === "driver" ? "Driver" : "Truck"}
-          columns={view.columns} rows={rows} other={comparison ? data.current : data.comparison} expanded={expanded}
+          columns={view.columns} rows={rows} expanded={expanded}
           toggle={id => setExpanded(value => value === id ? "" : id)} />}
       {view.id === "owner-operator" && rows?.some(row => row.metrics.netPayable !== undefined) &&
-        <div className="space-y-2"><h2 className="text-lg font-semibold">Operator settlement</h2><p className="text-xs opacity-75">Finalized statements are shown in full for weeks starting within the selected dates.</p>
+        <div className="space-y-2"><h2 className="text-lg font-semibold">Operator settlement</h2><p className="text-xs opacity-75">Finalized statements for the selected week.</p>
           <ReportTable key={key+"settlements"} name="Truck" columns={settlementColumns} rows={rows.filter(row => row.metrics.netPayable !== undefined)}
-            other={comparison ? data.current : data.comparison} expanded={expanded.startsWith("settlement:") ? expanded.slice(11) : ""}
+            expanded={expanded.startsWith("settlement:") ? expanded.slice(11) : ""}
             toggle={id => setExpanded(value => value === "settlement:" + id ? "" : "settlement:" + id)} settlements />
         </div>}
     </>}
   </section></SourceContext.Provider>;
 }
 
-function DateInput({ label, caption = label, value, required, onChange }: {
-  label: string; caption?: string; value: string; required?: boolean; onChange: (value: string) => void;
-}) {
-  return <label className="grid min-w-0 gap-1 text-xs text-zinc-400">
-    {caption}
-    <input aria-label={label} type="date" required={required} className={controlClass + " !w-auto max-w-full"}
-      value={value} onChange={event => onChange(event.target.value)} />
-  </label>;
-}
-
-function PeriodButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
-  return <button type="button" aria-pressed={active} onClick={onClick}
-    className={"rounded-md px-3 py-1.5 text-[13px] " + (active ? "bg-zinc-500/20 font-semibold" : "text-zinc-400 hover:bg-zinc-500/10")}>{children}</button>;
-}
-
-function ReportTable({ name, columns, rows, other, expanded, toggle, settlements }: {
-  name: string; columns: string[]; rows: ReportRow[]; other: ReportRow[]; expanded: string; toggle: (id: string) => void; settlements?: boolean;
+function ReportTable({ name, columns, rows, expanded, toggle, settlements }: {
+  name: string; columns: string[]; rows: ReportRow[]; expanded: string; toggle: (id: string) => void; settlements?: boolean;
 }) {
   const [page, setPage] = useState(1);
-  const previous = new Map(other.map(row => [row.id, row]));
   return <div className="overflow-x-auto rounded-md border border-zinc-500/35">
     <table className="w-full min-w-max text-sm">
       <thead className="bg-zinc-500/10 text-xs"><tr>
@@ -248,18 +192,12 @@ function ReportTable({ name, columns, rows, other, expanded, toggle, settlements
             <th scope="row" className={cell + " text-left font-medium"}>
               <button type="button" aria-expanded={expanded === row.id} onClick={() => toggle(row.id)} className="flex items-center gap-2 text-left">
                 <ChevronDown size={14} className={expanded === row.id ? "rotate-180" : ""} /> {row.name}
-                {row.reviewCount > 0 && <span className="rounded bg-amber-500/10 px-1.5 text-[11px] font-normal text-amber-600 dark:text-amber-400">Review {row.reviewCount}</span>}
               </button>
             </th>
             {columns.map(key => {
               const value = row.metrics[key];
-              const compare = previous.get(row.id)?.metrics[key];
-              const delta = value === undefined || compare === undefined ? undefined : value - compare;
               return <td key={key} className={cell + " whitespace-nowrap text-right tabular-nums"}>
                 {formatMetric(key, value)}
-                {delta !== undefined && delta !== 0 && <span title="Difference from the other period" className="block text-[11px] opacity-65">
-                  {delta > 0 ? "+" : ""}{percents.has(key) ? number.format(delta) + " pp" : formatMetric(key, delta)}
-                </span>}
               </td>;
             })}
           </tr>
@@ -286,27 +224,26 @@ function sourceHref(source: ReportEvidence) {
 }
 
 function SourceRecords({ group, settlements }: { group: string; settlements?: boolean }) {
-  const {view, query, period, revision} = useContext(SourceContext);
+  const {view, query, revision} = useContext(SourceContext);
   const [records, setRecords] = useState<ReportEvidence[]>();
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     const abort = new AbortController();
-    fetchReportSources(view, { ...query, revision }, group, period, abort.signal).then(data => { if (!abort.signal.aborted) setRecords(data); }, reason => { if (!abort.signal.aborted) setError(reason.message); });
+    fetchReportSources(view, { ...query, revision }, group, abort.signal).then(data => { if (!abort.signal.aborted) setRecords(data); }, reason => { if (!abort.signal.aborted) setError(reason.message); });
     return () => abort.abort();
-  }, [view, query, group, period, revision, retry]);
+  }, [view, query, group, revision, retry]);
   if (!records) return <div className="p-4 text-xs" role={error ? "alert" : "status"}>{error || "Loading source records…"}{error && <button className="ui-button ml-2" onClick={() => setRetry(n=>n+1)}>Retry</button>}</div>;
   const sources = settlements ? records.filter(s => s.kind === "Driver Pay" && s.values?.netPayable !== undefined) : records;
   return <div className="max-h-96 overflow-auto border-b border-zinc-500/30 bg-zinc-500/5 px-3 py-2">
     <table className="w-full text-left text-xs">
       <caption className="pb-2 text-left font-semibold">Source records</caption>
-      <thead><tr>{["Date", "Source", "Record", "Assignment", "Status", "Details"].map(label => <th key={label} scope="col" className="px-2 pb-2">{label}</th>)}</tr></thead>
+      <thead><tr>{["Date", "Source", "Record", "Assignment", "Details"].map(label => <th key={label} scope="col" className="px-2 pb-2">{label}</th>)}</tr></thead>
       <tbody>{sources.map((source, index) => { const href = sourceHref(source); return <tr key={source.kind + source.id + index} className="border-t border-zinc-500/20 align-top">
         <td className="whitespace-nowrap px-2 py-2">{source.date}</td>
         <td className="px-2 py-2">{source.kind}</td>
         <td className="px-2 py-2"><div>{href ? <Link href={href} prefetch={false} className="text-blue-600 underline dark:text-blue-400">{source.label}</Link> : source.label}</div><div className="break-all opacity-60">{source.id}</div></td>
         <td className="px-2 py-2">{[source.truck, source.driver, source.dispatcher].filter(Boolean).join(" · ")}</td>
-        <td className="px-2 py-2 capitalize">{source.state}</td>
         <td className="px-2 py-2">
           {source.note && <p>{source.note}</p>}
           {Object.entries(source.values ?? {}).map(([key, value]) => <div key={key}>{labels[key] ?? key} · {formatMetric(key, value)}</div>)}
@@ -322,11 +259,10 @@ function SourceRecords({ group, settlements }: { group: string; settlements?: bo
 
 function ReportSummary({rows, financial, loading}: { rows?: ReportRow[]; financial: boolean; loading: boolean }) {
   const sum = (metric: string) => rows?.length && rows.every(r=>r.metrics[metric] !== undefined) ? rows.reduce((total,r)=>total+(r.metrics[metric]??0),0) : undefined;
-  const review = rows?.reduce((total,r)=>total+r.reviewCount,0) ?? 0;
   return <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-    <MetricCard icon={ChartNoAxesCombined} label="Confirmed load gross" value={formatMetric("gross",sum("gross"))} loading={loading} />
-    <MetricCard icon={ChartNoAxesCombined} label={financial ? "Contribution" : "Reported groups"} value={financial ? formatMetric("contribution",sum("contribution")) : number.format(rows?.length ?? 0)} loading={loading} />
+    <MetricCard icon={ChartNoAxesCombined} label="Load gross" value={formatMetric("gross",sum("gross"))} loading={loading} />
+    <MetricCard icon={ChartNoAxesCombined} label={financial ? "Profit" : "Reported groups"} value={financial ? formatMetric("contribution",sum("contribution")) : number.format(rows?.length ?? 0)} loading={loading} />
     <MetricCard icon={ChartNoAxesCombined} label="Source records" value={number.format(rows?.reduce((total,r)=>total+r.sourceCount,0) ?? 0)} loading={loading} />
-    <MetricCard icon={ChartNoAxesCombined} label="Records needing review" value={number.format(review)} loading={loading} />
+    <MetricCard icon={ChartNoAxesCombined} label="Miles" value={formatMetric("miles",sum("miles"))} loading={loading} />
   </div>;
 }

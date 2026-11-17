@@ -81,9 +81,13 @@ conversion used that faulty check and created duplicate slots.
 ## Reports
 
 Reports v1 (`/reports`) includes only active Gross Board load entries and selected
-trips, using linked Loads revenue/miles by delivery date, native service-day
+trips, using Gross Board displayed revenue/miles (including entered overrides) by delivery date, native service-day
 assignments and finalized Driver Pay evidence. Operator carrier fees exclude the
-dispatch adjustment balance. Migration 222 adds read indexes without changing
+dispatch adjustment balance. Owner-operator Profit includes finalized recurring
+charge deductions as RC, honoring actual source choices and excluding credits,
+installments and escrow. Only attributable company-paid costs participate. Reports
+uses the shared completed-week selector from 2026-10-19, enforces the same bounds
+on summaries/sources/CSV, and never refetches solely on window focus. Migration 222 adds read indexes without changing
 financial records or the payroll protocol. Summaries, lazy sources and CSV share
 report permissions; repeatable snapshots fence the bounded period cache with
 source/financial revisions and missing-load evidence. See `docs/REPORTS.md`;

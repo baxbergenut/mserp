@@ -1,31 +1,26 @@
 # Reports
 
 Open `/reports` for Company Truck P&L, Owner-Operator Truck P&L, Dispatcher
-Performance, and Driver Performance. Each report provides the selected and
-comparison periods, historical truck/driver/dispatcher filters, source records,
-and a CSV with both periods. `reports.read` grants the financial views and their
+Performance, and Driver Performance. Each report provides the selected
+week, historical truck/driver/dispatcher filters, source records,
+and a CSV for the selected week. `reports.read` grants the financial views and their
 exports. `reports.performance` grants the performance views and their exports.
 A source link to another Clustie page also requires that page's permission.
 Report requests use read-only snapshots and never initiate provider syncs or
 prepare, edit, or finalize payroll. Apply migration 222 before enabling this release; it adds read indexes and an immutable statement-load-ID extractor, with no financial data or payroll protocol changes.
 
-- Dates are inclusive in New York. The default is the last completed
-  Monday–Sunday week with the preceding week as its comparison. Both ranges
-  can be changed independently, up to 366 days per range.
-- Gross Board defines the eligible load cohort: only its active load entries
-  contribute load evidence. Completed Loads absent from Gross Board are excluded.
-  Confirmed gross and miles come from those linked Loads by actual delivery date. Completed
-  statuses use the Status Board convention (delivered, completed, invoiced).
-  An exact upstream ID takes precedence over a uniquely matching normalized
-  load number. Gross Board supplies dated assignments and provisional manual
-  evidence. For splits, only explicitly selected Gross Board trips contribute;
-  provider trip gross and miles are used when they sum to the Loads record.
-  Missing or invalid selected trips stay visible for review with unavailable amounts.
-  Repeat links do not multiply source amounts.
-  Clustie owns assignments: original service-day native selections and dated fleet history supply driver/truck/dispatcher identity. Provider driver and truck labels never fill an unassigned native record.
-  A completed load without actual delivery is visible for review when another
-  source date places it in the period. Conflicting assignment evidence keeps
-  attributable totals in Unassigned.
+- The shared WeekSelector exposes completed New York Monday–Sunday weeks from
+  October 19, 2026 through the last completed week. That latest week is the default.
+  Summary, sources and CSV use the same server-validated week; custom date and
+  comparison controls are removed.
+- Only active Gross Board entries and explicitly selected trips contribute load
+  evidence. Gross and miles use Gross Board's displayed values: manual overrides,
+  linked source defaults and reviewed split allocations follow the shared board
+  projection. Manual unmatched entries contribute their entered amounts too.
+  Linked completed loads retain actual-delivery-date recognition; manual entries
+  use their board date. Repeat links count once. Unknown amounts stay blank.
+  Clustie owns original service-day assignments; provider labels cannot fill them.
+  The UI shows data without Review badges, a review counter or provisional columns.
 - Dispatcher credit follows the original service day. An approved Gross Board
   transfer retains its recorded original dispatcher and truck. Revenue stays on
   the actual delivery date, including when a transfer crosses a week boundary. An active truck-week is one truck with qualifying work for the
@@ -44,14 +39,21 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   expense types Equipment, Equipment Lease/Rental, Truck Lease/Rental
   and Trailer Lease/Rental. Truck/trailer payments, loan principal and shared
   overhead are outside contribution; mixed loan payments are not estimated.
-  Unresolved source identity or cost responsibility is visible in Unassigned.
-  Where pay or known truck costs need review, dependent metrics stay blank.
+  Only known company-paid costs attributed to a truck are included. Driver, owner
+  and broker charges and unassigned costs are excluded from costs and drilldowns.
+  Company reimbursements remain company costs. Equipment and carrier-cost columns
+  are hidden; attributable company costs still participate in Profit.
+  Missing payroll earnings leave pay-dependent metrics blank.
 - Driver earnings use finalized Driver Pay matched by exact load/trip identity,
   including cross-week statement placement. Owner-operator carrier fees are
   the frozen settlement driver-gross basis less matched operator load earnings.
-  The difference between confirmed Loads gross and that basis is shown separately
-  as Dispatch adjustment balance and does not become carrier income. Carrier contribution
-  subtracts carrier-borne operating costs. Weekly settlement rows use finalized
+  The difference between Gross Board gross and that basis is shown separately
+  as Dispatch adjustment balance and does not become carrier income. Owner-operator Profit is carrier fees plus RC less attributable company-paid costs.
+  RC (recurring charges) sums actual negative recurring deductions in the selected
+  week's finalized statements, using saved source choices rather than scheduled
+  base/due amounts. Truck sources retain exact dated truck attribution. Legacy
+  recurring occurrences require a single dated owner-operated truck. Zero/waived
+  charges, positive credits, installments, escrow and draft statements add no RC. Weekly settlement rows use finalized
   Driver Pay for weeks starting in the selected period. They show the whole
   statement, with reimbursements, deductions, and escrow movements. Weekly
   amounts with several dated truck assignments are shown in Unassigned.
@@ -59,8 +61,8 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
 ## Read performance
 
 - The initial response contains summary rows and filter choices for one period.
-  Comparison is opt-in; row source records are fetched on expansion. CSV includes
-  both periods and their evidence, with the same server-side view permission.
+  Row source records are fetched on expansion. CSV includes the selected week
+  and its evidence, with the same server-side view permission.
 - Loads are narrowed by the indexed delivery period before resolving board links.
   Ownership is resolved in a batch of distinct truck/service days. The frozen
   load-ID GIN index finds cross-week statements without a load-by-statement JSON join.
@@ -73,7 +75,8 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   provider delivery bookkeeping, telemetry and derived preparation do not evict
   unchanged reports. Maintenance classification stays explicitly included.
   Drilldowns and exports carry the displayed source revision and reject changes
-  with a refresh instruction. Returning to the page refreshes its snapshot.
+  with a refresh instruction. Window focus does not refetch or collapse rows. Explicit Refresh and changes
+  to week/view/filter load a snapshot; the calendar hook only changes it on week rollover.
 - Tables render at most 50 groups at once; source rows are lazy. Measurements must
   include loaded data and two animation frames, not just the page heading.
 
@@ -85,23 +88,27 @@ synthetic records, not production accounting sign-off.
 
 | Source calculation | Company truck | Owner-operator truck |
 | --- | ---: | ---: |
-| Confirmed Loads revenue | $1,100 | $1,800 |
-| Confirmed miles | 400 | 600 |
-| Frozen load earnings | $300 | $1,360 |
+| Gross Board revenue | $1,199 | $1,999 |
+| Gross Board miles | 400 | 500 |
+| Matched frozen load earnings | $300; manual entry unmatched | $1,360 |
 | Fuel / tolls / scales | $200 / $40 / $14 | — |
 | Company maintenance / equipment | $80 / $60 | $0 / $50 |
 | Carrier fee (settlement gross $1,700 less $1,360) | — | $340 |
-| Dispatch adjustment balance (separate) | — | $100 |
-| Contribution | $406 | $290 |
+| Dispatch adjustment balance (separate) | — | $299 |
+| Profit | blank until manual entry has payroll evidence | $290 |
 
-Company RPM is $2.75 and cost/mile is $1.735 before display rounding. The $200
-manual board entry stays provisional, and a duplicate exact load link adds no
-revenue or miles. A $900 truck payment is excluded; a separate $30 maintenance
-record without a truck remains Unassigned. Operator earnings $1,360 + $25
-reimbursements − $50 deductions − $20 escrow withheld + $5 escrow returned =
-$1,320 net payable. A $10 escrow application is disclosed separately.
+Gross Board's $999 / 300-mile override and $200 / 100-mile manual entry give
+company revenue $1,199 / 400 miles. Removing the unmatched manual entry yields
+company profit $305 with frozen pay $300 and costs $394. The duplicate link adds
+no revenue or miles. Driver-charged repairs and the unassigned $30 maintenance
+record are excluded. A $900 truck payment remains excluded. The owner-operator
+base fixture has RC $0 and separate net settlement $1,320.
 
-Checks: TestReportsClosedWeekDatabase and TestReportsGrossBoardCohortDatabase
+The recurring-charge fixture deducts $125 insurance (base $200 / due $450) and
+$25 legacy recurring fees. A waived $75 fee, $50 credit, $40 installment and
+escrow movements do not add RC. RC is $150, Profit $440, and settlement net $1,180.
+
+Checks: TestReportsClosedWeekDatabase, TestReportsRecurringChargesDatabase and TestReportsGrossBoardCohortDatabase
 (fresh/incremental), TestReportsCutoff,
 TestReportsFleetScaleDatabase, TestReportsPermissionsAndCSV and
 frontend/scripts/test-reports-e2e.mjs. The database tests also verify source-edit
