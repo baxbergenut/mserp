@@ -86,6 +86,7 @@ type ReportRow struct {
 	Name            string             `json:"name"`
 	AssignedDrivers []PayPerson        `json:"assignedDrivers,omitempty"`
 	Metrics         map[string]float64 `json:"metrics"`
+	Estimated       map[string]bool    `json:"estimated,omitempty"`
 	Sources         []ReportEvidence   `json:"sources,omitempty"`
 	SourceCount     int                `json:"sourceCount"`
 	ReviewCount     int                `json:"reviewCount"`
@@ -311,7 +312,7 @@ func (groups reportGroups) add(id, name string, i reportIdentity, source ReportE
 	group := groups[id]
 	if group == nil {
 		group = &reportGroup{
-			ReportRow: ReportRow{ID: id, Name: name, Metrics: map[string]float64{}},
+			ReportRow: ReportRow{ID: id, Name: name, Metrics: map[string]float64{}, Estimated: map[string]bool{}},
 			loads:     map[string]bool{}, days: map[string]bool{}, truckWeeks: map[string]bool{}, timingLoads: map[string]bool{},
 		}
 		groups[id] = group
@@ -440,6 +441,9 @@ func (s *reportRead) period(ctx context.Context, from, to string) ([]ReportRow, 
 			return a.ID < b.ID
 		})
 		result = append(result, g.ReportRow)
+	}
+	if err := s.reportFirstNames(ctx, result); err != nil {
+		return nil, err
 	}
 	sort.Slice(result, func(i, j int) bool {
 		a, b := result[i], result[j]

@@ -85,9 +85,13 @@ trips, using Gross Board displayed revenue/miles (including entered overrides) b
 assignments and exact Driver Pay tariff calculations for open loads. Matched
 finalized load fees take precedence; reopening restores the current tariff basis.
 Manual Gross Board entries use their entered pay basis too. Operator carrier fees exclude the
-dispatch adjustment balance. Owner-operator Profit includes finalized recurring
-charge deductions as RC, honoring actual source choices and excluding credits,
-installments and escrow. Only attributable company-paid costs participate. Reports
+dispatch adjustment balance. Owner-operator Profit includes selected-week scheduled
+recurring charges as estimated RC, replaced by actual finalized source choices
+(including zero). Dated ownership, phases, eligibility and employment exclusions
+remain authoritative; credits, installments and escrow are excluded. Per-metric
+estimate flags propagate to Profit/Margin/CPM and render in the Status Board stale-ETA yellow; CSV notes retain
+the estimate status. Driver fee labels and first names are used in Reports.
+Only attributable company-paid costs participate. Reports
 uses the shared completed-week selector from 2026-10-19, enforces the same bounds
 on summaries/sources/CSV, and never refetches solely on window focus. Weekly truck
 rows include native dated drivers and team members; profile links retain page

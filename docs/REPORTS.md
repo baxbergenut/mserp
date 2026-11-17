@@ -55,11 +55,14 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   the driver-gross basis less matched operator load earnings (frozen values when finalized).
   The difference between Gross Board gross and that basis is shown separately
   as Dispatch adjustment balance and does not become carrier income. Owner-operator Profit is carrier fees plus RC less attributable company-paid costs.
-  RC (recurring charges) sums actual negative recurring deductions in the selected
-  week's finalized statements, using saved source choices rather than scheduled
-  base/due amounts. Truck sources retain exact dated truck attribution. Legacy
+  RC (recurring charges) estimates the selected week's scheduled negative truck
+  charges using the same effective phases, per-truck amounts, eligibility rules,
+  vacation/termination exclusions and dated owner routing as Driver Pay. It does
+  not accrue intervening weeks or estimate balance collections. Finalized statements
+  replace the schedule with actual deductions, including partial/zero source choices.
+  Reopening restores the schedule estimate. Truck sources retain dated truck attribution. Legacy
   recurring occurrences require a single dated owner-operated truck. Zero/waived
-  charges, positive credits, installments, escrow and draft statements add no RC. Weekly settlement rows use finalized
+  charges, positive credits, installments and escrow add no RC. Weekly settlement rows use finalized
   Driver Pay for weeks starting in the selected period. They show the whole
   statement, with reimbursements, deductions, and escrow movements. Weekly
   amounts with several dated truck assignments are shown in Unassigned.
@@ -91,7 +94,14 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   all drivers assigned on the selected week's native New York service days,
   including dated team members and midweek changes, not today's crew. Units and
   driver names link to permission-checked profiles; the rest of the row expands
-  sources. Weekly crew labels do not change revenue or cost attribution.
+  sources. Weekly crew labels do not change revenue or cost attribution. Driver
+  names use the profile's first name (legacy full-name records fall back to the
+  first word). Numeric cells and headers are centered. Driver earnings are labelled
+  Driver fee; Source records and Reported groups summary cards are removed.
+- Per-metric `estimated` flags identify calculated driver fees, carrier fees, RC,
+  and their dependent Profit/Margin/CPM. Only those values render in the Status Board stale-ETA yellow, including
+  the aggregate Profit and source evidence. CSV notes list estimated metrics;
+  finalized amounts retain their ordinary styling. These flags do not alter totals.
 
 ## Closed-week reconciliation
 
@@ -121,10 +131,14 @@ The recurring-charge fixture deducts $125 insurance (base $200 / due $450) and
 $25 legacy recurring fees. A waived $75 fee, $50 credit, $40 installment and
 escrow movements do not add RC. RC is $150, Profit $440, and settlement net $1,180.
 
-Checks: TestReportsClosedWeekDatabase, TestReportsTariffProfitDatabase, TestReportsRecurringChargesDatabase and TestReportsGrossBoardCohortDatabase
+Checks: TestReportsClosedWeekDatabase, TestReportsTariffProfitDatabase,
+TestReportsEstimatedRecurringDatabase, TestReportsRecurringChargesDatabase and TestReportsGrossBoardCohortDatabase
 (fresh/incremental), TestReportsCutoff,
 TestReportsFleetScaleDatabase, TestReportsPermissionsAndCSV and
-frontend/scripts/test-reports-e2e.mjs. The database tests also verify source-edit
+frontend/scripts/test-reports-e2e.mjs. Run test-reports-estimates-e2e.mjs afterward
+against the same disposable review schema to verify scheduled/finalized/waived/
+reopened RC, CSV estimate status and exact stale-ETA color parity in both themes.
+The database tests also verify source-edit
 cache invalidation, provider-missing transitions, tariff/finalized/reopened pay, native
 assignment authority, unavailable timing, permissions and CSV formula escaping.
 

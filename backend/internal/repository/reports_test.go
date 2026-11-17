@@ -46,7 +46,7 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 			t.Fatalf("company: %+v", company.Current)
 		}
 		check(company.Current[0], map[string]float64{"gross": 119900, "miles": 400, "maintenance": 8000, "fuel": 20000, "tolls": 4000, "scales": 1400, "equipment": 6000, "completedLoads": 2, "earnedPay": 37500, "contribution": 43000})
-		if crew := company.Current[0].AssignedDrivers; len(crew) != 1 || crew[0].Name != "Company Driver" || crew[0].ID != "61000000-0000-0000-0000-000000000001" {
+		if crew := company.Current[0].AssignedDrivers; len(crew) != 1 || crew[0].Name != "Company" || crew[0].ID != "61000000-0000-0000-0000-000000000001" {
 			t.Fatalf("missing dated driver identity: %+v", crew)
 		}
 		operator := read(ReportOperator, "2026-10-12", "2026-10-18")
@@ -66,7 +66,7 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		}
 		period := performance.Period
 		filtered, err := repo.Read(ctx, ReportsQuery{View: ReportDriver, Period: period, Truck: "61000000-0000-0000-0000-000000000004", Dispatcher: "historical:Former Dispatcher"})
-		if err != nil || len(filtered.Current) != 1 || filtered.Current[0].Name != "Company Driver" {
+		if err != nil || len(filtered.Current) != 1 || filtered.Current[0].Name != "Company" {
 			t.Fatal("dated filters", filtered, err)
 		}
 		dispatch := read(ReportDispatcher, "2026-10-12", "2026-10-18")

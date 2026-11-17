@@ -24,7 +24,7 @@ const views: { id: ReportView; label: string; access: string; columns: string[] 
 const settlementColumns = ["settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable"];
 
 const labels: Record<string, string> = {
-  gross: "Load gross", earnedPay: "Earned driver pay", fuel: "Fuel", tolls: "Tolls", scales: "Scales", maintenance: "Maintenance",
+  gross: "Load gross", earnedPay: "Driver fee", fuel: "Fuel", tolls: "Tolls", scales: "Scales", maintenance: "Maintenance",
   equipment: "Equipment", contribution: "Profit", margin: "Margin", miles: "Miles", revenuePerMile: "RPM",
   costPerMile: "CPM", provisionalGross: "Provisional gross", provisionalLoads: "Provisional entries", unassignedCost: "Unassigned costs",
   dispatchBalance: "Dispatch adjustment balance", carrierFees: "Carrier fees", carrierCosts: "Carrier-borne costs", settlementEarnings: "Earnings", reimbursements: "Reimbursements", deductions: "Deductions",
@@ -45,6 +45,12 @@ function formatMetric(key: string, value?: number) {
   if (value === undefined) return "";
   if (percents.has(key)) return number.format(value) + "%";
   return units.has(key) ? number.format(value) : currency.format(value / 100);
+}
+
+function MetricValue({ metric, value, estimated }: { metric: string; value?: number; estimated?: boolean }) {
+  return <span data-estimated={estimated && value !== undefined ? "true" : undefined}
+    title={estimated && value !== undefined ? "Estimated · updates when finalized" : undefined}
+    className={estimated ? "text-yellow-400" : undefined}>{formatMetric(metric, value)}</span>;
 }
 
 const filterFields = [
@@ -192,7 +198,7 @@ function ReportTable({ name, columns, rows, expanded, toggle, settlements }: {
       <thead className="bg-zinc-500/10 text-xs"><tr>
         <SortHeader column="name" label={name} sort={sort} onSort={onSort} className={cell} />
         {trucks && <SortHeader column="assignedDrivers" label="Assigned driver" sort={sort} onSort={onSort} className={cell} />}
-        {columns.map(key => <SortHeader key={key} column={key} label={labels[key]} sort={sort} onSort={onSort} right className={cell} />)}
+        {columns.map(key => <SortHeader key={key} column={key} label={labels[key]} sort={sort} onSort={onSort} center className={cell} />)}
       </tr></thead>
       <tbody>
         {sorted.slice((page-1)*50,page*50).map(row => <Fragment key={row.id}>
@@ -212,8 +218,8 @@ function ReportTable({ name, columns, rows, expanded, toggle, settlements }: {
             </Fragment>)}</td>}
             {columns.map(key => {
               const value = row.metrics[key];
-              return <td key={key} className={cell + " whitespace-nowrap text-right tabular-nums"}>
-                {formatMetric(key, value)}
+              return <td key={key} className={cell + " whitespace-nowrap text-center tabular-nums"}>
+                <MetricValue metric={key} value={value} estimated={row.estimated?.[key]} />
               </td>;
             })}
           </tr>
@@ -279,7 +285,7 @@ function SourceTable({ sources }: { sources: ReportEvidence[] }) {
         <td className="px-2 py-2">{[source.truck, source.driver, source.dispatcher].filter(Boolean).join(" · ")}</td>
         <td className="px-2 py-2">
           {source.note && <p>{source.note}</p>}
-          {Object.entries(source.values ?? {}).map(([key, value]) => <div key={key}>{labels[key] ?? key} · {formatMetric(key, value)}</div>)}
+          {Object.entries(source.values ?? {}).map(([key, value]) => <div key={key}>{labels[key] ?? key} · <MetricValue metric={key} value={value} estimated={source.state === "calculated"} /></div>)}
           {source.pickupActual && <div>Pickup actual · {source.pickupActual}</div>}
           {source.pickupScheduled && <div>Pickup scheduled · {source.pickupScheduled}</div>}
           {source.deliveryActual && <div>Delivery actual · {source.deliveryActual}</div>}
@@ -292,10 +298,9 @@ function SourceTable({ sources }: { sources: ReportEvidence[] }) {
 
 function ReportSummary({rows, financial, loading}: { rows?: ReportRow[]; financial: boolean; loading: boolean }) {
   const sum = (metric: string) => rows?.length && rows.every(r=>r.metrics[metric] !== undefined) ? rows.reduce((total,r)=>total+(r.metrics[metric]??0),0) : undefined;
-  return <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+  return <div className={"grid grid-cols-2 gap-4 " + (financial ? "xl:grid-cols-3" : "")}>
     <MetricCard icon={ChartNoAxesCombined} label="Load gross" value={formatMetric("gross",sum("gross"))} loading={loading} />
-    <MetricCard icon={ChartNoAxesCombined} label={financial ? "Profit" : "Reported groups"} value={financial ? formatMetric("contribution",sum("contribution")) : number.format(rows?.length ?? 0)} loading={loading} />
-    <MetricCard icon={ChartNoAxesCombined} label="Source records" value={number.format(rows?.reduce((total,r)=>total+r.sourceCount,0) ?? 0)} loading={loading} />
     <MetricCard icon={ChartNoAxesCombined} label="Miles" value={formatMetric("miles",sum("miles"))} loading={loading} />
+    {financial && <MetricCard icon={ChartNoAxesCombined} label="Profit" value={<MetricValue metric="contribution" value={sum("contribution")} estimated={rows?.some(row => row.estimated?.contribution)} />} loading={loading} />}
   </div>;
 }

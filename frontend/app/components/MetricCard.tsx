@@ -1,10 +1,11 @@
 import { SkeletonBar } from "./WeeklyTableSkeleton";
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface MetricCardProps {
   label: string;
-  value: string;
+  value: ReactNode;
   icon: LucideIcon;
   delta?: number | null;
   delay?: number;

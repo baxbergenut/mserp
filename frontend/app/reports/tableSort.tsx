@@ -45,13 +45,13 @@ export function useTableSort<T>(rows: T[], value: (row: T, key: string) => Value
   return { sorted, sort, changeSort, register };
 }
 
-export function SortHeader({ column, label, sort, onSort, right = false, className = "" }: {
-  column: string; label: string; sort?: Sort; onSort: (key: string) => void; right?: boolean; className?: string;
+export function SortHeader({ column, label, sort, onSort, center = false, className = "" }: {
+  column: string; label: string; sort?: Sort; onSort: (key: string) => void; center?: boolean; className?: string;
 }) {
   const active = sort?.key === column;
   const Icon = active ? sort.descending ? ArrowDown : ArrowUp : ArrowUpDown;
   return <th scope="col" aria-sort={active ? sort.descending ? "descending" : "ascending" : "none"} className={className}>
-    <button type="button" onClick={() => onSort(column)} className={`group flex w-full items-center gap-1.5 whitespace-nowrap py-0.5 font-medium focus-visible:outline-2 focus-visible:outline-blue-500 ${right ? "justify-end" : "text-left"}`}>
+    <button type="button" onClick={() => onSort(column)} className={`group flex w-full items-center gap-1.5 whitespace-nowrap py-0.5 font-medium focus-visible:outline-2 focus-visible:outline-blue-500 ${center ? "justify-center" : "text-left"}`}>
       {label}<Icon aria-hidden="true" className={`h-3 w-3 shrink-0 ${active ? "text-blue-400" : "text-zinc-500 opacity-50 group-hover:opacity-100"}`} />
     </button>
   </th>;
