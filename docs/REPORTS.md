@@ -12,11 +12,16 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
 - Dates are inclusive in New York. The default is the last completed
   Monday–Sunday week with the preceding week as its comparison. Both ranges
   can be changed independently, up to 366 days per range.
-- Confirmed gross and miles come from Loads by actual delivery date. Completed
+- Gross Board defines the eligible load cohort: only its active load entries
+  contribute load evidence. Completed Loads absent from Gross Board are excluded.
+  Confirmed gross and miles come from those linked Loads by actual delivery date. Completed
   statuses use the Status Board convention (delivered, completed, invoiced).
   An exact upstream ID takes precedence over a uniquely matching normalized
   load number. Gross Board supplies dated assignments and provisional manual
-  evidence. For splits, provider trip gross and miles are used when they sum to the Loads record. Repeat links do not multiply source amounts.
+  evidence. For splits, only explicitly selected Gross Board trips contribute;
+  provider trip gross and miles are used when they sum to the Loads record.
+  Missing or invalid selected trips stay visible for review with unavailable amounts.
+  Repeat links do not multiply source amounts.
   Clustie owns assignments: original service-day native selections and dated fleet history supply driver/truck/dispatcher identity. Provider driver and truck labels never fill an unassigned native record.
   A completed load without actual delivery is visible for review when another
   source date places it in the period. Conflicting assignment evidence keeps
@@ -96,7 +101,8 @@ record without a truck remains Unassigned. Operator earnings $1,360 + $25
 reimbursements − $50 deductions − $20 escrow withheld + $5 escrow returned =
 $1,320 net payable. A $10 escrow application is disclosed separately.
 
-Checks: TestReportsClosedWeekDatabase (fresh/incremental), TestReportsCutoff,
+Checks: TestReportsClosedWeekDatabase and TestReportsGrossBoardCohortDatabase
+(fresh/incremental), TestReportsCutoff,
 TestReportsFleetScaleDatabase, TestReportsPermissionsAndCSV and
 frontend/scripts/test-reports-e2e.mjs. The database tests also verify source-edit
 cache invalidation, provider-missing transitions, missing finalized pay, native
