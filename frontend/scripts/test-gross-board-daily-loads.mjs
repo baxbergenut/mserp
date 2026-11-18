@@ -114,6 +114,32 @@ try {
   await page.reload();
   await expect(clearCell('driver rate')).toHaveValue('');
 
+  // Enter amounts without selecting a load. All three levels of totals update
+  // while the edit is pending and still show the amounts after reload.
+  holdNextSave = true;
+  await clearCell('total gross').fill('400');
+  await clearCell('driver rate').fill('275');
+  await clearCell('miles').fill('125.25');
+  await clearCell('miles').blur();
+  await expect.poll(() => typeof releaseSave).toBe('function');
+  const cells = field => page.locator(`[data-gross-driver="${driverId}"][data-gross-field="${field}"]`);
+  const checkTotals = async () => {
+    await expect(clearCell('load number or status')).toHaveValue('');
+    await expect(cells('originalTotal')).toHaveText('$3,300.00');
+    await expect(cells('driverTotal')).toHaveText('$2,575.00');
+    await expect(cells('milesTotal')).toHaveText('1,575.25');
+    await expect(page.getByRole('button', { name: 'Rate balance for Daily Driver' })).toContainText('+$725.00');
+    for (const totals of [page.getByRole('row', { name: 'Unassigned totals' }), page.locator('tfoot tr')]) {
+      await expect(totals.getByRole('cell')).toHaveText(['$3,300.00', '$2,575.00', '1,575.25', '$2.09', '$1.63', '+$725.00']);
+    }
+  };
+  await checkTotals();
+  releaseSave();
+  await expect.poll(() => saved(clearDay)).toMatchObject({ loadNumber: '', originalRate: '400.00', driverRate: '275.00', miles: '125.25' });
+  await page.reload();
+  await checkTotals();
+  releaseSave = undefined;
+
   // Reuse two removed slots in one editor, matching the reported disappearing loads.
   await page.getByRole('button', { name: `Daily Driver, ${secondDay}, add another load`, exact: true }).click();
   await field(secondDay, 'load number or status', 1).fill('SECOND-2');

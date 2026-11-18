@@ -55,11 +55,16 @@ func preferredGrossBoardQueuePlans(plans []BoardLoad, aliases map[string]string,
 }
 
 func markBoardLoadCompleted(state *boardLoadState, load BoardLoad) {
-	state.Completed = append(state.Completed, boardCompletionKey(load))
+	state.Completed = appendBoardLoadKeys(state.Completed, load)
+}
+
+func appendBoardLoadKeys(keys []string, load BoardLoad) []string {
+	keys = append(keys, boardCompletionKey(load))
 	if load.Manual {
-		state.Completed = append(state.Completed, "plan:"+load.PlanID)
+		keys = append(keys, "plan:"+load.PlanID)
 	}
 	if load.queueAlias != "" && load.queueAlias != load.PlanID {
-		state.Completed = append(state.Completed, "plan:"+load.queueAlias)
+		keys = append(keys, "plan:"+load.queueAlias)
 	}
+	return keys
 }

@@ -55,7 +55,10 @@ const plan = { ...blank, loadNumber: "PLAN", originalRate: "1000.10", driverRate
 assert.equal(rateBalance("300.10", [plan]), 10000n);
 assert.equal(rateChange({ ...plan, driverRate: "" }), null);
 assert.equal(rateChange({ ...plan, driverRate: "0" }), 100010n);
-assert.equal(rateChange({ ...plan, loadNumber: "" }), null);
+const numberless = { ...plan, loadNumber: "", miles: "250.25" };
+assert.deepEqual(totals([numberless]), { original: 100010n, driver: 120020n, miles: 25025n });
+assert.equal(rateChange(numberless), -20010n);
+assert.equal(incompleteRates([numberless]), 0);
 assert.equal(rateChange({ ...plan, duplicate: true }), null);
 assert.equal(incompleteRates([{ ...plan, driverRate: "" }, blank]), 1);
 const match = matchLoad({ ...plan, miles: "500" }, { id: 4, loadNumber: "PLAN", originalRate: "950.25", miles: "480.50" });

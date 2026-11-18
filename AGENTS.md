@@ -2175,8 +2175,9 @@ assignment lookup lists.
   Original-pay entry also fills driver gross while it is blank or still equals
   the previous original pay; a distinct driver gross is preserved. Rate balance carries original minus driver rate
   forward from the first saved board entry through the selected week's end,
-  including plans. Missing load numbers or rates are excluded and counted as
-  incomplete, never treated as zero. Repeated system loads for the same driver
+  including plans. Entries with a blank load number contribute to gross and mileage
+  totals and, when both rates are entered, to the rate balance. Load and gross entries
+  with missing rates count as incomplete. Repeated system loads for the same driver
   contribute only on their earliest board date and are identified in history.
   Future weeks never affect an earlier balance. Balances follow driver IDs across
   dispatcher changes; source corrections and historical edits recalculate carry.
@@ -4124,18 +4125,17 @@ after the new cache table enters the source inventory.
 The ready-city-state-v1 context refreshes legacy full-address caches once under
 the existing budget/backoff; manual destination text stays untouched.
 
-## Status Board queued completion
+## Status Board queued completion and cancellation
 
-- Editors can Mark completed on a noncurrent Next entry, including Gross-origin
-  and in-transit loads. The exact plan is fenced by driver version and load revision.
-  Only operational completion/history changes; Gross Board, provider status,
-  payroll and the current selection remain untouched. Existing Restore to queue
-  corrects a local completion. Provider-terminal loads remain non-restorable.
+- Editors can Mark completed or Cancel load on a noncurrent Next entry, including
+  Gross Board plans and in-transit loads. Driver version and load revision fence
+  these operational actions. Restore to queue corrects either action while the
+  source remains eligible.
 - Check testBoardQueuedCompletion in TestDriverBoardDatabase (fresh/migrated)
   and frontend/scripts/test-status-board-loads.mjs.
-- The Next Loads panel shows the recorded editor next to Completed. Both queued
-  completion and current-load progression use the original name from the board
-  audit. The panel prefixes the badge with Marked as for queued completions,
+- The Next Loads panel credits the original editor from the board audit for
+  completion, cancellation and current-load progression. It prefixes the
+  Completed badge with Marked as for queued completions,
   which preserve the current load's text and selection in the audit.
   Provider-only completions have no editor label.
 

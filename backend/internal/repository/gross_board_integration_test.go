@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -703,6 +704,35 @@ func TestGrossBoardDatabase(t *testing.T) {
 		var rate string
 		if err = pool.QueryRow(ctx, `SELECT coalesce(driver_rate::text,'') FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date`, carryDriver, day).Scan(&rate); err != nil || rate != "" {
 			t.Fatal("partial patch batch committed", rate, err)
+		}
+	})
+	t.Run("amounts without a load number", func(t *testing.T) {
+		start := time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)
+		entry := GrossBoardEntry{DriverID: carryDriver, Date: "2027-02-01", OriginalRate: "400", DriverRate: "275", Miles: "125.25",
+			Fields: []string{"originalRate", "driverRate", "miles"}}
+		saved, err := repo.SaveChanges(ctx, []GrossBoardEntry{entry}, "")
+		if err != nil || len(saved) != 1 || saved[0].LoadNumber != "" || saved[0].LoadRecordID != nil ||
+			saved[0].OriginalRate != "400.00" || saved[0].DriverRate != "275.00" || saved[0].Miles != "125.25" {
+			t.Fatalf("numberless amounts did not persist: %+v, %v", saved, err)
+		}
+		board, err := repo.Get(ctx, start)
+		if err != nil || len(board.Entries) != 1 || board.Entries[0].LoadNumber != "" ||
+			board.Entries[0].OriginalRate != "400.00" || board.Entries[0].DriverRate != "275.00" || board.Entries[0].Miles != "125.25" {
+			t.Fatalf("numberless amounts missing from snapshot: %+v, %v", board.Entries, err)
+		}
+		lines, err := repo.BalanceHistory(ctx, carryDriver, start)
+		if err != nil || len(lines) != 1 || lines[0].Change != "125.00" {
+			t.Fatalf("numberless amounts missing from rate balance: %+v, %v", lines, err)
+		}
+		following, err := repo.BalanceHistory(ctx, carryDriver, start.AddDate(0, 0, 7))
+		if err != nil || len(following) != 0 {
+			t.Fatalf("amounts duplicated into following week: %+v, %v", following, err)
+		}
+		board, err = repo.Get(ctx, start.AddDate(0, 0, 7))
+		if err != nil || !slices.ContainsFunc(board.Balances, func(balance GrossBoardBalance) bool {
+			return balance.DriverID == carryDriver && balance.OpeningBalance == lines[0].Balance
+		}) {
+			t.Fatalf("numberless change did not carry forward: %+v, %v", board.Balances, err)
 		}
 	})
 	t.Run("rate reset", func(t *testing.T) {

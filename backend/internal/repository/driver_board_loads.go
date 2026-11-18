@@ -45,6 +45,8 @@ type BoardLoad struct {
 	Completed           bool        `json:"completed,omitempty"`
 	CompletedByName     string      `json:"completedByName,omitempty"`
 	MarkedAsCompleted   bool        `json:"markedAsCompleted,omitempty"`
+	Cancelled           bool        `json:"cancelled,omitempty"`
+	CancelledByName     string      `json:"cancelledByName,omitempty"`
 	CanRestoreToQueue   bool        `json:"canRestoreToQueue,omitempty"`
 	Manual              bool        `json:"manual,omitempty"`
 	PlanID              string      `json:"planId"`
@@ -76,6 +78,7 @@ type boardLoadState struct {
 	DestinationManual     bool              `json:"destinationManual,omitempty"`
 	StopKey               string            `json:"stopKey"`
 	Completed             []string          `json:"completed,omitempty"`
+	Cancelled             []string          `json:"cancelled,omitempty"`
 	CompletedStops        map[string]bool   `json:"completedStops,omitempty"`
 	RestoredPlans         map[string]bool   `json:"restoredPlans,omitempty"`
 }
@@ -559,7 +562,8 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
  AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.payload->'current'->>'loadId'
  OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','invoiced','cancelled','canceled')
- OR coalesce((SELECT payload->'order' ? e.plan_id::text FROM driver_board_load_state WHERE driver_id=e.driver_id),false))
+ OR current_state.payload->'order' ? e.plan_id::text
+ OR current_state.payload->'cancelled' ?| ARRAY['plan:' || e.plan_id::text, 'load:' || l.id::text])
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, week, selected)
 	if err != nil {
 		return nil, err
@@ -700,6 +704,10 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 		for _, key := range s.Completed {
 			completed[key] = true
 		}
+		cancelled := map[string]bool{}
+		for _, key := range s.Cancelled {
+			cancelled[key] = true
+		}
 		// An older duplicate must not hide the same source's eligible plan.
 		// Prefer eligible Gross Board counterparts, preserving date/slot order.
 		queuePlans := slices.Clone(plans[id])
@@ -747,14 +755,16 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 			// Gross Board owns the plan. Losing its DataTruck details does not
 			// remove an otherwise eligible upcoming load from the queue.
 			sourceUnavailable := terminalLoad(p.SourceStatus) || (p.Manual && p.SourceMissing)
-			completedHere := completed[boardCompletionKey(p)] || completed["plan:"+p.PlanID] || completed["plan:"+aliases[p.PlanID]]
-			if sourceUnavailable || completedHere {
-				p.Completed = providerCompletedLoad(p.SourceStatus) || (completedHere && !sourceUnavailable)
+			loadKey, planKey, aliasKey := boardCompletionKey(p), "plan:"+p.PlanID, "plan:"+p.queueAlias
+			completedHere := completed[loadKey] || completed[planKey] || completed[aliasKey]
+			p.Cancelled = cancelled[loadKey] || cancelled[planKey] || cancelled[aliasKey]
+			if sourceUnavailable || completedHere || p.Cancelled {
+				p.Completed = !p.Cancelled && (providerCompletedLoad(p.SourceStatus) || (completedHere && !sourceUnavailable))
 				p.PreviouslyActive = false
-				if p.Completed && sourceUnavailable {
+				if (p.Completed || p.Cancelled) && sourceUnavailable {
 					p.Warning = ""
 				}
-				p.CanRestoreToQueue = completedHere && !sourceUnavailable &&
+				p.CanRestoreToQueue = (completedHere || p.Cancelled) && !sourceUnavailable &&
 					!strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Unavailable = append(view.Unavailable, p)
 			} else if !boardPlanQueued(p, s, from) {
@@ -826,7 +836,7 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 		return BoardLoads{}, err
 	}
 	if !includeRoute {
-		if err := annotateBoardCompletions(ctx, tx, id, views[id].Unavailable); err != nil {
+		if err := annotateBoardLoadHistory(ctx, tx, id, views[id].Unavailable); err != nil {
 			return BoardLoads{}, err
 		}
 	}
@@ -1082,27 +1092,30 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		s.RestoredPlans[p.PlanID] = true
 		s.Hidden = slices.DeleteFunc(s.Hidden, func(id string) bool { return id == p.PlanID })
 		e.Status = boardProgressStatus(e.Status, []BoardLoad{p})
-	case "complete_queued":
-		// Complete only the exact noncurrent queue entry the editor reviewed.
-		// This is operational state, not a Gross Board or provider mutation.
+	case "complete_queued", "cancel_queued":
+		// Apply the action only to the exact noncurrent queue entry reviewed.
 		index := slices.IndexFunc(view.Next, func(p BoardLoad) bool { return p.PlanID == a.PlanID })
 		if index < 0 || strings.EqualFold(strings.TrimSpace(view.Next[index].Number), strings.TrimSpace(e.CurrentLoad)) {
 			return result, ErrBoardLoadSelection
 		}
 		p := view.Next[index]
-		markBoardLoadCompleted(&s, p)
+		if a.Action == "cancel_queued" {
+			s.Cancelled = appendBoardLoadKeys(s.Cancelled, p)
+		} else {
+			markBoardLoadCompleted(&s, p)
+		}
 		delete(s.RestoredPlans, p.PlanID)
 		next := slices.Delete(slices.Clone(view.Next), index, index+1)
 		e.Status = boardProgressStatus(e.Status, next)
-	case "restore_completed":
+	case "restore_completed", "restore_cancelled":
 		index := slices.IndexFunc(view.Unavailable, func(p BoardLoad) bool {
-			return p.PlanID == a.PlanID && p.CanRestoreToQueue
+			return p.PlanID == a.PlanID && p.CanRestoreToQueue && p.Cancelled == (a.Action == "restore_cancelled")
 		})
 		if index < 0 {
 			return result, ErrBoardLoadSelection
 		}
 		p := view.Unavailable[index]
-		// An explicit completion correction also clears the same worked departure.
+		// An explicit queue restore also clears the same worked departure.
 		if p.previousActiveEvent != 0 {
 			if s.RequeuedLoads == nil {
 				s.RequeuedLoads = map[string]int64{}
@@ -1110,14 +1123,18 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 			s.RequeuedLoads[boardCompletionKey(p)] = p.previousActiveEvent
 		}
 		loadKey, planKey := boardCompletionKey(p), "plan:"+p.PlanID
-		matchesCompletion := func(key string) bool {
+		matchesLoad := func(key string) bool {
 			return key == loadKey || key == planKey || p.queueAlias != "" && key == "plan:"+p.queueAlias
 		}
-		s.Completed = slices.DeleteFunc(s.Completed, matchesCompletion)
-		for stop := range s.CompletedStops {
-			key, _, _ := strings.Cut(stop, "/")
-			if matchesCompletion(key) {
-				delete(s.CompletedStops, stop)
+		if p.Cancelled {
+			s.Cancelled = slices.DeleteFunc(s.Cancelled, matchesLoad)
+		} else {
+			s.Completed = slices.DeleteFunc(s.Completed, matchesLoad)
+			for stop := range s.CompletedStops {
+				key, _, _ := strings.Cut(stop, "/")
+				if matchesLoad(key) {
+					delete(s.CompletedStops, stop)
+				}
 			}
 		}
 		s.Hidden = slices.DeleteFunc(s.Hidden, func(id string) bool { return id == p.PlanID })
@@ -1255,7 +1272,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	result = BoardLoadResult{Entry: saved[0], Loads: views[a.DriverID]}
-	if err = annotateBoardCompletions(ctx, tx, a.DriverID, result.Loads.Unavailable); err != nil {
+	if err = annotateBoardLoadHistory(ctx, tx, a.DriverID, result.Loads.Unavailable); err != nil {
 		return result, err
 	}
 	result.Entry.Status = boardProgressStatus(result.Entry.Status, result.Loads.Next)

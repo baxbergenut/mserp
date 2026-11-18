@@ -49,8 +49,8 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   const panel = useRef<HTMLElement>(null);
   const detailsPending = !!view.detailsOmitted || sourceKey !== details.sourceKey;
   const locked = busy || waiting || detailsPending || !canEdit;
-  const completed = view.unavailable.filter(load => load.completed);
-  const unavailable = view.unavailable.filter(load => !load.completed);
+  const past = view.unavailable.filter(load => load.completed || load.cancelled);
+  const unavailable = view.unavailable.filter(load => !load.completed && !load.cancelled);
   const drag = useLoadQueueDrag(view.next, `${view.fromDate}:${view.revision}`, locked, order => act({ action: "order", order }));
   const currentPlan = view.current?.planId ?? null;
   if (currentPlan !== expandedCurrent) { setExpandedCurrent(currentPlan); setExpanded(currentPlan); }
@@ -117,35 +117,36 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
       {load.stops.length > 0 && <ol className="mt-3 space-y-2">{load.stops.map((s, i) => <li key={`${s.key}-${i}`} className={`rounded-md px-2 py-1.5 text-xs ${view.current?.planId === load.planId && view.stopKey === s.key ? "bg-blue-500/15 text-blue-200" : "bg-zinc-900 text-zinc-400"}`}><span className="capitalize">{i + 1}. {s.type || "Stop"}</span> · {compactLoadLocation(s.location) || "Location unavailable"}{s.appointment && <span className="mt-1 block text-[11px] text-zinc-500">Appointment: {time(s.appointment)} NY</span>}</li>)}</ol>}
     </>;
   }
-  function loadCard(load: BoardLoad, kind: "next" | "current" | "completed" | "earlier", index = -1) {
+  function loadCard(load: BoardLoad, kind: "next" | "current" | "past" | "earlier", index = -1) {
     const open = expanded === load.planId;
     const current = kind === "current";
     const inTransit = kind === "earlier" && inTransitLoad(load);
-    const status = current ? "Current" : kind === "completed" ? "Completed" : load.previouslyActive ? "Previously active" : inTransit ? "In Transit" : load.overdue ? "Overdue" : "";
-    const completedBy = kind === "completed" ? load.completedByName : undefined;
-    const markedAsCompleted = kind === "completed" && load.markedAsCompleted;
+    const status = current ? "Current" : kind === "past" ? (load.cancelled ? "Cancelled" : "Completed") : load.previouslyActive ? "Previously active" : inTransit ? "In Transit" : load.overdue ? "Overdue" : "";
+    const actor = kind === "past" ? (load.cancelled ? load.cancelledByName : load.completedByName) : undefined;
+    const markedAsCompleted = kind === "past" && load.markedAsCompleted;
     const statusLabel = markedAsCompleted ? "Marked as Completed" : status ? `${status} load` : "";
     const draggable = kind === "next" && canEdit && drag.queue.length > 1 && !locked;
     return <article key={load.planId} data-queued-load={kind === "next" ? load.planId : undefined}
       onPointerDown={draggable ? event => drag.start(event, load.planId) : undefined}
       className={`relative rounded-lg border data-[load-dragging=true]:z-[15] data-[load-dragging=true]:cursor-grabbing data-[load-dragging=true]:bg-zinc-950 data-[load-dragging=true]:ring-2 data-[load-dragging=true]:ring-blue-400 ${draggable ? "touch-none cursor-grab select-none" : ""} ${current ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-800"}`}>
       <div className="flex items-center">
-        <button type="button" aria-label={`${load.number}${statusLabel ? ` · ${statusLabel}` : ""}${completedBy ? ` by ${completedBy}` : ""}`} aria-expanded={open}
+        <button type="button" aria-label={`${load.number}${statusLabel ? ` · ${statusLabel}` : ""}${actor ? ` by ${actor}` : ""}`} aria-expanded={open}
         className={`flex min-h-10 min-w-0 flex-1 items-center gap-2 px-3 text-left text-sm font-medium text-zinc-200 hover:bg-zinc-800/60 ${draggable ? "cursor-[inherit]" : ""}`}
         onClick={() => setExpanded(open ? null : load.planId)}><span className={`min-w-0 flex-1 truncate ${load.loadId === null || load.sourceMissing ? "text-red-300" : ""}`}>{load.number}</span>
           {markedAsCompleted && <span className="shrink-0 text-xs text-zinc-400">Marked as</span>}
-          {status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${current ? "bg-blue-500/20 text-blue-200" : "bg-zinc-800 text-zinc-300"}`}>{status}</span>}
-          {completedBy && <span className="max-w-[45%] truncate text-xs text-zinc-400" title={completedBy}>by {completedBy}</span>}
+          {status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${current ? "bg-blue-500/20 text-blue-200" : load.cancelled ? "bg-rose-500/15 text-rose-300" : "bg-zinc-800 text-zinc-300"}`}>{status}</span>}
+          {actor && <span className="max-w-[45%] truncate text-xs text-zinc-400" title={actor}>by {actor}</span>}
         </button><CopyLoadNumber number={load.number} /></div>
       {open && <div className="border-t border-zinc-800 px-3 pb-3">{detail(load)}
         {current && <><label className="mt-3 block text-xs text-zinc-400">Destination source<select aria-label="Current load destination source" disabled={locked} value={view.destinationSource ? view.stopKey : ""} onChange={e => void act(e.target.value ? { action: "source", stopKey: e.target.value } : { action: "manual" })} className={`${controlClass} mt-1`}><option value="">Manual destination</option>{load.stops.filter(s => s.location).map((s, i) => <option key={`${s.key}-${i}`} value={s.key}>{s.type} · {compactLoadLocation(s.location)}</option>)}</select></label>
           {canEdit && <button className={`${buttonClass} mt-3`} disabled={locked} onClick={() => { setClear(true); setSelect(null); }}>Clear current selection</button>}</>}
-        {(kind === "completed" || load.previouslyActive) && canEdit && load.canRestoreToQueue && <button type="button" className={`${buttonClass} mt-3`} disabled={locked}
+        {(kind === "past" || load.previouslyActive) && canEdit && load.canRestoreToQueue && <button type="button" className={`${buttonClass} mt-3`} disabled={locked}
           aria-label={`Restore to queue · ${load.number}`}
-          onClick={() => void act({ action: load.previouslyActive ? "restore_previous" : "restore_completed", planId: load.planId })}>Restore to queue</button>}
+          onClick={() => void act({ action: load.previouslyActive ? "restore_previous" : load.cancelled ? "restore_cancelled" : "restore_completed", planId: load.planId })}>Restore to queue</button>}
         {(kind === "next" || kind === "earlier") && !load.canRemoveFromQueue && <p className="mt-3 text-xs text-zinc-500">Remove this plan in Gross Board.</p>}
         {(kind === "next" || kind === "earlier") && canEdit && <div className="mt-3 flex flex-wrap gap-2"><button className={buttonClass} disabled={locked} onClick={() => choose(load)}>Set current</button>{load.canRemoveFromQueue && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "hide", planId: load.planId })}>Remove from queue</button>}{kind === "next" && <>
             <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "complete_queued", planId: load.planId })}>Mark completed</button>
+            <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "cancel_queued", planId: load.planId })}>Cancel load</button>
             <button aria-label={`Move ${load.number} up`} className={buttonClass} disabled={locked || index === view.next.length - 1} onClick={() => move(index, 1)}><ArrowUp className="h-3 w-3" /></button>
             <button aria-label={`Move ${load.number} down`} className={buttonClass} disabled={locked || index === 0} onClick={() => move(index, -1)}><ArrowDown className="h-3 w-3" /></button>
           </>}</div>}</div>}
@@ -178,7 +179,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
         <section ref={drag.sequence} className="space-y-2" aria-label="Load sequence" onClickCapture={drag.onClickCapture}>
           {drag.queue.map((load, index) => loadCard(load, "next", index)).reverse()}
           {view.current ? loadCard(view.current, "current") : <article className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400">No current load</article>}
-          {completed.reverse().map(load => loadCard(load, "completed"))}
+          {past.reverse().map(load => loadCard(load, "past"))}
           {[...view.earlier].reverse().map(load => loadCard(load, "earlier"))}
         </section>
         {view.hidden.length > 0 && <details><summary className="cursor-pointer text-xs text-zinc-400">Removed from queue ({view.hidden.length})</summary><p className="mt-2 text-xs text-zinc-500">Only manually added loads can be removed here.</p>{view.hidden.map(load => <div key={load.planId} className="mt-2 flex items-center justify-between gap-2 text-sm text-zinc-400"><span>{load.number} · {load.date}</span>{canEdit && <button className={buttonClass} disabled={locked} onClick={() => void act({ action: "restore", planId: load.planId })}>Restore</button>}</div>)}</details>}

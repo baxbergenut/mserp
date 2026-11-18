@@ -171,7 +171,7 @@ var grossBoardEffective = `WITH ranked AS MATERIALIZED (
  trip_source.split,trip_source.review AS trip_review,trip_source.review_reason AS trip_review_reason,trip_source.options AS trips
  FROM ranked e LEFT JOIN loads l ON l.id=e.matched_id ` + loadTripSourceSQL + `
 ), effective AS (
- SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND btrim(load_number)<>'' AND
+ SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
  THEN effective_original-driver_rate END AS balance_change
  FROM resolved WHERE service_date < $1::date+7

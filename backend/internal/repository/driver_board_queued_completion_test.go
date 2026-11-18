@@ -93,6 +93,41 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 	before := snapshot()
 	old := e
+	cancel := action("cancel_queued", target.PlanID)
+	badCancel := cancel
+	badCancel.Revision = "stale"
+	if _, err = repo.ChangeLoads(ctx, badCancel, actor); !errors.Is(err, ErrBoardLoadSelection) {
+		t.Fatal("cancellation accepted stale revision", err)
+	}
+	badCancel = cancel
+	badCancel.PlanID = initial.Current.PlanID
+	if _, err = repo.ChangeLoads(ctx, badCancel, actor); !errors.Is(err, ErrBoardLoadSelection) {
+		t.Fatal("cancellation accepted current plan", err)
+	}
+	cancelled := act(cancel)
+	past := find(cancelled.Loads.Unavailable, "84V7859")
+	if find(cancelled.Loads.Next, "84V7859") != nil || past == nil || !past.Cancelled || past.Completed || !past.CanRestoreToQueue || past.CancelledByName != "Ben Simpson" {
+		t.Fatal("cancelled load missing from history", cancelled)
+	}
+	if cancelled.Entry.Status != "ENROUTE" || cancelled.Loads.Current.Number != initial.Current.Number || cancelled.Loads.StopKey != initial.StopKey || snapshot() != before {
+		t.Fatal("cancelling changed the current load or financial source", cancelled)
+	}
+	exec(`UPDATE app_users SET username='Renamed cancellation editor' WHERE id=$1`, actor)
+	exec(`UPDATE loads SET status='Canceled' WHERE id=88971`)
+	if past := find(view().Unavailable, "84V7859"); past == nil || !past.Cancelled || past.CanRestoreToQueue || past.CancelledByName != "Ben Simpson" {
+		t.Fatal("cancelled history lost attribution after upstream cancellation of an older load", past)
+	}
+	if _, err = repo.ChangeLoads(ctx, action("restore_cancelled", target.PlanID), actor); !errors.Is(err, ErrBoardLoadSelection) {
+		t.Fatal("restored provider-terminal cancellation", err)
+	}
+	exec(`UPDATE loads SET status='in_transit' WHERE id=88971`)
+	exec(`UPDATE app_users SET username='Ben Simpson' WHERE id=$1`, actor)
+	restoredCancellation := act(action("restore_cancelled", target.PlanID))
+	if queued := find(restoredCancellation.Loads.Next, "84V7859"); queued == nil || queued.Cancelled || queued.CancelledByName != "" || restoredCancellation.Entry.Status != "RESERVED" {
+		t.Fatal("restore did not return cancelled load to queue", restoredCancellation)
+	}
+	before = snapshot()
+	old = e
 	stale := action("complete_queued", target.PlanID)
 	bad := stale
 	bad.Revision = "stale"
@@ -167,6 +202,11 @@ func testBoardQueuedCompletion(t *testing.T, ctx context.Context, pool *pgxpool.
 		if find(r.Loads.Next, number) == nil {
 			t.Fatal("manual restore", r)
 		}
+		r = act(action("cancel_queued", p.PlanID))
+		if item := find(r.Loads.Unavailable, number); item == nil || !item.Cancelled || item.CancelledByName != "Second completion editor" {
+			t.Fatal("manual cancellation", r)
+		}
+		act(action("restore_cancelled", p.PlanID))
 	}
 	exec(`UPDATE loads SET status='Delivered' WHERE id=88973`)
 	if p := find(view().Unavailable, "COMPLETE-MANUAL"); p == nil || !p.Completed || p.MarkedAsCompleted || p.CompletedByName != "" {

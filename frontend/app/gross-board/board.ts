@@ -169,7 +169,7 @@ export function mismatch(entered: string, actual: string) {
 }
 
 export function rateChange(entry: GrossBoardEntry): bigint | null {
-  if (entry.deleted || entry.dayStatus || entry.duplicate || entry.tripReview || !entry.loadNumber.trim() || entry.originalRate === "" || entry.driverRate === ""
+  if (entry.deleted || entry.dayStatus || entry.duplicate || entry.tripReview || entry.originalRate === "" || entry.driverRate === ""
     || !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate)) return null;
   return hundredths(entry.originalRate) - hundredths(entry.driverRate);
 }

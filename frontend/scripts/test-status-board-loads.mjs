@@ -58,17 +58,19 @@ try {
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
-        if (input.action === 'complete_queued') {
+        if (input.action === 'complete_queued' || input.action === 'cancel_queued') {
           const target = full.next.find(load => load.planId === input.planId);
           expect(target?.number).toBe('84V7859');
           expect(full.current.number).toBe('NEXT');
-          full = { ...full, next: full.next.filter(load => load.planId !== input.planId), unavailable: [...full.unavailable, { ...target, completed: true, completedByName: 'Ben Simpson', markedAsCompleted: true, canRestoreToQueue: true }], revision: 'queued-completed' };
+          const outcome = input.action === 'cancel_queued' ? { cancelled: true, cancelledByName: 'Ben Simpson' } : { completed: true, completedByName: 'Ben Simpson', markedAsCompleted: true };
+          full = { ...full, next: full.next.filter(load => load.planId !== input.planId), unavailable: [...full.unavailable, { ...target, ...outcome, canRestoreToQueue: true }], revision: `queued-${entry.version}` };
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
-        if (input.action === 'restore_completed' && input.planId === '84V7859') {
+        if (['restore_completed', 'restore_cancelled'].includes(input.action) && input.planId === '84V7859') {
           const target = full.unavailable.find(load => load.planId === input.planId);
-          full = { ...full, next: [...full.next, { ...target, completed: false, completedByName: undefined, markedAsCompleted: undefined, canRestoreToQueue: false }], unavailable: full.unavailable.filter(load => load.planId !== input.planId), revision: 'queued-restored' };
+          expect(input.action).toBe(target.cancelled ? 'restore_cancelled' : 'restore_completed');
+          full = { ...full, next: [...full.next, { ...target, completed: false, completedByName: undefined, markedAsCompleted: undefined, cancelled: false, cancelledByName: undefined, canRestoreToQueue: false }], unavailable: full.unavailable.filter(load => load.planId !== input.planId), revision: `restored-${entry.version}` };
           entry = { ...entry, version: entry.version + 1 };
           return route.fulfill({ json: { entry, loads: full } });
         }
@@ -393,11 +395,23 @@ try {
   await panel.getByRole('button', { name: /Restore to queue.*84V7859/ }).click();
   await expect(panel.locator('[data-queued-load="84V7859"]')).toBeVisible();
   await expect(panel.getByRole('button', { name: /NEXT.*Current load/ })).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel load', exact: true }).click();
+  await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
+  const cancelled = sequence.getByRole('button', { name: '84V7859 · Cancelled load by Ben Simpson', exact: true });
+  await expect(cancelled.getByText('Cancelled', { exact: true })).toBeVisible();
+  await expect(cancelled.getByText('by Ben Simpson', { exact: true })).toBeVisible();
+  await expect(sequence.getByRole('button', { name: /NEXT.*Current load/ })).toBeVisible();
+  await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
+  await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).click();
+  await cancelled.click();
+  await panel.getByRole('button', { name: /Restore to queue.*84V7859/ }).click();
+  await expect(panel.locator('[data-queued-load="84V7859"]')).toBeVisible();
   editable = false;
   await page.reload();
   await page.getByRole('button', { name: /Loads Driver.*Next load/, exact: true }).press('Enter');
   await panel.getByRole('button', { name: '84V7859', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Mark completed', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Cancel load', exact: true })).toHaveCount(0);
   // Dispatcher uses the same edit capability, with no administrator flag.
   editorRole = 'Dispatcher'; editable = true;
   await page.reload();
@@ -408,7 +422,7 @@ try {
   await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
   await expect(markedComplete).toBeVisible();
   expect(errors).toEqual([]);
-  console.log(`Updater and Dispatcher non-admin: ` + 'Status Board loads passed: animated drag, keyboard reorder, queued completion/read-only permissions, completed/previously-active history restoration, live refresh, and multi-pickup progression.');
+  console.log('Status Board loads passed: queue ordering, completion and cancellation with actor attribution, read-only permissions, history restoration, live refresh, and multi-pickup progression.');
 } finally {
   pending.splice(0).forEach(resolve => resolve());
   await browser.close();

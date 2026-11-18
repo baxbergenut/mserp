@@ -614,6 +614,8 @@ export interface BoardStop { key: string; type: string; location: string; street
 export interface BoardLoad {
   completedByName?: string;
   markedAsCompleted?: boolean;
+  cancelled?: boolean;
+  cancelledByName?: string;
   previouslyActive?: boolean;
   canRemoveFromQueue?: boolean;
   overdue?: boolean;
@@ -634,7 +636,7 @@ export interface BoardLoads {
   fromDate: string; revision: string; customOrder: boolean;
 }
 export interface BoardLoadAction {
-  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "complete_queued" | "restore_completed" | "restore_previous" | "source" | "manual" | "stop_time";
+  action: "add" | "advance" | "select" | "clear" | "order" | "reset_order" | "hide" | "restore" | "complete_queued" | "cancel_queued" | "restore_completed" | "restore_cancelled" | "restore_previous" | "source" | "manual" | "stop_time";
   number?: string; planId?: string; order?: string[]; stopKey?: string; manualStopTime?: string;
 }
 
