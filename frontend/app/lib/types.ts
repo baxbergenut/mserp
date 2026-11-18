@@ -1924,7 +1924,7 @@ export interface DriverPayEscrowEditor {
   suggestStop: boolean;
 }
 
-export type ReportView = "company" | "owner-operator" | "dispatcher" | "driver";
+export type ReportView = "company" | "owner-operator" | "investor" | "dispatcher" | "driver";
 
 export type ReportsQuery = {
   revision?: string;

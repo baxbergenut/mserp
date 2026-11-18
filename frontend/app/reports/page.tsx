@@ -16,12 +16,12 @@ import { SortHeader, useTableSort } from "./tableSort";
 
 const views: { id: ReportView; label: string; access: string; columns: string[] }[] = [
   { id: "company", label: "Company Truck P&L", access: "reports.read", columns: ["gross", "miles", "earnedPay", "fuel", "tolls", "scales", "maintenance", "margin", "revenuePerMile", "costPerMile", "contribution"] },
-  { id: "owner-operator", label: "Owner-Operator Truck P&L", access: "reports.read", columns: ["gross", "miles", "carrierFees", "dispatchBalance", "recurringCharges", "contribution"] },
+  { id: "owner-operator", label: "Owner-Operator Truck P&L", access: "reports.read", columns: ["gross", "miles", "carrierFees", "recurringCharges", "contribution"] },
+  { id: "investor", label: "Investor Truck P&L", access: "reports.read", columns: ["gross", "miles", "carrierFees", "recurringCharges", "contribution"] },
   { id: "dispatcher", label: "Dispatcher Performance", access: "reports.performance", columns: ["completedLoads", "gross", "miles", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct"] },
   { id: "driver", label: "Driver Performance", access: "reports.performance", columns: ["completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency"] },
 ];
 
-const settlementColumns = ["settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable"];
 
 const labels: Record<string, string> = {
   gross: "Load gross", earnedPay: "Driver fee", fuel: "Fuel", tolls: "Tolls", scales: "Scales", maintenance: "Maintenance",
@@ -64,7 +64,7 @@ const SourceContext = createContext<{ view: ReportView; query: ReportsQuery; rev
 
 export default function ReportsPage() {
   const permissions = usePermissions();
-  const available = views.filter(view => permissions.includes(view.access));
+  const available = views.filter(view => permissions.includes(view.access) && (view.id !== "investor" || permissions.includes("investors.read")));
   const [selected, setSelected] = useState<ReportView>("company");
   const view = available.find(item => item.id === selected) ?? available[0];
   const id = view?.id;
@@ -146,7 +146,7 @@ export default function ReportsPage() {
       </button>)}
     </nav>
 
-    <ReportSummary rows={rows} financial={view.id === "company" || view.id === "owner-operator"} loading={!data && !currentError} />
+    <ReportSummary rows={rows} financial={view.access === "reports.read"} loading={!data && !currentError} />
     <div role="group" aria-label="Report controls" className="flex flex-wrap items-center gap-2">
       <WeekSelector week={week} lastWeek={latestWeek} onChange={value => { setWeek(value); setExpanded(""); }}
         jump={{ label: "Last completed week", onClick: () => { setWeek(""); setExpanded(""); }, disabled: week === latestWeek }} />
@@ -176,25 +176,20 @@ export default function ReportsPage() {
         <ReportTable key={key} name={view.id === "dispatcher" ? "Dispatcher" : view.id === "driver" ? "Driver" : "Truck"}
           columns={view.columns} rows={rows} expanded={expanded}
           toggle={id => setExpanded(value => value === id ? "" : id)} />}
-      {view.id === "owner-operator" && rows?.some(row => row.metrics.netPayable !== undefined) &&
-        <div className="space-y-2"><h2 className="text-lg font-semibold">Operator settlement</h2><p className="text-xs opacity-75">Finalized statements for the selected week.</p>
-          <ReportTable key={key+"settlements"} name="Truck" columns={settlementColumns} rows={rows.filter(row => row.metrics.netPayable !== undefined)}
-            expanded={expanded.startsWith("settlement:") ? expanded.slice(11) : ""}
-            toggle={id => setExpanded(value => value === "settlement:" + id ? "" : "settlement:" + id)} settlements />
-        </div>}
+
     </>}
   </section></SourceContext.Provider>;
 }
 
-function ReportTable({ name, columns, rows, expanded, toggle, settlements }: {
-  name: string; columns: string[]; rows: ReportRow[]; expanded: string; toggle: (id: string) => void; settlements?: boolean;
+function ReportTable({ name, columns, rows, expanded, toggle }: {
+  name: string; columns: string[]; rows: ReportRow[]; expanded: string; toggle: (id: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const { sorted, sort, changeSort, register } = useTableSort(rows, reportSortValue);
   const trucks = name === "Truck";
   const onSort = (key: string) => { changeSort(key); setPage(1); };
   return <div className="overflow-x-auto rounded-md border border-zinc-500/35">
-    <table aria-label={settlements ? "Operator settlement" : `${name} report`} className="w-full min-w-max text-sm">
+    <table aria-label={`${name} report`} className="w-full min-w-max text-sm">
       <thead className="bg-zinc-500/10 text-xs"><tr>
         <SortHeader column="name" label={name} sort={sort} onSort={onSort} className={cell} />
         {trucks && <SortHeader column="assignedDrivers" label="Assigned driver" sort={sort} onSort={onSort} className={cell} />}
@@ -223,7 +218,7 @@ function ReportTable({ name, columns, rows, expanded, toggle, settlements }: {
               </td>;
             })}
           </tr>
-          {expanded === row.id && <tr ref={element => register(row.id + ":sources", element)}><td colSpan={columns.length + (trucks ? 2 : 1)} className="p-0"><SourceRecords group={row.id} settlements={settlements} /></td></tr>}
+          {expanded === row.id && <tr ref={element => register(row.id + ":sources", element)}><td colSpan={columns.length + (trucks ? 2 : 1)} className="p-0"><SourceRecords group={row.id} /></td></tr>}
         </Fragment>)}
       </tbody>
     </table>
@@ -242,6 +237,7 @@ function sourceHref(source: ReportEvidence) {
   if (source.kind === "Gross Board") {
     return "/gross-board?" + new URLSearchParams({ driverId, date, slot, loadNumber: source.label });
   }
+  if (source.kind === "Investor Pay") return "/accounting/investor-pay?" + new URLSearchParams({ truckId: driverId, weekStart: date });
   if (source.kind === "Driver Pay") {
     return "/accounting/driver-pay?" + new URLSearchParams({ driverId, weekStart: date });
   }
@@ -251,7 +247,7 @@ function sourceHref(source: ReportEvidence) {
   return "";
 }
 
-function SourceRecords({ group, settlements }: { group: string; settlements?: boolean }) {
+function SourceRecords({ group }: { group: string }) {
   const {view, query, revision} = useContext(SourceContext);
   const [records, setRecords] = useState<ReportEvidence[]>();
   const [error, setError] = useState("");
@@ -262,7 +258,7 @@ function SourceRecords({ group, settlements }: { group: string; settlements?: bo
     return () => abort.abort();
   }, [view, query, group, revision, retry]);
   if (!records) return <div className="p-4 text-xs" role={error ? "alert" : "status"}>{error || "Loading source records…"}{error && <button className="ui-button ml-2" onClick={() => setRetry(n=>n+1)}>Retry</button>}</div>;
-  return <SourceTable sources={settlements ? records.filter(s => s.kind === "Driver Pay" && s.values?.netPayable !== undefined) : records} />;
+  return <SourceTable sources={records} />;
 }
 
 function sourceSortValue(source: ReportEvidence, key: string) {

@@ -1,6 +1,6 @@
 # Reports
 
-Open `/reports` for Company Truck P&L, Owner-Operator Truck P&L, Dispatcher
+Open `/reports` for Company Truck P&L, Owner-Operator Truck P&L, Investor Truck P&L, Dispatcher
 Performance, and Driver Performance. Each report provides the selected
 week, historical truck/driver/dispatcher filters, source records,
 and a CSV for the selected week. `reports.read` grants the financial views and their
@@ -53,8 +53,7 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   native source driver/date/slot for manual entries. Reopening restores calculated
   pay; source and tariff edits invalidate the report cache. Owner-operator carrier fees are
   the driver-gross basis less matched operator load earnings (frozen values when finalized).
-  The difference between Gross Board gross and that basis is shown separately
-  as Dispatch adjustment balance and does not become carrier income. Owner-operator Profit is carrier fees plus RC less attributable company-paid costs.
+  Dispatch adjustments are excluded from carrier income. Owner-operator Profit is carrier fees plus RC less attributable company-paid costs.
   RC (recurring charges) estimates the selected week's scheduled negative truck
   charges using the same effective phases, per-truck amounts, eligibility rules,
   vacation/termination exclusions and dated owner routing as Driver Pay. It does
@@ -62,10 +61,9 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   replace the schedule with actual deductions, including partial/zero source choices.
   Reopening restores the schedule estimate. Truck sources retain dated truck attribution. Legacy
   recurring occurrences require a single dated owner-operated truck. Zero/waived
-  charges, positive credits, installments and escrow add no RC. Weekly settlement rows use finalized
-  Driver Pay for weeks starting in the selected period. They show the whole
-  statement, with reimbursements, deductions, and escrow movements. Weekly
-  amounts with several dated truck assignments are shown in Unassigned.
+  charges, positive credits, installments and escrow add no RC. Whole statements are available in Accounting.
+- Investor Truck P&L shows carrier profit. Carrier fees use driver gross less the gross investor share under the applicable weekly agreement. Matched frozen Investor Pay load earnings and actual recurring deductions take precedence. Missing agreements leave dependent metrics blank. Profit adds RC and subtracts attributable company costs. Summary, sources and CSV require both Reports and Investors View.
+- Trucks with zero report loads contribute zero miles. Missing mileage on a qualifying load still makes that total unavailable.
 
 ## Read performance
 
@@ -117,7 +115,6 @@ synthetic records, not production accounting sign-off.
 | Fuel / tolls / scales | $200 / $40 / $14 | — |
 | Company maintenance / equipment | $80 / $60 | $0 / $50 |
 | Carrier fee (settlement gross $1,700 less $1,360) | — | $340 |
-| Dispatch adjustment balance (separate) | — | $299 |
 | Profit | $430 | $290 |
 
 Gross Board's $999 / 300-mile override and $200 / 100-mile manual entry give
@@ -125,11 +122,11 @@ company revenue $1,199 / 400 miles. Removing the unmatched manual entry yields
 company profit $305 with frozen pay $300 and costs $394. The duplicate link adds
 no revenue or miles. Driver-charged repairs and the unassigned $30 maintenance
 record are excluded. A $900 truck payment remains excluded. The owner-operator
-base fixture has RC $0 and separate net settlement $1,320.
+base fixture has RC $0.
 
 The recurring-charge fixture deducts $125 insurance (base $200 / due $450) and
 $25 legacy recurring fees. A waived $75 fee, $50 credit, $40 installment and
-escrow movements do not add RC. RC is $150, Profit $440, and settlement net $1,180.
+escrow movements do not add RC. RC is $150 and Profit is $440.
 
 Checks: TestReportsClosedWeekDatabase, TestReportsTariffProfitDatabase,
 TestReportsEstimatedRecurringDatabase, TestReportsRecurringChargesDatabase and TestReportsGrossBoardCohortDatabase

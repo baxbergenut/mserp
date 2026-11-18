@@ -47,6 +47,13 @@ func TestReportsPermissionsAndCSV(t *testing.T) {
 			t.Fatalf("%s exposed performance data: %d", path, out.Code)
 		}
 	}
+	for _, suffix := range []string{"", "/sources", "/export.csv"} {
+		for _, permission := range []string{"reports.read", "investors.read"} {
+			if out := request("/reports/investor"+suffix, permission); out.Code != 403 {
+				t.Fatalf("investor report exposed with %s: %d", permission, out.Code)
+			}
+		}
+	}
 	if fixture.calls != 0 {
 		t.Fatal("denied request reached data source")
 	}

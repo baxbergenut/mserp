@@ -133,11 +133,12 @@ try {
       [...document.querySelectorAll('nav[aria-label="Report views"] button')].find(b=>b.textContent===label).click();
     }),label);
   }
-  const labels=['Owner-Operator Truck P&L','Dispatcher Performance','Driver Performance','Company Truck P&L'];
+  const labels=['Owner-Operator Truck P&L','Investor Truck P&L','Dispatcher Performance','Driver Performance','Company Truck P&L'];
   const coldViews={};
   for (const label of labels) {
     coldViews[label]=await switchView(label);
-    await page.screenshot({path:join(output,label.startsWith('Owner')?'operator.png':label.startsWith('Dispatcher')?'dispatcher.png':label.startsWith('Driver')?'driver.png':'company.png'),fullPage:true});
+    if(label === "Investor Truck P&L"){const investor=page.getByRole("row").filter({has:page.getByRole("link",{name:"INV-RPT",exact:true})});await expect(investor.getByRole("cell",{name:"$220.00",exact:true})).toBeVisible();}
+    await page.screenshot({path:join(output,label.startsWith('Owner')?'operator.png':label.startsWith('Investor')?'investor.png':label.startsWith('Dispatcher')?'dispatcher.png':label.startsWith('Driver')?'driver.png':'company.png'),fullPage:true});
   }
   for(let n=0;n<3;n++) for(const label of labels) samples.push({view:label,ms:await switchView(label)});
   console.log(JSON.stringify({firstNavigationMs,coldDocumentMs:coldDocument,coldViews,samples}));
@@ -154,10 +155,11 @@ try {
   await expect(page.getByRole('columnheader',{name:'RPM',exact:true})).toBeVisible();
   await expect(page.getByText(/^Review \d+/)).toHaveCount(0);
   await page.getByRole('button',{name:'Owner-Operator Truck P&L',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Operator settlement'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Operator settlement'})).toHaveCount(0);
   await expect(page.getByText('$340.00',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Comparison',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Change dates',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('columnheader',{name:'Dispatch adjustment balance'})).toHaveCount(0);
   const weeks=await page.getByLabel('Week',{exact:true}).locator('option').evaluateAll(options=>options.map(option=>option.value));
   expect(weeks.at(-1)).toBe('2026-10-19'); expect(weeks[0]).toBe('2026-11-09');
   await expect(page.getByRole('button',{name:'Next week',exact:true})).toBeDisabled();

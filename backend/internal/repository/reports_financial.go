@@ -56,7 +56,7 @@ WITH aliases AS (
  coalesce(coalesce(c.driver,active.driver)::text,''),coalesce(d.full_name,''),
  coalesce(dispatch.dispatcher_id::text,''),coalesce(dispatch.dispatcher_name,''),
  CASE WHEN own.is_company THEN 'company' WHEN own.driver_id=active.driver THEN 'owner_operator'
-  WHEN own.id IS NOT NULL AND active.driver IS NOT NULL THEN 'investor_driver' ELSE 'unassigned' END,
+  WHEN own.id IS NOT NULL AND (active.driver IS NOT NULL OR own.driver_id IS NULL) THEN 'investor_driver' ELSE 'unassigned' END,
  CASE WHEN c.payer<>'' THEN c.payer WHEN own.is_company THEN 'company'
   WHEN own.id IS NOT NULL AND active.driver IS NOT NULL THEN 'operator' ELSE 'review' END
  FROM costs c LEFT JOIN trucks t ON t.id=c.truck
@@ -107,6 +107,9 @@ func (s *reportRead) addFinancial(ctx context.Context, groups reportGroups, load
 	rows.Close()
 	if err != nil {
 		return err
+	}
+	if s.query.View == ReportInvestor {
+		return s.addInvestorReport(ctx, groups, loads, from, to)
 	}
 	return s.addReportPayroll(ctx, groups, loads, from, to)
 }
@@ -251,14 +254,11 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 					g.missingPay = true
 				} else {
 					g.Metrics["carrierFees"] += float64(basis - fee)
-					if l.gross != nil {
-						g.Metrics["dispatchBalance"] += *l.gross - float64(basis)
-					}
 					metrics["carrierFees"] = float64(basis - fee)
 				}
 			}
 		}
-		if week >= reportMonday(from) && week <= to {
+		if s.query.View == ReportCompany && week >= reportMonday(from) && week <= to {
 			s.addReportStatement(groups, d, week, from, to, assigned)
 		}
 	}
@@ -290,9 +290,6 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 				evidence.Values["carrierFees"] = float64(gross - fee)
 				g.Estimated["carrierFees"] = true
 				g.Metrics["carrierFees"] += float64(gross - fee)
-				if l.gross != nil {
-					g.Metrics["dispatchBalance"] += *l.gross - float64(gross)
-				}
 			}
 		}
 	}
@@ -392,7 +389,7 @@ func reportAddDays(date string, days int) string {
 
 func (s *reportRead) addReportStatement(groups reportGroups, d DriverPayDriver, week, from, to string, assigned map[reportAssignmentKey]reportIdentity) {
 	var i reportIdentity
-	mixed, mixedDispatcher, relevant, matched := false, false, false, false
+	mixed, mixedDispatcher, matched := false, false, false
 	for day := 0; day < 7; day++ {
 		a := assigned[reportAssignmentKey{d.ID, reportAddDays(week, day)}]
 		if a.truck == "" {
@@ -407,7 +404,6 @@ func (s *reportRead) addReportStatement(groups reportGroups, d DriverPayDriver, 
 		a.name = d.FullName
 		_, _, valid := s.groupIdentity(a)
 		if valid && a.employment != "unassigned" {
-			relevant = true
 			if s.includes(a) {
 				matched = true
 			}
@@ -424,78 +420,38 @@ func (s *reportRead) addReportStatement(groups reportGroups, d DriverPayDriver, 
 	}
 	values := map[string]float64{}
 	note := ""
-	if s.query.View == ReportCompany {
-		for _, row := range d.Layovers {
-			if row.Date < from || row.Date > to || slices.Contains(d.Edits.LayoverExcludedDates, row.Date) {
-				continue
-			}
-			a := assigned[reportAssignmentKey{d.ID, row.Date}]
-			if a.employment != "company" || !s.includes(a) {
-				continue
-			}
-			n, err := chargeCents(row.Amount)
-			if err != nil {
-				continue
-			}
-			g := groups.add(a.truck, a.unit, a, ReportEvidence{Kind: "Driver Pay", ID: d.ID + "/" + week + "/layover/" + row.Date, Label: d.FullName, Date: row.Date,
-				State: "finalized", Note: "Layover earnings", Values: map[string]float64{"earnedPay": float64(n)}})
-			g.Metrics["earnedPay"] += float64(n)
+	for _, row := range d.Layovers {
+		if row.Date < from || row.Date > to || slices.Contains(d.Edits.LayoverExcludedDates, row.Date) {
+			continue
 		}
-		// Weekly manual earnings adjustments carry no service date.
-		if week >= from && week <= to {
-			for _, a := range d.Edits.Adjustments {
-				if a.Kind != "addition" {
-					continue
-				}
-				n, err := chargeCents(a.Amount)
-				if err == nil {
-					values["earnedPay"] += float64(n)
-				}
-			}
+		a := assigned[reportAssignmentKey{d.ID, row.Date}]
+		if a.employment != "company" || !s.includes(a) {
+			continue
 		}
-		if _, ok := values["earnedPay"]; !ok || (!matched && i.truck != "") || (i.truck == "" && !s.includes(i)) {
-			return
+		n, err := chargeCents(row.Amount)
+		if err != nil {
+			continue
 		}
-		note = "Weekly earnings adjustment"
-	} else {
-		if week < from || !relevant || !matched {
-			return
-		}
-		var earned int64
-		for _, l := range d.Loads {
-			n, _ := chargeCents(l.Fee)
-			earned += n
-		}
-		earned += driverLayoverTotal(d)
-		reimb := d.ReimbursedCents()
-		for _, a := range d.Edits.Adjustments {
-			n, _ := chargeCents(a.Amount)
-			if a.Kind == "addition" {
-				earned += n
-			} else if a.Kind == "reimbursement" {
-				reimb += n
-			}
-		}
-		returned, applied := d.EscrowMovementCents()
-		var withheld int64
-		for _, a := range d.Edits.ExpenseDeductions {
-			if a.Source == "escrow" {
-				n, _ := chargeCents(a.Amount)
-				withheld += n
-			}
-		}
-		for _, a := range d.AutoCharges {
-			if strings.HasPrefix(a.Source, "escrow:") {
-				n, _ := chargeCents(a.Amount)
-				withheld -= n
-			}
-		}
-		net := d.NetPayCents()
-		values = map[string]float64{"recurringCharges": 0, "settlementEarnings": float64(earned), "reimbursements": float64(reimb),
-			"deductions": float64(earned + reimb + returned - withheld - net), "escrowReturned": float64(returned),
-			"escrowApplied": float64(applied), "escrowWithheld": float64(withheld), "netPayable": float64(net)}
-		note = "Whole statement week"
+		g := groups.add(a.truck, a.unit, a, ReportEvidence{Kind: "Driver Pay", ID: d.ID + "/" + week + "/layover/" + row.Date, Label: d.FullName, Date: row.Date,
+			State: "finalized", Note: "Layover earnings", Values: map[string]float64{"earnedPay": float64(n)}})
+		g.Metrics["earnedPay"] += float64(n)
 	}
+	// Weekly manual earnings adjustments carry no service date.
+	if week >= from && week <= to {
+		for _, a := range d.Edits.Adjustments {
+			if a.Kind != "addition" {
+				continue
+			}
+			n, err := chargeCents(a.Amount)
+			if err == nil {
+				values["earnedPay"] += float64(n)
+			}
+		}
+	}
+	if _, ok := values["earnedPay"]; !ok || (!matched && i.truck != "") || (i.truck == "" && !s.includes(i)) {
+		return
+	}
+	note = "Weekly earnings adjustment"
 	if mixed {
 		note += " · Multiple dated truck assignments"
 	}
@@ -562,7 +518,7 @@ func (g *reportGroup) finishFinancial(view string) {
 			}
 		}
 	}
-	if view == ReportOperator && (g.Estimated["carrierFees"] || g.Estimated["recurringCharges"]) {
+	if view != ReportCompany && (g.Estimated["carrierFees"] || g.Estimated["recurringCharges"]) {
 		if _, ok := m["contribution"]; ok {
 			g.Estimated["contribution"] = true
 		}
