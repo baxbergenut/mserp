@@ -24,11 +24,14 @@ func registerReportsRoutes(r chi.Router, logger *slog.Logger, reports reportsSou
 			q := r.URL.Query()
 			view := chi.URLParam(r, "view")
 			permission := map[string]string{
-				repository.ReportCompany: "reports.read", repository.ReportOperator: "reports.read",
+				repository.ReportInvestor: "reports.read", repository.ReportCompany: "reports.read", repository.ReportOperator: "reports.read",
 				repository.ReportDispatcher: "reports.performance", repository.ReportDriver: "reports.performance",
 			}[view]
 			if permission == "" {
 				writeAPIError(w, 404, "Unknown report")
+				return
+			}
+			if view == repository.ReportInvestor && !requireCapabilities(w, r, "investors.read") {
 				return
 			}
 			if !requireCapabilities(w, r, permission) {
@@ -113,7 +116,8 @@ var reportCSVMoney = map[string]bool{
 
 var reportCSVColumns = map[string][]string{
 	repository.ReportCompany:    {"gross", "miles", "earnedPay", "fuel", "tolls", "scales", "maintenance", "margin", "revenuePerMile", "costPerMile", "contribution"},
-	repository.ReportOperator:   {"gross", "miles", "carrierFees", "dispatchBalance", "recurringCharges", "settlementEarnings", "reimbursements", "deductions", "escrowWithheld", "escrowReturned", "escrowApplied", "netPayable", "contribution"},
+	repository.ReportOperator:   {"gross", "miles", "carrierFees", "recurringCharges", "contribution"},
+	repository.ReportInvestor:   {"gross", "miles", "carrierFees", "recurringCharges", "contribution"},
 	repository.ReportDispatcher: {"completedLoads", "gross", "miles", "truckWeeks", "grossPerTruckWeek", "loadedRPM", "deadheadPct"},
 	repository.ReportDriver:     {"completedLoads", "activeDays", "miles", "pickupOnTime", "pickupCoverage", "deliveryOnTime", "deliveryCoverage", "fuelEfficiency"},
 }

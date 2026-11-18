@@ -15,7 +15,7 @@ type reportLoad struct {
 	gross, miles, loaded, empty                                                               *float64
 	pickupOnTime, deliveryOnTime                                                              *bool
 	pickupActual, pickupScheduled, deliveryActual, deliveryScheduled                          string
-	payDriver, payType, payRate, driverGross, payMiles                                        string
+	owner, settlementDate, payDriver, payType, payRate, driverGross, payMiles                 string
 }
 
 func (l reportLoad) evidence() ReportEvidence {
@@ -48,7 +48,7 @@ func readReportLoads(ctx context.Context, tx pgx.Tx, view, from, to string) ([]r
 		if err = rows.Scan(&l.parent, &l.trip, &l.number, &l.date, &l.serviceDate, &l.pickupDate, &l.deliveryDate, &l.boardSlot, &l.state, &l.note,
 			&l.gross, &l.miles, &l.loaded, &l.empty, &l.pickupOnTime, &l.deliveryOnTime, &l.pickupActual, &l.pickupScheduled, &l.deliveryActual, &l.deliveryScheduled,
 			&l.truck, &l.unit, &l.driver, &l.name, &l.dispatcher, &l.dispatcherName, &l.employment,
-			&l.payDriver, &l.payType, &l.payRate, &l.driverGross, &l.payMiles); err != nil {
+			&l.payDriver, &l.payType, &l.payRate, &l.driverGross, &l.payMiles, &l.owner, &l.settlementDate); err != nil {
 			return nil, err
 		}
 		loads = append(loads, l)
@@ -73,7 +73,7 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
  OR (e.load_record_id IS NULL AND lower(btrim(e.load_number)) IN (SELECT lower(btrim(load_id)) FROM selected)))
  ),
  board AS MATERIALIZED (
- SELECT e.*,l.id matched,g.dispatch_date,g.truck_id transfer_truck,g.dispatcher_id credited_id,g.dispatcher_name credited_name
+ SELECT e.*,l.id matched,g.settlement_date,g.dispatch_date,g.truck_id transfer_truck,g.dispatcher_id credited_id,g.dispatcher_name credited_name
  FROM board_candidates e ` + grossBoardResolvedLoad + `
  LEFT JOIN gross_board_transfers g ON g.active AND (g.driver_id,g.source_date,g.source_slot)=(e.driver_id,e.service_date,e.slot)
  ),
@@ -85,7 +85,7 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
  ),
  allocations AS (
  SELECT l.*,e.load_trip_id board_trip_id,e.service_date,e.slot,e.conflict,e.driver_id board_driver,
-  e.transfer_truck,e.credited_id,e.credited_name,e.dispatch_date,e.driver_rate,trip_source.review trip_review,
+  e.transfer_truck,e.credited_id,e.credited_name,e.dispatch_date,e.settlement_date,e.driver_rate,trip_source.review trip_review,
   CASE WHEN trip_source.review THEN NULL WHEN trip_source.reviewed THEN trip_source.original
    ELSE coalesce(e.entered_original_rate,trip_source.original) END gross,
   CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,trip_source.miles) END miles,
@@ -114,13 +114,13 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
   NULL::uuid provider_truck,
   CASE WHEN NOT a.conflict THEN a.transfer_truck END transfer_truck,
   CASE WHEN NOT a.conflict THEN a.credited_id END credited_id,
-  CASE WHEN NOT a.conflict THEN a.credited_name END credited_name
+  CASE WHEN NOT a.conflict THEN a.credited_name END credited_name,coalesce(a.settlement_date,a.service_date) settlement_date
  FROM allocations a LEFT JOIN load_source_availability availability ON availability.load_id=a.id
  UNION ALL
  SELECT '','',e.load_number,e.service_date,e.service_date,
   NULL,NULL,NULL,NULL,e.slot,'provisional','Unmatched manual Gross Board entry',
   coalesce(e.entered_original_rate,e.original_rate),coalesce(e.entered_miles,e.miles),NULL,NULL,e.driver_rate,
-  e.driver_id,NULL,e.transfer_truck,e.credited_id,e.credited_name FROM board e WHERE e.matched IS NULL
+  e.driver_id,NULL,e.transfer_truck,e.credited_id,e.credited_name,coalesce(e.settlement_date,e.service_date) FROM board e WHERE e.matched IS NULL
  ),
  in_period AS MATERIALIZED (SELECT x.* FROM sourced x,bounds b WHERE x.report_date BETWEEN b.first AND b.last),
  dates AS (SELECT coalesce(jsonb_agg(jsonb_build_object('driver',driver,'date',service)),'[]'::jsonb) refs
@@ -152,7 +152,7 @@ WITH bounds AS (SELECT $1::date first,$2::date last,
   CASE WHEN own.is_company THEN 'company' WHEN own.driver_id=payroll_driver_at(p.driver,p.service) THEN 'owner_operator'
    WHEN own.id IS NOT NULL AND p.driver IS NOT NULL THEN 'investor_driver' ELSE 'unassigned' END,
   coalesce(tariff.id::text,''),coalesce(tariff.pay_type,''),coalesce(tariff.pay_rate::text,''),
-  coalesce(p.driver_rate::text,''),coalesce(p.miles::text,'')
+  coalesce(p.driver_rate::text,''),coalesce(p.miles::text,''),coalesce(own.id::text,''),p.settlement_date::text
  FROM linked p LEFT JOIN trucks t ON t.id=p.truck LEFT JOIN drivers d ON d.id=p.driver
  LEFT JOIN drivers tariff ON tariff.id=payroll_driver_at(p.driver,p.service)
  LEFT JOIN ownership h ON h.truck=p.truck AND h.service=p.service LEFT JOIN investors own ON own.id=h.owner_id`

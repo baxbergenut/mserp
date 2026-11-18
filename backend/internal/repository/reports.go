@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	ReportInvestor   = "investor"
 	ReportCompany    = "company"
 	ReportOperator   = "owner-operator"
 	ReportDispatcher = "dispatcher"
@@ -329,10 +330,14 @@ func reportMonday(date string) string {
 
 func (s *reportRead) groupIdentity(i reportIdentity) (string, string, bool) {
 	switch s.query.View {
-	case ReportCompany, ReportOperator:
+	case ReportCompany, ReportOperator, ReportInvestor:
+		if s.query.View == ReportInvestor && i.employment != "investor_driver" {
+			return "", "", false
+		}
 		if i.employment != "" && i.employment != "unassigned" &&
 			!(s.query.View == ReportCompany && i.employment == "company") &&
-			!(s.query.View == ReportOperator && i.employment == "owner_operator") {
+			!(s.query.View == ReportOperator && i.employment == "owner_operator") &&
+			!(s.query.View == ReportInvestor && i.employment == "investor_driver") {
 			return "", "", false
 		}
 		if i.employment == "unassigned" {
@@ -353,7 +358,7 @@ func (s *reportRead) period(ctx context.Context, from, to string) ([]ReportRow, 
 	if err != nil {
 		return nil, err
 	}
-	financial := s.query.View == ReportCompany || s.query.View == ReportOperator
+	financial := s.query.View == ReportCompany || s.query.View == ReportOperator || s.query.View == ReportInvestor
 	if financial {
 		if err = s.addFinancial(ctx, groups, loads, from, to); err != nil {
 			return nil, err
@@ -520,7 +525,7 @@ func (g *reportGroup) addTiming(l reportLoad) {
 
 func (g *reportGroup) finish(view string) {
 	m := g.Metrics
-	if !g.missingMiles && len(g.loads) > 0 {
+	if !g.missingMiles {
 		m["miles"] = float64(g.milesHundredths) / 100
 	}
 	if g.missingGross {
@@ -556,7 +561,7 @@ func (g *reportGroup) finish(view string) {
 		if g.deliveryCovered > 0 {
 			m["deliveryOnTime"] = 100 * float64(g.deliveryOnTime) / float64(g.deliveryCovered)
 		}
-	case ReportCompany, ReportOperator:
+	case ReportCompany, ReportOperator, ReportInvestor:
 		g.finishFinancial(view)
 	}
 }

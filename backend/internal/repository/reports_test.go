@@ -53,8 +53,7 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		if len(operator.Current) != 1 {
 			t.Fatalf("operator: %+v", operator.Current)
 		}
-		check(operator.Current[0], map[string]float64{"gross": 199900, "carrierFees": 34000, "carrierCosts": 5000, "contribution": 29000,
-			"settlementEarnings": 136000, "reimbursements": 2500, "escrowWithheld": 2000, "escrowReturned": 500, "escrowApplied": 1000, "deductions": 5000, "netPayable": 132000})
+		check(operator.Current[0], map[string]float64{"gross": 199900, "carrierFees": 34000, "carrierCosts": 5000, "contribution": 29000})
 		performance := read(ReportDriver, "2026-10-12", "2026-10-18")
 		if len(performance.Current) != 2 {
 			t.Fatalf("driver: %+v", performance.Current)
@@ -74,7 +73,9 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 			t.Fatalf("transferred dispatch: %+v", dispatch.Current)
 		}
 		check(dispatch.Current[1], map[string]float64{"gross": 199900, "truckWeeks": 1, "grossPerTruckWeek": 199900})
-		check(operator.Current[0], map[string]float64{"dispatchBalance": 29900})
+		if _, ok := operator.Current[0].Metrics["netPayable"]; ok {
+			t.Fatal("whole statement in P&L")
+		}
 		if _, err = admin.Exec(ctx, `INSERT INTO expenses(truck_id,driver_id,category,category_id,expense_date,amount,expense_type,payment_type,covered_by)
  SELECT '61000000-0000-0000-0000-000000000004'::uuid,'61000000-0000-0000-0000-000000000001'::uuid,name,id,'2026-10-13'::date,500,'Driver repair','Card','Driver' FROM expense_settings WHERE kind='category' AND name='Maintenance'
  UNION ALL SELECT NULL,'61000000-0000-0000-0000-000000000001'::uuid,name,id,'2026-10-13'::date,700,'Unassigned driver repair','Card','Driver' FROM expense_settings WHERE kind='category' AND name='Maintenance'`); err != nil {
@@ -182,7 +183,7 @@ func TestReportsTariffProfitDatabase(t *testing.T) {
 		// Gross Board mileage overrides + manual entries, not provider miles.
 		read(ReportCompany, 30000, 50500)
 		owner := read(ReportOperator, 136000, 29000)
-		if owner.Metrics["carrierFees"] != 34000 || owner.Metrics["dispatchBalance"] != 29900 {
+		if owner.Metrics["carrierFees"] != 34000 {
 			t.Fatal(owner.Metrics)
 		}
 		if _, exists := owner.Metrics["netPayable"]; exists {
@@ -295,7 +296,7 @@ func TestReportsRecurringChargesDatabase(t *testing.T) {
 			t.Fatal(result, err)
 		}
 		row := result.Current[0]
-		if row.Metrics["recurringCharges"] != 15000 || row.Metrics["contribution"] != 44000 || row.Metrics["netPayable"] != 118000 {
+		if row.Metrics["recurringCharges"] != 15000 || row.Metrics["contribution"] != 44000 {
 			t.Fatal("recurring deductions or profit do not reconcile", row.Metrics)
 		}
 		var evidence float64

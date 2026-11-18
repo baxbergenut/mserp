@@ -84,6 +84,7 @@ Reports v1 (`/reports`) includes only active Gross Board load entries and select
 trips, using Gross Board displayed revenue/miles (including entered overrides) by delivery date, native service-day
 assignments and exact Driver Pay tariff calculations for open loads. Matched
 finalized load fees take precedence; reopening restores the current tariff basis.
+Investor Truck P&L uses the dated investor share or matched frozen Investor Pay earnings, plus recurring charges less company costs. Its summary, sources and CSV require reports.read and investors.read. Idle trucks contribute zero miles to the summary. The Owner-Operator report shows only the P&L.
 Manual Gross Board entries use their entered pay basis too. Operator carrier fees exclude the
 dispatch adjustment balance. Owner-operator Profit includes selected-week scheduled
 recurring charges as estimated RC, replaced by actual finalized source choices

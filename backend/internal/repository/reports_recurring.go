@@ -68,53 +68,9 @@ func (s *reportRead) addReportRecurringWeek(ctx context.Context, groups reportGr
 		}
 		s.addReportRecurring(groups, card, week, assigned, trucks)
 	}
-	phases, err := payrollTruckPhases(ctx, s.tx, week)
+	charges, err := s.scheduledReportCharges(ctx, week)
 	if err != nil {
 		return err
-	}
-	data, err := truckChargesForEmploymentWeek(ctx, s.tx, TruckChargeData{Phases: phases}, week)
-	if err != nil {
-		return err
-	}
-	index := indexEffectiveTruckPhases(data.Phases, week)
-	if len(index) == 0 {
-		return nil
-	}
-	// Small configuration query; do not load recurring schedules or payroll cards.
-	rows, err = s.tx.Query(ctx, `SELECT t.id::text,t.name,t.direction,t.eligibility,
- coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',r.week_start::text,'eligibility',r.eligibility) ORDER BY r.week_start)
- FROM driver_charge_type_rules r WHERE r.type_id=t.id),'[]'::jsonb) FROM driver_charge_types t ORDER BY t.id`)
-	if err != nil {
-		return err
-	}
-	var types []ChargeType
-	for rows.Next() {
-		var typ ChargeType
-		var body []byte
-		if err = rows.Scan(&typ.ID, &typ.Name, &typ.Direction, &typ.Eligibility, &body); err != nil {
-			rows.Close()
-			return err
-		}
-		if err = json.Unmarshal(body, &typ.Rules); err != nil {
-			rows.Close()
-			return err
-		}
-		types = append(types, typ)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	// Eligibility follows native weekly Gross Board placement, even when a load
-	// delivers in another reporting week. Provider labels are never ownership.
-	loadMap, err := truckPayLoadMap(ctx, s.tx, week)
-	if err != nil {
-		return err
-	}
-	hasLoads := map[string]bool{}
-	for _, load := range loadMap {
-		hasLoads[load.TruckID] = true
 	}
 	for driver, trucks := range owners {
 		if frozen[driver] {
@@ -124,7 +80,7 @@ func (s *reportRead) addReportRecurringWeek(ctx context.Context, groups reportGr
 			if !s.includes(i) {
 				continue
 			}
-			for _, charge := range effectiveTruckRecurringCharges(index[truck], types, truck, week, hasLoads[truck]) {
+			for _, charge := range charges[truck] {
 				amount, err := chargeCents(charge.Amount)
 				if err != nil || amount > 0 {
 					continue
@@ -137,4 +93,60 @@ func (s *reportRead) addReportRecurringWeek(ctx context.Context, groups reportGr
 		}
 	}
 	return nil
+}
+
+func (s *reportRead) scheduledReportCharges(ctx context.Context, week string) (map[string][]PayAutoCharge, error) {
+	phases, err := payrollTruckPhases(ctx, s.tx, week)
+	if err != nil {
+		return nil, err
+	}
+	data, err := truckChargesForEmploymentWeek(ctx, s.tx, TruckChargeData{Phases: phases}, week)
+	if err != nil {
+		return nil, err
+	}
+	index := indexEffectiveTruckPhases(data.Phases, week)
+	if len(index) == 0 {
+		return nil, nil
+	}
+	// Small configuration query; do not load recurring schedules or payroll cards.
+	rows, err := s.tx.Query(ctx, `SELECT t.id::text,t.name,t.direction,t.eligibility,
+ coalesce((SELECT jsonb_agg(jsonb_build_object('weekStart',r.week_start::text,'eligibility',r.eligibility) ORDER BY r.week_start)
+ FROM driver_charge_type_rules r WHERE r.type_id=t.id),'[]'::jsonb) FROM driver_charge_types t ORDER BY t.id`)
+	if err != nil {
+		return nil, err
+	}
+	var types []ChargeType
+	for rows.Next() {
+		var typ ChargeType
+		var body []byte
+		if err = rows.Scan(&typ.ID, &typ.Name, &typ.Direction, &typ.Eligibility, &body); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err = json.Unmarshal(body, &typ.Rules); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		types = append(types, typ)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	// Eligibility follows native weekly Gross Board placement, even when a load
+	// delivers in another reporting week. Provider labels are never ownership.
+	loadMap, err := truckPayLoadMap(ctx, s.tx, week)
+	if err != nil {
+		return nil, err
+	}
+	hasLoads := map[string]bool{}
+	for _, load := range loadMap {
+		hasLoads[load.TruckID] = true
+	}
+	result := map[string][]PayAutoCharge{}
+	for truck, phases := range index {
+		result[truck] = effectiveTruckRecurringCharges(phases, types, truck, week, hasLoads[truck])
+	}
+	return result, nil
 }

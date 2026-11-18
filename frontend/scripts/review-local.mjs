@@ -80,6 +80,8 @@ try {
     const fixture = (await readFile(join(backend, 'internal/repository/testdata/reports_closed_week.sql'), 'utf8'))
       .replace(/2026-10-\d{2}/g, date => new Date(new Date(date).getTime()+offset).toISOString().slice(0,10));
     sql(`SET search_path TO ${schema},public;\n${fixture}`);
+    const investorFixture = (await readFile(join(backend,'internal/repository/testdata/reports_investor.sql'),'utf8')).replace(/2026-10-\d{2}/g,date=>new Date(new Date(date).getTime()+offset).toISOString().slice(0,10));
+    sql(`SET search_path TO ${schema},public;\n${investorFixture}`);
     if (process.env.MSERP_REVIEW_REPORTS_SCALE === '1') {
       const scale = (await readFile(join(backend, 'internal/repository/testdata/reports_scale.sql'), 'utf8'))
         .replace(/2026-10-\d{2}/g, date => new Date(new Date(date).getTime()+offset).toISOString().slice(0,10));
