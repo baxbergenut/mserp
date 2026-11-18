@@ -1969,3 +1969,8 @@ export type ReportsResult = {
   comparison: ReportRow[];
   options: Record<"trucks" | "drivers" | "dispatchers", { id: string; name: string }[]>;
 };
+
+export type ReportDrilldown = {
+  sources: ReportEvidence[];
+  report?: ReportsResult;
+};

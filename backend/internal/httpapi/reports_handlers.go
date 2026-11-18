@@ -58,19 +58,36 @@ func registerReportsRoutes(r chi.Router, logger *slog.Logger, reports reportsSou
 				return
 			}
 			w.Header().Set("Cache-Control", "no-store")
-			if expected := q.Get("revision"); expected != "" && expected != result.Revision {
+			sources := strings.HasSuffix(r.URL.Path, "/sources")
+			refreshSummary := sources && q.Get("refreshSummary") == "true"
+			expected := q.Get("revision")
+			if !refreshSummary && expected != "" && expected != result.Revision {
 				writeAPIError(w, 409, "Source records changed. Refresh the report and try again.")
 				return
 			}
-			if strings.HasSuffix(r.URL.Path, "/sources") {
-				rows := result.Current
-				for _, row := range rows {
-					if row.ID == q.Get("group") {
-						writeJSON(w, 200, row.Sources)
-						return
+			if sources {
+				records := []repository.ReportEvidence{}
+				for _, row := range result.Current {
+					if row.ID == q.Get("group") && row.Sources != nil {
+						records = row.Sources
+						break
 					}
 				}
-				writeJSON(w, 200, []repository.ReportEvidence{})
+				if !refreshSummary {
+					writeJSON(w, 200, records)
+					return
+				}
+				response := struct {
+					Sources []repository.ReportEvidence `json:"sources"`
+					Report  *repository.ReportsResult   `json:"report,omitempty"`
+				}{Sources: records}
+				if expected != result.Revision {
+					// Both the replacement totals and the selected evidence come from
+					// this same read, even if another source changes during delivery.
+					omitReportSources(&result)
+					response.Report = &result
+				}
+				writeJSON(w, 200, response)
 				return
 			}
 			if export {
@@ -81,18 +98,22 @@ func registerReportsRoutes(r chi.Router, logger *slog.Logger, reports reportsSou
 				}
 				return
 			}
-			for i := range result.Current {
-				result.Current[i].Sources = nil
-			}
-			for i := range result.Comparison {
-				result.Comparison[i].Sources = nil
-			}
+			omitReportSources(&result)
 			writeJSON(w, 200, result)
 		}
 	}
 	r.Get("/reports/{view}", read(false))
 	r.Get("/reports/{view}/sources", read(false))
 	r.Get("/reports/{view}/export.csv", read(true))
+}
+
+func omitReportSources(result *repository.ReportsResult) {
+	for i := range result.Current {
+		result.Current[i].Sources = nil
+	}
+	for i := range result.Comparison {
+		result.Comparison[i].Sources = nil
+	}
 }
 
 func reportCSVText(value string) string {

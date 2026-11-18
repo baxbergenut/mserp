@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, Fragment, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ChartNoAxesCombined, ChevronDown, Download, RefreshCw } from "lucide-react";
 import Link from "@/app/components/AccessLink";
 import { MetricCard } from "@/app/components/MetricCard";
@@ -60,7 +60,7 @@ const filterFields = [
 ] as const;
 const cell = "border-b border-zinc-500/25 px-3 py-2";
 const blankFilters: ReportsQuery = {};
-const SourceContext = createContext<{ view: ReportView; query: ReportsQuery; revision?: string }>({ view: "company", query: {} });
+const SourceContext = createContext<{ view: ReportView; query: ReportsQuery; report?: ReportsResult; refresh: (previous: ReportsResult, next: ReportsResult) => void } | null>(null);
 
 export default function ReportsPage() {
   const permissions = usePermissions();
@@ -83,6 +83,9 @@ export default function ReportsPage() {
   const data = result?.key === key ? result.data : undefined;
   const previousData = result?.data;
   const currentError = error?.key === key ? error.message : "";
+  const refreshFromSources = useCallback((previous: ReportsResult, data: ReportsResult) => {
+    setResult(current => current?.data === previous ? { ...current, data } : current);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -130,7 +133,7 @@ export default function ReportsPage() {
     setExpanded("");
   }
 
-  return <SourceContext.Provider value={{ view: view.id, query, revision:data?.revision }}><section className="min-w-0 space-y-4" data-report-ready={Boolean(data)}>
+  return <SourceContext.Provider value={{ view: view.id, query, report: data, refresh: refreshFromSources }}><section className="min-w-0 space-y-4" data-report-ready={Boolean(data)}>
     <PageHeader>
       <div className="flex items-center gap-3">
         <ChartNoAxesCombined aria-hidden="true" className="h-5 w-5 text-zinc-500" />
@@ -248,17 +251,22 @@ function sourceHref(source: ReportEvidence) {
 }
 
 function SourceRecords({ group }: { group: string }) {
-  const {view, query, revision} = useContext(SourceContext);
-  const [records, setRecords] = useState<ReportEvidence[]>();
+  const {view, query, report, refresh} = useContext(SourceContext)!;
+  const [result, setResult] = useState<{ revision: string; records: ReportEvidence[] }>();
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
+    if (!report || result?.revision === report.revision) return;
     const abort = new AbortController();
-    fetchReportSources(view, { ...query, revision }, group, abort.signal).then(data => { if (!abort.signal.aborted) setRecords(data); }, reason => { if (!abort.signal.aborted) setError(reason.message); });
+    fetchReportSources(view, { ...query, revision: report.revision }, group, abort.signal).then(data => {
+      if (abort.signal.aborted) return;
+      if (data.report) refresh(report, data.report);
+      setResult({ revision: data.report?.revision ?? report.revision, records: data.sources });
+    }, reason => { if (!abort.signal.aborted) setError(reason.message); });
     return () => abort.abort();
-  }, [view, query, group, revision, retry]);
-  if (!records) return <div className="p-4 text-xs" role={error ? "alert" : "status"}>{error || "Loading source records…"}{error && <button className="ui-button ml-2" onClick={() => setRetry(n=>n+1)}>Retry</button>}</div>;
-  return <SourceTable sources={records} />;
+  }, [view, query, group, report, retry, refresh, result?.revision]);
+  if (!result || result.revision !== report?.revision) return <div className="p-4 text-xs" role={error ? "alert" : "status"}>{error || "Loading source records…"}{error && <button className="ui-button ml-2" onClick={() => {setError(""); setRetry(n=>n+1);}}>Retry</button>}</div>;
+  return <SourceTable sources={result.records} />;
 }
 
 function sourceSortValue(source: ReportEvidence, key: string) {
