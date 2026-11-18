@@ -841,6 +841,6 @@ export const saveDriverPayEscrow = (weekStart: string, driverId: string, editVer
 export const fetchReport = (view: import("./types").ReportView, query: import("./types").ReportsQuery, signal: AbortSignal) =>
   apiRequest<import("./types").ReportsResult>(withQuery(`/reports/${view}`, query), { signal });
 export const fetchReportSources = (view: import("./types").ReportView, query: import("./types").ReportsQuery, group: string, signal: AbortSignal) =>
-  apiRequest<import("./types").ReportEvidence[]>(withQuery(`/reports/${view}/sources`, { ...query, group }), { signal });
+  apiRequest<import("./types").ReportDrilldown>(withQuery(`/reports/${view}/sources`, { ...query, group, refreshSummary: "true" }), { signal });
 export const exportReport = (view: import("./types").ReportView, query: import("./types").ReportsQuery) =>
   performRequest(withQuery(`/reports/${view}/export.csv`, query), undefined, response => response.blob());

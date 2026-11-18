@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -68,6 +69,28 @@ func TestReportsPermissionsAndCSV(t *testing.T) {
 	for _, path := range []string{"/reports/company/sources", "/reports/company/export.csv"} {
 		if out := request(path+query+"&revision=obsolete", "reports.read"); out.Code != 409 {
 			t.Fatalf("%s accepted changed source records: %d", path, out.Code)
+		}
+	}
+	for _, tc := range []struct {
+		group, revision string
+		wantReport      bool
+		wantSources     int
+	}{
+		{"company", "fixture", false, 1},
+		{"company", "obsolete", true, 1},
+		{"removed", "obsolete", true, 0},
+	} {
+		calls := fixture.calls
+		out := request("/reports/company/sources"+query+"&refreshSummary=true&group="+tc.group+"&revision="+tc.revision, "reports.read")
+		var body struct {
+			Sources []repository.ReportEvidence
+			Report  *repository.ReportsResult
+		}
+		if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil || out.Code != 200 || fixture.calls != calls+1 || body.Sources == nil || len(body.Sources) != tc.wantSources || (body.Report != nil) != tc.wantReport {
+			t.Fatalf("drilldown %+v: status %d body %s", tc, out.Code, out.Body)
+		}
+		if tc.wantReport && (body.Report.Revision != "fixture" || len(body.Report.Current) != 1 || body.Report.Current[0].Sources != nil) {
+			t.Fatalf("expected a compact current summary: %+v", body.Report)
 		}
 	}
 	if out := request("/reports/company"+query, "reports.read"); out.Code != 200 {

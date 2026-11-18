@@ -81,8 +81,10 @@ prepare, edit, or finalize payroll. Apply migration 222 before enabling this rel
   The digest shares payroll's audited operational exclusions, so board presence,
   provider delivery bookkeeping, telemetry and derived preparation do not evict
   unchanged reports. Maintenance classification stays explicitly included.
-  Drilldowns and exports carry the displayed source revision and reject changes
-  with a refresh instruction. Window focus does not refetch or collapse rows. Explicit Refresh and changes
+  Row expansion sends the displayed revision. If it changed, the sources response
+  also supplies refreshed summary rows from the same snapshot. The UI updates totals
+  and opens the selected row in one request. CSV checks the displayed revision.
+  Window focus does not refetch or collapse rows. Explicit Refresh and changes
   to week/view/filter load a snapshot; the calendar hook only changes it on week rollover.
 - Tables render at most 50 groups at once; source rows are lazy. Measurements must
   include loaded data and two animation frames, not just the page heading.

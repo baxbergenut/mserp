@@ -37,9 +37,13 @@ try {
  const downloadEvent=page.waitForEvent('download');await page.getByRole('button',{name:'Export CSV',exact:true}).click();
  const download=await downloadEvent;const csvPath=join(output,'operator-estimated.csv');await download.saveAs(csvPath);
  expect(await readFile(csvPath,'utf8')).toContain('Estimated:');
+ const sourceReads=[];
+ page.on('response',response=>{if(new URL(response.url()).pathname.endsWith('/sources'))sourceReads.push(response.status());});
  sql(`UPDATE payroll_settlements SET finalized=true,report=jsonb_set(report,'{autoCharges}',
  '[{"name":"Weekly insurance","source":"truck_charge:${truck}:${type}","amount":"-125.00"}]') WHERE driver_id='${driver}'`);
- await page.getByRole('button',{name:'Refresh report',exact:true}).click();
+ await row.getByRole('button').click();
+ const sources=page.getByRole('table',{name:'Source records',exact:true});
+ await expect(sources.getByText(/RC \(recurring charges\) · \$125\.00/)).toBeVisible();
  await expect(row.getByRole('cell',{name:'$125.00',exact:true})).toBeVisible();
  await expect(row.getByRole('cell',{name:'$415.00',exact:true})).toBeVisible();
  await expect(row.locator('[data-estimated="true"]')).toHaveCount(0);
@@ -51,5 +55,17 @@ try {
  await page.getByRole('button',{name:'Refresh report',exact:true}).click();
  await expect(row.getByRole('cell',{name:'$250.00',exact:true}).locator('[data-estimated="true"]')).toBeVisible();
  await expect(row.getByRole('cell',{name:'$540.00',exact:true}).locator('[data-estimated="true"]')).toBeVisible();
+ await page.getByRole('button',{name:'Investor Truck P&L',exact:true}).click();
+ const investor=page.getByRole('row').filter({has:page.getByRole('link',{name:'INV-RPT',exact:true})});
+ await expect(investor.getByRole('cell',{name:'$220.00',exact:true})).toBeVisible();
+ const investorTruck='64000000-0000-0000-0000-000000000003';
+ try {
+   sql(`UPDATE truck_charge_phases SET amount=110 WHERE truck_id='${investorTruck}'`);
+   await investor.getByRole('button').click();
+   await expect(sources.getByText(/RC \(recurring charges\) · \$110\.00/)).toBeVisible();
+   await expect(investor.getByRole('cell',{name:'$230.00',exact:true})).toBeVisible();
+   await expect(investor.getByRole('button')).toHaveAttribute('aria-expanded','true');
+   expect(sourceReads).toEqual([200,200]);
+ } finally {sql(`UPDATE truck_charge_phases SET amount=100 WHERE truck_id='${investorTruck}'`);}
  console.log('Reports estimates passed: scheduled RC/profit, finalized partial/zero replacement, reopening, CSV, dark/light stale-ETA color.');
 } finally {await browser.close();}
