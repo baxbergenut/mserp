@@ -58,13 +58,17 @@ try {
  expect(terminated.ok(), await terminated.text()).toBe(true);
  await page.goto(`${base}/driver-board`);
  const cell = page.getByRole('combobox', { name: 'Avery Bennett · Assign truck', exact: true });
+ const focusPicker = async () => { await expect(cell).toBeEnabled(); await cell.focus(); };
  await expect(cell).toBeEnabled();
+ await expect(cell.locator('option')).toHaveCount(2);
+ await focusPicker();
  await expect(cell).toHaveAttribute('title', 'Assign truck effective today (New York)');
  await expect(cell.locator(`option[value="${shop}"]`)).toBeEnabled();
  await expect(cell.locator(`option[value="${shop}"]`)).toContainText('Shop');
  await expect(cell.locator(`option[value="${oos}"]`)).toHaveCount(0);
  await expect(cell.locator(`option:is([value="${free}"], [value="${shop}"], [value="${occupied}"])`))
    .toHaveText(['202', '204 — Shop', '203 — Chris Davis']);
+ await focusPicker();
  await cell.selectOption(free);
  await expect(cell).toHaveValue(free);
  expect(sql(`SELECT count(*) FROM truck_driver_assignments WHERE driver_id='${driver}' AND truck_id='${free}' AND assigned_at='${today}'::date::timestamp AT TIME ZONE 'America/New_York' AND unassigned_at IS NULL`)).toBe('1');
@@ -80,6 +84,7 @@ try {
  expect((await save(await preview(), occupied)).status()).toBe(409);
  await page.reload();
  // No browser-dialog listener: the user preview dismisses window.confirm automatically.
+ await focusPicker();
  await cell.selectOption(occupied);
  const confirmation = page.getByRole('dialog', { name: 'Reassign truck', exact: true });
  await expect(confirmation).toContainText('Chris Davis');
@@ -87,6 +92,7 @@ try {
  await expect(cell).toBeEnabled();
  await expect(cell).toHaveValue(first);
  expect((await preview(other)).truckId).toBe(occupied);
+ await focusPicker();
  await cell.selectOption(occupied);
  await expect(confirmation).toContainText('Chris Davis');
  // A load assigned while the confirmation is open must still block the save.
@@ -101,11 +107,14 @@ try {
  expect(await blocked.text()).toContain('active load ACTIVE-203');
  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
  await page.reload();
+ await focusPicker();
  await expect(cell.locator(`option[value="${occupied}"]`)).toBeDisabled();
  await expect(cell.locator(`option[value="${occupied}"]`)).toContainText('Active load ACTIVE-203');
  await setCurrentLoad(other, '');
  await page.reload();
+ await focusPicker();
  await expect(cell.locator(`option[value="${occupied}"]`)).toBeEnabled();
+ await focusPicker();
  await cell.selectOption(occupied);
  await expect(confirmation).toContainText('Chris Davis');
  await confirmation.getByRole('button', { name: 'Reassign truck', exact: true }).click();
@@ -123,6 +132,7 @@ try {
  expect(sql(`SELECT count(*) FROM truck_driver_assignments WHERE driver_id='${teammate}'`)).toBe('0');
  // Shop is selectable and assignment must preserve its status and restriction reason.
  await page.reload();
+ await focusPicker();
  await cell.selectOption(shop);
  await expect(cell).toHaveValue(shop);
  const assignedShop = await (await page.request.get(`${base}/api/trucks/${shop}`)).json();
@@ -141,6 +151,7 @@ try {
  expect((await save(await preview(other), occupied, false, other)).status()).toBe(204);
  await page.reload();
  await expect(cell).toBeEnabled();
+ await focusPicker();
  await expect(cell.locator(`option[value="${occupied}"]`)).toHaveText('203 — Chris Davis');
  await page.goto(`${base}/drivers/detail?id=${driver}`);
  await page.getByRole('button', { name: 'Edit driver', exact: true }).click();

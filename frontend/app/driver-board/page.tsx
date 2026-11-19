@@ -148,19 +148,23 @@ export default function DriverBoardPage() {
       setEtaRetrying(current => ({ ...current, [id]: false }));
     }
   }
+  const trucksById = useMemo(() => new Map(truckChoices?.map(truck => [truck.id, truck])), [truckChoices]);
   const canAssignTruck = permissions.includes("drivers.edit") && permissions.includes("trucks.read");
   const refreshTruckChoices = useCallback(() => {
     if (canAssignTruck) void fetchTruckAssignmentChoices().then(setTruckChoices).catch(err => setOrderError(err instanceof Error ? err.message : "Could not load trucks"));
   }, [canAssignTruck]);
   useEffect(() => {
     refreshTruckChoices();
-    window.addEventListener("focus", refreshTruckChoices);
-    return () => window.removeEventListener("focus", refreshTruckChoices);
+    const refreshFocusedPicker = () => {
+      if (document.activeElement?.matches("select.truck-assignment-select")) refreshTruckChoices();
+    };
+    window.addEventListener("focus", refreshFocusedPicker);
+    return () => window.removeEventListener("focus", refreshFocusedPicker);
   }, [refreshTruckChoices]);
   const drivers = useMemo(() => (board?.drivers ?? []).filter(d =>
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
     (selectedStatuses === null || selectedStatuses.includes(displayedBoardStatus(entries[d.id]?.status ?? "", d, board?.statusSyncEnabled))) &&
-    [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase())), [board, entries, search, selectedDispatchers, selectedStatuses]);
+    (!search.trim() || [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase()))), [board, entries, search, selectedDispatchers, selectedStatuses]);
   const autoOrder = board?.autoOrderDispatchers;
   const rowDrag = useDriverRowDrag(drivers, moveDriver, autoOrder, autoOrderGroupNames);
   const renderedDrivers = rowDrag.drivers;
@@ -454,7 +458,7 @@ export default function DriverBoardPage() {
                       if (target && revision && !orderDisabled && (target.dispatcherId !== d.dispatcherId || !autoOrder?.[d.dispatcherId]) && !rowDrag.active) void moveDriver(d.id, target.id, event.key === "ArrowDown", revision);
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>,
-              truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck && !d.departed ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,
+              truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck && !d.departed ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} currentChoice={trucksById.get(d.truckId)} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,
               trailerNumber: <TrailerCell key="trailerNumber" entry={entry} name={d.fullName} disabled={disabled} edit={edit} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />,
               originalGross: <td key="originalGross" data-board-column="originalGross" className={grossCellClass}>{decimalDisplay(sum.original, true)}</td>,
               driverGross: <td key="driverGross" data-board-column="driverGross" className={grossCellClass}>{decimalDisplay(sum.driver, true)}</td>,
