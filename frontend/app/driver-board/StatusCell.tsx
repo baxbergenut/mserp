@@ -3,10 +3,11 @@
 import { ChevronDown } from "lucide-react";
 import { statuses, statusLabel } from "./board";
 
-export function StatusCell({ name, value, label, disabled, canAdvance, onChange, onAdvance,choices=statuses }: {
-  name: string; value: string; label: string; disabled: boolean; canAdvance: boolean;
+export function StatusCell({ name, value, disabled, canAdvance, onChange, onAdvance,choices=statuses }: {
+  name: string; value: string; disabled: boolean; canAdvance: boolean;
   onChange: (value: string) => void; onAdvance: () => void; choices?:string[];
 }) {
+  const label = statusLabel(value);
   return <div className="flex h-8 items-center">
     <button type="button" data-grid-display aria-label={`${name} · Advance load`} title={label || "No status"} disabled={disabled || !canAdvance}
       onClick={event => { if (event.detail < 2) onAdvance(); }}

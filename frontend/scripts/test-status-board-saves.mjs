@@ -80,20 +80,19 @@ try {
   await page.getByLabel('Truck status reason', { exact: true }).fill('Repair needed');
   await page.getByRole('button', { name: 'Apply status', exact: true }).click();
   const label = page.getByRole('button', { name: 'Save Driver · Advance load', exact: true });
-  await expect(label).toHaveText('Shop · Rest');
+  await expect(label).toHaveText('Shop');
   await saved();
   expect(entry.status).toBe('REST');
   await page.reload();
-  await expect(label).toHaveText('Shop · Rest');
+  await expect(label).toHaveText('Shop');
   await expect(status).toHaveValue('SHOP');
   const filters = page.getByRole('group', { name: 'Status choices' });
   await page.getByRole('button', { name: 'Status filter' }).click();
-  for (const choice of ['Shop', 'Rest']) {
-    await filters.getByRole('button', { name: 'Clear all' }).click();
-    await expect(label).toHaveCount(0);
-    await filters.getByRole('checkbox', { name: choice, exact: true }).check();
-    await expect(label).toHaveText('Shop · Rest');
-  }
+  await filters.getByRole('button', { name: 'Clear all' }).click();
+  await filters.getByRole('checkbox', { name: 'Rest', exact: true }).check();
+  await expect(label).toHaveCount(0);
+  await filters.getByRole('checkbox', { name: 'Shop', exact: true }).check();
+  await expect(label).toHaveText('Shop');
   await filters.getByRole('button', { name: 'Select all' }).click();
   await page.keyboard.press('Escape');
   const before = writes;
