@@ -285,7 +285,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   const roleValue = access.roles.find(r => r.name === 'Board viewer');
   const { randomBytes } = await import('node:crypto');
   const password = randomBytes(20).toString('hex');
-  const user = await page.request.post(`${base}/api/settings/users`, { headers, data: { username: 'Board Viewer', email: 'board-viewer@example.com', password, roleId: roleValue.id, active: true } });
+  const user = await page.request.post(`${base}/api/settings/users`, { headers, data: { username: 'Board Viewer', firstName: 'Board', lastName: 'Viewer', email: 'board-viewer@example.com', password, roleId: roleValue.id, active: true } });
   expect(user.status()).toBe(200);
   const context = await page.context().browser().newContext();
   try {
