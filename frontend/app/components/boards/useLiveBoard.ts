@@ -23,24 +23,19 @@ export function useLiveBoard<T, P extends Peer, S extends { driverId: string }>(
     const clientId = crypto.randomUUID();
     let active = true, reading = false, pending = false, authorized = true;
     let selection: S | null = null;
-    let streaming = false, readAfter = 0, published = false, writing = false;
+    let streaming = false, lastSnapshot = 0, published = false, writing = false;
     let pushVersion = 0;
+    let latest: P[] = [];
     let readTimer: ReturnType<typeof setTimeout> | undefined;
     let staleTimer: ReturnType<typeof setTimeout> | undefined;
     let writes = Promise.resolve();
     const ready = () => active && authorized && !document.hidden && navigator.onLine;
     const accept = (rows: P[]) => {
-      if (!ready()) return;
-      const others = rows.filter(p => p.clientId !== clientId && p.userId !== userId);
-      setPeers(others);
-      // Same-cell heartbeats extend the server lease without sending a move.
-      // Recheck when the earliest visible peer could expire, including clock skew.
-      const now = Date.now();
-      readAfter = others.reduce((next, p) => {
-        const expires = Date.parse(p.expiresAt);
-        return Math.min(next, now + Math.max(5000, Math.min(30000, Number.isFinite(expires) ? expires - now : 5000)));
-      }, Infinity);
-      clearTimeout(staleTimer); staleTimer = setTimeout(() => { if (active) setPeers([]); }, 35000);
+      lastSnapshot = Date.now();
+      latest = rows.filter(p => p.clientId !== clientId && p.userId !== userId);
+      if (ready()) setPeers(latest);
+      clearTimeout(staleTimer);
+      staleTimer = setTimeout(() => { latest = []; if (active) setPeers([]); }, 35000);
     };
     const read = async () => {
       if (!ready()) return;
@@ -74,18 +69,19 @@ export function useLiveBoard<T, P extends Peer, S extends { driverId: string }>(
     };
     const visible = () => {
       if (document.hidden) leave();
-      else { announce(); schedule(); callback.current(); }
+      else { announce(); if (streaming && Date.now() - lastSnapshot < 35000) setPeers(latest); else schedule(); callback.current(); }
     };
     let close = () => {};
     const connect = () => {
       close();
       if (navigator.onLine && authorized) close = options.subscribe(value => callback.current(value), rows => { if (rows) { pushVersion++; accept(rows); } else schedule(); }, value => { streaming = value; if (active) setConnected(value); }, () => { authorized = false; if (active) { setPeers([]); setConnected(false); } });
     };
-    const online = () => { connect(); announce(); schedule(); callback.current(); };
+    const online = () => { connect(); announce(); callback.current(); };
     const offline = () => { streaming = false; close(); setConnected(false); setPeers([]); };
-    connect(); schedule();
+    connect();
     const heartbeat = setInterval(announce, 10000);
-    const expiry = setInterval(() => { if (!streaming || Date.now() >= readAfter) void read(); }, 5000);
+    // The stream sends an initial peers frame, pushes moves and confirms leases on heartbeat.
+    const expiry = setInterval(() => { if (!streaming || Date.now() - lastSnapshot >= 35000) void read(); }, 15000);
     document.addEventListener("focusin", select); document.addEventListener("pointerup", select);
     document.addEventListener("visibilitychange", visible); window.addEventListener("pagehide", leave);
     window.addEventListener("online", online); window.addEventListener("offline", offline);

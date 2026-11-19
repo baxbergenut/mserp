@@ -22,7 +22,7 @@ import { canCreateDriver, usePermissions } from "@/app/lib/access";
 import { opensGridDetails, spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { compactLoadLocation } from "@/app/lib/usStates";
 import { PhoneCell } from "./PhoneCell";
-import { LocationCell, formatCoordinates } from "./LocationCell";
+import { LocationCell, formatCoordinates, locationTime } from "./LocationCell";
 // Give each deferred dialog its own boundary so a cold download cannot hide AppShell.
 const DriverLeaveDialog = dynamic(() => import("./DriverLeaveDialog").then(m => m.DriverLeaveDialog), { loading: () => null });
 import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/driverLeave";
@@ -51,7 +51,6 @@ const buttonClass = "inline-flex items-center gap-2 rounded-lg border border-zin
 const cellClass = "overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80";
 const grossTierColors = ["bg-[#f4cccc]", "bg-[#ffff00]", "bg-[#00ff00]", "bg-[#00ffff]"];
 const twoTierGrossColors = [grossTierColors[0], grossTierColors[2], grossTierColors[3]];
-const locationTime = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 function getDestination(entry: DriverBoardEntry, driver: DriverBoardDriver, loads?: BoardLoadsView) {
   if (["HOME", "HOME (YARD)", "VACATION"].includes(entry.status)) {
@@ -77,6 +76,8 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
     value={entry[field]} onChange={event => edit(entry.driverId, field, event.target.value)}
     className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none placeholder:text-zinc-700 focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" />;
 });
+
+const emptyTotals = totals([]);
 
 function etaTarget(entry: DriverBoardEntry | undefined, loads: BoardLoadsView | undefined) {
   if (!entry) return "";
@@ -219,16 +220,27 @@ export default function DriverBoardPage() {
   const dispatcherNames = new Map((board?.drivers ?? []).map(d => [d.dispatcherId, d.dispatcherName]));
   const dispatchers: [string, string][] = dispatcherOrder.ids.map(id => [id, id === "" ? "Unassigned" : dispatcherNames.get(id) ?? autoOrderGroupNames?.[id] ?? id]);
   const pendingDrivers = (board?.pendingDrivers ?? []).filter(d => (selectedDispatchers === null || selectedDispatchers.includes("")) && (selectedStatuses === null || selectedStatuses.includes("NEW DRIVER")) && d.fullName.toLowerCase().includes(search.trim().toLowerCase()));
-  const index = useMemo(() => indexBoardEntries(board?.grossEntries ?? []), [board]);
-  const ids = new Set(drivers.map(d => d.id));
-  const summary = totals((board?.grossEntries ?? []).filter(e => ids.has(e.driverId)));
-  const groups = new Map<string, ReturnType<typeof totals>>();
-  for (const d of renderedDrivers) {
-    const sum = totals(index.byDriver.get(d.id) ?? []);
-    const group = groups.get(d.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) };
-    group.original += sum.original; group.driver += sum.driver; group.miles += sum.miles;
-    groups.set(d.dispatcherId, group);
-  }
+  const grossEntries = board?.grossEntries;
+  const index = useMemo(() => indexBoardEntries(grossEntries ?? []), [grossEntries]);
+  const driverTotals = useMemo(() => new Map(Array.from(index.byDriver, ([id, entries]) => [id, totals(entries)])), [index]);
+  const summary = useMemo(() => {
+    const sum = { ...emptyTotals };
+    for (const driver of drivers) {
+      const amounts = driverTotals.get(driver.id);
+      if (amounts) { sum.original += amounts.original; sum.driver += amounts.driver; sum.miles += amounts.miles; }
+    }
+    return sum;
+  }, [driverTotals, drivers]);
+  const groups = useMemo(() => {
+    const groups = new Map<string, ReturnType<typeof totals>>();
+    for (const driver of renderedDrivers) {
+      const sum = driverTotals.get(driver.id) ?? emptyTotals;
+      const group = groups.get(driver.dispatcherId) ?? { ...emptyTotals };
+      group.original += sum.original; group.driver += sum.driver; group.miles += sum.miles;
+      groups.set(driver.dispatcherId, group);
+    }
+    return groups;
+  }, [driverTotals, renderedDrivers]);
   const disabled = !canEdit || loading || leaving || state.actionBusy;
   const orderDisabled = disabled || saving || dirty;
   async function toggleAutoOrder(dispatcherId: string, dispatcherName: string) {
@@ -398,7 +410,7 @@ export default function DriverBoardPage() {
             const entry = entries[d.id];
             const displayedStatus = displayedBoardStatus(entry.status, d, board?.statusSyncEnabled);
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
-            const sum = totals(index.byDriver.get(d.id) ?? []);
+            const sum = driverTotals.get(d.id) ?? emptyTotals;
             const grossTier = board?.grossTierMinimumCents?.reduce(
               (tier, minimum, i) => sum.original >= BigInt(minimum) ? i + 1 : tier, 0,
             ) ?? 0;

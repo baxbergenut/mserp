@@ -15,12 +15,13 @@ type samsaraFixtureClient struct {
 	err      error
 }
 
-func (f samsaraFixtureClient) Snapshot(context.Context, time.Time) (samsara.Snapshot, error) {
+func (f samsaraFixtureClient) Snapshot(context.Context, time.Time, bool) (samsara.Snapshot, error) {
 	return f.snapshot, f.err
 }
 
 type samsaraFixtureRepository struct{ stored, failed int }
 
+func (f *samsaraFixtureRepository) MileageEnabled(context.Context) (bool, error) { return false, nil }
 func (f *samsaraFixtureRepository) Store(context.Context, samsara.Snapshot, time.Time) error {
 	f.stored++
 	return nil

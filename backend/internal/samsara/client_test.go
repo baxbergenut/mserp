@@ -31,7 +31,7 @@ func TestSnapshotDuplicateVINUsesOnlyUnambiguousAttachedGateway(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]any{"data": json.RawMessage(data)})
 			}))
 			defer server.Close()
-			s, err := NewClient(server.URL, "fixture", "").Snapshot(context.Background(), time.Now())
+			s, err := NewClient(server.URL, "fixture", "").Snapshot(context.Background(), time.Now(), true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,6 +48,32 @@ func TestSnapshotDuplicateVINUsesOnlyUnambiguousAttachedGateway(t *testing.T) {
 				t.Fatal("attached gateway was not selected", s)
 			}
 		})
+	}
+}
+
+func TestSnapshotGPSOnly(t *testing.T) {
+	now := time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/fleet/vehicles":
+			fmt.Fprint(w, `{"data":[{"id":"one","vin":"1M8GDM9AXKP042788"}]}`)
+		case "/fleet/vehicles/stats":
+			if types := r.URL.Query().Get("types"); types != "gps" {
+				t.Errorf("requested stats %q", types)
+			}
+			fmt.Fprint(w, `{"data":[{"id":"one","gps":{"time":"2026-10-21T15:59:00Z","latitude":40,"longitude":-75},"obdOdometerMeters":{"time":"2026-10-21T15:59:00Z","value":1609344}}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	snapshot, err := NewClient(server.URL, "fixture", "").Snapshot(context.Background(), now, false)
+	if err != nil || len(snapshot.Vehicles) != 1 {
+		t.Fatal(snapshot, err)
+	}
+	v := snapshot.Vehicles[0]
+	if v.GPS == nil || v.Odometer != nil {
+		t.Fatal("expected GPS only", v)
 	}
 }
 
@@ -75,7 +101,7 @@ func TestSnapshotIdentityPaginationAndUnits(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	snapshot, err := NewClient(server.URL, "fixture-token", "fixture-version").Snapshot(context.Background(), now)
+	snapshot, err := NewClient(server.URL, "fixture-token", "fixture-version").Snapshot(context.Background(), now, true)
 	if err != nil || len(snapshot.Vehicles) != 2 || len(snapshot.Ambiguous) != 1 || snapshot.Invalid != 1 {
 		t.Fatal(snapshot, err)
 	}
@@ -98,7 +124,7 @@ func TestSnapshotFailureAndRedirectDoNotExposeCredentials(t *testing.T) {
 				fmt.Fprint(w, "fixture-secret-token")
 			}))
 			defer server.Close()
-			_, err := NewClient(server.URL, "fixture-secret-token", "").Snapshot(context.Background(), time.Now())
+			_, err := NewClient(server.URL, "fixture-secret-token", "").Snapshot(context.Background(), time.Now(), true)
 			if err == nil || strings.Contains(err.Error(), "fixture-secret-token") || strings.Contains(err.Error(), "example.invalid") {
 				t.Fatal("unsafe provider error", err)
 			}
@@ -110,7 +136,7 @@ func TestSnapshotRejectsRepeatedCursor(t *testing.T) {
 		fmt.Fprint(w, `{"data":[],"pagination":{"hasNextPage":true,"endCursor":"same"}}`)
 	}))
 	defer server.Close()
-	if _, err := NewClient(server.URL, "fixture", "").Snapshot(context.Background(), time.Now()); err == nil {
+	if _, err := NewClient(server.URL, "fixture", "").Snapshot(context.Background(), time.Now(), true); err == nil {
 		t.Fatal("repeated cursor accepted")
 	}
 }
