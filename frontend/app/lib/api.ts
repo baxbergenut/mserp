@@ -186,10 +186,12 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
     method: "POST", body: JSON.stringify({ driverId, action }),
   });
 
-export const fetchGrossBoard = async (weekStart: string) => {
-  await boardReadiness.wait(`gross:${weekStart}`);
-  return apiRequest<GrossBoard>(withQuery("/gross-board", { weekStart }));
-};
+function readBoardSnapshot<T>(key: string, path: string, query: Record<string, string>, signal?: AbortSignal) {
+  return boardReadiness.read(key, () => apiRequest<T>(withQuery(path, query), { signal }),
+    opening => apiRequest<{ opening: string; board: T } | undefined>(withQuery(path, { ...query, opening }), { signal }));
+}
+export const fetchGrossBoard = (weekStart: string) =>
+  readBoardSnapshot<GrossBoard>(`gross:${weekStart}`, "/gross-board", { weekStart });
 export const setGrossBoardWeekLock = (weekStart: string, locked: boolean) =>
   apiRequest<GrossBoardWeekLock>("/gross-board/week-lock", { method: "PUT", body: JSON.stringify({ weekStart, locked }) });
 export const fetchGrossPresence = (weekStart: string) => apiRequest<import("./types").GrossBoardPresence[]>(withQuery("/gross-board/presence", { weekStart }));
@@ -197,7 +199,7 @@ export const updateGrossPresence = (clientId: string, cell: import("./types").Gr
 export const clearGrossPresence = (clientId: string) => performRequest<void>(`/gross-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossBoard) => void, presence: (peers?: import("./types").GrossBoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const ready = boardReadiness.subscribe(`gross:${weekStart}`, () => changed());
-  const stream = new EventSource(`${API_BASE}${withQuery("/gross-board/events", { weekStart, initial: "none" })}`, { withCredentials: true });
+  const stream = new EventSource(`${API_BASE}${withQuery("/gross-board/events", { weekStart, initial: "none", opening: ready.opening })}`, { withCredentials: true });
   stream.addEventListener("open", () => { ready.open(); connection(true); });
   stream.addEventListener("error", () => { ready.error(); connection(false); });
   stream.addEventListener("changed", () => changed());
@@ -208,8 +210,7 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
   return () => { ready.close(); stream.close(); };
 }
 export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) => {
-  await boardReadiness.wait("status");
-  return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "grid" }), { signal }).then(expandBoard);
+  return readBoardSnapshot<DriverBoard | import("./types").CompactDriverBoard>("status", "/driver-board", { weekStart, overview: "1", compact: "grid" }, signal).then(expandBoard);
 };
 export function saveDriverBoard(entries: DriverBoardEntry[], textBase: Record<string, DriverBoardEntry> = {}) {
   const omitReceipt = (key: string, value: unknown) => key === "fleetStatus" ? undefined : value;
@@ -232,7 +233,7 @@ export const clearBoardPresence = (clientId: string) =>
   performRequest<void>(`/driver-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeBoardEvents(changed: (board?: DriverBoard) => void, presence: (peers?: import("./types").BoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const ready = boardReadiness.subscribe("status", () => changed());
-  const stream = new EventSource(`${API_BASE}/driver-board/events?overview=1&initial=none`, { withCredentials: true });
+  const stream = new EventSource(`${API_BASE}${withQuery("/driver-board/events", { overview: "1", initial: "none", opening: ready.opening })}`, { withCredentials: true });
   stream.addEventListener("open", () => { ready.open(); connection(true); });
   stream.addEventListener("error", () => { ready.error(); connection(false); });
   stream.addEventListener("changed", () => changed());
@@ -335,6 +336,7 @@ export class APIError extends Error {
 }
 export function resetAccessRequests() { accessGeneration++; reads.clear(true); }
 function acceptSession(session: AuthSession) {
+  boardReadiness.parallel = session.parallelBoardOpening === true;
   const fingerprint = JSON.stringify([session.user.id, session.user.accessRevision, session.user.permissions, session.user.expenseCategoryAccess]);
   if (fingerprint !== accessFingerprint) {
     resetAccessRequests(); accessFingerprint = fingerprint; currentPermissions = session.user.permissions;

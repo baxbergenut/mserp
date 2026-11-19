@@ -1,7 +1,7 @@
-// Subscribe before the opening GET so no commit can fall between the snapshot
-// and the live subscription. The stream opens without calculating another board.
+// An opening snapshot must follow registration of its live subscription.
 export class BoardReadiness {
-  private connections = new Map<string, { ready: Promise<void>; resolve: () => void; connected: boolean; recover: boolean }>();
+  parallel = false;
+  private connections = new Map<string, { ready: Promise<void>; resolve: () => void; connected: boolean; recover: boolean; opening?: string; attempted: boolean }>();
 
   subscribe(key: string, recover: () => void) {
     const gate = () => {
@@ -9,10 +9,12 @@ export class BoardReadiness {
       const ready = new Promise<void>(done => { resolve = done; });
       return { ready, resolve };
     };
-    const entry = { ...gate(), connected: false, recover: false };
+    const opening = this.parallel ? globalThis.crypto?.randomUUID?.() : undefined;
+    const entry = { ...gate(), connected: false, recover: false, opening, attempted: false };
     this.connections.set(key, entry);
     let active = true;
     return {
+      opening,
       open: () => {
         if (!active) return;
         entry.connected = true;
@@ -21,6 +23,8 @@ export class BoardReadiness {
         entry.recover = true; // A reconnect must recover the disconnected interval.
       },
       error: () => {
+        // An authorized server registration can precede the first browser open.
+        if (opening) entry.recover = true;
         if (entry.connected) Object.assign(entry, gate());
         entry.connected = false;
       },
@@ -30,6 +34,20 @@ export class BoardReadiness {
         if (this.connections.get(key) === entry) this.connections.delete(key);
       },
     };
+  }
+
+  async read<T>(key: string, read: () => Promise<T>, paired: (opening: string) => Promise<{ opening: string; board: T } | undefined>) {
+    const entry = this.connections.get(key);
+    if (entry?.opening && !entry.connected && !entry.attempted) {
+      const result = await paired(entry.opening).finally(() => { entry.attempted = true; });
+      if (result?.opening === entry.opening) return result.board;
+      // The stream was blocked, routed elsewhere, or served by an older API.
+      // The server has already waited, so arm late-connection recovery now.
+      await this.wait(key, 0);
+    } else {
+      await this.wait(key);
+    }
+    return read();
   }
 
   async wait(key: string, fallbackMS = 150) {

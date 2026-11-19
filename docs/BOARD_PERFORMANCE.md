@@ -72,9 +72,15 @@ Opening previously calculated the board once for HTTP and again for the initial
 event-stream snapshot. The stream did not flush its headers until that calculation
 and any shared snapshot mutex wait finished, so Connecting could last seconds.
 Streams now flush the authorized connection first. New clients request
-`initial=none`, wait for that subscription before their initial HTTP read, and
-recover with a GET after reconnect. A 150 ms fallback keeps HTTP opening available
-when streaming is blocked; a late connection then reconciles any missed interval.
+`initial=none`. When the authenticated session advertises parallel opening,
+the browser starts the stream and grid GET together with one tab-specific ID.
+The API starts the snapshot after registering the matching viewer, board and
+Gross Board week. If the requests reach different processes or the stream is
+blocked, the opening attempt returns 204 after at most 150 ms of registration
+wait without building a grid. The ordinary GET and reconnect then cover the
+missed interval. Older clients retain their browser-side wait. Run
+`node scripts/test-investors-e2e.mjs --board-opening-only` against the local
+PostgreSQL fixture to compare both paths at 178 ms round-trip latency.
 Invalidations received while loading remain pending until the board can apply them.
 Legacy clients still receive an initial snapshot, and commit snapshots retain
 per-subscriber permissions and existing draft/version checks.

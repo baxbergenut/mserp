@@ -19,6 +19,7 @@ import { runAssignmentWeekE2E } from './assignment-week-e2e.mjs';
 import { runEscrowTasksE2E } from './escrow-tasks-e2e.mjs';
 import { runPayrollWorkflowsE2E } from './payroll-workflows-e2e.mjs';
 import { runOffboardingE2E } from './offboarding-e2e.mjs';
+import { runBoardOpeningE2E } from './board-opening-e2e.mjs';
 import { runBoardSaveRecovery } from './board-save-recovery-e2e.mjs';
 import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { runGrossBoardLiveE2E, runGrossBoardPartialE2E } from './gross-board-live-e2e.mjs';
@@ -118,7 +119,9 @@ try {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
-  if (process.argv.includes('--board-save-only')) {
+  if (process.argv.includes('--board-opening-only')) {
+    await runBoardOpeningE2E({ page, base, setNetworkLatency });
+  } else if (process.argv.includes('--board-save-only')) {
     await runBoardSaveRecovery({page,base,password,sql,schema});
   } else if (investorRetained) {
     await runInvestorRetainedE2E({page,base,sql,schema,temp});

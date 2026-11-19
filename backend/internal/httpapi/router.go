@@ -206,6 +206,8 @@ func NewRouter(
 	events := newTaskEvents(pool, logger)
 	protected.Get("/tasks/events", events.serve(auth))
 	boardEvents := newDatabaseEvents(pool, logger, "mserp_driver_board", "driver_board.read")
+	openings := &boardOpenings{}
+	boardEvents.openings = openings
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
 	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
 	boardEvents.snapshotEvent = "board"
@@ -244,9 +246,9 @@ func NewRouter(
 		return json.Marshal(value)
 	}
 	protected.Get("/driver-board/events", boardEvents.serve(auth, boardPresence))
-	registerGrossBoardRoutes(protected, logger, grossBoardRepo)
-	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo)
-	registerDriverBoardRoutes(protected, logger, boardRepo)
+	registerGrossBoardRoutes(protected, logger, grossBoardRepo, openings)
+	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo, openings)
+	registerDriverBoardRoutes(protected, logger, boardRepo, openings)
 	registerBoardMapHistory(protected, logger, boardRepo, fiveELDHistory)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
 	closePayrollLive := registerPayrollLive(protected, pool, logger, auth, payRepo)

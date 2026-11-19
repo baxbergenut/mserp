@@ -72,10 +72,11 @@ type authUserResponse struct {
 }
 
 type sessionResponse struct {
-	PermissionCatalog []repository.Permission `json:"permissionCatalog"`
-	User              authUserResponse        `json:"user"`
-	CSRFToken         string                  `json:"csrfToken"`
-	ExpiresAt         time.Time               `json:"expiresAt"`
+	ParallelBoardOpening bool                    `json:"parallelBoardOpening"`
+	PermissionCatalog    []repository.Permission `json:"permissionCatalog"`
+	User                 authUserResponse        `json:"user"`
+	CSRFToken            string                  `json:"csrfToken"`
+	ExpiresAt            time.Time               `json:"expiresAt"`
 }
 
 func newAuthHandler(logger *slog.Logger, store authStore, options AuthOptions) *authHandler {
@@ -336,10 +337,11 @@ func authSessionFromContext(ctx context.Context) (repository.AuthSession, bool) 
 
 func (h *authHandler) makeSessionResponse(ctx context.Context, user repository.AuthUser, csrfToken string, expiresAt time.Time) sessionResponse {
 	response := sessionResponse{
-		PermissionCatalog: repository.Permissions,
-		User:              authUserResponse{CanResetGrossBoardBalance: canManageGrossBoard(user), Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
-		CSRFToken:         csrfToken,
-		ExpiresAt:         expiresAt,
+		ParallelBoardOpening: true,
+		PermissionCatalog:    repository.Permissions,
+		User:                 authUserResponse{CanResetGrossBoardBalance: canManageGrossBoard(user), Administrator: user.Administrator, AccessRevision: user.AccessRevision, ID: user.ID, Username: user.Username, Email: user.Email, RoleID: user.RoleID, ExpenseVerificationRole: expenseVerificationRole(user), Permissions: user.Permissions, ExpenseCategoryAccess: user.ExpenseCategoryAccess, Theme: user.Theme},
+		CSRFToken:            csrfToken,
+		ExpiresAt:            expiresAt,
 	}
 	return response
 }

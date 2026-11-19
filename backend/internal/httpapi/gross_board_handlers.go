@@ -128,7 +128,7 @@ func canManageGrossBoard(user repository.AuthUser) bool {
 	return user.Administrator || strings.EqualFold(strings.TrimSpace(user.RoleName), "Accountant")
 }
 
-func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.GrossBoardRepository) {
+func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.GrossBoardRepository, openings *boardOpenings) {
 	fail := func(w http.ResponseWriter, err error) {
 		if errors.Is(err, repository.ErrGrossBoardWeekLocked) {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "gross_board_week_locked", "error": err.Error()})
@@ -166,12 +166,15 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if !openings.admit(w, r) {
+			return
+		}
 		board, err := snapshots.get(r.Context(), boardReadKey{week: week}, repo.Get)
 		if err != nil {
 			fail(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, board)
+		writeBoardSnapshot(w, r, board)
 	})
 	r.Put("/gross-board/week-lock", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := authSessionFromContext(r.Context())
