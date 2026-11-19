@@ -22,7 +22,8 @@ type BoardFleetStatus struct {
 func attachBoardSaveReceipt(ctx context.Context, tx pgx.Tx, entry *DriverBoardEntry) error {
 	entry.FleetStatus = &BoardFleetStatus{}
 	s := entry.FleetStatus
-	return tx.QueryRow(ctx, `SELECT d.availability_status,d.status_version,coalesce(t.id::text,''),coalesce(fleet_truck_operating_status(t.id),''), coalesce(h.id,0)
+	return tx.QueryRow(ctx, `SELECT d.availability_status,d.status_version,coalesce(t.id::text,''),`+boardTruckConditionSQL+`
+ WHEN d.active OR fleet_truck_has_operator(t.id) THEN 'in_use' ELSE 'ready' END, coalesce(h.id,0)
  FROM drivers d LEFT JOIN trucks t ON t.id=fleet_status_driver_truck(d.id)
  LEFT JOIN driver_board_history h ON h.driver_id=d.id AND h.transaction_id=txid_current() AND h.source='board' AND h.undo_of IS NULL
  WHERE d.id=$1`, entry.DriverID).Scan(&s.AvailabilityStatus, &s.StatusVersion, &s.TruckID, &s.TruckOperatingStatus, &entry.UndoID)

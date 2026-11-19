@@ -129,6 +129,12 @@ func driverBoardType(payType string, ownerOperator, investorTruck, ownTruck bool
 	return "%"
 }
 
+// Match fleet_truck_operating_status. Callers supply the final in_use/ready
+// decision when they already know which active drivers operate the truck.
+const boardTruckConditionSQL = `CASE WHEN t.id IS NULL THEN '' WHEN t.status='terminated' THEN 'terminated'
+ WHEN t.status='out_of_service' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='out_of_service') THEN 'out_of_service'
+ WHEN t.status='maintenance' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='shop') THEN 'shop'`
+
 func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (DriverBoard, error) {
 	return r.get(ctx, week, true)
 }
@@ -166,9 +172,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
  coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb),
 	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,
- CASE WHEN t.id IS NULL THEN '' WHEN t.status='terminated' THEN 'terminated'
- WHEN t.status='out_of_service' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='out_of_service') THEN 'out_of_service'
- WHEN t.status='maintenance' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='shop') THEN 'shop'
+ `+boardTruckConditionSQL+`
  ELSE 'in_use' END,d.availability_status,d.status_version,coalesce(d.city,''),coalesce(d.state,''),NOT d.active
  FROM drivers d CROSS JOIN (SELECT $1::date AS today) board_day
  `+driverBoardDispatcherJoinSQL+`
