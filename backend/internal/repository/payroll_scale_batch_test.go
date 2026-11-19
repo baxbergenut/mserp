@@ -28,6 +28,7 @@ func TestPayrollScaleBatchDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer tx.Rollback(ctx)
 			read := payrollPublicationReadContext(ctx, tx)
 			if err := preparePayrollScaleWeeks(read, tx, weeks); err != nil {
 				t.Fatal(err)
