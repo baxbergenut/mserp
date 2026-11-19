@@ -61,7 +61,11 @@ var wmtPayerJoins = `
  AND (h.unassigned_at IS NULL OR t.transaction_date<(h.unassigned_at AT TIME ZONE 'America/New_York')::date)
  HAVING count(DISTINCT h.owner_id)=1) ownership ON true
  LEFT JOIN investors i ON i.id=ownership.owner_id
- CROSS JOIN LATERAL(SELECT CASE WHEN t.driver_id IS NULL OR i.id IS NULL OR t.match_warning LIKE '%conflicts%' THEN 'review'
+ CROSS JOIN LATERAL(SELECT CASE
+ WHEN NOT i.is_company AND i.driver_id IS NULL AND (NOT t.source_conflict OR EXISTS (
+ SELECT 1 FROM truck_unit_aliases a WHERE a.unit_key=upper(btrim(t.tractor_number))
+ HAVING count(*)=1 AND bool_and(a.truck_id=t.truck_id))) THEN 'investor'
+ WHEN t.driver_id IS NULL OR i.id IS NULL OR t.source_conflict OR t.match_warning LIKE '%conflicts%' THEN 'review'
  WHEN i.is_company THEN 'company' WHEN i.driver_id=pd.driver_id THEN 'driver' ELSE 'investor' END payer) b
 `
 

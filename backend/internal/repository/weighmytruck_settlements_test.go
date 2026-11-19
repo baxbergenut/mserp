@@ -168,6 +168,19 @@ func TestWMTSettlementDatabase(t *testing.T) {
 			if len(scales(final)) != 2 {
 				t.Fatal("finalization lost scale tickets")
 			}
+			// A vendor revision introduces a different driver's code. The tractor
+			// and its dated investor still identify the payer after reopening.
+			otherDriver := id(`INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate) VALUES('Other scale driver','other scale driver','cpm',0.75) RETURNING id`)
+			run(`INSERT INTO weighmytruck_memberships(driver_id,email,first_name,last_name,phone,driver_code,enrolled)
+ VALUES($1,'other@example.test','Other','Driver','5559876543','074',true)`, otherDriver)
+			revised := weighmytruck.Ticket{Number: "111", Site: "1", Date: day, Fee: "15.25", Tractor: "074", DriverCode: "074"}
+			if e = repo.StoreSettlements(ctx, day, []weighmytruck.Ticket{revised}); e != nil {
+				t.Fatal(e)
+			}
+			list, e = repo.Transactions(ctx, week, day, "111", Pagination{})
+			if e != nil || len(list.Items) != 1 || list.Items[0].Payer != "investor" || list.Items[0].Warning == "" {
+				t.Fatalf("driver discrepancy on a verified investor truck: %+v %v", list, e)
+			}
 			ticket.Fee = "20.00"
 			if e = repo.StoreSettlements(ctx, day, []weighmytruck.Ticket{ticket}); e != nil {
 				t.Fatal(e)
@@ -190,8 +203,16 @@ func TestWMTSettlementDatabase(t *testing.T) {
 				t.Fatal(e)
 			}
 			updated, e := pay.InvestorPay(ctx, date)
-			if e != nil || scales(updated)[1].Amount != "-20.00" {
+			if e != nil || len(scales(updated)) != 2 || scales(updated)[0].Amount != "-15.25" || scales(updated)[1].Amount != "-20.00" {
 				t.Fatalf("reopened correction: %+v %v", scales(updated), e)
+			}
+			revised.Tractor = "UNKNOWN"
+			if e = repo.StoreSettlements(ctx, day, []weighmytruck.Ticket{revised}); e != nil {
+				t.Fatal(e)
+			}
+			list, e = repo.Transactions(ctx, week, day, "111", Pagination{})
+			if e != nil || len(list.Items) != 1 || list.Items[0].Payer != "review" {
+				t.Fatalf("conflicting tractor billed to investor: %+v %v", list, e)
 			}
 			verifyWMTAutoRouting(t, ctx, pool)
 			// Automatic removal is one mutation, including repeated worker runs.

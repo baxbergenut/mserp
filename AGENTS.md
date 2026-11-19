@@ -152,6 +152,9 @@ helper before 203. See
 `docs/PAYROLL_EXPENSE_FINALIZATION.md`.
 
 Driver and Investor Pay accept any CAT Scale deduction up to the unpaid balance.
+For a dated investor with no driver profile, driver identity does not determine
+scale liability. A changed source identity requires the reported tractor to
+uniquely match the linked truck. Driver attribution warnings remain visible.
 Driver choices use migration 202 and investor choices use the existing statement
 edits JSON. Finalization records the amount collected and the original ticket
 amount. Earlier whole-ticket receipts stay authoritative. Zero choices stay

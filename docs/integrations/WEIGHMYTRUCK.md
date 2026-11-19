@@ -103,7 +103,11 @@ and percentage), and hired drivers on investor trucks charge Investor Pay.
 Team-driver tickets use the dated main driver while preserving the source identity.
 No manual payer setup is required. The Drivers tab shows the current derived
 payer; Transactions shows each ticket's historical payer. Unknown/conflicting
-links or ownership show Needs review; an investor ticket without a matching
+driver evidence stays visible for review. When the dated investor has no driver
+profile, driver identity cannot change the payer. A changed source identity
+requires the reported tractor to resolve uniquely to the linked truck before
+that investor can be billed. Unresolved payer or ownership shows Needs review;
+an investor ticket without a matching
 dated truck agreement is flagged and withheld from payroll until configured.
 Existing manual billing rows remain as history and no longer control open
 statements. The legacy billing endpoint rejects changes with a refresh message.
