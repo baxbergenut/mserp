@@ -341,7 +341,7 @@ export default function DriverBoardPage() {
 
     </PinnablePageHeader>
 
-    {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{state.conflictingRows.length ? state.conflictingRows.map(row => <div key={row.latest.driverId} className="flex flex-wrap items-center gap-2"><span>{row.message}</span><button className={buttonClass} disabled={saving} onClick={() => state.resolveConflict(row.latest, true)}>Apply my edits</button><button className={buttonClass} disabled={saving} onClick={() => state.resolveConflict(row.latest, false)}>Use saved row</button></div>) : dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
+    {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{state.conflictingRows.length ? state.conflictingRows.map(row => <div key={row.latest.driverId} className="flex flex-wrap items-center gap-2"><span>{row.message}</span><button className={buttonClass} disabled={saving} onClick={() => state.resolveConflict(row.latest)}>Apply my edits</button><button className={buttonClass} disabled={saving} onClick={() => state.resolveConflict(row.latest, row.fields)}>Use saved values</button></div>) : dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
     {leaving && (dirty || saving) && <BoardNavigationNotice
       message={error && !saving ? "Your edits could not be saved." : "Saving changes before leaving…"}
       onStay={state.cancelNavigation}
@@ -519,7 +519,7 @@ export default function DriverBoardPage() {
           }}>Reset column layout</button>
       </div>
     </StatusBoardScrollArea>
-    <CellPresence peers={state.peers} />
+    <CellPresence presence={state.presence} />
     {nextStop && <NextStopDialog name={nextStop.name} status={nextStop.status} loads={nextStop.loads}
       onClose={() => setNextStop(null)} onApply={stopKey => state.changeLoads(nextStop.id, nextStop.loads, { action: "advance", stopKey })} />}
     {etaEditor && entries[etaEditor.id]?.status !== "READY" && <ETAEditor key={etaEditor.id} targetChanged={etaEditor.target !== etaTarget(entries[etaEditor.id], board?.loads[etaEditor.id])} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}

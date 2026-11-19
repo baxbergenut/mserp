@@ -13,7 +13,5 @@ export function useGrossLive(week: string, onChanged: (board?: GrossBoard) => vo
     select: selectedGrossCell,
     subscribe: (...args) => subscribeGrossEvents(week, ...args),
   }), [week]);
-  const live = useLiveBoard(options, onChanged);
-  const peers = useMemo(() => live.peers.filter(p => p.weekStart === week), [live.peers, week]);
-  return { ...live, peers };
+  return useLiveBoard(options, onChanged);
 }

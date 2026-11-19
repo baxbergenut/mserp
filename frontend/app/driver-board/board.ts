@@ -132,25 +132,29 @@ export function isBoardTextEdit(base: DriverBoardEntry | undefined, draft: Drive
     (base.notes !== draft.notes || base.trailerNumber !== draft.trailerNumber || base.trailerNote !== draft.trailerNote);
 }
 
-export function rebaseBoardDraft(base: DriverBoardEntry, draft: DriverBoardEntry, latest: DriverBoardEntry) {
+export function rebaseBoardDraft(base: DriverBoardEntry, draft: DriverBoardEntry, latest: DriverBoardEntry, savedFields: readonly (keyof DriverBoardEntry)[] = []) {
   const entry = { ...latest };
-  if (draft.resolveCurrentLoad && (!base.resolveCurrentLoad || draft.currentLoad !== base.currentLoad)) entry.resolveCurrentLoad = true;
-  if (draft.statusEdited && (!base.statusEdited || draft.status !== base.status || draft.effectiveAt !== base.effectiveAt || draft.statusReason !== base.statusReason)) {
+  if (!savedFields.includes("currentLoad") && draft.resolveCurrentLoad && (!base.resolveCurrentLoad || draft.currentLoad !== base.currentLoad)) entry.resolveCurrentLoad = true;
+  if (!savedFields.includes("status") && draft.statusEdited && (!base.statusEdited || draft.status !== base.status || draft.effectiveAt !== base.effectiveAt || draft.statusReason !== base.statusReason)) {
     entry.statusEdited = true;
     entry.statusReason = draft.statusReason;
     entry.effectiveAt = draft.effectiveAt;
   }
   const conflicts: BoardField[] = [];
+  const conflictingFields: BoardField[] = [];
   for (const group of boardFieldGroups) {
+    if (savedFields.includes(group[0])) continue;
     const changed = group.filter(field => !sameField(base, draft, field));
     const hasIntent = group[0] === "currentLoad" && (entry.resolveCurrentLoad || entry.statusEdited);
     if (!changed.length && !hasIntent) continue;
+    const priorCount = conflicts.length;
     for (const field of group) {
       if (!sameField(base, latest, field) && (!sameField(draft, latest, field) || hasIntent)) conflicts.push(field);
     }
+    if (conflicts.length > priorCount) conflictingFields.push(...group);
     for (const field of changed) Object.assign(entry, { [field]: draft[field] });
   }
-  return { entry, conflicts };
+  return { entry, conflicts, conflictingFields };
 }
 
 // An in-flight save may finish after more typing. Keep the new text, while

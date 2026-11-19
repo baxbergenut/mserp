@@ -46,7 +46,7 @@ func (w *timedWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 // Browser timings ride on the next ordinary request and carry no identifiers.
 // Only bounded numeric observations and known operation names reach the log.
 func logBoardClientTimings(logger *slog.Logger, raw string) {
-	if raw == "" || len(raw) > 300 {
+	if raw == "" || len(raw) > 512 {
 		return
 	}
 	samples := strings.Split(raw, ",")
@@ -63,9 +63,20 @@ func logBoardClientTimings(logger *slog.Logger, raw string) {
 		default:
 			continue
 		}
-		ms, err := strconv.Atoi(value)
-		if err == nil && ms >= 0 && ms <= 120000 {
+		total, phases, hasPhases := strings.Cut(value, "/")
+		ms, err := strconv.Atoi(total)
+		if err != nil || ms < 0 || ms > 120000 {
+			continue
+		}
+		if !hasPhases {
 			logger.Info("board browser timing", "operation", name, "duration_ms", ms)
+			continue
+		}
+		before, received, ok := strings.Cut(phases, "/")
+		submit, submitErr := strconv.Atoi(before)
+		ack, ackErr := strconv.Atoi(received)
+		if ok && submitErr == nil && ackErr == nil && 0 <= submit && submit <= ack && ack <= ms {
+			logger.Info("board browser timing", "operation", name, "duration_ms", ms, "before_request_ms", submit, "request_ms", ack-submit, "response_to_paint_ms", ms-ack)
 		}
 	}
 }

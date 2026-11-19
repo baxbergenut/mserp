@@ -1,11 +1,13 @@
 "use client";
 
+import { useBoardPeers, type BoardPresenceStore } from "@/app/components/boards/useLiveBoard";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { BoardPresence } from "@/app/lib/types";
 
 const colors = ["#2563eb", "#b45309", "#9333ea", "#047857", "#be185d", "#0e7490"];
-export function CellPresence({ peers }: { peers: BoardPresence[] }) {
+export function CellPresence({ presence }: { presence: BoardPresenceStore<BoardPresence> }) {
+  const peers = useBoardPeers(presence);
   const overlay = useRef<HTMLDivElement>(null);
   const cursors = useMemo(() => {
     const cells = new Map<string, BoardPresence[]>();

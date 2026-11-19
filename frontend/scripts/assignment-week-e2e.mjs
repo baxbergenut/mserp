@@ -4,10 +4,11 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const date = new Date(`${today}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
-  const week = date.toISOString().slice(0, 10);
   date.setUTCDate(date.getUTCDate() + 7);
   const next = date.toISOString().slice(0, 10);
-  date.setUTCDate(date.getUTCDate() - 7);
+  // Inspect a completed week on both Gross Board and Driver Pay.
+  date.setUTCDate(date.getUTCDate() - 14);
+  const week = date.toISOString().slice(0, 10);
   date.setUTCDate(date.getUTCDate() - 7);
   const previous = date.toISOString().slice(0, 10);
   const driver = 'e4700000-0000-0000-0000-000000000001';
@@ -120,7 +121,8 @@ export async function runAssignmentWeekE2E({ page, base, sql, schema }) {
   expect(daily.assignments.slice(0, 2).every(a => a.dispatcherId === cameron && a.truckId === truck1)).toBe(true);
   expect(daily.assignments.slice(2).every(a => a.dispatcherId === mark && a.truckId === truck2)).toBe(true);
   await page.goto(`${base}/gross-board`);
-  await page.getByPlaceholder('Search drivers…').fill('Week Didi');
+  await page.getByRole('button', { name: 'Previous week', exact: true }).click();
+  await page.getByPlaceholder('Search drivers, truck units or load numbers…').fill('Week Didi');
   const dailyRows = page.locator('tbody > tr').filter({ has: page.locator(`th[data-gross-driver="${driver}"]`) });
   await expect(dailyRows).toHaveCount(2);
   await expect(dailyRows.nth(0).getByText('Changed dispatcher', { exact: true })).toHaveCount(5);

@@ -4,13 +4,15 @@ const samples: string[] = [];
 
 // Called after React commits the acknowledged rows. Allow a paint before
 // measuring, and omit hidden tabs where animation frames can be suspended.
-export function recordBoardPaint(board: Board, operation: Operation, start: number) {
+export function recordBoardPaint(board: Board, operation: Operation, start: number, sent: number, received: number) {
   if (!start || document.hidden) return;
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (document.hidden) return;
     const ms = Math.round(performance.now() - start);
     if (ms < 0 || ms > 120000) return;
-    samples.push(`${board}-${operation}=${ms}`);
+    const before = Math.round(sent - start), throughResponse = Math.round(received - start);
+    const phases = before >= 0 && throughResponse >= before && ms >= throughResponse ? `/${before}/${throughResponse}` : "";
+    samples.push(`${board}-${operation}=${ms}${phases}`);
     if (samples.length > 12) samples.shift();
   }));
 }

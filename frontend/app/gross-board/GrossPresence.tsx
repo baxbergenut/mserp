@@ -1,11 +1,14 @@
 "use client";
-import { useLayoutEffect, useState } from "react";
+import { useBoardPeers, type BoardPresenceStore } from "@/app/components/boards/useLiveBoard";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { GrossBoardPresence } from "@/app/lib/types";
 
 const colors = ["#2563eb", "#b45309", "#9333ea", "#047857", "#be185d", "#0e7490"];
 type Cursor = { key: string; names: string; label: string; color: string; left: number; top: number; width: number; height: number };
-export function GrossPresence({ peers }: { peers: GrossBoardPresence[] }) {
+export function GrossPresence({ presence, week }: { presence: BoardPresenceStore<GrossBoardPresence>; week: string }) {
+  const snapshot = useBoardPeers(presence);
+  const peers = useMemo(() => snapshot.filter(p => p.weekStart === week), [snapshot, week]);
   const [cursors,setCursors] = useState<Cursor[]>([]);
   useLayoutEffect(() => {
     let frame=0;

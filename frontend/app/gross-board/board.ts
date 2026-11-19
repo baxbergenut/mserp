@@ -1,6 +1,13 @@
 import type { DriverBoardGrossEntry, GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
 
 export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[], entries: GrossBoardEntry[] = []) {
+  const transfers = new Map<string, GrossBoardEntry[]>();
+  for (const entry of entries) {
+    if (!entry.transferVersion) continue;
+    const group = transfers.get(entry.driverId);
+    if (group) group.push(entry);
+    else transfers.set(entry.driverId, [entry]);
+  }
   return drivers.flatMap(driver => {
     const assignments = driver.assignments?.length ? driver.assignments : dates.map(date => ({ ...driver, date }));
     const groups = new Map<string, GrossBoardDriver & { dates: string[] }>();
@@ -15,7 +22,7 @@ export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[], ent
       }
       groups.set(assignment.dispatcherId, group);
     }
-    for (const entry of entries.filter(e => e.driverId === driver.id && e.transferVersion)) {
+    for (const entry of transfers.get(driver.id) ?? []) {
       const id=entry.creditedDispatcherId || "";
       const group=groups.get(id) ?? {...driver,dispatcherId:id,dispatcherName:entry.creditedDispatcherName || "Unassigned",dates:[]};
       if(!group.dates.includes(entry.date)) group.dates.push(entry.date);

@@ -22,7 +22,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   const [orderSaving, setOrderSaving] = useState(false);
   const orderSavingRef = useRef(false);
   const [error, setError] = useState("");
-  const [conflictingRows, setConflictingRows] = useState<{ latest: DriverBoardEntry; message: string }[]>([]);
+  const [conflictingRows, setConflictingRows] = useState<{ latest: DriverBoardEntry; message: string; fields: (keyof DriverBoardEntry)[] }[]>([]);
   const [refreshError, setRefreshError] = useState("");
   const [eldRefreshing, setELDRefreshing] = useState(false);
   const activity = useRef(0);
@@ -40,6 +40,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   const undoStack = useRef<{ id: number; driverId: string; group: number }[]>([]);
   const draftUndo = useRef<{ id: string; field: keyof DriverBoardEntry; before?: DriverBoardEntry; group: number }[]>([]);
   const lastTextEdit = useRef(-Infinity);
+  const response = useRef({ open: 0, save: 0, submitted: 0, load: 0 });
   const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0), confirmedLoad = useRef(0);
   const editSession = useRef<{ id: string; field: keyof DriverBoardEntry; group: number } | null>(null);
   const editSequence = useRef(0);
@@ -58,7 +59,8 @@ export function useDriverBoard(lockedDriverId?: string) {
   useEffect(() => {
     let cancelled = false;
     openStarted.current = performance.now();
-    fetchDriverBoard(currentChargeWeek()).then(value => { if (!cancelled) setBoard(value); })
+    response.current.open = 0;
+    fetchDriverBoard(currentChargeWeek()).then(value => { if (!cancelled) { response.current.open = performance.now(); setBoard(value); } })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load Status Board"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -125,15 +127,15 @@ export function useDriverBoard(lockedDriverId?: string) {
   useLayoutEffect(() => {
     if (loading || !board) return;
     if (openStarted.current) {
-      recordBoardPaint("status", "open", openStarted.current);
+      recordBoardPaint("status", "open", openStarted.current, openStarted.current, response.current.open);
       openStarted.current = 0;
     }
     if (!actionBusy && confirmedLoad.current) {
-      recordBoardPaint("status", "load", confirmedLoad.current);
+      recordBoardPaint("status", "load", confirmedLoad.current, confirmedLoad.current, response.current.load);
       confirmedLoad.current = 0;
     }
     if (!dirty && !saving && confirmedEdit.current) {
-      recordBoardPaint("status", "save", confirmedEdit.current);
+      recordBoardPaint("status", "save", confirmedEdit.current, response.current.submitted, response.current.save);
       confirmedEdit.current = 0;
     }
   }, [actionBusy, board, dirty, loading, saving]);
@@ -240,6 +242,7 @@ export function useDriverBoard(lockedDriverId?: string) {
         const drafts = Object.values(snapshot);
         const textBase = drafts.every(d => isBoardTextEdit(baselines[d.driverId], d))
           ? Object.fromEntries(drafts.map(d => [d.driverId, baselines[d.driverId]])) : undefined;
+        response.current.submitted = performance.now();
         committed = await saveDriverBoard(drafts, textBase);
       } catch (err) {
         if (!(err instanceof APIError) || err.code !== "board_row_changed") throw err;
@@ -250,11 +253,11 @@ export function useDriverBoard(lockedDriverId?: string) {
         for (const draft of Object.values(snapshot)) {
           const latest = latestById.get(draft.driverId), base = baselines[draft.driverId];
           if (!latest || !base || base.version !== draft.version) throw err;
-          const { entry, conflicts } = rebaseBoardDraft(base, draft, latest);
+          const { entry, conflicts, conflictingFields } = rebaseBoardDraft(base, draft, latest);
           if (conflicts.length) {
             const name = board?.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
             const fields = conflicts.map(key => key + " is now " + (typeof latest[key] === "object" ? JSON.stringify(latest[key]) : latest[key] || "(empty)"));
-            review.push({ latest, message: name + " · " + fields.join(", ") });
+            review.push({ latest, fields: conflictingFields, message: name + " · " + fields.join(", ") });
           }
           retry.push(entry);
         }
@@ -264,6 +267,7 @@ export function useDriverBoard(lockedDriverId?: string) {
         }
         committed = await saveDriverBoard(retry);
       }
+      response.current.save = performance.now();
       setConflictingRows([]);
       const loadIds = committed.filter(e => { const base = savedRef.current[e.driverId]; return !base || base.currentLoad !== e.currentLoad || base.status !== e.status || base.destination !== e.destination || base.eta !== e.eta || snapshot[e.driverId]?.resolveCurrentLoad; }).map(e => e.driverId);
       // Advance the authoritative refs before releasing the save lock. A new
@@ -293,16 +297,18 @@ export function useDriverBoard(lockedDriverId?: string) {
     finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); }
   }, [canEdit, loading, refreshLoads, board?.drivers]);
 
-  function resolveConflict(latest: DriverBoardEntry, keepDraft: boolean) {
+  function resolveConflict(latest: DriverBoardEntry, savedFields: readonly (keyof DriverBoardEntry)[] = []) {
     if (savingRef.current) return;
     const id = latest.driverId, draft = changesRef.current[id], base = savedRef.current[id];
     if (!draft || !base) return;
     const next = { ...changesRef.current };
-    if (keepDraft) next[id] = rebaseBoardDraft(base, draft, latest).entry;
-    else {
-      delete next[id];
-      draftUndo.current = draftUndo.current.filter(a => a.id !== id);
-    }
+    const merge = (value: DriverBoardEntry) => rebaseBoardDraft(base, value, latest, savedFields).entry;
+    const merged = merge(draft);
+    if (JSON.stringify(merged) === JSON.stringify(latest)) delete next[id];
+    else next[id] = merged;
+    draftUndo.current = draftUndo.current
+      .filter(action => action.id !== id || (next[id] && !savedFields.includes(action.field)))
+      .map(action => action.id === id && action.before ? { ...action, before: merge(action.before) } : action);
     savedRef.current[id] = latest;
     changesRef.current = next;
     setChanges(next);
@@ -374,6 +380,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     busyDrivers.current = [driverId];
     try {
       const result = await changeBoardLoads(entry, view, action);
+      response.current.load = performance.now();
       editSession.current = null;
       if (result.entry.undoId) undoStack.current.push({ id: result.entry.undoId, driverId, group: ++editSequence.current });
       savedRef.current[driverId] = result.entry;

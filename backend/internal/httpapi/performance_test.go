@@ -25,6 +25,17 @@ func TestPerformancePreservesStreaming(t *testing.T) {
 	}
 }
 
+func TestBoardBrowserTimingPhases(t *testing.T) {
+	var output strings.Builder
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logBoardClientTimings(logger, "status-save=240/60/210,gross-open=190,status-load=30/40/90,unknown=2,status-open=180/bad/150")
+	log := output.String()
+	if strings.Count(log, "board browser timing") != 2 || !strings.Contains(log, "operation=status-save duration_ms=240 before_request_ms=60 request_ms=150 response_to_paint_ms=30") ||
+		!strings.Contains(log, "operation=gross-open duration_ms=190") {
+		t.Fatal(log)
+	}
+}
+
 func TestPayrollPerformanceScenarios(t *testing.T) {
 	for _, tc := range []struct{ method, url, want string }{
 		{"GET", "/driver-pay?summary=1", "summary"},
