@@ -148,3 +148,60 @@ func TestPayrollLegacyExpenseReopenDatabase(t *testing.T) {
 		}
 	})
 }
+
+func TestInvestorFrozenLateExpenseDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		var actor string
+		if err := pool.QueryRow(ctx, `INSERT INTO app_users(username,password_hash) VALUES('Frozen expense test',crypt('test-only',gen_salt('bf'))) RETURNING id::text`).Scan(&actor); err != nil {
+			t.Fatal(err)
+		}
+		repo := NewDriverPayRepository(pool)
+		week, _ := chargeWeek("2026-10-05")
+		page, err := repo.InvestorPay(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		final, err := repo.SettleInvestor(ctx, week, projectionTruck, page.Revision, actor, "", false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		net := final.Drivers[0].NetPayCents()
+		var expense string
+		if err = pool.QueryRow(ctx, `INSERT INTO expenses(category_id,category,expense_type,truck_id,driver_id,owner_id,covered_by,expense_date,amount)
+ SELECT id,name,'Late repair',$1,$2,'18200000-0000-0000-0000-000000000003','Truck Owner','2026-10-20',102.67 FROM expense_settings WHERE kind='category' AND name='Maintenance' RETURNING id`, projectionTruck, projectionDriver).Scan(&expense); err != nil {
+			t.Fatal(err)
+		}
+		repo.ConfigurePreparedReads(true)
+		repo.ConfigurePreparedFinalization(true)
+		repo.resourceConcurrency = true
+		if err = repo.EnablePayrollShadow(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, `UPDATE payroll_projection_control SET protocol_mode='resources' WHERE singleton`); err != nil {
+			t.Fatal(err)
+		}
+		if err = repo.RequestPayrollPreparation(ctx, week, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = repo.PrepareNextPayrollWeek(ctx); err != nil {
+			t.Fatal(err)
+		}
+		prepared, err := repo.PreparedPayroll(ctx, "investor", week, PayPageQuery{ID: projectionTruck}, false)
+		if err != nil || len(prepared.Drivers) != 1 {
+			t.Fatal("prepare frozen statement", err)
+		}
+		card := prepared.Drivers[0]
+		if card.NetPayCents() != net || len(card.Edits.ExpenseDeductions) != 0 {
+			t.Fatalf("frozen payable changed from %d to %d with expenses %+v", net, card.NetPayCents(), card.Edits.ExpenseDeductions)
+		}
+		open, err := repo.SettleInvestor(WithPayrollReceipt(ctx), week, projectionTruck, prepared.Revision, actor, "", true, false, PayrollSettlementCommand{RequestID: "18200000-0000-0000-0000-000000008191", ExpectedStatementRevision: card.StatementRevision})
+		if err != nil {
+			t.Fatal("reopen after late expense", err)
+		}
+		rows := open.Drivers[0].Edits.ExpenseDeductions
+		if len(rows) != 1 || rows[0].ExpenseID != expense || rows[0].Saved || rows[0].Amount != "102.67" {
+			t.Fatalf("reopened draft expenses: %+v", rows)
+		}
+	})
+}

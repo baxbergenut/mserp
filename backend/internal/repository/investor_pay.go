@@ -560,18 +560,19 @@ func readInvestorEdits(ctx context.Context, tx pgx.Tx, d *DriverPayDriver) error
 }
 
 func applyFrozenInvestorStatement(d *DriverPayDriver, body []byte, meta PayrollSettlement) error {
-	// Frozen JSON can omit empty charge lists. Do not retain live tickets
-	// when a finalized statement deferred every charge.
-	d.AutoCharges, d.DeferredScaleCharges = nil, nil
-	if err := json.Unmarshal(body, d); err != nil {
+	// Omitted fields in a frozen report were empty at finalization.
+	// Decoding into a live card would retain later deductions and charges.
+	var frozen DriverPayDriver
+	if err := json.Unmarshal(body, &frozen); err != nil {
 		return err
 	}
 	meta.Finalized = true
-	if d.Settlement != nil {
-		meta.Override = d.Settlement.Override
-		meta.Reason = d.Settlement.Reason
+	if frozen.Settlement != nil {
+		meta.Override = frozen.Settlement.Override
+		meta.Reason = frozen.Settlement.Reason
 	}
-	d.Settlement = &meta
+	frozen.Settlement = &meta
+	*d = frozen
 	return nil
 }
 
