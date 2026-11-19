@@ -140,9 +140,8 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	// These interactive queries are too short to amortize PostgreSQL's JIT
-	// compilation. Keep this transaction-local; payroll jobs retain their policy.
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
+	key, err := boardWeekRevision(ctx, tx, week, false)
+	if err != nil {
 		return result, err
 	}
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
@@ -224,10 +223,6 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	ids := []string{}
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)
-	}
-	key, err := boardWeekRevision(ctx, tx, week, false)
-	if err != nil {
-		return result, err
 	}
 	entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
 	if err != nil {
@@ -336,10 +331,7 @@ func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardE
 		return nil, err
 	}
 	for i := range entries {
-		if err = attachBoardFleetStatus(ctx, tx, &entries[i]); err != nil {
-			return nil, err
-		}
-		if err = attachBoardUndoID(ctx, tx, &entries[i]); err != nil {
+		if err = attachBoardSaveReceipt(ctx, tx, &entries[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -384,9 +376,12 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if err := e.LeavePlan.Validate(); err != nil {
 			return nil, err
 		}
-		loadStateValue, _, readErr := loadState(ctx, tx, e.DriverID)
-		if readErr != nil {
-			return nil, readErr
+		var loadStateValue boardLoadState
+		if e.ResolveCurrentLoad || e.StatusEdited || old.CurrentLoad != e.CurrentLoad || old.Destination != e.Destination || old.ETA != e.ETA {
+			loadStateValue, _, readErr = loadState(ctx, tx, e.DriverID)
+			if readErr != nil {
+				return nil, readErr
+			}
 		}
 		if strings.TrimSpace(e.CurrentLoad) != "" &&
 			(!strings.EqualFold(strings.TrimSpace(e.CurrentLoad), strings.TrimSpace(old.CurrentLoad)) || (matchCurrentLoad && e.ResolveCurrentLoad)) {

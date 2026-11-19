@@ -209,11 +209,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return GrossBoard{}, err
 	}
 	defer tx.Rollback(ctx)
-	// These interactive queries contain many lateral projections. JIT startup
-	// can exceed the query itself, especially while several boards are open.
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
-		return GrossBoard{}, err
-	}
+
 	key, err := boardWeekRevision(ctx, tx, week, true)
 	if err != nil {
 		return GrossBoard{}, err

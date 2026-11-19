@@ -13,6 +13,16 @@ import (
 // The four source tables advance their revisions on INSERT, UPDATE, DELETE and
 // TRUNCATE. Availability and reset records have independent write paths.
 func boardWeekRevision(ctx context.Context, tx pgx.Tx, week time.Time, openings bool) (string, error) {
+	// Some callers run against a partial schema or transaction-local board
+	// tables. A counter for a shadowed table cannot certify those rows.
+	var available bool
+	if err := tx.QueryRow(ctx, `SELECT set_config('jit','off',true),set_config('plan_cache_mode','force_custom_plan',true),
+ to_regclass('payroll_cache_revisions') IS NOT NULL AND to_regprocedure('payroll_resource_table(text)') IS NOT NULL AND
+ (SELECT count(*)=16 FROM pg_trigger WHERE tgrelid IN ('gross_board_entries'::regclass,'gross_board_extra_entries'::regclass,'gross_board_transfers'::regclass,'loads'::regclass)
+ AND tgname IN ('payroll_cache_insert','payroll_cache_update','payroll_cache_delete','payroll_cache_truncate')
+ AND tgenabled IN ('O','A'))`).Scan(nil, nil, &available); err != nil || !available {
+		return "", err
+	}
 	var key string
 	err := tx.QueryRow(ctx, `SELECT CASE WHEN count(*)=4 AND NOT bool_or(payroll_resource_table(table_name)) THEN
  jsonb_build_array(current_schema(),$1::date,array_agg(revision ORDER BY table_name),

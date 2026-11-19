@@ -78,10 +78,12 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   const plan = card('PLAN-101');
   await plan.getByRole('button', { name: 'PLAN-101', exact: true }).click();
-  await plan.getByRole('button', { name: 'Remove from queue', exact: true }).click();
+  await expect(plan.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
+  await plan.getByRole('button', { name: 'Cancel load', exact: true }).click();
   const todayPlan = card('TODAY-PLAN');
   await todayPlan.getByRole('button', { name: 'TODAY-PLAN', exact: true }).click();
-  await todayPlan.getByRole('button', { name: 'Remove from queue', exact: true }).click();
+  await expect(todayPlan.getByRole('button', { name: 'Remove from queue', exact: true })).toHaveCount(0);
+  await todayPlan.getByRole('button', { name: 'Cancel load', exact: true }).click();
   await card('NEXT-B').getByRole('button', { name: 'NEXT-B', exact: true }).click();
   const queued = panel.getByLabel('Load sequence').getByRole('button', { name: /^NEXT-[BC]$/ });
   await expect(queued).toHaveText(['NEXT-C', 'NEXT-B']);
