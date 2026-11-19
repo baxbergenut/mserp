@@ -20,6 +20,10 @@ import (
 )
 
 var ErrBoardLoadSelection = errors.New("load plans changed or the selection is unavailable; refresh Loads and review the current plans")
+
+// Preserve the established conflict categories for callers that use errors.Is.
+var ErrBoardLoadRowChanged = fmt.Errorf("driver changed while the load was open: %w", ErrDriverBoardConflict)
+var ErrBoardLoadPlansChanged = fmt.Errorf("load list changed while it was open: %w", ErrBoardLoadSelection)
 var ErrBoardLoadCompleted = errors.New("a load completed in DataTruck cannot be made current")
 var ErrBoardGrossPlanRemoval = errors.New("remove this load from Gross Board; Gross Board plans cannot be removed from the Status Board queue")
 
@@ -960,8 +964,11 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	if err != nil {
 		return result, err
 	}
-	if !active || e.Version != a.Version {
+	if !active {
 		return result, ErrDriverBoardConflict
+	}
+	if e.Version != a.Version {
+		return result, ErrBoardLoadRowChanged
 	}
 	a.FromDate = r.loadStartDate(a.FromDate)
 	views, err := readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate, r.now())
@@ -970,7 +977,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	}
 	view := views[a.DriverID]
 	if view.Revision != a.Revision {
-		return result, ErrBoardLoadSelection
+		return result, ErrBoardLoadPlansChanged
 	}
 	s, _, err := loadState(ctx, tx, a.DriverID)
 	if err != nil {
