@@ -25,6 +25,10 @@ func NewPayrollWorkPriority() *PayrollWorkPriority {
 	return &PayrollWorkPriority{changed: make(chan struct{}), backgrounds: map[uint64]context.CancelCauseFunc{}}
 }
 
+func (r *LoadRepository) ConfigurePayrollWorkPriority(priority *PayrollWorkPriority) {
+	r.workPriority = priority
+}
+
 func (r *GrossBoardRepository) ConfigurePayrollWorkPriority(priority *PayrollWorkPriority) {
 	r.workPriority = priority
 }

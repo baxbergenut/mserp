@@ -71,27 +71,23 @@ func currentLoadSourceRecords(ctx context.Context, tx pgx.Tx, records []LoadReco
 }
 
 func saveLoadSourceVersions(ctx context.Context, tx pgx.Tx, records []LoadRecord) error {
-	batch := &pgx.Batch{}
+	ids := make([]int, 0, len(records))
+	times := make([]time.Time, 0, len(records))
 	for _, record := range records {
-		if record.ModifiedDatetime == nil {
-			continue
+		if record.ModifiedDatetime != nil {
+			ids = append(ids, record.ID)
+			times = append(times, *record.ModifiedDatetime)
 		}
-		// Existing-only refreshes must neither create unseen loads nor advance the
-		// numeric discovery watermark. Do not create metadata for unseen IDs.
-		batch.Queue(`INSERT INTO datatruck_load_versions(load_id,modified_datetime)
- SELECT id,$2::timestamptz FROM loads WHERE id=$1
- ON CONFLICT(load_id) DO UPDATE SET modified_datetime=excluded.modified_datetime
- WHERE datatruck_load_versions.modified_datetime<excluded.modified_datetime`, record.ID, record.ModifiedDatetime)
 	}
-	if batch.Len() == 0 {
+	if len(ids) == 0 {
 		return nil
 	}
-	results := tx.SendBatch(ctx, batch)
-	defer results.Close()
-	for range batch.Len() {
-		if _, err := results.Exec(); err != nil {
-			return err
-		}
-	}
-	return results.Close()
+	// Only stored loads can advance their provider version. Multiple observations
+	// of one ID retain the newest timestamp, as in sequential upserts.
+	_, err := tx.Exec(ctx, `INSERT INTO datatruck_load_versions(load_id,modified_datetime)
+ SELECT l.id,max(v.modified) FROM unnest($1::integer[],$2::timestamptz[]) v(id,modified)
+ JOIN loads l ON l.id=v.id GROUP BY l.id ORDER BY l.id
+ ON CONFLICT(load_id) DO UPDATE SET modified_datetime=excluded.modified_datetime
+ WHERE datatruck_load_versions.modified_datetime<excluded.modified_datetime`, ids, times)
+	return err
 }

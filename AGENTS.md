@@ -65,6 +65,14 @@ previews conservative, provider-verified replacements and applies only an exact
 digest under native financial/finalized guards. It preserves total driver gross,
 publishes affected payroll atomically and records an immutable retry receipt.
 See `docs/integrations/DATATRUCK_LOAD_RECONCILIATION.md` for operator usage.
+Scheduled DataTruck source refreshes resolve roster names per batch and preserve
+provider modification fences, existing-only discovery and the 15-minute heartbeat.
+A dispatcher can interrupt an uncommitted automated missing-load repair. It
+revalidates provider evidence, finalized guards and current board rows after the
+board is quiet. The resumed transaction finishes without another preemption.
+Canonical changes and payroll publication still commit together. See
+`TestMissingBoardReplacementDatabase` and `TestLoadRefreshBatchDatabase`.
+
 Gross Board saves reject new duplicate load-number claims across drivers, dates
 and slots, including different DataTruck IDs with the same normalized number.
 Distinct selected trips of one parent remain supported. The check runs once on

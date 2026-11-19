@@ -14,7 +14,8 @@ import (
 )
 
 type LoadRepository struct {
-	pool *pgxpool.Pool
+	pool         *pgxpool.Pool
+	workPriority *PayrollWorkPriority
 }
 
 func NewLoadRepository(pool *pgxpool.Pool) *LoadRepository {
@@ -118,20 +119,21 @@ func LoadToRecord(load datatruck.Load, payload []byte, syncedAt time.Time) (Load
 	return record, nil
 }
 
-const upsertLoadSQL = `
-INSERT INTO loads (
-	id, load_id, driver_id, dispatcher_id, shipment_id, status,
+const loadImportColumns = `id, load_id, driver_id, dispatcher_id, shipment_id, status,
 	load_pay, total_other_pay, total_pay, total_miles, per_mile_revenue,
 	dispatcher_name, driver_name, team_driver_name, truck_unit, customer_name,
 	pickup_time, delivery_time, pickup_appointment_time, delivery_appointment_time,
-	created_datetime, synced_at, raw_payload
-) VALUES (
+	created_datetime, synced_at, raw_payload`
+
+const upsertLoadSQL = `INSERT INTO loads (` + loadImportColumns + `) VALUES (
 	$1, $2, $3, $4, $5, $6,
 	$7, $8, $9, $10, $11,
 	$12, $13, $14, $15, $16,
 	$17, $18, $19, $20,
 	$21, $22, $23
-)
+)` + loadImportConflictSQL
+
+const loadImportConflictSQL = `
 ON CONFLICT (id) DO UPDATE SET
 	load_id = EXCLUDED.load_id,
 	driver_id = EXCLUDED.driver_id,
@@ -416,24 +418,31 @@ type driverNameCandidate struct {
 }
 
 func findCompatibleDriver(ctx context.Context, tx pgx.Tx, name string) (string, string, bool, error) {
-	rows, err := tx.Query(ctx, `SELECT id, full_name FROM drivers ORDER BY created_at, id`)
+	roster, err := driverNameRoster(ctx, tx)
 	if err != nil {
 		return "", "", false, err
 	}
-	defer rows.Close()
+	return matchCompatibleDriver(name, roster)
+}
 
-	candidates := make([]driverNameCandidate, 0)
-	for rows.Next() {
-		var candidateID, candidateName string
-		if err := rows.Scan(&candidateID, &candidateName); err != nil {
-			return "", "", false, err
-		}
-		if relayDriverNameMatchQuality(name, candidateName) >= 90 {
-			candidates = append(candidates, driverNameCandidate{id: candidateID, fullName: candidateName})
-		}
+func driverNameRoster(ctx context.Context, tx pgx.Tx) ([]driverNameCandidate, error) {
+	rows, err := tx.Query(ctx, `SELECT id, full_name FROM drivers ORDER BY created_at, id`)
+	if err != nil {
+		return nil, err
 	}
-	if err := rows.Err(); err != nil {
-		return "", "", false, err
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (driverNameCandidate, error) {
+		var candidate driverNameCandidate
+		err := row.Scan(&candidate.id, &candidate.fullName)
+		return candidate, err
+	})
+}
+
+func matchCompatibleDriver(name string, roster []driverNameCandidate) (string, string, bool, error) {
+	var candidates []driverNameCandidate
+	for _, candidate := range roster {
+		if relayDriverNameMatchQuality(name, candidate.fullName) >= 90 {
+			candidates = append(candidates, candidate)
+		}
 	}
 	return chooseUniqueCompatibleDriver(candidates)
 }
