@@ -100,7 +100,7 @@ func runBoardCommand[T any](priority *PayrollWorkPriority, run func(bool) (T, er
 	return value, err
 }
 
-func beginBoardMutation(ctx context.Context, pool *pgxpool.Pool, source bool) (pgx.Tx, error) {
+func beginBoardMutation(ctx context.Context, pool *pgxpool.Pool, source bool, actor, action string) (pgx.Tx, error) {
 	var tx pgx.Tx
 	var err error
 	if source {
@@ -111,16 +111,14 @@ func beginBoardMutation(ctx context.Context, pool *pgxpool.Pool, source bool) (p
 	if err != nil {
 		return nil, err
 	}
-	// Take the fleet lock before driver rows, including load actions and undo.
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SELECT fleet_status_lock()`); err != nil {
+	// Configure the transaction under the fleet lock before reading any driver row.
+	settings := `SELECT set_config('jit','off',true),set_config('mserp.board_actor',$1,true),set_config('mserp.board_source',$2,true)`
+	if !source {
+		settings += `,set_config('mserp.payroll.board_operational','on',true)`
+	}
+	if _, err = tx.Exec(ctx, settings+" FROM fleet_status_lock()", actor, action); err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, err
-	}
-	if !source {
-		if _, err = tx.Exec(ctx, `SET LOCAL mserp.payroll.board_operational='on'`); err != nil {
-			_ = tx.Rollback(ctx)
-			return nil, err
-		}
 	}
 	return tx, nil
 }

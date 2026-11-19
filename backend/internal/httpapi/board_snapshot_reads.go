@@ -2,9 +2,26 @@ package httpapi
 
 import (
 	"context"
+	"mserp/internal/db"
 	"sync"
 	"time"
 )
+
+// Full-fleet reads compete for CPU and the API's ten PostgreSQL connections.
+// Limit concurrent HTTP and live board builds before either acquires a connection.
+// Edits, load drawers, presence and financial commands never wait on this channel.
+var boardReadSlots = make(chan struct{}, 2)
+
+func acquireBoardRead(ctx context.Context) (func(), error) {
+	end := db.Phase(ctx, "board_read_admission")
+	defer end()
+	select {
+	case boardReadSlots <- struct{}{}:
+		return func() { <-boardReadSlots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 // Only callers present before the SQL read begins may share its snapshot.
 type boardReadKey struct {
@@ -59,20 +76,27 @@ func (r *boardSnapshotReads[T]) get(ctx context.Context, key boardReadKey, read 
 }
 
 func (r *boardSnapshotReads[T]) run(key boardReadKey, batch *boardRead[T], read func(context.Context, time.Time) (T, error)) {
-	// Hold no database connection during this short window. A request arriving
-	// during an expensive query can start the next read without waiting for it.
+	// Coalesce callers until a slot is available. A request arriving after
+	// the read starts belongs to a newer batch and observes later commits.
 	timer := time.NewTimer(2 * time.Millisecond)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
 	case <-batch.ctx.Done():
 	}
+	release, err := acquireBoardRead(batch.ctx)
+	if err == nil {
+		defer release()
+	}
 	r.mu.Lock()
 	if r.pending[key] == batch {
 		delete(r.pending, key)
 	}
 	r.mu.Unlock()
-	if err := batch.ctx.Err(); err != nil {
+	if err == nil {
+		err = batch.ctx.Err()
+	}
+	if err != nil {
 		batch.err = err
 	} else {
 		batch.board, batch.err = read(batch.ctx, key.week)

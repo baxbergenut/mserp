@@ -69,7 +69,7 @@ func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver strin
 
 func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver string, version int, actor string, source bool, personal ...bool) (DriverBoardEntry, error) {
 	var entry DriverBoardEntry
-	tx, err := beginBoardMutation(ctx, r.pool, source)
+	tx, err := beginBoardMutation(ctx, r.pool, source, actor, "undo")
 	if err != nil {
 		return entry, err
 	}
@@ -171,9 +171,6 @@ func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver strin
 				entry.clearReturnedHomeTime(true, boardLoadToday(r.now()))
 			}
 		}
-	}
-	if err = setBoardActor(ctx, tx, actor, "undo"); err != nil {
-		return entry, err
 	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('mserp.board_undo',$1,true)`, strconv.FormatInt(id, 10)); err != nil {
 		return entry, err

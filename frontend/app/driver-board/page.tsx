@@ -78,6 +78,12 @@ const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, 
     className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none placeholder:text-zinc-700 focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" />;
 });
 
+function etaTarget(entry: DriverBoardEntry | undefined, loads: BoardLoadsView | undefined) {
+  if (!entry) return "";
+  const destination = entry.destination.trim();
+  return JSON.stringify([entry.currentLoad, destination, destination ? "" : loads?.current?.planId ?? "", destination ? "" : loads?.stopKey ?? ""]);
+}
+
 export default function DriverBoardPage() {
   const [truckChoices, setTruckChoices] = useState<TruckAssignmentChoice[] | null>(null);
   const [setupDriver, setSetupDriver] = useState<{ intakeId: string; fullName: string } | null>(null);
@@ -86,7 +92,7 @@ export default function DriverBoardPage() {
  const [terminating,setTerminating]=useState<Driver|null>(null);
   const [statusChoices,setStatusChoices]=useState(statuses);
   useEffect(()=>{const c=new AbortController();fetchFleetStatusCatalog(c.signal).then(v=>setStatusChoices(v.rules.map(r=>r.boardStatus))).catch(()=>{});return()=>c.abort();},[]);
-  const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; anchor: HTMLButtonElement } | null>(null);
+  const [etaEditor, setEtaEditor] = useState<{ id: string; name: string; value: string; target: string; anchor: HTMLButtonElement } | null>(null);
   const [pickupEditor, setPickupEditor] = useState<{ id: string; name: string; planId: string; pickup: BoardStop; anchor: HTMLButtonElement } | null>(null);
   const [nextStop, setNextStop] = useState<{ id: string; name: string; status: string; loads: BoardLoadsView } | null>(null);
   const [leaveEditor, setLeaveEditor] = useState<{ id: string; name: string; status: string; changingStatus: boolean } | null>(null);
@@ -460,7 +466,7 @@ export default function DriverBoardPage() {
                     className={"h-8 w-full min-w-0 text-ellipsis bg-transparent px-1.5 text-[11px] outline-none focus:text-clip focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + destination.color} />
                   {destination.showStop && stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
                 </div></td>,
-              eta: <td key="eta" data-board-column="eta" className={cellClass}>{entry.status === "READY" ? <span aria-label={`${d.fullName} - No ETA while ready`} className="block h-8" /> : <ETACell name={d.fullName} canRetry={canEdit} retryDisabled={disabled || saving || dirty} retrying={!!etaRetrying[d.id]} onRetry={() => void retryETA(d.id, d.fullName, loads?.automation?.context ?? "")} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, anchor })} />}</td>,
+              eta: <td key="eta" data-board-column="eta" className={cellClass}>{entry.status === "READY" ? <span aria-label={`${d.fullName} - No ETA while ready`} className="block h-8" /> : <ETACell name={d.fullName} canRetry={canEdit} retryDisabled={disabled || saving || dirty} retrying={!!etaRetrying[d.id]} onRetry={() => void retryETA(d.id, d.fullName, loads?.automation?.context ?? "")} value={entry.eta} automation={loads?.automation} stop={stop} disabled={disabled} expanded={etaEditor?.id === d.id} onOpen={anchor => setEtaEditor(etaEditor?.id === d.id ? null : { id: d.id, name: d.fullName, value: entry.eta, target: etaTarget(entry, loads), anchor })} />}</td>,
               loadPlan: <td key="loadPlan" data-board-column="loadPlan" className={cellClass} title={pickupDisabled ? nextPickup?.detail : undefined}>
                 <div className="flex h-8 w-full items-center gap-2">
                   <button type="button" data-grid-display data-grid-select={!canEdit || undefined} data-grid-action={!canEdit || undefined}
@@ -504,7 +510,7 @@ export default function DriverBoardPage() {
     <CellPresence peers={state.peers} />
     {nextStop && <NextStopDialog name={nextStop.name} status={nextStop.status} loads={nextStop.loads}
       onClose={() => setNextStop(null)} onApply={stopKey => state.changeLoads(nextStop.id, nextStop.loads, { action: "advance", stopKey })} />}
-    {etaEditor && entries[etaEditor.id]?.status !== "READY" && <ETAEditor key={`${etaEditor.id}:${board?.loads[etaEditor.id]?.automation?.context ?? ""}:${board?.loads[etaEditor.id]?.automation?.stopType ?? ""}`} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
+    {etaEditor && entries[etaEditor.id]?.status !== "READY" && <ETAEditor key={etaEditor.id} targetChanged={etaEditor.target !== etaTarget(entries[etaEditor.id], board?.loads[etaEditor.id])} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {pickupEditor && <ETAEditor key={`${pickupEditor.id}:${pickupEditor.planId}:${pickupEditor.pickup.key}`} anchor={pickupEditor.anchor} name={pickupEditor.name} value="" pickup={board?.loads[pickupEditor.id]?.next.find(load => load.planId === pickupEditor.planId)?.stops.find(stop => stop.key === pickupEditor.pickup.key) ?? pickupEditor.pickup} waiting={dirty || saving || loading} onAction={async action => {
       const view = board?.loads[pickupEditor.id];
       if (!view || view.next[0]?.planId !== pickupEditor.planId) throw new Error("Next load changed. Close and reopen the pickup time.");

@@ -1,3 +1,4 @@
+import { takeBoardTimingHeader } from "./boardTiming";
 import { expensePayload } from "./expenseCosts";
 export const fetchTruckAssignmentChoices = () => apiRequest<import("./types").TruckAssignmentChoice[]>("/drivers/truck-assignment-choices");
 export const fetchDriverTruckAssignment = (id: string, signal?: AbortSignal) => apiRequest<import("./types").DriverTruckAssignment>(`/drivers/${id}/truck-assignment`, { signal });
@@ -369,7 +370,8 @@ async function performRequest<T>(path: string, init?: RequestInit, readBody?: (r
         ? { "Content-Type": "application/json" }
 			: {}),
 		...(needsCSRF && csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-		...init?.headers,
+		...(path.startsWith("/driver-board") || path.startsWith("/gross-board") ? takeBoardTimingHeader() : {}),
+      ...init?.headers,
     },
   }).catch(error => {
     if (error instanceof Error && error.name === "AbortError") throw error;

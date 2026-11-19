@@ -147,6 +147,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(loadDestination).toHaveValue('Atlanta, GA');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'My view', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect(field('ETA')).toHaveText('—');
   await field('ETA').click();
   await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('');
@@ -171,11 +172,31 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await field('Current load').fill('LOAD 8841');
   await field('Trailer').fill('TA 102');
   await field('Status').selectOption('ENROUTE');
+  // Deliver the updated load context while the dispatcher is typing the ETA.
+  const loadDetailsURL = url => url.pathname === `/api/driver-board/loads/${id}`;
+  let releaseDetails;
+  const detailsGate = new Promise(resolve => { releaseDetails = resolve; });
+  let destinationDetailsReady = false;
+  await page.route(loadDetailsURL, async route => {
+    const response = await route.fetch();
+    if ((await response.json()).automation?.customDestination) {
+      destinationDetailsReady = true;
+      await detailsGate;
+    }
+    await route.fulfill({ response });
+  });
   await field('Destination').fill('Memphis, TN → Louisville, KY');
   await field('ETA').click();
   await page.getByLabel('Miles left', { exact: true }).fill('');
   await page.getByLabel('Arrival time', { exact: true }).fill('17:00');
+  try {
+    await expect.poll(() => destinationDetailsReady).toBe(true);
+  } finally {
+    releaseDetails();
+  }
+  await page.unrouteAll({ behavior: 'wait' });
   await page.screenshot({ path: join(temp, 'status-board-eta-picker.png'), fullPage: true, animations: 'disabled' });
+  await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('17:00');
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await field('Notes').fill('Call before arrival');
   await field('Home time').click();
@@ -284,7 +305,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   const roleValue = access.roles.find(r => r.name === 'Board viewer');
   const { randomBytes } = await import('node:crypto');
   const password = randomBytes(20).toString('hex');
-  const user = await page.request.post(`${base}/api/settings/users`, { headers, data: { username: 'Board Viewer', email: 'board-viewer@example.com', password, roleId: roleValue.id, active: true } });
+  const user = await page.request.post(`${base}/api/settings/users`, { headers, data: { username: 'Board Viewer', firstName: 'Board', lastName: 'Viewer', email: 'board-viewer@example.com', password, roleId: roleValue.id, active: true } });
   expect(user.status()).toBe(200);
   const context = await page.context().browser().newContext();
   try {

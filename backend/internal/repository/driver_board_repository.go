@@ -314,18 +314,15 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 }
 
 func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardEntry, source bool, actor ...string) ([]DriverBoardEntry, error) {
-	tx, err := beginBoardMutation(ctx, r.pool, source)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
 	user := ""
 	if len(actor) > 0 {
 		user = actor[0]
 	}
-	if err = setBoardActor(ctx, tx, user, "board"); err != nil {
+	tx, err := beginBoardMutation(ctx, r.pool, source, user, "board")
+	if err != nil {
 		return nil, err
 	}
+	defer tx.Rollback(ctx)
 	entries, err = saveDriverBoardEntries(ctx, tx, entries, boardLoadToday(r.now()), true)
 	if err != nil {
 		return nil, err
@@ -348,26 +345,29 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if e.EffectiveAt != nil {
 			when = e.EffectiveAt.UTC().Format(time.RFC3339Nano)
 		}
-		if _, err := tx.Exec(ctx, `SELECT set_config('mserp.status_effective_at',$1,true),set_config('mserp.status_reason',$2,true)`, when, strings.TrimSpace(e.StatusReason)); err != nil {
-			return nil, err
-		}
 		e.UndoID = 0
+		// Keep the row read in its own statement after acquiring the driver lock.
+		// Send the three statements together to avoid two database round trips.
+		var batch pgx.Batch
+		batch.Queue(`SELECT set_config('mserp.status_effective_at',$1,true),set_config('mserp.status_reason',$2,true)`, when, strings.TrimSpace(e.StatusReason))
 		var active, wasHome bool
-		err = tx.QueryRow(ctx, `SELECT active,fleet_status_enabled() AND availability_status='home' FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).Scan(&active, &wasHome)
+		var old DriverBoardEntry
+		var readErr error
+		batch.Queue(`SELECT active,fleet_status_enabled() AND availability_status='home' FROM drivers WHERE id=$1 FOR UPDATE`, e.DriverID).QueryRow(func(row pgx.Row) error {
+			return row.Scan(&active, &wasHome)
+		})
+		batch.Queue(boardEntryQuery, e.DriverID).QueryRow(func(row pgx.Row) error {
+			old, readErr = scanBoardEntry(row)
+			return readErr
+		})
+		err = tx.SendBatch(ctx, &batch).Close()
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrDriverBoardConflict
 		}
 		if err != nil {
 			return nil, err
 		}
-		if !active {
-			return nil, ErrDriverBoardConflict
-		}
-		old, readErr := boardEntry(ctx, tx, e.DriverID)
-		if readErr != nil {
-			return nil, readErr
-		}
-		if old.Version != e.Version {
+		if !active || old.Version != e.Version {
 			return nil, ErrDriverBoardConflict
 		}
 		if e.LeavePlan == nil {

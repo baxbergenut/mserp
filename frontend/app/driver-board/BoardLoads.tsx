@@ -41,6 +41,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   if (!overview && (view.detailsOmitted || sourceKey !== details.sourceKey)) setDetails({ sourceKey, view: initial });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [detailsError, setDetailsError] = useState("");
   const [select, setSelect] = useState<BoardLoad | null>(null);
   const [clear, setClear] = useState(false);
   const [number, setNumber] = useState("");
@@ -73,13 +74,13 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     if (!overview) return;
     const controller = new AbortController();
     void fetchBoardLoads(driverId, undefined, controller.signal)
-      .then(value => { if (!controller.signal.aborted) { setDetails({ sourceKey, view: value }); setError(""); } })
-      .catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not load plans."); });
+      .then(value => { if (!controller.signal.aborted) { setDetails({ sourceKey, view: value }); setDetailsError(""); } })
+      .catch(e => { if (!controller.signal.aborted) setDetailsError(e instanceof Error ? e.message : "Could not load plans."); });
     return () => controller.abort();
   }, [driverId, sourceKey, overview]);
   async function refresh() {
     setBusy(true); setError(""); setSelect(null); setClear(false);
-    try { setDetails({ sourceKey, view: await fetchBoardLoads(driverId) }); }
+    try { setDetails({ sourceKey, view: await fetchBoardLoads(driverId) }); setDetailsError(""); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not load plans."); }
     finally { setBusy(false); }
   }
@@ -88,7 +89,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
     setBusy(true); setError("");
     try {
       const updated = await onChange(driverId, view, action);
-      setDetails({ sourceKey, view: updated }); setSelect(null); setClear(false);
+      setDetailsError(""); setDetails({ sourceKey, view: updated }); setSelect(null); setClear(false);
       if (action.action === "add") {
         setNumber("");
         setExpanded(updated.next.find(load => load.number.toLowerCase() === action.number?.toLowerCase())?.planId ?? null);
@@ -159,7 +160,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
         {waiting && <p className="text-xs text-amber-300">Wait for board edits to finish saving before changing loads.</p>}
         {view.detailsOmitted && !error && <p role="status" className="text-xs text-zinc-400">Loading load history…</p>}
         {view.resolutionWarning && <p role="status" className="text-xs text-amber-300">{view.resolutionWarning}</p>}
-        {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+        {(error || detailsError) && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error || detailsError}</p>}
         {canEdit && <form className="space-y-2" onSubmit={event => {
           event.preventDefault();
           const value = number.trim();

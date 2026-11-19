@@ -97,7 +97,11 @@ Driver and Investor Pay acquire the shared side before pinning a finalization
 snapshot, including at Monday rollover. Historical or mixed planning saves
 retain the global source gate. Load-slot and financial writes retain their
 existing protocol. Status Board text load selection resolves weekly native
-plans before the unique available provider fallback.
+plans before the unique available provider fallback. Status Board coalesces rapid
+text input for up to 120 ms and flushes on blur or navigation. Browser timings
+for visible board opens and confirmed edits travel on subsequent ordinary board
+requests. Full-board HTTP and stream snapshots share two build slots per API
+process so bursts of refreshes leave database connections available for writes.
 
 ## Reports
 
