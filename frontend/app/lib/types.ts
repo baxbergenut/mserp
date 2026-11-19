@@ -537,6 +537,8 @@ export interface FiveELDBoardSummary {
   invalid: number;
 }
 
+export type DriverBoardGrossEntry = Pick<GrossBoardEntry, "driverId" | "date" | "slot" | "loadNumber" | "dayStatus" | "originalRate" | "driverRate" | "miles" | "duplicate" | "deleted" | "tripReview">;
+
 export interface DriverBoard {
   pendingDrivers?: { intakeId: string; fullName: string }[];
 	statusSyncEnabled?: boolean;
@@ -547,7 +549,7 @@ export interface DriverBoard {
   weekStart: string;
   drivers: DriverBoardDriver[];
   entries: DriverBoardEntry[];
-  grossEntries: GrossBoardEntry[];
+  grossEntries: DriverBoardGrossEntry[];
   grossTierMinimumCents?: number[];
   loads: Record<string, BoardLoads>;
   eld: FiveELDBoardSummary;

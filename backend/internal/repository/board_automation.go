@@ -139,6 +139,8 @@ type BoardAutomation struct {
 
 	routeAddress   string
 	travelEvidence BoardTravel
+	persisted      bool
+	etaContext     string
 }
 
 type ArrivalEvidence struct {
@@ -249,7 +251,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 	rows, err := tx.Query(ctx, `WITH vin_counts AS MATERIALIZED (
  SELECT upper(regexp_replace(vin,'[^A-Za-z0-9]','','g')) vin,count(*) matches FROM trucks WHERE vin IS NOT NULL GROUP BY 1
  ) SELECT d.id,coalesce(t.id::text,'')||'/'||coalesce(a.id::text,'')||'/'||coalesce(t.vin,'')||'/'||coalesce(b.trailer_number,''),coalesce(c.evidence,'{}'::jsonb),coalesce(CASE WHEN $2 THEN c.travel ELSE c.travel-'geometry'-'following' END,'{}'::jsonb),coalesce(c.eta_context,''),coalesce(b.eta,''),
- (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND coalesce(vc.matches,0)=1),coalesce(el.source,''),el.reported_at,coalesce(c.ready_location,'{}'::jsonb),c.ready_location_requested_at
+ (t.vin IS NOT NULL AND btrim(t.vin)<>'' AND coalesce(vc.matches,0)=1),coalesce(el.source,''),el.reported_at,coalesce(c.ready_location,'{}'::jsonb),c.ready_location_requested_at,c.driver_id IS NOT NULL
  FROM drivers d LEFT JOIN truck_driver_assignments a ON a.driver_id=d.id AND a.unassigned_at IS NULL
  LEFT JOIN trucks t ON t.id=a.truck_id LEFT JOIN vin_counts vc ON vc.vin=upper(regexp_replace(t.vin,'[^A-Za-z0-9]','','g'))
  LEFT JOIN driver_board_automation c ON c.driver_id=d.id LEFT JOIN driver_board b ON b.driver_id=d.id `+statusBoardELDLocationJoinSQL+` WHERE d.id=ANY($1::uuid[])`, ids, includeRoute)
@@ -261,11 +263,11 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 		var id, truck, etaContext, eta, telemetrySource string
 		var evidence ArrivalEvidence
 		var travel BoardTravel
-		var telemetrySafe bool
+		var telemetrySafe, persisted bool
 		var gpsAt *time.Time
 		var readyLocation BoardReadyLocation
 		var readyRequestedAt *time.Time
-		if err = rows.Scan(&id, &truck, &evidence, &travel, &etaContext, &eta, &telemetrySafe, &telemetrySource, &gpsAt, &readyLocation, &readyRequestedAt); err != nil {
+		if err = rows.Scan(&id, &truck, &evidence, &travel, &etaContext, &eta, &telemetrySafe, &telemetrySource, &gpsAt, &readyLocation, &readyRequestedAt, &persisted); err != nil {
 			return err
 		}
 		v := views[id]
@@ -302,7 +304,7 @@ func enrichBoardAutomation(ctx context.Context, tx pgx.Tx, views map[string]Boar
 			sum := sha256.Sum256(body)
 			key = hex.EncodeToString(sum[:])
 		}
-		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key, CustomDestination: address != "", routeAddress: address, travelEvidence: travel}
+		a := &BoardAutomation{Context: key, ArrivalOverride: "auto", TravelMode: "manual", Evidence: evidence, RoutingEnabled: travel.Enabled, ManualETAValid: etaContext == "" || etaContext == key, CustomDestination: address != "", routeAddress: address, travelEvidence: travel, persisted: persisted, etaContext: etaContext}
 		a.TravelRetryPending = travel.Context == key && travel.retryPending()
 		a.TelemetrySafe = telemetrySafe
 		if selectionInvalid && address == "" {

@@ -2,11 +2,11 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { GrossBoardEntry } from "@/app/lib/types";
+import type { DriverBoardGrossEntry } from "@/app/lib/types";
 import { addDays, shortDate } from "@/app/gross-board/board";
 
 export function CurrentLoadInput({ value, label, disabled, entries, week, onChange, warning }: {
-  value: string; label: string; disabled: boolean; entries: GrossBoardEntry[]; week: string;
+  value: string; label: string; disabled: boolean; entries: DriverBoardGrossEntry[]; week: string;
   onChange: (value: string) => void;
   warning?: string;
 }) {

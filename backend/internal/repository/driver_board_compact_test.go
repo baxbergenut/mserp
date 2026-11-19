@@ -33,6 +33,24 @@ func TestCompactBoardPreservesDifferentSnapshots(t *testing.T) {
 	}
 }
 
+func TestCompactBoardGridGrossEvidence(t *testing.T) {
+	board := DriverBoard{GrossEntries: []GrossBoardEntry{{DriverID: "d", Date: "2026-11-19", Slot: 2, LoadNumber: "test", OriginalRate: "100.00", DriverRate: "90.01", Miles: "123.00", Duplicate: true, TripReview: true, Trips: []GrossBoardTrip{{ID: 5}}}}}
+	data, err := json.Marshal(CompactBoardGrid(board))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		GrossEntries []map[string]any `json:"grossEntries"`
+	}
+	if err = json.Unmarshal(data, &result); err != nil || len(result.GrossEntries) != 1 {
+		t.Fatal("gross grid entries", err)
+	}
+	row := result.GrossEntries[0]
+	if row["driverId"] != "d" || row["loadNumber"] != "test" || row["driverRate"] != "90.01" || row["duplicate"] != true || row["tripReview"] != true || row["trips"] != nil {
+		t.Fatal(row)
+	}
+}
+
 func TestBoardOverviewPreservesLiveEvidence(t *testing.T) {
 	p := BoardLoad{PlanID: "plan", Number: "load", Stops: []BoardStop{{Key: "stop"}}}
 	full := DriverBoard{Loads: map[string]BoardLoads{"driver": {Current: &p, Week: []BoardLoad{p}, Next: []BoardLoad{p}, Earlier: []BoardLoad{p}, Hidden: []BoardLoad{p}, Unavailable: []BoardLoad{p}, Revision: "fence", StopKey: "stop"}}}

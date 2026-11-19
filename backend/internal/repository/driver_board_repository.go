@@ -139,7 +139,7 @@ func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (Driver
 	return r.get(ctx, week, true)
 }
 
-func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, displayStopCities bool) (DriverBoard, error) {
+func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, displayBoard bool) (DriverBoard, error) {
 	result := DriverBoard{WeekStart: week.Format("2006-01-02"), Drivers: []DriverBoardDriver{}, Entries: []DriverBoardEntry{}, GrossEntries: []GrossBoardEntry{}}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -153,13 +153,15 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
 		return result, err
 	}
-	rule, err := readEffectiveCommissionRule(ctx, tx, result.WeekStart)
-	if err != nil {
-		return result, err
-	}
-	if rule != nil {
-		for _, tier := range rule.Rules.Tiers {
-			result.GrossTierMinimumCents = append(result.GrossTierMinimumCents, tier.minGrossCents())
+	if displayBoard {
+		rule, err := readEffectiveCommissionRule(ctx, tx, result.WeekStart)
+		if err != nil {
+			return result, err
+		}
+		if rule != nil {
+			for _, tier := range rule.Rules.Tiers {
+				result.GrossTierMinimumCents = append(result.GrossTierMinimumCents, tier.minGrossCents())
+			}
 		}
 	}
 	// Retained departure rows are history, not live assignments.
@@ -228,29 +230,31 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)
 	}
-	entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
-	if err != nil {
-		return result, err
-	}
-	visible := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		visible[id] = true
-	}
-	for _, entry := range entries {
-		if visible[entry.DriverID] {
-			result.GrossEntries = append(result.GrossEntries, entry)
+	if displayBoard {
+		entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+		if err != nil {
+			return result, err
 		}
+		visible := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			visible[id] = true
+		}
+		for _, entry := range entries {
+			if visible[entry.DriverID] {
+				result.GrossEntries = append(result.GrossEntries, entry)
+			}
+		}
+		result.ELD, err = fiveELDSyncSummary(ctx, tx)
+		if err != nil {
+			return result, err
+		}
+		result.ELD.Configured = r.fiveELDConfigured
 	}
-	result.ELD, err = fiveELDSyncSummary(ctx, tx)
-	if err != nil {
-		return result, err
-	}
-	result.ELD.Configured = r.fiveELDConfigured
 	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{}, r.plans, key)
 	if err != nil {
 		return result, err
 	}
-	if displayStopCities {
+	if displayBoard {
 		if err := applyBoardStopCities(ctx, tx, result.Loads); err != nil {
 			return result, err
 		}
@@ -268,9 +272,11 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		return result, err
 	}
 	applyBoardDispatcherOrder(&result)
-	result.PendingDrivers, err = readBoardPendingDrivers(ctx, tx)
-	if err != nil {
-		return result, err
+	if displayBoard {
+		result.PendingDrivers, err = readBoardPendingDrivers(ctx, tx)
+		if err != nil {
+			return result, err
+		}
 	}
 	return result, tx.Commit(ctx)
 }

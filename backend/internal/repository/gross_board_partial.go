@@ -131,6 +131,21 @@ func (r *GrossBoardRepository) SavePartialChanges(ctx context.Context, entries [
 	if err = lockGrossBoardWrite(ctx, tx, actor); err != nil {
 		return GrossBoardSaveResult{}, err
 	}
+	result := GrossBoardSaveResult{Entries: []GrossBoardEntry{}, Issues: []GrossBoardSaveIssue{}}
+	// A single group either commits together or rolls back the whole request.
+	// Only a multi-entry batch needs savepoints to retain independent successes.
+	if len(entries) == 1 {
+		saved, saveErr := r.saveEntriesLocked(ctx, tx, slices.Clone(entries))
+		if saveErr != nil {
+			if issue, ok := grossBoardIssue(saveErr, entries); ok {
+				result.Issues = append(result.Issues, issue)
+				return result, tx.Rollback(ctx)
+			}
+			return result, saveErr
+		}
+		result.Entries = saved
+		return result, commitPayrollMutation(ctx, tx)
+	}
 	attempt := func(group []GrossBoardEntry) ([]GrossBoardEntry, error) {
 		savepoint, err := tx.Begin(ctx)
 		if err != nil {
@@ -145,7 +160,6 @@ func (r *GrossBoardRepository) SavePartialChanges(ctx context.Context, entries [
 		}
 		return saved, savepoint.Commit(ctx)
 	}
-	result := GrossBoardSaveResult{Entries: []GrossBoardEntry{}, Issues: []GrossBoardSaveIssue{}}
 	saved, err := attempt(entries)
 	if err == nil {
 		result.Entries = saved

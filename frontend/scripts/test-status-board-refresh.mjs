@@ -35,7 +35,7 @@ try {
   await page.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname.slice(4);
     if (path === '/driver-board' && req.method() === 'GET') {
-      reads++; expect(url.searchParams.get('compact')).toBe('1');
+      reads++; expect(url.searchParams.get('compact')).toBe('grid');
       if (delayRead) { delayRead = false; await new Promise(resolve => { releaseRead = resolve; }); return route.fulfill({ json: board('Stale HTTP response', 1) }); }
       return route.fulfill({ json: { ...board('Initial', 1), plans: [], loads: { [driver.id]: loads } } });
     }

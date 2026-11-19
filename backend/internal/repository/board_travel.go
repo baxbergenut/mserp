@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"math"
+	"reflect"
 	"sort"
 	"time"
 
@@ -270,6 +271,9 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			if onlyDriver != "" {
 				return ErrETARetryUnavailable
 			}
+			if !a.TelemetrySafe || !a.readyLocation.due(a.Context, d.Location, now) {
+				continue
+			}
 			if err := r.refreshReadyLocation(ctx, routes, d, view); err != nil {
 				return err
 			}
@@ -290,19 +294,21 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			evidence = recoverCachedArrival(evidence, a.Context, a.travelEvidence, stop)
 			evidence = evaluateArrival(evidence, a.Context, d.Location, stop, now)
 		}
-		body, _ := json.Marshal(evidence)
-		_, err = conn.Exec(ctx, `INSERT INTO driver_board_automation(driver_id,evidence) VALUES($1,$2)
+		if !a.persisted || evidence != a.Evidence {
+			body, _ := json.Marshal(evidence)
+			_, err = conn.Exec(ctx, `INSERT INTO driver_board_automation(driver_id,evidence) VALUES($1,$2)
    ON CONFLICT(driver_id) DO UPDATE SET evidence=EXCLUDED.evidence,updated_at=now() WHERE driver_board_automation.evidence IS DISTINCT FROM EXCLUDED.evidence`, d.ID, body)
-		if err != nil {
-			return err
+			if err != nil {
+				return err
+			}
 		}
-		if a.Context != "" {
+		if a.etaContext == "" && a.Context != "" {
 			_, err = conn.Exec(ctx, `UPDATE driver_board_automation SET eta_context=$2 WHERE driver_id=$1 AND eta_context=''`, d.ID, a.Context)
 			if err != nil {
 				return err
 			}
 		}
-		if routes == nil || !routes.Options.Enabled {
+		if (routes == nil || !routes.Options.Enabled) && a.RoutingEnabled {
 			if _, err = conn.Exec(ctx, `UPDATE driver_board_automation SET travel=jsonb_set(travel,'{enabled}','false'::jsonb) WHERE driver_id=$1 AND travel->>'enabled'='true'`, d.ID); err != nil {
 				return err
 			}
@@ -338,6 +344,7 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			unavailable = "Truck GPS location has an invalid timestamp"
 		}
 		if unavailable != "" {
+			previous := t
 			if t.Context != a.Context {
 				t = BoardTravel{Context: a.Context}
 			}
@@ -347,6 +354,9 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			}
 			if !a.TelemetrySafe || missingStopCoordinates {
 				t.CalculatedAt = time.Time{}
+			}
+			if reflect.DeepEqual(previous, t) {
+				continue
 			}
 			// Do not mark this as a route attempt: fresh GPS should queue immediately.
 			if err = r.storeBoardTravel(ctx, d.ID, d.TruckID, view.Revision, a.Context, t); err != nil {
