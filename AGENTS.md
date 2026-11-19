@@ -485,6 +485,9 @@ status while background source evidence refreshes.
   Driver setup and identity edits reject a matching name plus the same phone
   or email, including matches on terminated profiles. Reactivation checks for
   an active match. FleetScope linking leaves the existing profile intact.
+- Active Maintenance trucks publish their assigned primary and co-driver to
+  FleetScope while retaining their Maintenance status. Hold, Out of Service,
+  Terminated and inactive trucks publish an empty crew.
 - Outbound FleetScope fleet sync uses migration 103, `fleetscope/sync.go`,
   repository `fleetscope_sync*.go`, `httpapi/fleetscope_sync_handlers.go`, and
   Settings > FleetScope. Default off; no receiver writes on deployment alone.

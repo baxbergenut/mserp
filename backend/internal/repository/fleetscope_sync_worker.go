@@ -89,7 +89,7 @@ func truckAcceptsCrew(truck fleetscope.TruckProjection) bool {
 		return false
 	}
 	switch truck.OperationalStatus {
-	case "maintenance", "out_of_service", "hold", "terminated":
+	case "out_of_service", "hold", "terminated":
 		return false
 	}
 	return true
