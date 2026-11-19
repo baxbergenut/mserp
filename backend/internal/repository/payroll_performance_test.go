@@ -125,12 +125,12 @@ func TestPayrollPerformance(t *testing.T) {
  INSERT INTO driver_escrows(id,driver_id,driver_name,start_date,amount,opening_paid)
  SELECT md5('escrow'||n)::uuid,md5('driver'||n)::uuid,'Perf Driver '||n,'2026-01-01',2500,500 FROM generate_series(1,176)n WHERE n%4<>0;
  INSERT INTO driver_escrow_payments(escrow_id,week_start,amount)
- SELECT id,'2026-09-21'::date+7*w,100 FROM driver_escrows CROSS JOIN generate_series(0,1)w;
+ SELECT id,'2026-09-21'::date+7*w,100 FROM driver_escrows CROSS JOIN generate_series(0,1)w WHERE driver_id IS NOT NULL AND start_date='2026-01-01';
  -- Only fixture creation may import an already historical release. Restore the
  -- ordinary date/version/funding guard before every measured read and save.
  ALTER TABLE driver_escrow_releases DISABLE TRIGGER escrow_release_guard;
  INSERT INTO driver_escrow_releases(escrow_id,week_start,amount)
- SELECT id,'2026-09-28',50 FROM driver_escrows;
+ SELECT id,'2026-09-28',50 FROM driver_escrows WHERE driver_id IS NOT NULL AND start_date='2026-01-01';
  ALTER TABLE driver_escrow_releases ENABLE TRIGGER escrow_release_guard;
  ALTER TABLE fuel_transactions DISABLE TRIGGER fuel_reporting_fields_before;
  WITH inserted AS (

@@ -51,7 +51,7 @@ function watch(row: HTMLTableRowElement, activate: () => void) {
 }
 
 export function ProgressiveBoardRow({ immediate, columns, height, label, children }: {
-  immediate: boolean; columns: number; height: number; label: string; children: ReactElement;
+  immediate: boolean; columns: number; height: number; label: string; children: () => ReactElement;
 }) {
   const [mounted, setMounted] = useState(immediate);
   const placeholder = useRef<HTMLTableRowElement>(null);
@@ -64,7 +64,7 @@ export function ProgressiveBoardRow({ immediate, columns, height, label, childre
     else if (placeholder.current) stop = watch(placeholder.current, activate);
     return () => { cancelled = true; stop(); };
   }, [immediate, mounted]);
-  if (mounted || immediate) return children;
+  if (mounted || immediate) return children();
   return <tr ref={placeholder} data-board-row-pending aria-busy="true" style={{ height }}>
     <th scope="row" className="border-b border-zinc-800 px-3 text-left text-xs font-medium text-zinc-500">{label}</th>
     <td colSpan={columns - 1} className="border-b border-zinc-800" />

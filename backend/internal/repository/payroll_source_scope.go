@@ -11,8 +11,9 @@ import (
 
 type payrollSourceImpactMemoKey struct{}
 type payrollSourceImpactMemo struct {
-	tx     pgx.Tx
-	proofs map[[3]string]*payrollPublicationImpact
+	tx        pgx.Tx
+	proofs    map[[3]string]*payrollPublicationImpact
+	intervals map[[2]string]*payrollSourceInterval
 }
 
 // A table revision can change without touching this command's complete locked
@@ -116,6 +117,46 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 	if before == current {
 		return &payrollPublicationImpact{roots: []string{}, weeks: map[string]bool{}}, nil
 	}
+	var interval *payrollSourceInterval
+	var err error
+	memo, _ := ctx.Value(payrollSourceImpactMemoKey{}).(*payrollSourceImpactMemo)
+	if memo != nil && memo.tx == tx {
+		// All weeks in this validation phase share the same locked source data.
+		// Retain complete intervals, including missing evidence, only until posting.
+		key := [2]string{before, current}
+		var known bool
+		interval, known = memo.intervals[key]
+		if !known {
+			interval, err = readPayrollSourceInterval(ctx, tx, before, current)
+			if err == nil {
+				if memo.intervals == nil {
+					memo.intervals = make(map[[2]string]*payrollSourceInterval)
+				}
+				memo.intervals[key] = interval
+			}
+		}
+	} else {
+		interval, err = readPayrollSourceInterval(ctx, tx, before, current)
+	}
+	if err != nil || interval == nil {
+		return nil, err
+	}
+	return interval.impactForWeek(ctx, tx, week)
+}
+
+type payrollSourceInterval struct {
+	ids, board, loads, other []int64
+	// The three bits identify board, load and remaining events in this interval.
+	impacts map[int]*payrollPublicationImpact
+}
+
+const (
+	boardIntervalEvents = 1 << iota
+	loadIntervalEvents
+	otherIntervalEvents
+)
+
+func readPayrollSourceInterval(ctx context.Context, tx pgx.Tx, before, current string) (*payrollSourceInterval, error) {
 	parse := func(value string) (map[string]int64, bool) {
 		result := map[string]int64{}
 		for _, entry := range strings.Split(value, ",") {
@@ -196,38 +237,60 @@ func readPayrollChangedSourceImpact(ctx context.Context, tx pgx.Tx, before, curr
 			return nil, nil
 		}
 	}
-	impactIDs := ids
-	if week != "" {
-		// Preserve date proofs when independent board and provider changes
-		// share an interval with one another or with a ledger change.
-		impactIDs = append([]int64{}, otherIDs...)
-		for _, scoped := range [][]int64{boardIDs, loadIDs} {
-			if len(scoped) == 0 {
+	return &payrollSourceInterval{ids: ids, board: boardIDs, loads: loadIDs, other: otherIDs, impacts: make(map[int]*payrollPublicationImpact)}, nil
+}
+
+func (i *payrollSourceInterval) captured(ctx context.Context, tx pgx.Tx, mask int, ids []int64) (*payrollPublicationImpact, error) {
+	if cached, known := i.impacts[mask]; known {
+		return cached, nil
+	}
+	impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", ids)
+	if err == nil {
+		i.impacts[mask] = impact
+	}
+	return impact, err
+}
+
+func (i *payrollSourceInterval) impactForWeek(ctx context.Context, tx pgx.Tx, week string) (*payrollPublicationImpact, error) {
+	ids := i.ids
+	mask := 0
+	if len(i.other) > 0 {
+		mask |= otherIntervalEvents
+	}
+	impactIDs := append([]int64(nil), i.other...)
+	for _, set := range []struct {
+		bit int
+		ids []int64
+	}{{boardIntervalEvents, i.board}, {loadIntervalEvents, i.loads}} {
+		if len(set.ids) == 0 {
+			continue
+		}
+		if week != "" && len(set.ids) != len(ids) {
+			impact, err := i.captured(ctx, tx, set.bit, set.ids)
+			if err != nil {
+				return nil, err
+			}
+			if impact != nil && impact.weeks != nil && !impact.weeks[week] {
 				continue
 			}
-			if len(scoped) != len(ids) {
-				impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", scoped)
-				if err != nil {
-					return nil, err
-				}
-				if impact != nil && impact.weeks != nil && !impact.weeks[week] {
-					continue
-				}
-			}
-			impactIDs = append(impactIDs, scoped...)
 		}
-		if len(impactIDs) == 0 {
-			return &payrollPublicationImpact{roots: []string{}, weeks: map[string]bool{}, changeIDs: ids}, nil
-		}
+		mask |= set.bit
+		impactIDs = append(impactIDs, set.ids...)
 	}
-	impact, err := payrollCapturedImpact(ctx, tx, nil, "", "", impactIDs)
+	if len(impactIDs) == 0 {
+		return &payrollPublicationImpact{roots: []string{}, weeks: map[string]bool{}, changeIDs: ids}, nil
+	}
+	if len(impactIDs) == len(ids) {
+		impactIDs = ids
+	}
+	impact, err := i.captured(ctx, tx, mask, impactIDs)
 	if err != nil || impact == nil || (len(impact.roots) == 0 && impact.weeks == nil) {
 		return nil, err
 	}
-	// Even when an event cannot change this week's values, it can bump
-	// a shared resource epoch. Keep its captured delta in the exact proof.
-	impact.changeIDs = ids
-	return impact, nil
+	// A week may exclude some events from routing, but needs all epoch deltas.
+	result := *impact
+	result.changeIDs = ids
+	return &result, nil
 }
 
 // Only these captured source events may explain a stale resource epoch for an

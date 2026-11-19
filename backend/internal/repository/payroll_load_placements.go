@@ -99,7 +99,18 @@ func (r *DriverPayRepository) PlacePayLoad(ctx context.Context, kind string, in 
 		return nil
 	}
 	var report DriverPayWeek
-	if kind == "investor" {
+	// beginPayrollSourceCommand validated this exact revision inside the locked
+	// transaction. Reuse its detail for the load list. The native allocation,
+	// transfer, placement and both settlement guards below still run.
+	if r.preparedCommands && command != nil && command.expected != "" &&
+		in.StatementKind == kind && in.StatementID == in.DriverID && in.StatementWeekStart == in.WeekStart {
+		var storedSnapshot string
+		var row DriverPayDriver
+		row, err = preparedStatementDetail(ctx, tx, kind, in.DriverID, in.WeekStart, command.expected, &storedSnapshot)
+		if err == nil {
+			report.Drivers = []DriverPayDriver{row}
+		}
+	} else if kind == "investor" {
 		// Validate the same conservative connected component used by investor
 		// statement reads, rather than calculating unrelated fleet statements.
 		selected, selectErr := selectPayrollContext(payrollWeekContext(ctx, in.WeekStart), tx, "truck", in.DriverID)

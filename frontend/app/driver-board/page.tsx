@@ -403,7 +403,7 @@ export default function DriverBoardPage() {
               return <td key={column} className={column === "currentLoad" ? `${cellClass} bg-zinc-950` : cellClass} />;
             })}
           </tr>) : []),
-              ...members.map(d => {
+              ...members.map(d => <ProgressiveBoardRow key={d.id} immediate={renderedDrivers.indexOf(d) < 24 || rowDrag.active} columns={columns.length} height={33} label={d.fullName}>{() => {
             const disabled = !canEdit || loading || leaving || state.actionBusy || !!d.departed;
             const orderDisabled = disabled || saving || dirty;
             const i = renderedDrivers.indexOf(d);
@@ -498,10 +498,10 @@ export default function DriverBoardPage() {
               homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass} title={disabled ? homeTimeTitle : undefined}><button type="button" data-grid-display aria-label={`${d.fullName} · Home time`} title={homeTimeTitle} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,
               driverAddress: <td key="driverAddress" data-board-column="driverAddress" className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>,
             };
-            return <ProgressiveBoardRow key={d.id} immediate={i < 24 || rowDrag.active} columns={columns.length} height={33} label={d.fullName}><tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
+            return <tr className="group bg-zinc-950/20 hover:bg-zinc-800/20" data-driver-id={d.id}>
                 {columns.map(column => cells[column])}
-              </tr></ProgressiveBoardRow>;
-          })];
+              </tr>;
+            }}</ProgressiveBoardRow>)];
           })}
           {!loading && drivers.length === 0 && pendingDrivers.length === 0 && <tr><td colSpan={columns.length} className="p-10 text-center text-zinc-500">{error && !board ? "Status Board could not be loaded. Use Retry to try again." : "No active drivers match this view."}</td></tr>}
         </tbody>

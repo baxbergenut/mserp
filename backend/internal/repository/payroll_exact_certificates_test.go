@@ -31,6 +31,31 @@ func TestPayrollExactCertificatesDatabase(t *testing.T) {
 		}
 		exactShared := shared(`{"certificate:a":2,"certificate:b":3}`)
 		staleShared := shared(`{"certificate:a":1,"certificate:b":3}`)
+		t.Run("packed and local claim containment matches expanded keys", func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(ctx)
+			input := fmt.Sprintf(`[{},{"statement:test":2},{"certificate:a":1},{"$shared":"%s"},{"$shared":"%s","certificate:a":7,"certificate:c":0,"statement:test":1}]`, exactShared, staleShared)
+			query := payrollRebaseClaimsSQL + `SELECT ordinality AS id,value AS resource_dependencies
+ FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY` + payrollRebasePermittedSQL + `
+ ), expected AS (
+ SELECT id FROM candidates CROSS JOIN claims WHERE unrestricted OR
+ ARRAY(SELECT key FROM jsonb_object_keys(payroll_expand_resource_dependencies(resource_dependencies)) key WHERE key NOT LIKE 'statement:%')
+ <@ ARRAY(SELECT jsonb_object_keys(held))
+ ) SELECT NOT EXISTS ((SELECT id FROM versions EXCEPT SELECT id FROM expected)
+ UNION ALL (SELECT id FROM expected EXCEPT SELECT id FROM versions))`
+			for _, claims := range []string{"", "[]", `["certificate:a"]`, `["certificate:a","certificate:b"]`, `["certificate:a","certificate:b","certificate:c"]`} {
+				if _, err := tx.Exec(ctx, `SELECT set_config('mserp.payroll.resources',$1,true)`, claims); err != nil {
+					t.Fatal(err)
+				}
+				var equal bool
+				if err := tx.QueryRow(ctx, query, input).Scan(&equal); err != nil || !equal {
+					t.Fatalf("claim mismatch for %q: %v", claims, err)
+				}
+			}
+		})
 		emptyShared := shared(`{}`)
 		packed := func(fp, local string) string { return fmt.Sprintf(`{"$shared":%q%s}`, fp, local) }
 		cases := []struct {

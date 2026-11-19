@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"mserp/internal/db"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -81,9 +82,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if edits.Version != card.Edits.Version {
 		return edits, ErrDriverPayConflict
 	}
-	localAdjustment := command != nil && command.before != nil &&
-		!slices.Equal(card.Edits.Adjustments, edits.Adjustments) && payrollStatementLocalSave(card.Edits, edits)
-	if localAdjustment {
+	localEdit := edits.Notes != card.Edits.Notes || !maps.Equal(edits.Comments, card.Edits.Comments) ||
+		!slices.Equal(card.Edits.Adjustments, edits.Adjustments)
+	if localEdit && command != nil && command.before != nil && payrollStatementLocalSave(card.Edits, edits) {
 		// The locked, reviewed statement already includes its generated charges.
 		edits.GeneratedCharges = card.Edits.GeneratedCharges
 	} else {

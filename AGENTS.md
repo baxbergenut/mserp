@@ -256,6 +256,14 @@ status while background source evidence refreshes.
   statements are converted; finalized and unreferenced payments remain untouched.
   See `docs/PAYROLL_EXPENSE_FINALIZATION.md` for invariants and validation.
 
+- Payroll publication reads the receipt's selected statement versions across
+  weeks in one query on either side of publication. A validated placement can
+  reuse its exact saved load list. Its earliest possible affected week includes
+  old and new native, transfer and placement dates. Mixed financial events or
+  missing dates retain full calculation. Escrow lookups share only proven
+  source presence within the post-write transaction. Canonical balances and
+  financial commands still run under their native guards.
+
 - Ready payroll finalizations reuse fenced saved expense allocations and exact
   canonical cost receipts. A first all-zero Fuel/Toll statement with no override
   or existing cost collection omits the zero posting; existing collections still
@@ -3667,7 +3675,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   odometers only while at least one program has an enabled schedule. Store each
   fleet GPS snapshot in bulk and retain timestamp and provider identity guards.
   Weekly PTI sync writes changed truck context in one batch and preserves manual
-  checklist edits. Healthy Status and Gross Board streams carry peer snapshots;
+  checklist edits. The idle PTI worker compares current dated crews before
+  acquiring the fleet lock and rechecks any changes inside the transaction.
+  Healthy Status and Gross Board streams carry peer snapshots;
   presence GETs recover a disconnected or stale stream.
 - Exact VINs match only one local truck. Duplicate Samsara VINs resolve only to
   one attached gateway; multiple gateways or duplicate IDs/stats stay ambiguous.

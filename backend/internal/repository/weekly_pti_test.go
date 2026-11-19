@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/db"
 )
 
 func TestPTIEligibility(t *testing.T) {
@@ -102,6 +103,7 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			}
 			mustAdmin(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ` + quoted + ` TO mserp_app`)
 			app := cfg.Copy()
+			app.ConnConfig.Tracer = db.Tracer{}
 			app.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
 			app.ConnConfig.RuntimeParams["role"] = "mserp_app"
 			pool, e := pgxpool.NewWithConfig(ctx, app)
@@ -197,7 +199,12 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			}
 			financialBefore := scalar(`SELECT (SELECT count(*) FROM expenses)::text||':'||(SELECT count(*) FROM driver_pay_weeks)::text||':'||(SELECT count(*) FROM relay_driver_operations)::text`)
 			in := PTIChange{RequestID: "93000000-0000-4000-8000-000000000001", Version: selected.Version, Eligibility: "required", EligibilityReason: selected.EligibilityReason, Received: true, Review: "checked", Notes: "Video inspected"}
-			changed, err := repo.ChangePTI(ctx, week, selected.TruckID, actor, in)
+			measured, calls := db.WithQueryMetrics(ctx)
+			changed, err := repo.ChangePTI(measured, week, selected.TruckID, actor, in)
+			t.Logf("existing PTI checklist edit: %d database calls", calls.Queries.Load())
+			if calls.Queries.Load() > 6 {
+				t.Fatal("single PTI edit exceeded its database call budget")
+			}
 			if err != nil || changed.ReviewedBy != "PTI Reviewer" || changed.ReceivedBy != "PTI Reviewer" || changed.Version != 2 {
 				t.Fatal(changed, err)
 			}
@@ -256,6 +263,21 @@ func TestWeeklyPTIDatabase(t *testing.T) {
 			}
 			if err = repo.EnsureCurrentPTIWeek(ctx); err != nil {
 				t.Fatal(err)
+			}
+			blocker, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = blocker.Exec(ctx, `SELECT fleet_status_lock()`); err != nil {
+				t.Fatal(err)
+			}
+			probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+			probe, idleCalls := db.WithQueryMetrics(probe)
+			err = repo.EnsureCurrentPTIWeek(probe)
+			cancel()
+			_ = blocker.Rollback(ctx)
+			if err != nil || idleCalls.Queries.Load() != 3 {
+				t.Fatal("idle PTI worker waited on the fleet lock or queried unexpected rows", err, idleCalls.Queries.Load())
 			}
 			snapshot, err := repo.PTIWeek(ctx, week)
 			if err != nil {
