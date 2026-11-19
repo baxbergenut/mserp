@@ -221,7 +221,8 @@ func TestWMTSettlementDatabase(t *testing.T) {
 			run(`UPDATE investor_pay_weeks SET finalized=true,
  report=jsonb_set(jsonb_set(report,'{autoCharges}','[]'),'{edits,adjustments}',
  '[{"id":"manual","kind":"deduction","amount":"15.25","name":"scale tickets"}]'),
- edits=jsonb_set(edits,'{manualScalePayment}',jsonb_build_object('adjustmentId','manual','charges',
+ edits=jsonb_set(jsonb_set(edits,'{adjustments}','[{"id":"manual","kind":"deduction","amount":"15.25","name":"scale tickets"}]'),
+ '{manualScalePayment}',jsonb_build_object('adjustmentId','manual','charges',
  jsonb_build_array(jsonb_build_object('source',$2::text,'amount','-15.25','scaleOriginalAmount','-15.25'))))
  WHERE truck_id=$1`, truck, source)
 			revised.Tractor = "074"

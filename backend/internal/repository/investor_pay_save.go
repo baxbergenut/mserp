@@ -327,7 +327,7 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 			continue
 		}
 		if reopen {
-			writeBatch.Queue(`UPDATE investor_pay_weeks SET finalized=false,version=version+1 WHERE truck_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart)
+			writeBatch.Queue(`UPDATE investor_pay_weeks SET finalized=false,version=version+1,edits=`+reopenInvestorEditsSQL+` WHERE truck_id=$1 AND week_start=$2::date`, d.ID, report.WeekStart)
 		} else {
 			if err = savePaySources(ctx, tx, d, &d.Edits, "investor", actor); err != nil {
 				return empty, err

@@ -55,12 +55,20 @@ func reopenPreparedDriverWeek(ctx context.Context, tx pgx.Tx, week, actor, reaso
 	return nil
 }
 
+// Reopening releases the linked ticket receipts. Replace only their manual
+// deduction with ordinary ticket selection on the open draft.
+const reopenInvestorEditsSQL = `CASE WHEN edits ? 'manualScalePayment' THEN
+ jsonb_set(edits,'{adjustments}',coalesce((SELECT jsonb_agg(a ORDER BY ordinal)
+ FROM jsonb_array_elements(edits->'adjustments') WITH ORDINALITY AS x(a,ordinal)
+ WHERE a->>'id' IS DISTINCT FROM edits->'manualScalePayment'->>'adjustmentId'),'[]'))
+ ELSE edits END`
+
 func reopenPreparedInvestorWeek(ctx context.Context, tx pgx.Tx, report DriverPayWeek, cards []DriverPayDriver) error {
 	ids := make([]string, 0, len(cards))
 	for _, card := range cards {
 		ids = append(ids, card.ID)
 	}
-	changed, err := tx.Exec(ctx, `UPDATE investor_pay_weeks SET finalized=false,version=version+1
+	changed, err := tx.Exec(ctx, `UPDATE investor_pay_weeks SET finalized=false,version=version+1,edits=`+reopenInvestorEditsSQL+`
  WHERE week_start=$1::date AND truck_id=ANY($2::uuid[]) AND finalized`, report.WeekStart, ids)
 	if err != nil {
 		return err
