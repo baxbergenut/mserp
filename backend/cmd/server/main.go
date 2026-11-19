@@ -294,6 +294,7 @@ func main() {
 	expenseRepo := repository.NewExpenseRepository(pool)
 	grossBoardRepo := repository.NewGrossBoardRepository(pool)
 	payrollPriority := repository.NewPayrollWorkPriority()
+	loadRepo.ConfigurePayrollWorkPriority(payrollPriority)
 	grossBoardRepo.ConfigurePayrollWorkPriority(payrollPriority)
 	authRepo := repository.NewAuthRepository(pool)
 	customTaskRepo := repository.NewCustomTaskRepository(pool)

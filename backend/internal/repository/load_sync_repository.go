@@ -2,7 +2,8 @@ package repository
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -97,60 +98,8 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 	if len(records) == 0 {
 		return nil
 	}
-	batch := &pgx.Batch{}
-	for _, l := range records {
-		var driverID, dispatcherID *string
-		if l.DriverName != nil {
-			var id string
-			err := tx.QueryRow(ctx, `SELECT id FROM drivers WHERE normalized_name=$1 ORDER BY created_at,id LIMIT 1`, normalizeName(*l.DriverName)).Scan(&id)
-			if errors.Is(err, pgx.ErrNoRows) {
-				var found bool
-				id, _, found, err = findCompatibleDriver(ctx, tx, *l.DriverName)
-				if found {
-					driverID = &id
-				}
-			} else if err == nil {
-				driverID = &id
-			}
-			if err != nil {
-				return err
-			}
-		}
-		if l.DispatcherName != nil {
-			var id string
-			err := tx.QueryRow(ctx, `SELECT id FROM dispatchers WHERE normalized_name=$1 ORDER BY created_at,id LIMIT 1`, normalizeName(*l.DispatcherName)).Scan(&id)
-			if err == nil {
-				dispatcherID = &id
-			} else if !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-		}
-		query := `UPDATE loads SET load_id=$2,driver_id=$3,dispatcher_id=$4,shipment_id=$5,status=$6,
- load_pay=$7,total_other_pay=$8,total_pay=$9,total_miles=$10,per_mile_revenue=$11,
- dispatcher_name=$12,driver_name=$13,team_driver_name=$14,truck_unit=$15,customer_name=$16,
- pickup_time=$17,delivery_time=$18,pickup_appointment_time=$19,delivery_appointment_time=$20,
- created_datetime=$21,synced_at=$22,raw_payload=$23 WHERE id=$1 AND (
- ROW(load_id,driver_id,dispatcher_id,shipment_id,status,load_pay,total_other_pay,total_pay,total_miles,per_mile_revenue,
- dispatcher_name,driver_name,team_driver_name,truck_unit,customer_name,pickup_time,delivery_time,pickup_appointment_time,delivery_appointment_time,created_datetime,raw_payload)
- IS DISTINCT FROM ROW($2::text,$3::uuid,$4::uuid,$5::text,$6::text,$7::numeric(10,2),$8::numeric(10,2),$9::numeric(10,2),$10::numeric(10,2),$11::numeric(10,4),
- $12::text,$13::text,$14::text,$15::text,$16::text,$17::timestamptz,$18::timestamptz,$19::timestamptz,$20::timestamptz,$21::timestamptz,$23::jsonb)
- OR synced_at < $22::timestamptz - interval '15 minutes')`
-		if recoverMissing {
-			query = upsertLoadSQL
-		}
-		batch.Queue(query,
-			l.ID, l.LoadID, driverID, dispatcherID, l.ShipmentID, l.Status, l.LoadPay, l.TotalOtherPay, l.TotalPay,
-			l.TotalMiles, l.PerMileRevenue, l.DispatcherName, l.DriverName, l.TeamDriverName, l.TruckUnit, l.CustomerName,
-			l.PickupTime, l.DeliveryTime, l.PickupAppointmentTime, l.DeliveryAppointmentTime, l.CreatedDatetime, l.SyncedAt, l.RawPayload)
-	}
-	results := tx.SendBatch(ctx, batch)
-	for range records {
-		if _, err := results.Exec(); err != nil {
-			_ = results.Close()
-			return err
-		}
-	}
-	if err := results.Close(); err != nil {
+
+	if err = refreshLoadRows(ctx, tx, records, recoverMissing); err != nil {
 		return err
 	}
 	if err := saveLoadSourceVersions(ctx, tx, records); err != nil {
@@ -167,4 +116,136 @@ func (r *LoadRepository) refreshLoads(ctx context.Context, records []LoadRecord,
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+type loadRefreshNames struct {
+	drivers, dispatchers map[string]string
+}
+
+// Resolve exact names once for a batch. Historical profiles retain their
+// original created-at/ID precedence, including inactive drivers.
+func loadRefreshRoster(ctx context.Context, tx pgx.Tx, records []LoadRecord) (loadRefreshNames, error) {
+	names := loadRefreshNames{drivers: map[string]string{}, dispatchers: map[string]string{}}
+	var drivers, dispatchers []string
+	for _, r := range records {
+		if r.DriverName != nil {
+			drivers = append(drivers, normalizeName(*r.DriverName))
+		}
+		if r.DispatcherName != nil {
+			dispatchers = append(dispatchers, normalizeName(*r.DispatcherName))
+		}
+	}
+	if len(drivers)+len(dispatchers) == 0 {
+		return names, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (kind,normalized_name) kind,normalized_name,id FROM (
+ SELECT 'driver' kind,normalized_name,id,created_at FROM drivers WHERE normalized_name=ANY($1::text[])
+ UNION ALL SELECT 'dispatcher',normalized_name,id,created_at FROM dispatchers WHERE normalized_name=ANY($2::text[])
+ ) p ORDER BY kind,normalized_name,created_at,id`, drivers, dispatchers)
+	if err != nil {
+		return names, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind, name, id string
+		if err := rows.Scan(&kind, &name, &id); err != nil {
+			return names, err
+		}
+		if kind == "driver" {
+			names.drivers[name] = id
+		} else {
+			names.dispatchers[name] = id
+		}
+	}
+	return names, rows.Err()
+}
+
+// pgx needs the PostgreSQL types of VALUES parameters before execution. Numeric
+// precision matches the destination columns, including comparison before writes.
+var loadRefreshTypes = []string{"integer", "text", "uuid", "uuid", "text", "text", "numeric(10,2)", "numeric(10,2)", "numeric(10,2)", "numeric(10,2)", "numeric(10,4)", "text", "text", "text", "text", "text", "timestamptz", "timestamptz", "timestamptz", "timestamptz", "timestamptz", "timestamptz", "jsonb"}
+
+const refreshExistingLoadsSQL = `UPDATE loads l SET
+ load_id=r.load_id,driver_id=r.driver_id,dispatcher_id=r.dispatcher_id,shipment_id=r.shipment_id,status=r.status,
+ load_pay=r.load_pay,total_other_pay=r.total_other_pay,total_pay=r.total_pay,total_miles=r.total_miles,per_mile_revenue=r.per_mile_revenue,
+ dispatcher_name=r.dispatcher_name,driver_name=r.driver_name,team_driver_name=r.team_driver_name,truck_unit=r.truck_unit,customer_name=r.customer_name,
+ pickup_time=r.pickup_time,delivery_time=r.delivery_time,pickup_appointment_time=r.pickup_appointment_time,delivery_appointment_time=r.delivery_appointment_time,
+ created_datetime=r.created_datetime,synced_at=r.synced_at,raw_payload=r.raw_payload
+ FROM incoming r WHERE l.id=r.id AND (
+ ROW(l.load_id,l.driver_id,l.dispatcher_id,l.shipment_id,l.status,l.load_pay,l.total_other_pay,l.total_pay,l.total_miles,l.per_mile_revenue,
+ l.dispatcher_name,l.driver_name,l.team_driver_name,l.truck_unit,l.customer_name,l.pickup_time,l.delivery_time,l.pickup_appointment_time,l.delivery_appointment_time,l.created_datetime,l.raw_payload)
+ IS DISTINCT FROM ROW(r.load_id,r.driver_id,r.dispatcher_id,r.shipment_id,r.status,r.load_pay,r.total_other_pay,r.total_pay,r.total_miles,r.per_mile_revenue,
+ r.dispatcher_name,r.driver_name,r.team_driver_name,r.truck_unit,r.customer_name,r.pickup_time,r.delivery_time,r.pickup_appointment_time,r.delivery_appointment_time,r.created_datetime,r.raw_payload)
+ OR l.synced_at < r.synced_at - interval '15 minutes')`
+
+func refreshLoadRows(ctx context.Context, tx pgx.Tx, records []LoadRecord, recoverMissing bool) error {
+	names, err := loadRefreshRoster(ctx, tx, records)
+	if err != nil {
+		return err
+	}
+	compatible := map[string]string{}
+	var roster []driverNameCandidate
+	for len(records) > 0 {
+		var values strings.Builder
+		args := make([]any, 0, min(64, len(records))*len(loadRefreshTypes))
+		seen := map[int]bool{}
+		for _, l := range records[:min(64, len(records))] {
+			// Keep repeated observations of one load in input order.
+			if seen[l.ID] {
+				break
+			}
+			seen[l.ID] = true
+			var driverID, dispatcherID *string
+			if l.DriverName != nil {
+				id := names.drivers[normalizeName(*l.DriverName)]
+				if id == "" {
+					var cached bool
+					id, cached = compatible[*l.DriverName]
+					if !cached {
+						if roster == nil {
+							roster, err = driverNameRoster(ctx, tx)
+							if err != nil {
+								return err
+							}
+						}
+						id, _, _, err = matchCompatibleDriver(*l.DriverName, roster)
+						if err != nil {
+							return err
+						}
+						compatible[*l.DriverName] = id
+					}
+				}
+				if id != "" {
+					driverID = &id
+				}
+			}
+			if l.DispatcherName != nil {
+				if id := names.dispatchers[normalizeName(*l.DispatcherName)]; id != "" {
+					dispatcherID = &id
+				}
+			}
+			if values.Len() > 0 {
+				values.WriteByte(',')
+			}
+			values.WriteByte('(')
+			for n, typ := range loadRefreshTypes {
+				if n > 0 {
+					values.WriteByte(',')
+				}
+				fmt.Fprintf(&values, "$%d::%s", len(args)+n+1, typ)
+			}
+			values.WriteByte(')')
+			args = append(args, l.ID, l.LoadID, driverID, dispatcherID, l.ShipmentID, l.Status, l.LoadPay, l.TotalOtherPay, l.TotalPay,
+				l.TotalMiles, l.PerMileRevenue, l.DispatcherName, l.DriverName, l.TeamDriverName, l.TruckUnit, l.CustomerName,
+				l.PickupTime, l.DeliveryTime, l.PickupAppointmentTime, l.DeliveryAppointmentTime, l.CreatedDatetime, l.SyncedAt, l.RawPayload)
+		}
+		query := "WITH incoming(" + loadImportColumns + ") AS (VALUES " + values.String() + ") " + refreshExistingLoadsSQL
+		if recoverMissing {
+			query = "INSERT INTO loads (" + loadImportColumns + ") VALUES " + values.String() + loadImportConflictSQL
+		}
+		if _, err = tx.Exec(ctx, query, args...); err != nil {
+			return err
+		}
+		records = records[len(seen):]
+	}
+	return nil
 }

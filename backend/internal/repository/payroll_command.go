@@ -658,6 +658,13 @@ func beginPayrollMutation(ctx context.Context, pool interface {
 }
 
 func commitPayrollMutation(ctx context.Context, tx pgx.Tx) error {
+	if err := publishPayrollMutation(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func publishPayrollMutation(ctx context.Context, tx pgx.Tx) error {
 	if enabled, _ := ctx.Value(payrollPublicationKey{}).(bool); enabled {
 		var changed, maybeLiveExpense bool
 		if err := tx.QueryRow(ctx, `SELECT count(*)<>0,coalesce(bool_and(table_name IN
@@ -672,7 +679,7 @@ func commitPayrollMutation(ctx context.Context, tx pgx.Tx) error {
 					return err
 				}
 				if handled {
-					return tx.Commit(ctx)
+					return nil
 				}
 			}
 			var impact *payrollPublicationImpact
@@ -691,7 +698,7 @@ func commitPayrollMutation(ctx context.Context, tx pgx.Tx) error {
 			}
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // Transport metadata is never part of an editable ledger row or its audit body.

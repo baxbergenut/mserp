@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"mserp/internal/datatruck"
+	"mserp/internal/db"
 )
 
 func TestMissingBoardReplacementDatabase(t *testing.T) {
@@ -137,9 +138,7 @@ func TestMissingBoardReplacementDatabase(t *testing.T) {
 		if _, err = admin.Exec(ctx, `DROP TRIGGER fail_replacement_publication ON payroll_statement_current; DROP FUNCTION fail_replacement_publication()`); err != nil {
 			t.Fatal(err)
 		}
-		if count, err := r.ReplaceMissingBoardLoads(ctx, ids, live); err != nil || count != 2 {
-			t.Fatal("replacement failed", count, err)
-		}
+		testBoardSaveDuringReplacement(t, ctx, pool, r, ids, live)
 		board, err := NewGrossBoardRepository(pool).Get(ctx, week)
 		if err != nil {
 			t.Fatal(err)
@@ -181,4 +180,66 @@ func TestMissingBoardReplacementDatabase(t *testing.T) {
 			t.Fatal("source history removed", sources, err)
 		}
 	})
+}
+
+func testBoardSaveDuringReplacement(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repo *LoadRepository, ids []int, live []datatruck.Load) {
+	t.Helper()
+	id := 88400
+	if _, err := pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay) VALUES($1,'BOARD-DURING-REPAIR','booked',200,200)`, id); err != nil {
+		t.Fatal(err)
+	}
+	// Stop the repair inside atomic publication, after its canonical writes.
+	blocker, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Rollback(ctx)
+	if _, err = blocker.Exec(ctx, "LOCK TABLE payroll_statement_current IN SHARE MODE"); err != nil {
+		t.Fatal(err)
+	}
+	blockerPID := blocker.Conn().PgConn().PID()
+	priority := NewPayrollWorkPriority()
+	repo.ConfigurePayrollWorkPriority(priority)
+	run, metrics := db.WithMetrics(ctx)
+	done := make(chan error, 1)
+	go func() {
+		count, err := repo.ReplaceMissingBoardLoads(run, ids, live)
+		if count != 2 && err == nil {
+			err = fmt.Errorf("repaired %d groups, want 2", count)
+		}
+		done <- err
+	}()
+	wait, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	for {
+		var waiting bool
+		if err = pool.QueryRow(wait, `SELECT EXISTS(SELECT 1 FROM pg_locks l WHERE NOT l.granted AND $1::int=ANY(pg_blocking_pids(l.pid)))`, int(blockerPID)).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case err = <-done:
+			t.Fatal("repair exited before publication", err)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	board := NewGrossBoardRepository(pool)
+	board.ConfigurePayrollWorkPriority(priority)
+	start := time.Now()
+	result, err := board.SavePartialChanges(wait, []GrossBoardEntry{{DriverID: projectionDriver, Date: "2026-10-11", LoadNumber: "BOARD-DURING-REPAIR", LoadRecordID: &id, Fields: []string{"loadNumber", "loadRecordId"}}}, "")
+	if err != nil || len(result.Entries) != 1 || len(result.Issues) != 0 {
+		t.Fatal("board save while publication is blocked", result, err)
+	}
+	t.Logf("Gross Board edit committed in %v while the background publication remained blocked", time.Since(start))
+	if err = blocker.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-done; err != nil {
+		t.Fatal(err)
+	}
+	if metrics.Events()["load_repair_yielded_to_board"] != 1 {
+		t.Fatal("repair did not yield once and resume", metrics.Events())
+	}
 }

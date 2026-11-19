@@ -119,6 +119,17 @@ already read under the driver lock. The browser uses them to rebase independent
 edits or show the saved value next to the local draft. A version check still
 applies to the next submission. Older responses use the board refresh fallback.
 
+The automated DataTruck replacement job yields to an interactive board command
+during an uncommitted repair. A retry after the board is quiet checks provider
+availability, current load identity, board versions and financial protection
+again. Publication stays in the same transaction. The resumed repair runs to
+completion, and an unknown commit result never triggers this retry.
+
+On a disposable PostgreSQL database, the 250-load reconciliation fixture went
+from 1,009 SQL calls to 15. The 253-observation existing-only refresh went from
+1,021 to 16. Both database layouts also forced a dispatcher save during a
+blocked repair publication and checked the posted result after the repair resumed.
+
 ## References
 
 - [PostgreSQL 16: EXPLAIN](https://www.postgresql.org/docs/16/using-explain.html)

@@ -3,7 +3,11 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"time"
+
 	"fmt"
+	"mserp/internal/db"
 	"strings"
 
 	"mserp/internal/datatruck"
@@ -179,12 +183,45 @@ func (r *LoadRepository) ReplaceMissingBoardLoads(ctx context.Context, ids []int
 		}
 		returned[load.ID] = true
 	}
+	// If a dispatcher arrives during a scheduled repair, discard uncommitted
+	// work and reacquire the native guards after the board is quiet. Allow the
+	// resumed attempt to finish, including on a continuously edited board.
+	work, release, err := r.workPriority.background(ctx)
+	if err != nil {
+		return 0, err
+	}
+	count, err := r.replaceMissingBoardLoads(work, ctx, ids, live)
+	release()
+	if !errors.Is(err, errPayrollWorkYielded) || ctx.Err() != nil {
+		return count, err
+	}
+	db.Event(ctx, "load_repair_yielded_to_board")
+	_, release, err = r.workPriority.background(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	return r.replaceMissingBoardLoads(ctx, ctx, ids, live)
+}
+
+func (r *LoadRepository) replaceMissingBoardLoads(ctx, commitCtx context.Context, ids []int, live []datatruck.Load) (_ int, resultErr error) {
+	// A commit with an unknown outcome must not enter the automatic retry.
+	committing := false
+	defer func() {
+		if resultErr != nil && !committing && errors.Is(context.Cause(ctx), errPayrollWorkYielded) {
+			resultErr = errPayrollWorkYielded
+		}
+	}()
 	ctx = WithPayrollPublication(ctx)
 	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	}()
 	present := make([]int, 0, len(live))
 	for _, load := range live {
 		present = append(present, load.ID)
@@ -258,7 +295,14 @@ func (r *LoadRepository) ReplaceMissingBoardLoads(ctx context.Context, ids []int
 			}
 		}
 	}
-	if err = commitPayrollMutation(ctx, tx); err != nil {
+	if err = publishPayrollMutation(ctx, tx); err != nil {
+		return 0, err
+	}
+	if err = ctx.Err(); err != nil {
+		return 0, err
+	}
+	committing = true
+	if err = tx.Commit(commitCtx); err != nil {
 		return 0, err
 	}
 	return groups, nil
