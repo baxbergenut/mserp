@@ -9,7 +9,7 @@ export async function runManualNextLoadsE2E({ page, base, sql, schema, temp, id 
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(989011,'MANUAL-KNOWN','Dispatched',0,0,
     '{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Dallas","state":"TX"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Boston","state":"MA"}}]}');
   `);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.reload();
   const search = page.getByLabel('Search Status Board', { exact: true });
   await search.fill('Manual Queue Driver');
   await page.getByRole('button', { name: 'Manual Queue Driver · Next load', exact: true }).click();

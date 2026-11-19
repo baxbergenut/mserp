@@ -96,7 +96,7 @@ func TestReportsClosedWeekDatabase(t *testing.T) {
 		company.Current[0].Metrics["gross"] = -1
 		check(read(ReportCompany, "2026-10-12", "2026-10-18").Current[0], map[string]float64{"gross": 119900})
 		// Collaboration heartbeats must not evict unchanged financial snapshots.
-		if _, err = admin.Exec(ctx, `UPDATE payroll_cache_revisions SET revision=revision+1 WHERE table_name IN ('driver_board_presence','gross_board_presence','fleetscope_sync_state','maintenance_odometer_readings','payroll_statement_current')`); err != nil {
+		if _, err = admin.Exec(ctx, `UPDATE payroll_cache_revisions SET revision=revision+1 WHERE table_name IN ('board_presence','fleetscope_sync_state','maintenance_odometer_readings','payroll_statement_current')`); err != nil {
 			t.Fatal(err)
 		}
 		if presence := read(ReportCompany, "2026-10-12", "2026-10-18"); presence.Revision != company.Revision {

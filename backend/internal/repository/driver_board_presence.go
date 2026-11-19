@@ -17,9 +17,9 @@ type BoardPresence struct {
 func (r *DriverBoardRepository) Presence(ctx context.Context) ([]BoardPresence, error) {
 	result := []BoardPresence{}
 	rows, err := r.pool.Query(ctx, `SELECT p.client_id,p.user_id,u.username,p.driver_id,p.column_key,p.expires_at
- FROM driver_board_presence p JOIN app_users u ON u.id=p.user_id JOIN auth_sessions s ON s.token_hash=p.session_hash
+ FROM board_presence p JOIN app_users u ON u.id=p.user_id JOIN auth_sessions s ON s.token_hash=p.session_hash
  JOIN app_roles role ON role.id=u.role_id JOIN drivers d ON d.id=p.driver_id
- WHERE p.expires_at>now() AND s.expires_at>now() AND u.active AND d.active
+ WHERE p.board='status' AND p.expires_at>now() AND s.expires_at>now() AND u.active AND d.active
  AND (role.system_role OR user_permission_allowed(role.permissions,u.permission_overrides,'driver_board.read')) ORDER BY u.username,p.client_id`)
 	if err != nil {
 		return nil, err
@@ -36,19 +36,28 @@ func (r *DriverBoardRepository) Presence(ctx context.Context) ([]BoardPresence, 
 }
 
 func (r *DriverBoardRepository) SetPresence(ctx context.Context, client, user, session, driver, column string) error {
+	// Expired rows need the original cleanup transaction so their removal publishes
+	// the correct notifications and releases client IDs for a different session.
+	const insert = `INSERT INTO board_presence(board,client_id,user_id,session_hash,driver_id,column_key,expires_at)
+ SELECT 'status',$1,$2,$3,$4,$5,now()+interval '30 seconds' WHERE EXISTS(SELECT 1 FROM drivers WHERE id=$4 AND active)
+ AND EXISTS(SELECT 1 FROM auth_sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now())`
+	const onConflict = ` ON CONFLICT(board,client_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,column_key=EXCLUDED.column_key,expires_at=EXCLUDED.expires_at
+ WHERE board_presence.user_id=EXCLUDED.user_id AND board_presence.session_hash=EXCLUDED.session_hash`
+	result, err := r.pool.Exec(ctx, insert+` AND NOT EXISTS (
+		SELECT 1 FROM board_presence WHERE board='status' AND expires_at <= now()
+	)`+onConflict, client, user, session, driver, column)
+	if err != nil || result.RowsAffected() == 1 {
+		return err
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `DELETE FROM driver_board_presence WHERE expires_at<=now()`); err != nil {
+	if _, err = tx.Exec(ctx, `DELETE FROM board_presence WHERE board='status' AND expires_at<=now()`); err != nil {
 		return err
 	}
-	result, err := tx.Exec(ctx, `INSERT INTO driver_board_presence(client_id,user_id,session_hash,driver_id,column_key,expires_at)
- SELECT $1,$2,$3,$4,$5,now()+interval '30 seconds' WHERE EXISTS(SELECT 1 FROM drivers WHERE id=$4 AND active)
- AND EXISTS(SELECT 1 FROM auth_sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now())
- ON CONFLICT(client_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,column_key=EXCLUDED.column_key,expires_at=EXCLUDED.expires_at
- WHERE driver_board_presence.user_id=EXCLUDED.user_id AND driver_board_presence.session_hash=EXCLUDED.session_hash`, client, user, session, driver, column)
+	result, err = tx.Exec(ctx, insert+onConflict, client, user, session, driver, column)
 	if err != nil {
 		return err
 	}
@@ -59,6 +68,6 @@ func (r *DriverBoardRepository) SetPresence(ctx context.Context, client, user, s
 }
 
 func (r *DriverBoardRepository) ClearPresence(ctx context.Context, client, user, session string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM driver_board_presence WHERE client_id=$1 AND user_id=$2 AND session_hash=$3`, client, user, session)
+	_, err := r.pool.Exec(ctx, `DELETE FROM board_presence WHERE board='status' AND client_id=$1 AND user_id=$2 AND session_hash=$3`, client, user, session)
 	return err
 }

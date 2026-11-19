@@ -21,7 +21,7 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
   const field = name => page.getByLabel(`Progress Browser · ${name}`, { exact: true });
   const advance = field('Advance load');
   const location = field('Destination');
-  const saved = () => expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  const saved = () => expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   const undo = async () => { await page.getByRole('heading', { name: 'Status Board', exact: true }).click(); await page.keyboard.press('Control+z'); await saved(); };
   await field('Current load').fill('BROWSER-A');
   await expect(field('Status')).toHaveValue('DISPATCHED');

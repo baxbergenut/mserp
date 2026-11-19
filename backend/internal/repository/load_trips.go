@@ -91,3 +91,17 @@ const loadTripSourceSQL = `
   FROM stats CROSS JOIN checked LEFT JOIN LATERAL (SELECT * FROM trips WHERE id=e.load_trip_id LIMIT 1) selected ON true
   LEFT JOIN LATERAL (SELECT av.value AS v FROM jsonb_array_elements(checked.saved->'allocations') av(value) WHERE av.value->>'tripId'=e.load_trip_id::text) allocation ON true
  ) trip_source ON true `
+
+// A plain board entry has no trip evidence to validate. Keep the full validator
+// for selected trips, expected splits, reviewed allocations and nonempty payloads.
+const plainBoardLoad = `e.load_trip_id IS NULL AND NOT coalesce(l.split_expected,false)
+ AND l.split_allocation IS NULL AND coalesce(l.raw_payload->'trips','[]'::jsonb)='[]'::jsonb`
+
+const boardTripSourceSQL = ` LEFT JOIN LATERAL (
+ SELECT false AS split,NULL::numeric AS driver_gross,false AS review,l.total_pay AS original,
+ l.total_miles AS miles,'[]'::jsonb AS options,false AS reviewed,''::text AS review_reason WHERE ` + plainBoardLoad + `
+ UNION ALL
+ SELECT trip_source.split,trip_source.driver_gross,trip_source.review,trip_source.original,
+ trip_source.miles,trip_source.options,trip_source.reviewed,trip_source.review_reason
+ FROM (SELECT 1) seed ` + loadTripSourceSQL + ` WHERE NOT (` + plainBoardLoad + `)
+ ) trip_source ON true `

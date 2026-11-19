@@ -19,7 +19,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
     INSERT INTO gross_board_extra_entries(driver_id,service_date,slot,load_number,original_rate,driver_rate,miles) VALUES
     ('${id}','${nextWeek}',1,'NEXT-B',2000,1800,600),('${id}','${nextWeek}',2,'NEXT-C',3000,2800,700);
   `);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.reload();
   const defaultLoads = await (await page.request.get(`${base}/api/driver-board/loads/${id}`)).json();
   expect(defaultLoads.fromDate).toBe(today);
   expect(defaultLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
@@ -29,12 +29,17 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   const olderLoads = await (await page.request.get(`${base}/api/driver-board/loads/${id}?from=${previousWeek}`)).json();
   expect(olderLoads.next.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(false);
   expect(defaultLoads.earlier.some(load => load.number === 'OLD-WEEK-PLAN')).toBe(true);
-  expect(defaultLoads.earlier.some(load => load.number === 'YESTERDAY-PLAN')).toBe(true);
+  expect(defaultLoads.next.some(load => load.number === 'YESTERDAY-PLAN')).toBe(true);
   expect(defaultLoads.next.some(load => load.number === 'TODAY-PLAN')).toBe(true);
-  expect(defaultLoads.next.every(load => load.date >= today)).toBe(true);
+  const queueStart = new Date(week + 'T12:00:00Z');
+  queueStart.setUTCDate(queueStart.getUTCDate() - 2);
+  expect(defaultLoads.next.every(load => load.date >= queueStart.toISOString().slice(0, 10))).toBe(true);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await expect(field('Current load')).toHaveValue('LOAD 8841');
-  await expect(field('Next load').getByText('TODAY-PLAN', { exact: true })).toHaveClass(/text-red-300/);
+  const firstPlan = defaultBoard.loads[id].next[0];
+  await expect(field('Next load')).toContainText(firstPlan.number);
+  const number = field('Next load').locator('span').filter({hasText:firstPlan.number}).first();
+  await expect(number).toHaveClass(firstPlan.loadId === null || firstPlan.sourceMissing ? /text-red-300/ : /text-zinc-300/);
   await expect(field('ETA')).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Board Cpm · Loads', exact: true });
@@ -98,7 +103,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(field('Destination')).toHaveValue('Richmond, Virginia, 23219');
   await field('Destination').fill('Manual destination');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Boston, MA' });
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);
@@ -107,7 +112,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await expect(page.getByLabel('Board Cpm · Destination', { exact: true })).toHaveValue('Boston, MA');
   // Removing the source plan never drops the current load or advances to NEXT-B.
   sql(`SET search_path TO ${schema},public; UPDATE gross_board_entries SET load_number='',load_record_id=NULL WHERE driver_id='${id}' AND service_date='${nextWeek}';`);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.reload();
   await expect(field('Current load')).toHaveValue('SOURCE-A');
   await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   await expect(panel.getByText('Current plan was removed, replaced or reassigned in Gross Board; review it', { exact: true })).toBeVisible();

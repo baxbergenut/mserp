@@ -63,8 +63,8 @@ func (r *FuelRepository) CompletedDays(
 ) (map[string]struct{}, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT sync_date
-		FROM relay_fuel_sync_days
-		WHERE relay_environment = $1 AND sync_date BETWEEN $2 AND $3`,
+		FROM provider_sync_days
+		WHERE provider='relay' AND environment = $1 AND sync_date BETWEEN $2 AND $3`,
 		environment,
 		startDate.Format(time.DateOnly),
 		endDate.Format(time.DateOnly),
@@ -93,6 +93,12 @@ func (r *FuelRepository) UpsertDay(
 	syncedAt time.Time,
 	markComplete bool,
 ) error {
+	if len(transactions) == 0 {
+		if !markComplete {
+			return nil
+		}
+		return recordSyncDay(ctx, r.pool, "relay", environment, day.Format(time.DateOnly), 0, &syncedAt)
+	}
 	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return err
@@ -106,18 +112,7 @@ func (r *FuelRepository) UpsertDay(
 	}
 
 	if markComplete {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO relay_fuel_sync_days (
-				relay_environment, sync_date, transaction_count, fetched_at
-			) VALUES ($1, $2, $3, $4)
-			ON CONFLICT (relay_environment, sync_date) DO UPDATE SET
-				transaction_count = EXCLUDED.transaction_count,
-				fetched_at = EXCLUDED.fetched_at`,
-			environment,
-			day.Format(time.DateOnly),
-			len(transactions),
-			syncedAt,
-		); err != nil {
+		if err := recordSyncDay(ctx, tx, "relay", environment, day.Format(time.DateOnly), len(transactions), &syncedAt); err != nil {
 			return err
 		}
 	}

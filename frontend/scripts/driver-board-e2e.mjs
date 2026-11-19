@@ -112,7 +112,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByText('Owner operator · percentage of gross', { exact: true })).toHaveCount(0);
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
   await field('Current load').fill('plan-');
-  await expect(page.getByRole('option').filter({ hasText: 'PLAN-101' })).toBeVisible();
+  await expect(page.getByRole('listbox').getByRole('option').filter({ hasText: 'PLAN-101' })).toBeVisible();
   await expect(page.getByRole('listbox').getByRole('option')).toHaveCount(1);
   await page.screenshot({ path: join(temp, 'status-board-current-load-suggestions.png'), fullPage: true, animations: 'disabled' });
   await page.keyboard.press('Enter');
@@ -120,21 +120,21 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByRole('listbox')).toHaveCount(0);
   const loadDestination = page.getByLabel('Board Cpm · Destination', { exact: true });
   await expect(loadDestination).toHaveValue('Atlanta, GA');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Current load')).toHaveValue('PLAN-101');
   await expect(loadDestination).toHaveValue('Atlanta, GA');
   await field('Current load').fill('');
   await expect(field('Destination')).toHaveValue('');
   await expect(loadDestination).toHaveValue('');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Current load')).toHaveValue('');
   await expect(field('Destination')).toHaveValue('');
   await field('Current load').fill(' plan-101 ');
   await expect(loadDestination).toHaveValue('Atlanta, GA');
   await field('Notes').click();
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(loadDestination).toHaveValue('Atlanta, GA');
   await loadDestination.click();
@@ -142,7 +142,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await field('Advance load').click();
   await expect(loadDestination).toHaveValue('Dallas, TX');
   await field('Current load').fill('plan-');
-  await page.getByRole('option').filter({ hasText: 'PLAN-101' }).click();
+  await page.getByRole('listbox').getByRole('option').filter({ hasText: 'PLAN-101' }).click();
   await expect(field('Current load')).toHaveValue('PLAN-101');
   await expect(loadDestination).toHaveValue('Atlanta, GA');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
@@ -165,7 +165,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByLabel('Arrival date', { exact: true })).toHaveCount(0);
   await page.getByLabel('Miles left', { exact: true }).fill('300');
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('ETA')).toHaveText('300mi');
   await field('Current load').fill('LOAD 8841');
@@ -178,8 +178,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await page.screenshot({ path: join(temp, 'status-board-eta-picker.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await field('Notes').fill('Call before arrival');
-  await field('Home time').fill('Home next Friday');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await field('Home time').click();
+  await page.getByLabel('Home start date', { exact: true }).fill(today);
+  await page.getByRole('button', { name: 'Apply dates', exact: true }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Notes')).toHaveValue('Call before arrival');
   await expect(field('ETA')).toHaveText('ETA 17:00');
@@ -212,7 +214,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await page.getByRole('button', { name: 'Clear all', exact: true }).click();
   await expect(page.locator('tr[data-driver-id]')).toHaveCount(0);
   const statusForFilter = (await getBoard()).entries.find(e => e.driverId === id).status;
-  await page.getByRole('checkbox', { name: statusForFilter, exact: true }).check();
+  await page.getByRole('checkbox', { name: new RegExp('^' + statusForFilter + '$', 'i') }).check();
   await page.keyboard.press('Escape');
   await expect(page.locator('tr[data-driver-id]')).toHaveCount(1);
   await page.reload();
@@ -251,8 +253,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await field('Notes').fill('Local unsaved edit');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('changed', { timeout: 15000 });
   await expect(field('Notes')).toHaveValue('Local unsaved edit');
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.getByRole('link', { name: 'Board Cpm', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard edits and leave', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Board Cpm', exact: true })).toBeVisible();
+  await page.goto(`${base}/driver-board`);
   await expect(field('Notes')).toHaveValue('Other dispatcher edit');
   // A delayed response cannot drop text typed while that save is in flight.
   let release, intercepted;
@@ -266,10 +270,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await inFlight;
   await field('Notes').fill('Newer typing preserved');
   release();
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   expect((await getBoard()).entries.find(e => e.driverId === id).notes).toBe('Newer typing preserved');
   await field('Notes').fill('');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('Notes')).toHaveValue('');
   // Board-only viewers can read but cannot mutate board or fleet records.
@@ -286,7 +290,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   try {
     const viewer = await context.newPage();
     await viewer.goto(`${base}/login`);
-    await viewer.getByLabel('Email or existing username', { exact: true }).fill('board-viewer@example.com');
+    await viewer.getByLabel('Email', { exact: true }).fill('board-viewer@example.com');
     await viewer.getByLabel('Password', { exact: true }).fill(password);
     await viewer.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(viewer.getByRole('heading', { name: 'Status Board', exact: true })).toBeVisible();

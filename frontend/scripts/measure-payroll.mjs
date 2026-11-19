@@ -234,7 +234,7 @@ async function sourceVisibility(p, kind, week, statement) {
   if (failure) throw Error(`${kind}/${week}/externalSourceVisibility: ${failure}`);
 }
 try {
-  assert.equal(sql('SELECT active FROM accounting_cutover'), 'f');
+  assert.equal(sql('SELECT accounting_cutover_date() IS NULL'), 't');
   assert.equal(sql("SELECT count(*) FROM drivers WHERE full_name LIKE 'Perf Driver %'"), '176');
   if (prepared) assert.equal(sql('SELECT capture_enabled FROM payroll_projection_control WHERE singleton'), 't');
   // Supply complete evidence for ordinary finalization in this disposable fixture.

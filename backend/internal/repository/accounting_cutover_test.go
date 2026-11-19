@@ -12,8 +12,20 @@ import (
 	"time"
 )
 
+func migrationSQLForTest(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile("../../sql/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
+}
+
 func withoutAccountingCutoverMigration(t *testing.T, source string) string {
 	t.Helper()
+	for _, name := range []string{"223_retire_unused_tables.sql", "224_board_presence.sql", "225_provider_sync_days.sql"} {
+		source = strings.Replace(source, migrationSQLForTest(t, name), "", 1)
+	}
 	accessorial, err := os.ReadFile("../../sql/203_accessorial_expenses.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +60,7 @@ func withoutAccountingCutoverMigration(t *testing.T, source string) string {
 func applyAccountingCutoverMigration(t *testing.T, ctx context.Context, conn *pgx.Conn) {
 	t.Helper()
 	var exists bool
-	if e := conn.QueryRow(ctx, `SELECT to_regclass('accounting_cutover') IS NOT NULL`).Scan(&exists); e != nil {
+	if e := conn.QueryRow(ctx, `SELECT to_regclass('expense_external_settlements') IS NOT NULL`).Scan(&exists); e != nil {
 		t.Fatal(e)
 	}
 	if exists {
@@ -144,7 +156,7 @@ func TestAccountingCutoverRetiredDatabase(t *testing.T) {
 				if !strings.Contains(base, old) {
 					t.Fatal("migration missing from init")
 				}
-				exec(strings.Replace(base, old, "", 1))
+				exec(strings.Replace(strings.Replace(base, migrationSQLForTest(t, "223_retire_unused_tables.sql"), "", 1), old, "", 1))
 				// Retirement must not silently disable an activated installation.
 				exec("BEGIN; UPDATE accounting_cutover SET active=true")
 				if _, e = admin.Exec(ctx, string(m)); e == nil {
@@ -152,6 +164,7 @@ func TestAccountingCutoverRetiredDatabase(t *testing.T) {
 				}
 				exec("ROLLBACK")
 				exec(string(m))
+				exec(migrationSQLForTest(t, "223_retire_unused_tables.sql"))
 			} else {
 				exec(string(source))
 			}
@@ -354,7 +367,7 @@ func applyAccountingExpenseTestSchema(t *testing.T, ctx context.Context, conn *p
 	}()
 
 	var exists bool
-	if e := conn.QueryRow(ctx, "SELECT to_regclass('accounting_cutover') IS NOT NULL").Scan(&exists); e != nil {
+	if e := conn.QueryRow(ctx, "SELECT to_regclass('expense_external_settlements') IS NOT NULL").Scan(&exists); e != nil {
 		t.Fatal(e)
 	}
 	if exists {

@@ -147,7 +147,7 @@ let csrfToken = "";
 
 export const fetchTasks = (query: PageQuery & { status: TaskStatus | "all" }) =>
   paginatedRequest<PaginatedResponse<CustomTask>>(withQuery("/tasks", query));
-export const fetchTaskCount = () => apiRequest<{ count: number }>("/tasks/count");
+export const fetchTaskBadgeCounts = () => apiRequest<{ count: number; feedbackCount: number }>("/tasks/count?includeFeedback=1");
 export const fetchSidebarCounts = (signal?: AbortSignal) => apiRequest<import("./types").SidebarCounts>("/sidebar-counts", { signal });
 export function subscribeTaskEvents(onChange: () => void, onUnauthorized: () => void) {
   const events = new EventSource(`${API_BASE}/tasks/events`, { withCredentials: true });

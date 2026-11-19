@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"mserp/internal/db"
 	"sync"
 	"time"
 )
@@ -24,13 +25,14 @@ type IntervalJob struct {
 func RunIntervalJob(ctx context.Context, logger *slog.Logger, job IntervalJob) {
 	run := func() bool {
 		startedAt := time.Now()
-		if err := job.Run(ctx); err != nil {
+		runCtx, metrics := db.WithMetrics(ctx)
+		if err := job.Run(runCtx); err != nil {
 			if ctx.Err() != nil && errors.Is(err, context.Canceled) {
 				return false
 			}
-			logger.Error("interval sync failed", "job", job.Name, "error", err, "duration", time.Since(startedAt))
+			logger.Error("interval sync failed", "job", job.Name, "error", err, "duration", time.Since(startedAt), "db_calls", metrics.Queries.Load(), "pool_ms", float64(metrics.AcquireNanos.Load())/1e6, "pool_hold_ms", float64(metrics.HoldNanos.Load())/1e6)
 		} else {
-			logger.Info("interval sync finished", "job", job.Name, "duration", time.Since(startedAt))
+			logger.Info("interval sync finished", "job", job.Name, "duration", time.Since(startedAt), "db_calls", metrics.Queries.Load(), "pool_ms", float64(metrics.AcquireNanos.Load())/1e6, "pool_hold_ms", float64(metrics.HoldNanos.Load())/1e6)
 		}
 		return true
 	}
@@ -83,15 +85,16 @@ func runDailyJob(ctx context.Context, logger *slog.Logger, location *time.Locati
 
 		startedAt := time.Now()
 		logger.Info("daily sync starting", "job", job.Name)
-		if err := job.Run(ctx); err != nil {
+		runCtx, metrics := db.WithMetrics(ctx)
+		if err := job.Run(runCtx); err != nil {
 			if ctx.Err() != nil && errors.Is(err, context.Canceled) {
 				logger.Info("daily sync canceled", "job", job.Name)
 				return
 			}
-			logger.Error("daily sync failed", "job", job.Name, "error", err, "duration", time.Since(startedAt))
+			logger.Error("daily sync failed", "job", job.Name, "error", err, "duration", time.Since(startedAt), "db_calls", metrics.Queries.Load(), "pool_ms", float64(metrics.AcquireNanos.Load())/1e6, "pool_hold_ms", float64(metrics.HoldNanos.Load())/1e6)
 			continue
 		}
-		logger.Info("daily sync finished", "job", job.Name, "duration", time.Since(startedAt))
+		logger.Info("daily sync finished", "job", job.Name, "duration", time.Since(startedAt), "db_calls", metrics.Queries.Load(), "pool_ms", float64(metrics.AcquireNanos.Load())/1e6, "pool_hold_ms", float64(metrics.HoldNanos.Load())/1e6)
 	}
 }
 

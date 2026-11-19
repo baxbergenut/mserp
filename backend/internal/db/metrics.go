@@ -15,6 +15,9 @@ import (
 // Metrics contains counts and durations only. SQL, arguments and identities are
 // deliberately excluded from application performance logging.
 type Metrics struct {
+	Acquires     atomic.Int64
+	HoldNanos    atomic.Int64
+	Batches      atomic.Int64
 	Queries      atomic.Int64
 	QueryNanos   atomic.Int64
 	AcquireNanos atomic.Int64
@@ -111,7 +114,8 @@ func WithMetrics(ctx context.Context) (context.Context, *Metrics) {
 type Tracer struct{}
 
 func (Tracer) TraceBatchStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceBatchStartData) context.Context {
-	if ctx.Value(metricsKey{}) != nil {
+	if m, ok := ctx.Value(metricsKey{}).(*Metrics); ok {
+		m.Batches.Add(1)
 		return context.WithValue(ctx, batchStartKey{}, &batchMeasurement{time.Now()})
 	}
 	return ctx

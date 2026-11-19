@@ -34,6 +34,7 @@ previous_release=$(readlink -f "$current_link" 2>/dev/null || true)
 permissions_migration=112_permissions_v2.sql
 user_permissions_migration=219_user_permission_overrides.sql
 investor_access_migration=220_sensitive_investor_access.sql
+retired_tables_migration=223_retire_unused_tables.sql
 manager_verification_migration=151_retire_expense_manager_verification.sql
 accounting_cutover_migration=160_accounting_cutover.sql
 accounting_retirement_migration=161_retire_accounting_cutover.sql
@@ -116,6 +117,15 @@ prepare_release_backup() {
 
 compatible_release() {
     [[ -n $1 && -d $1 ]] || return 1
+    local shared_days
+    shared_days=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.provider_sync_days') IS NOT NULL") || return 1
+    [[ $shared_days == f ]] || { [[ $shared_days == t ]] && [[ $("$1/backend/mserp-api" -provider-days-capability 2>/dev/null) == provider-days-v1 ]]; } || return 1
+    local shared_presence
+    shared_presence=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.board_presence') IS NOT NULL") || return 1
+    [[ $shared_presence == f ]] || { [[ $shared_presence == t ]] && [[ $("$1/backend/mserp-api" -board-presence-capability 2>/dev/null) == board-presence-v1 ]]; } || return 1
+    local retired_tables
+    retired_tables=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT to_regclass('public.expense_external_settlements') IS NOT NULL AND to_regclass('public.accounting_cutover') IS NULL") || return 1
+    [[ $retired_tables == f ]] || { [[ $retired_tables == t ]] && [[ $("$1/backend/mserp-api" -retired-tables-capability 2>/dev/null) == retired-tables-v1 ]]; } || return 1
     local user_permissions
     user_permissions=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='app_users' AND column_name='permission_overrides')") || return 1
     [[ $user_permissions == f ]] || { [[ $user_permissions == t ]] && [[ -f $1/migrations/$user_permissions_migration ]]; } || return 1
@@ -342,8 +352,17 @@ fi
 # Resolve and validate the entire pending set before writing the migration ledger
 # or leaving a release directory behind. Any lookup/backup failure stops activation.
 collect_pending_migrations "$extract_dir/migrations"
+if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq 224_board_presence.sql; then
+    [[ $("$extract_dir/backend/mserp-api" -board-presence-capability) == board-presence-v1 ]] || exit 1
+fi
+if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq "$retired_tables_migration"; then
+    [[ $("$extract_dir/backend/mserp-api" -retired-tables-capability) == retired-tables-v1 ]] || exit 1
+fi
+if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq 225_provider_sync_days.sql; then
+    [[ $("$extract_dir/backend/mserp-api" -provider-days-capability) == provider-days-v1 ]] || exit 1
+fi
 # The compacting cutover must have a final, writer-quiesced recovery snapshot.
-if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq "$payroll_storage_migration"; then
+if printf '%s\n' "${pending_migrations[@]}" | grep -Fxq -e "$payroll_storage_migration" -e "$retired_tables_migration" -e 224_board_presence.sql -e 225_provider_sync_days.sql; then
     cutover_started=true
     systemctl stop mserp-api.service
     if systemctl is-active --quiet mserp-expense-sheet.service; then

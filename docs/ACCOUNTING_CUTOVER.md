@@ -8,11 +8,10 @@ Sheets. Backups and audit receipts retain the cleanup evidence. Installing this
 release never repeats that cleanup or settles additional expenses.
 
 Migration 161 refuses any populated/activated cutover, permanently rejects changes
-to its inactive singleton and removes cutoff-specific write guards. Empty tables
-and constant SQL compatibility functions from migration 160 are retained so older
-payroll queries and compatible rollback releases remain safe. Applied migration
-160 is not edited or reversed: it also supplies external expense settlement
-receipts and financial cache revision tracking that are still used.
+to its inactive singleton and removes cutoff-specific write guards. Migration 223 drops the six legacy cutover tables after verifying the untouched
+singleton, empty supporting tables and a drained capture queue under lock.
+The constant compatibility predicates, historical source identities, external
+settlement receipts and financial cache revision counters remain available.
 
 Ordinary partial-payment carry, finalized-statement protection, and external
 settlement and reversal APIs remain available. The special Sheets adjustment and

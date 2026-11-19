@@ -45,7 +45,19 @@ func registerTaskBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository
 	})
 	r.Get("/tasks/count", func(w http.ResponseWriter, r *http.Request) {
 		session, _ := authSessionFromContext(r.Context())
-		count, err := repo.OpenCount(r.Context(), slices.Contains(session.User.Permissions, "drivers.read"), slices.Contains(session.User.Permissions, "trucks.read"))
+		drivers := slices.Contains(session.User.Permissions, "drivers.read")
+		trucks := slices.Contains(session.User.Permissions, "trucks.read")
+		if r.URL.Query().Get("includeFeedback") == "1" {
+			count, feedback, err := repo.BadgeCounts(r.Context(), drivers, trucks)
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			w.Header().Set("Cache-Control", "private, no-store")
+			writeJSON(w, 200, map[string]int{"count": count, "feedbackCount": feedback})
+			return
+		}
+		count, err := repo.OpenCount(r.Context(), drivers, trucks)
 		if err != nil {
 			fail(w, err)
 			return

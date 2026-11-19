@@ -175,15 +175,7 @@ type BoardLoadResult struct {
 
 // Status Board number-only plans resolve against available source records. Historical
 // explicit IDs stay pinned, including deleted sources, so dispatch is never retargeted.
-const boardResolvedLoad = `
- LEFT JOIN LATERAL (
-   SELECT min(l.id) AS id FROM loads l
-   WHERE NOT e.deleted AND e.day_status='' AND ((e.load_record_id IS NOT NULL AND l.id=e.load_record_id)
-      OR (e.load_record_id IS NULL AND e.load_number<>'' AND lower(btrim(l.load_id))=lower(btrim(e.load_number))
-          AND ` + boardAvailableSourceSQL + `))
-   HAVING count(*)=1
- ) matched ON true
- LEFT JOIN loads l ON l.id=matched.id `
+const boardResolvedLoad = boardLoadIdentityJoin + " AND " + boardAvailableSourceSQL + boardLoadIdentityEnd
 
 const boardPlansSQL = `(SELECT driver_id,service_date,0 AS slot,false AS deleted,load_number,load_record_id,day_status,plan_id FROM gross_board_entries
  UNION ALL SELECT driver_id,service_date,slot,deleted,load_number,load_record_id,day_status,plan_id FROM gross_board_extra_entries)`

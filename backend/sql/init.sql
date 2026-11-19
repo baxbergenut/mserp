@@ -10397,3 +10397,121 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
 $$;
 CREATE INDEX IF NOT EXISTS reports_frozen_load_ids ON payroll_settlements
  USING gin (reports_statement_load_ids(report)) WHERE finalized;
+
+BEGIN;
+
+SELECT pg_advisory_xact_lock(736281940);
+LOCK TABLE accounting_cutover, accounting_cutover_previews, accounting_payroll_archives,
+ accounting_legacy_sources, accounting_rate_openings, accounting_rate_corrections,
+ gross_board_transfer_history IN ACCESS EXCLUSIVE MODE;
+
+DO $$
+DECLARE
+ retired text[] := ARRAY['accounting_cutover','accounting_cutover_previews','accounting_payroll_archives',
+  'accounting_legacy_sources','accounting_rate_openings','accounting_rate_corrections','gross_board_transfer_history'];
+ relation_name text;
+ populated boolean;
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM accounting_cutover WHERE id AND version=1 AND NOT active
+    AND week_start=DATE '2026-10-26' AND draft='{}'::jsonb AND activated_at IS NULL
+    AND activated_by IS NULL AND receipt IS NULL) THEN
+  RAISE EXCEPTION 'Accounting cutover singleton differs from the reviewed initial state';
+ END IF;
+ FOREACH relation_name IN ARRAY retired[2:7] LOOP
+  EXECUTE format('SELECT EXISTS (SELECT FROM %I)',relation_name) INTO populated;
+  IF populated THEN RAISE EXCEPTION 'Review retained records in %',relation_name; END IF;
+ END LOOP;
+ IF EXISTS (SELECT FROM payroll_projection_changes WHERE table_name=ANY(retired) AND dispatched_at IS NULL) THEN
+  RAISE EXCEPTION 'Drain pending payroll captures before retiring tables';
+ END IF;
+ -- Keep the source identities referenced by historical captures and revision evidence.
+ UPDATE payroll_projection_sources SET classification='unrelated' WHERE table_name=ANY(retired);
+END $$;
+
+DROP TABLE accounting_cutover_previews, accounting_payroll_archives, accounting_legacy_sources,
+ accounting_rate_openings, accounting_rate_corrections, accounting_cutover, gross_board_transfer_history RESTRICT;
+DROP FUNCTION protect_accounting_cutover(), protect_accounting_history(), protect_sheets_managed_plan(),
+ discard_gross_transfer_history() RESTRICT;
+
+COMMIT;
+
+BEGIN;
+SELECT pg_advisory_xact_lock(736281940);
+LOCK TABLE driver_board_presence, gross_board_presence IN ACCESS EXCLUSIVE MODE;
+
+CREATE TABLE board_presence (
+ board text NOT NULL CHECK (board IN ('status','gross')),
+ client_id uuid NOT NULL,
+ user_id uuid NOT NULL REFERENCES app_users ON DELETE CASCADE,
+ session_hash char(64) NOT NULL REFERENCES auth_sessions(token_hash) ON DELETE CASCADE,
+ driver_id uuid NOT NULL REFERENCES drivers ON DELETE CASCADE,
+ column_key text NOT NULL,
+ expires_at timestamptz NOT NULL,
+ week_start date,
+ cell_date date,
+ slot integer,
+ PRIMARY KEY (board,client_id),
+ CHECK (
+  (board='status' AND week_start IS NULL AND cell_date IS NULL AND slot IS NULL
+   AND column_key IN ('currentLoad','driver','truck','trailerNumber','originalGross','driverGross','phone','status','destination','notes','eta','loadPlan','homeTime'))
+  OR
+  (board='gross' AND week_start IS NOT NULL AND extract(isodow FROM week_start)=1
+   AND week_start BETWEEN DATE '2000-01-03' AND DATE '2100-12-27' AND slot IS NOT NULL AND slot BETWEEN -1 AND 99
+   AND ((column_key IN ('driver','truck','originalTotal','driverTotal','milesTotal','balance') AND cell_date IS NULL AND slot=0)
+     OR (column_key IN ('loadNumber','originalRate','driverRate','miles','note') AND cell_date IS NOT NULL AND cell_date BETWEEN week_start AND week_start+6))))
+);
+CREATE INDEX board_presence_expiry ON board_presence(board,expires_at);
+CREATE INDEX board_presence_gross_week ON board_presence(week_start) WHERE board='gross';
+
+INSERT INTO board_presence(board,client_id,user_id,session_hash,driver_id,column_key,expires_at)
+ SELECT 'status',client_id,user_id,session_hash,driver_id,column_key,expires_at FROM driver_board_presence;
+INSERT INTO board_presence(board,client_id,user_id,session_hash,driver_id,column_key,expires_at,week_start,cell_date,slot)
+ SELECT 'gross',client_id,user_id,session_hash,driver_id,column_key,expires_at,week_start,cell_date,slot FROM gross_board_presence;
+
+CREATE TRIGGER status_presence_changed AFTER INSERT OR UPDATE ON board_presence
+ FOR EACH ROW WHEN (NEW.board='status') EXECUTE FUNCTION notify_board_presence_change();
+CREATE TRIGGER status_presence_deleted AFTER DELETE ON board_presence
+ FOR EACH ROW WHEN (OLD.board='status') EXECUTE FUNCTION notify_board_presence_change();
+CREATE TRIGGER gross_presence_changed AFTER INSERT OR UPDATE ON board_presence
+ FOR EACH ROW WHEN (NEW.board='gross') EXECUTE FUNCTION notify_gross_presence_change();
+CREATE TRIGGER gross_presence_deleted AFTER DELETE ON board_presence
+ FOR EACH ROW WHEN (OLD.board='gross') EXECUTE FUNCTION notify_gross_presence_change();
+
+DROP TABLE driver_board_presence, gross_board_presence RESTRICT;
+INSERT INTO payroll_cache_revisions(table_name) VALUES('board_presence');
+INSERT INTO payroll_projection_sources(table_name,classification) VALUES('board_presence','unrelated');
+DO $$ BEGIN
+ IF EXISTS (SELECT FROM pg_roles WHERE rolname='mserp_app') THEN
+  ALTER TABLE board_presence OWNER TO mserp_app;
+ END IF;
+END $$;
+COMMIT;
+
+BEGIN;
+SELECT pg_advisory_xact_lock(736281940);
+LOCK TABLE relay_fuel_sync_days, prepass_toll_sync_days, weighmytruck_sync_days IN ACCESS EXCLUSIVE MODE;
+CREATE TABLE provider_sync_days (
+ provider text NOT NULL,
+ environment text NOT NULL,
+ sync_date date NOT NULL,
+ transaction_count integer NOT NULL,
+ fetched_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(provider,environment,sync_date),
+ CHECK ((provider='relay' AND environment IN ('staging','production') AND transaction_count>=0)
+     OR (provider='prepass' AND environment IN ('nonproduction','production') AND transaction_count>=0)
+     OR (provider='weighmytruck' AND environment='default'))
+);
+INSERT INTO provider_sync_days(provider,environment,sync_date,transaction_count,fetched_at)
+ SELECT 'relay',relay_environment,sync_date,transaction_count,fetched_at FROM relay_fuel_sync_days
+ UNION ALL SELECT 'prepass',prepass_environment,sync_date,transaction_count,fetched_at FROM prepass_toll_sync_days
+ UNION ALL SELECT 'weighmytruck','default',sync_date,ticket_count,synced_at FROM weighmytruck_sync_days;
+CREATE INDEX provider_sync_days_scale_fetched ON provider_sync_days(fetched_at DESC) WHERE provider='weighmytruck';
+DROP TABLE relay_fuel_sync_days, prepass_toll_sync_days, weighmytruck_sync_days RESTRICT;
+-- Completion markers are external bookkeeping. Canonical fuel, toll and scale records
+-- continue through their original payroll capture and canonical transaction.
+INSERT INTO payroll_cache_revisions(table_name) VALUES('provider_sync_days');
+INSERT INTO payroll_projection_sources(table_name,classification) VALUES('provider_sync_days','unrelated');
+DO $$ BEGIN
+ IF EXISTS (SELECT FROM pg_roles WHERE rolname='mserp_app') THEN ALTER TABLE provider_sync_days OWNER TO mserp_app; END IF;
+END $$;
+COMMIT;

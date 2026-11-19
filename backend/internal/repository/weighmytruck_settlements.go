@@ -163,7 +163,7 @@ func (r *WeighMyTruckRepository) Transactions(ctx context.Context, from, to, sea
 		return result, e
 	}
 	result.Page = NewPage(items, total, page)
-	e = tx.QueryRow(ctx, `SELECT max(synced_at) FROM weighmytruck_sync_days`).Scan(&result.LastSync)
+	e = tx.QueryRow(ctx, `SELECT max(fetched_at) FROM provider_sync_days WHERE provider='weighmytruck'`).Scan(&result.LastSync)
 	if e != nil {
 		return result, e
 	}
@@ -257,7 +257,7 @@ func (r *WeighMyTruckRepository) StoreSettlements(ctx context.Context, day strin
 	if e = reconcileWMT(ctx, tx); e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO weighmytruck_sync_days(sync_date,ticket_count) VALUES($1::date,$2) ON CONFLICT(sync_date) DO UPDATE SET synced_at=now(),ticket_count=excluded.ticket_count`, day, len(tickets))
+	e = recordSyncDay(ctx, tx, "weighmytruck", "default", day, len(tickets), nil)
 	if e != nil {
 		return e
 	}

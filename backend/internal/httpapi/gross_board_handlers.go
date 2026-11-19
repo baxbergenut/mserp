@@ -159,13 +159,14 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 		logger.Error("gross board request failed", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "the gross board could not be loaded or saved")
 	}
+	var snapshots boardSnapshotReads[repository.GrossBoard]
 	r.Get("/gross-board", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		board, err := repo.Get(r.Context(), week)
+		board, err := snapshots.get(r.Context(), boardReadKey{week: week}, repo.Get)
 		if err != nil {
 			fail(w, err)
 			return

@@ -37,6 +37,7 @@ var boardLiveTestMigrations = []string{
 // notification triggers only after those tables have been migrated back in.
 func withoutBoardLiveMigration(t *testing.T, source string) string {
 	t.Helper()
+	source = strings.Replace(strings.ReplaceAll(source, "\r\n", "\n"), migrationSQLForTest(t, "224_board_presence.sql"), "", 1)
 	for _, name := range boardLiveTestMigrations {
 		body, err := os.ReadFile("../../sql/" + name)
 		if err != nil {
@@ -118,7 +119,7 @@ func testBoardPresence(t *testing.T, ctx context.Context, pool *pgxpool.Pool, re
 	if len(read()) != 1 {
 		t.Fatal("another session removed cursor")
 	}
-	if _, err = pool.Exec(ctx, `UPDATE driver_board_presence SET expires_at=now()-interval '1 second'`); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE board_presence SET expires_at=now()-interval '1 second' WHERE board='status'`); err != nil {
 		t.Fatal(err)
 	}
 	if len(read()) != 0 {
@@ -143,7 +144,7 @@ func testBoardPresence(t *testing.T, ctx context.Context, pool *pgxpool.Pool, re
 		t.Fatal(err)
 	}
 	var count int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM driver_board_presence`).Scan(&count); err != nil || count != 0 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM board_presence WHERE board='status'`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("logout retained cursor", err, count)
 	}
 	if err = set(hash, "notes"); !errors.Is(err, ErrDriverBoardConflict) {

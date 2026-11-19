@@ -66,9 +66,10 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 			if strings.Count(body, retirementSQL) != 1 {
 				t.Fatal("transfer audit retirement missing from init")
 			}
-			body = strings.Replace(body, retirementSQL, "", 1)
+
 			mig := strings.ReplaceAll(string(migration), "\r\n", "\n")
 			if migrated {
+				body = strings.Replace(body, retirementSQL, "", 1)
 				if strings.Count(body, mig) != 1 {
 					t.Fatal("migration missing from init")
 				}
@@ -108,10 +109,14 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				exec(string(boardMigration))
 			}
 			const legacyAuditInsert = `INSERT INTO gross_board_transfer_history(actor_id,reason,after_value) VALUES('accountant','Legacy audit','{}')`
-			exec(legacyAuditInsert)
-			exec(retirementSQL)
+			if migrated {
+				exec(legacyAuditInsert)
+				exec(retirementSQL)
+			}
 			exec(`GRANT USAGE ON SCHEMA ` + quoted + ` TO mserp_app;GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app;SET ROLE mserp_app`)
-			exec(legacyAuditInsert)
+			if migrated {
+				exec(legacyAuditInsert)
+			}
 			pay := NewDriverPayRepository(pool)
 			board := NewGrossBoardRepository(pool)
 			week, _ := time.Parse(time.DateOnly, "2026-10-19")
@@ -289,7 +294,11 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				}
 			}
 			var history int
-			if e = pool.QueryRow(ctx, `SELECT count(*) FROM gross_board_transfer_history`).Scan(&history); e != nil || history != 0 {
+			historySQL := "SELECT count(*) FROM pg_tables WHERE schemaname=current_schema() AND tablename='gross_board_transfer_history'"
+			if migrated {
+				historySQL = "SELECT count(*) FROM gross_board_transfer_history"
+			}
+			if e = pool.QueryRow(ctx, historySQL).Scan(&history); e != nil || history != 0 {
 				t.Fatal("transfer wrote history", history, e)
 			}
 			input.TransferVersion = 0
