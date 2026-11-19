@@ -36,7 +36,8 @@ try {
       if (conflict || input.version !== entry.version) return route.fulfill({ status: 409, json: { error: 'Status board changed; your draft is retained.' } });
       writes++;
       entry = { ...input, statusEdited: false, version: entry.version + 1,
-        fleetStatus: { availabilityStatus: 'active', statusVersion: 1, truckId: 'truck', truckOperatingStatus: input.status === 'SHOP' ? 'shop' : 'in_use' } };
+        status: input.status === 'SHOP' && driver.availabilityStatus === 'rest' ? 'REST' : input.status,
+        fleetStatus: { availabilityStatus: driver.availabilityStatus, statusVersion: 1, truckId: 'truck', truckOperatingStatus: input.status === 'SHOP' ? 'shop' : driver.truckOperatingStatus } };
       Object.assign(driver, entry.fleetStatus);
       return route.fulfill({ json: [entry] });
     }
@@ -69,6 +70,36 @@ try {
   expect(writes).toBe(2);
   expect(entry.notes).toBe('Second edit while details are pending');
   releaseDetails(); releaseDetails = undefined;
+  // Fleet records Shop independently of the driver's Rest availability.
+  driver.availabilityStatus = 'rest';
+  driver.truckOperatingStatus = 'in_use';
+  entry = { ...entry, status: 'REST', fleetStatus: undefined, version: entry.version + 1 };
+  await page.reload();
+  await expect(status).toHaveValue('REST');
+  await status.selectOption('SHOP');
+  await page.getByLabel('Truck status reason', { exact: true }).fill('Repair needed');
+  await page.getByRole('button', { name: 'Apply status', exact: true }).click();
+  const label = page.getByRole('button', { name: 'Save Driver · Advance load', exact: true });
+  await expect(label).toHaveText('Shop · Rest');
+  await saved();
+  expect(entry.status).toBe('REST');
+  await page.reload();
+  await expect(label).toHaveText('Shop · Rest');
+  await expect(status).toHaveValue('SHOP');
+  const filters = page.getByRole('group', { name: 'Status choices' });
+  await page.getByRole('button', { name: 'Status filter' }).click();
+  for (const choice of ['Shop', 'Rest']) {
+    await filters.getByRole('button', { name: 'Clear all' }).click();
+    await expect(label).toHaveCount(0);
+    await filters.getByRole('checkbox', { name: choice, exact: true }).check();
+    await expect(label).toHaveText('Shop · Rest');
+  }
+  await filters.getByRole('button', { name: 'Select all' }).click();
+  await page.keyboard.press('Escape');
+  const before = writes;
+  await status.selectOption('SHOP');
+  await expect(page.getByLabel('Truck status reason', { exact: true })).toHaveCount(0);
+  expect(writes).toBe(before);
   // A server conflict preserves the draft and never claims it was saved.
   conflict = true;
   await notes.fill('Keep my conflicting draft');

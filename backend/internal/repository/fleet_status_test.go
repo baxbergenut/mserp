@@ -174,8 +174,18 @@ func TestFleetStatusDatabase(t *testing.T) {
 			if e = save("NEW DRIVER"); e != nil {
 				t.Fatal(e)
 			}
+			priority := NewPayrollWorkPriority()
+			board.ConfigurePayrollWorkPriority(priority)
+			background, release, err := priority.background(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer release()
 			if e = save("SHOP"); e != nil {
 				t.Fatal(e)
+			}
+			if context.Cause(background) != errPayrollWorkYielded {
+				t.Fatal("Shop save did not interrupt background preparation")
 			}
 			if got := scalar(`SELECT fleet_truck_operating_status($1)`, truck.ID); got != "shop" {
 				t.Fatal(got)

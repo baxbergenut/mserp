@@ -95,6 +95,7 @@ type DriverBoard struct {
 }
 
 type DriverBoardRepository struct {
+	workPriority      *PayrollWorkPriority
 	retryRoutes       *boardroutes.Client
 	retryELD          *fiveeld.Client
 	retryUSDOT        string
@@ -307,6 +308,14 @@ func readBoardPendingDrivers(ctx context.Context, tx pgx.Tx) ([]BoardPendingDriv
 }
 
 func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {
+	// An explicit equipment restriction updates the assigned truck. Start with
+	// the source lock to avoid replaying the command after its guarded rollback.
+	for _, e := range entries {
+		if e.StatusEdited && (e.Status == "SHOP" || e.Status == "STOP" || e.Status == "ACCIDENT") {
+			defer r.workPriority.interactive()()
+			return r.save(ctx, entries, true, actor...)
+		}
+	}
 	return runBoardCommand(func(source bool) ([]DriverBoardEntry, error) { return r.save(ctx, entries, source, actor...) })
 }
 
