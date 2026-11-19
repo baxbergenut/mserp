@@ -30,12 +30,14 @@ func grossBoardReviewError(entry GrossBoardEntry, reason string) error {
 }
 
 type GrossBoardRepository struct {
+	weekEntries  *boardWeekCache[[]GrossBoardEntry]
+	openings     *boardWeekCache[[]GrossBoardBalance]
 	pool         *pgxpool.Pool
 	workPriority *PayrollWorkPriority
 }
 
 func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
-	return &GrossBoardRepository{pool: pool}
+	return &GrossBoardRepository{pool: pool, weekEntries: new(boardWeekCache[[]GrossBoardEntry]), openings: new(boardWeekCache[[]GrossBoardBalance])}
 }
 
 type GrossBoardEntry struct {
@@ -207,16 +209,25 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return GrossBoard{}, err
 	}
 	defer tx.Rollback(ctx)
-	// These interactive queries contain many lateral projections. JIT startup
-	// can exceed the query itself, especially while several boards are open.
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
+
+	key, err := boardWeekRevision(ctx, tx, week, true)
+	if err != nil {
 		return GrossBoard{}, err
 	}
-	board, err := readGrossBoardSnapshot(ctx, tx, week, true)
+	entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+	if err != nil {
+		return GrossBoard{}, err
+	}
+	board, err := readGrossBoardSnapshot(ctx, tx, week, true, entries)
 	if err != nil {
 		return board, err
 	}
-	if err = readGrossBoardOpenings(ctx, tx, week, &board); err != nil {
+	board.Balances, err = r.openings.get(ctx, key, func() ([]GrossBoardBalance, error) {
+		snapshot := GrossBoard{Balances: []GrossBoardBalance{}}
+		err := readGrossBoardOpenings(ctx, tx, week, &snapshot)
+		return snapshot.Balances, err
+	})
+	if err != nil {
 		return board, err
 	}
 	state, err := readGrossBoardWeekLock(ctx, tx, week)
@@ -229,12 +240,12 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 
 // Payroll projections share the exact board resolution and transaction snapshot.
 func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard, error) {
-	return readGrossBoardSnapshot(ctx, tx, week, false)
+	return readGrossBoardSnapshot(ctx, tx, week, false, nil)
 }
 
 // Only the dispatch endpoint includes planning text, planning-only drivers and type labels.
 // Financial projections keep their existing roster, inputs and serialized data.
-func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, includeDispatchDetails bool) (GrossBoard, error) {
+func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, includeDispatchDetails bool, weeklyEntries []GrossBoardEntry) (GrossBoard, error) {
 	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}, PlanningEntries: []GrossBoardPlanningEntry{}}
 	planningRoster := ""
 	driverTypeColumns, driverTypeJoins := "", ""
@@ -284,23 +295,27 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 		return board, err
 	}
 
-	rows, err = tx.Query(ctx, grossBoardEffective+"SELECT "+grossBoardEntryColumns+`
+	if weeklyEntries != nil {
+		board.Entries = weeklyEntries
+	} else {
+		rows, err = tx.Query(ctx, grossBoardEffective+"SELECT "+grossBoardEntryColumns+`
  FROM effective WHERE service_date >= $1::date ORDER BY driver_id,service_date,slot`, week)
-	if err != nil {
-		return board, err
-	}
-	for rows.Next() {
-		var e GrossBoardEntry
-		if err = scanGrossBoardEntry(rows, &e); err != nil {
-			rows.Close()
+		if err != nil {
 			return board, err
 		}
-		board.Entries = append(board.Entries, e)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return board, err
+		for rows.Next() {
+			var e GrossBoardEntry
+			if err = scanGrossBoardEntry(rows, &e); err != nil {
+				rows.Close()
+				return board, err
+			}
+			board.Entries = append(board.Entries, e)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return board, err
+		}
 	}
 	markers, err := tx.Query(ctx, `SELECT t.driver_id::text,t.source_date::text,t.source_slot,t.version,t.dispatcher_id,t.dispatcher_name,e.load_number,e.version FROM gross_board_transfers t JOIN `+grossBoardEntriesSQL+` e ON e.driver_id=t.driver_id AND e.service_date=t.source_date AND e.slot=t.source_slot WHERE t.active AND t.source_date >= $1::date AND t.source_date < $1::date+7`, week)
 	if err != nil {

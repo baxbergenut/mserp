@@ -95,6 +95,8 @@ type DriverBoard struct {
 }
 
 type DriverBoardRepository struct {
+	plans             *boardWeekCache[map[string][]BoardLoad]
+	weekEntries       *boardWeekCache[[]GrossBoardEntry]
 	workPriority      *PayrollWorkPriority
 	retryRoutes       *boardroutes.Client
 	retryELD          *fiveeld.Client
@@ -106,7 +108,7 @@ type DriverBoardRepository struct {
 
 func NewDriverBoardRepository(pool *pgxpool.Pool, fiveELDConfigured ...bool) *DriverBoardRepository {
 	configured := len(fiveELDConfigured) > 0 && fiveELDConfigured[0]
-	return &DriverBoardRepository{pool: pool, now: time.Now, fiveELDConfigured: configured}
+	return &DriverBoardRepository{pool: pool, plans: new(boardWeekCache[map[string][]BoardLoad]), weekEntries: new(boardWeekCache[[]GrossBoardEntry]), now: time.Now, fiveELDConfigured: configured}
 }
 
 // Ownership and pay method are independent. An owner driving their own truck
@@ -138,9 +140,8 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	// These interactive queries are too short to amortize PostgreSQL's JIT
-	// compilation. Keep this transaction-local; payroll jobs retain their policy.
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
+	key, err := boardWeekRevision(ctx, tx, week, false)
+	if err != nil {
 		return result, err
 	}
 	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
@@ -223,32 +224,25 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	for _, d := range result.Drivers {
 		ids = append(ids, d.ID)
 	}
-	// Use the same exact load resolution and entered/source precedence as Gross Board.
-	rows, err = tx.Query(ctx, driverBoardCurrentEntries+"SELECT "+grossBoardEntryColumns+` FROM effective
- WHERE service_date >= $1::date AND driver_id=ANY($2::uuid[])
- ORDER BY driver_id,service_date,slot`, week, ids)
+	entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
 	if err != nil {
 		return result, err
 	}
-	for rows.Next() {
-		var e GrossBoardEntry
-		if err = scanGrossBoardEntry(rows, &e); err != nil {
-			rows.Close()
-			return result, err
+	visible := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		visible[id] = true
+	}
+	for _, entry := range entries {
+		if visible[entry.DriverID] {
+			result.GrossEntries = append(result.GrossEntries, entry)
 		}
-		result.GrossEntries = append(result.GrossEntries, e)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return result, err
 	}
 	result.ELD, err = fiveELDSyncSummary(ctx, tx)
 	if err != nil {
 		return result, err
 	}
 	result.ELD.Configured = r.fiveELDConfigured
-	result.Loads, err = readBoardLoads(ctx, tx, ids, r.loadStartDate(""), r.now())
+	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), false, r.plans, key)
 	if err != nil {
 		return result, err
 	}
@@ -337,10 +331,7 @@ func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardE
 		return nil, err
 	}
 	for i := range entries {
-		if err = attachBoardFleetStatus(ctx, tx, &entries[i]); err != nil {
-			return nil, err
-		}
-		if err = attachBoardUndoID(ctx, tx, &entries[i]); err != nil {
+		if err = attachBoardSaveReceipt(ctx, tx, &entries[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -385,9 +376,12 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if err := e.LeavePlan.Validate(); err != nil {
 			return nil, err
 		}
-		loadStateValue, _, readErr := loadState(ctx, tx, e.DriverID)
-		if readErr != nil {
-			return nil, readErr
+		var loadStateValue boardLoadState
+		if e.ResolveCurrentLoad || e.StatusEdited || old.CurrentLoad != e.CurrentLoad || old.Destination != e.Destination || old.ETA != e.ETA {
+			loadStateValue, _, readErr = loadState(ctx, tx, e.DriverID)
+			if readErr != nil {
+				return nil, readErr
+			}
 		}
 		if strings.TrimSpace(e.CurrentLoad) != "" &&
 			(!strings.EqualFold(strings.TrimSpace(e.CurrentLoad), strings.TrimSpace(old.CurrentLoad)) || (matchCurrentLoad && e.ResolveCurrentLoad)) {
@@ -435,16 +429,9 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 				e.Destination = ""
 			}
 			if strings.TrimSpace(e.CurrentLoad) != "" {
-				views, err := readBoardLoads(ctx, tx, []string{e.DriverID}, today, time.Now())
+				chosen, err := selectBoardCurrentLoad(ctx, tx, e.DriverID, today, e.CurrentLoad)
 				if err != nil {
 					return nil, err
-				}
-				chosen := matchBoardCurrentLoad(views[e.DriverID].Week, e.CurrentLoad)
-				if chosen == nil && !hasBoardNumber(views[e.DriverID].Week, e.CurrentLoad) {
-					chosen, err = importedBoardLoad(ctx, tx, e.CurrentLoad)
-					if err != nil {
-						return nil, err
-					}
 				}
 				if chosen != nil {
 					if providerCompletedLoad(chosen.SourceStatus) {

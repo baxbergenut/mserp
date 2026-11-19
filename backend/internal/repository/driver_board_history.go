@@ -33,16 +33,6 @@ func setBoardActor(ctx context.Context, tx pgx.Tx, actor, source string) error {
 	return err
 }
 
-// Only return events produced by this write, never another user's latest event.
-func attachBoardUndoID(ctx context.Context, tx pgx.Tx, entry *DriverBoardEntry) error {
-	err := tx.QueryRow(ctx, `SELECT id FROM driver_board_history WHERE driver_id=$1 AND transaction_id=txid_current() AND source='board' AND undo_of IS NULL`, entry.DriverID).Scan(&entry.UndoID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		entry.UndoID = 0
-		return nil
-	}
-	return err
-}
-
 func (r *DriverBoardRepository) History(ctx context.Context, ids []string, before int64, fields ...string) (DriverBoardHistory, error) {
 	result := DriverBoardHistory{Items: []DriverBoardEvent{}}
 	field := ""
@@ -212,7 +202,7 @@ func (r *DriverBoardRepository) undo(ctx context.Context, id int64, driver strin
 			}
 		}
 	}
-	if err = attachBoardFleetStatus(ctx, tx, &saved[0]); err != nil {
+	if err = attachBoardSaveReceipt(ctx, tx, &saved[0]); err != nil {
 		return entry, err
 	}
 	return saved[0], tx.Commit(ctx)
