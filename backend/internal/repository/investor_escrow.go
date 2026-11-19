@@ -32,25 +32,72 @@ func investorEscrowDeductions(ctx context.Context, tx pgx.Tx, truck, owner, week
 	return out, rows.Err()
 }
 
-// Use the report week: legacy saved edits may omit their weekStart.
-func addInvestorAccounts(ctx context.Context, tx pgx.Tx, d *DriverPayDriver, data ChargeData, loads map[string]map[string]bool, week string) error {
-	escrow, err := investorEscrowDeductions(ctx, tx, d.ID, d.InvestorID, week)
+type investorEscrowSources struct{ deductions, releases bool }
+
+// Check for sources across the exact truck/week scopes once after posting.
+// Balances, owner identity and collection choices still use the native readers.
+func prepareInvestorEscrowSources(ctx context.Context, tx pgx.Tx, publication *payrollPublicationReadState, scopes []payrollTruckInputScope, body []byte) error {
+	known := make(map[[2]string]map[string]investorEscrowSources)
+	for _, period := range scopes {
+		for _, truck := range period.Trucks {
+			known[[2]string{period.Week, truck}] = make(map[string]investorEscrowSources)
+		}
+	}
+	rows, err := tx.Query(ctx, `SELECT s.week::text,e.truck_id::text,e.owner_id::text,
+ bool_or(e.start_date<s.week+7),bool_or(r.id IS NOT NULL)
+ FROM jsonb_to_recordset($1::jsonb) s(week date,trucks uuid[])
+ JOIN driver_escrows e ON e.truck_id=ANY(s.trucks) AND e.owner_id IS NOT NULL
+ LEFT JOIN driver_escrow_releases r ON r.escrow_id=e.id AND r.week_start=s.week AND NOT r.cancelled AND r.payroll_return IS NULL AND r.correction_reason IS NULL
+ GROUP BY s.week,e.truck_id,e.owner_id`, body)
 	if err != nil {
 		return err
 	}
-	d.Edits.ExpenseDeductions = append(d.Edits.ExpenseDeductions, escrow...)
+	defer rows.Close()
+	for rows.Next() {
+		var week, truck, owner string
+		var sources investorEscrowSources
+		if err := rows.Scan(&week, &truck, &owner, &sources.deductions, &sources.releases); err != nil {
+			return err
+		}
+		if owners := known[[2]string{week, truck}]; owners != nil {
+			owners[owner] = sources
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	publication.investorEscrows = known
+	return nil
+}
+
+// Use the report week: legacy saved edits may omit their weekStart.
+func addInvestorAccounts(ctx context.Context, tx pgx.Tx, d *DriverPayDriver, data ChargeData, loads map[string]map[string]bool, week string) error {
+	sources := investorEscrowSources{deductions: true, releases: true}
+	if publication, _ := ctx.Value(payrollPublicationReadKey{}).(*payrollPublicationReadState); publication != nil && publication.tx == tx {
+		if owners, known := publication.investorEscrows[[2]string{week, d.ID}]; known {
+			sources = owners[d.InvestorID]
+		}
+	}
+	if sources.deductions {
+		escrow, err := investorEscrowDeductions(ctx, tx, d.ID, d.InvestorID, week)
+		if err != nil {
+			return err
+		}
+		d.Edits.ExpenseDeductions = append(d.Edits.ExpenseDeductions, escrow...)
+	}
 	data.Schedules = truckOwnerSchedules(data.Schedules, d.ID, d.InvestorID)
-	eligible, checkErr := investorAccountEligible(ctx, tx, d.ID, d.InvestorID, week)
-	if checkErr != nil {
-		return checkErr
+	if len(data.Schedules) > 0 {
+		eligible, err := investorAccountEligible(ctx, tx, d.ID, d.InvestorID, week)
+		if err != nil {
+			return err
+		}
+		if !eligible {
+			data.Schedules = nil
+		}
 	}
-	if !eligible {
-		data.Schedules = nil
-	}
-	generated, e := generatedForWeek(data, loads, week)
-	err = e
+	generated, err := generatedForWeek(data, loads, week)
 	d.Edits.GeneratedCharges = generated[d.ID]
-	if err != nil {
+	if err != nil || !sources.releases {
 		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT r.id::text,r.amount::text FROM driver_escrow_releases r JOIN driver_escrows e ON e.id=r.escrow_id

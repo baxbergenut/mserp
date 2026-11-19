@@ -65,10 +65,15 @@ func beginPayrollSourceCommand(ctx context.Context, tx pgx.Tx, actor, name strin
 		if _, err = chargeWeek(meta.StatementWeekStart); err != nil {
 			return nil, nil, err
 		}
-		err = validatePreparedPayrollCommand(ctx, tx, meta.StatementKind, meta.StatementID, meta.StatementWeekStart, meta.ExpectedStatementRevision)
-	}
-	if err == nil && c != nil && c.expected != "" {
-		c.beforeSnapshot, err = payrollCacheSnapshot(ctx, tx)
+		validation := payrollValidationContext(ctx, tx)
+		var current string
+		current, err = validatePreparedPayrollStatement(validation, tx, meta.StatementKind, meta.StatementID, meta.StatementWeekStart, meta.ExpectedStatementRevision)
+		if err == nil {
+			err = retainPayrollPeriodSourceProofs(validation, tx, current)
+		}
+		if c != nil {
+			c.beforeSnapshot = current
+		}
 	}
 	if c != nil && c.beforeSnapshot == "" {
 		if mutation, ok := tx.(*payrollMutationTransaction); ok {
@@ -434,6 +439,31 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 			return nil, err
 		}
 	}
+	// Capture the exact receipt scope before and after all periods are published.
+	// The command already holds the financial claims for those statements.
+	receiptScopes := make([]payrollReceiptScope, 0, len(periods))
+	for _, period := range periods {
+		selection, _ := period.ctx.Value(payrollPublicationSelectionKey{}).(*payrollSelection)
+		scope := payrollReceiptScope{Week: period.week.Format(time.DateOnly), All: selection == nil}
+		if selection != nil {
+			scope.Drivers, scope.Trucks = selection.drivers, selection.trucks
+			if !period.rebaseOnly && len(impacts) > 0 && impacts[0] != nil {
+				switch impacts[0].finalizedKind {
+				case "driver":
+					scope.Trucks = nil
+				case "investor":
+					scope.Drivers = nil
+				}
+			}
+		}
+		if scope.All || len(scope.Drivers)+len(scope.Trucks) > 0 {
+			receiptScopes = append(receiptScopes, scope)
+		}
+	}
+	previousVersions, err := payrollReceiptVersions(ctx, tx, receiptScopes)
+	if err != nil {
+		return nil, err
+	}
 	for _, period := range periods {
 		readCtx, w, rebaseOnly := period.ctx, period.week, period.rebaseOnly
 		if len(impacts) > 0 && impacts[0] != nil {
@@ -502,33 +532,6 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 		if e != nil {
 			return nil, e
 		}
-		// Include old destinations before replacing state. A zero balance, changed
-		// eligibility or moved source can remove a statement from the new report.
-		selection, _ := readCtx.Value(payrollPublicationSelectionKey{}).(*payrollSelection)
-		var drivers, trucks []string
-		if selection != nil {
-			drivers, trucks = selection.drivers, selection.trucks
-		}
-		previousVersions := map[PayrollStatementIdentity]string{}
-		old, e := tx.Query(ctx, `SELECT kind,statement_id::text,version_id::text FROM payroll_statement_state WHERE week_start=$1
- AND ($2::boolean OR (kind='driver' AND statement_id=ANY($3::uuid[])) OR (kind='investor' AND statement_id=ANY($4::uuid[])))`, w, selection == nil, drivers, trucks)
-		if e != nil {
-			return nil, e
-		}
-		for old.Next() {
-			identity := PayrollStatementIdentity{WeekStart: w.Format(time.DateOnly)}
-			var version string
-			if e = old.Scan(&identity.Kind, &identity.ID, &version); e != nil {
-				old.Close()
-				return nil, e
-			}
-			affectedSet[identity] = true
-			previousVersions[identity] = version
-		}
-		old.Close()
-		if e = old.Err(); e != nil {
-			return nil, e
-		}
 		var generation int64
 		if !concurrent {
 			e = tx.QueryRow(ctx, `INSERT INTO payroll_projection_jobs(week_start) VALUES($1)
@@ -547,29 +550,19 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 				return nil, e
 			}
 		}
-		// Unchanged publication reuses its current revision. Receipts enumerate
-		// only real changes and removals, rather than claiming no-op copies.
-		published, e := tx.Query(ctx, `SELECT kind,statement_id::text,version_id::text FROM payroll_statement_state WHERE week_start=$1
- AND ($2::boolean OR (kind='driver' AND statement_id=ANY($3::uuid[])) OR (kind='investor' AND statement_id=ANY($4::uuid[])))`, w, selection == nil, drivers, trucks)
-		if e != nil {
-			return nil, e
+	}
+	published, err := payrollReceiptVersions(ctx, tx, receiptScopes)
+	if err != nil {
+		return nil, err
+	}
+	for identity, version := range previousVersions {
+		if published[identity] != version {
+			affectedSet[identity] = true
 		}
-		for published.Next() {
-			identity := PayrollStatementIdentity{WeekStart: w.Format(time.DateOnly)}
-			var version string
-			if e = published.Scan(&identity.Kind, &identity.ID, &version); e != nil {
-				published.Close()
-				return nil, e
-			}
-			if previousVersions[identity] == version {
-				delete(affectedSet, identity)
-			} else {
-				affectedSet[identity] = true
-			}
-		}
-		published.Close()
-		if e = published.Err(); e != nil {
-			return nil, e
+	}
+	for identity, version := range published {
+		if previousVersions[identity] != version {
+			affectedSet[identity] = true
 		}
 	}
 	// These exact events belong to this command and all their materialized
@@ -590,6 +583,37 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 		return a.ID < b.ID
 	})
 	return affected, err
+}
+
+type payrollReceiptScope struct {
+	Week    string   `json:"week"`
+	All     bool     `json:"all_statements"`
+	Drivers []string `json:"drivers"`
+	Trucks  []string `json:"trucks"`
+}
+
+func payrollReceiptVersions(ctx context.Context, tx pgx.Tx, scopes []payrollReceiptScope) (map[PayrollStatementIdentity]string, error) {
+	versions := make(map[PayrollStatementIdentity]string)
+	if len(scopes) == 0 {
+		return versions, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT s.week_start::text,s.kind,s.statement_id::text,s.version_id::text
+ FROM jsonb_to_recordset($1::jsonb) p(week date,all_statements boolean,drivers uuid[],trucks uuid[])
+ JOIN payroll_statement_state s ON s.week_start=p.week
+ AND (p.all_statements OR (s.kind='driver' AND s.statement_id=ANY(p.drivers)) OR (s.kind='investor' AND s.statement_id=ANY(p.trucks)))`, scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var identity PayrollStatementIdentity
+		var version string
+		if err = rows.Scan(&identity.WeekStart, &identity.Kind, &identity.ID, &version); err != nil {
+			return nil, err
+		}
+		versions[identity] = version
+	}
+	return versions, rows.Err()
 }
 
 type payrollPublicationKey struct{}
@@ -678,12 +702,12 @@ func stripPayCommandMetadata(edits *DriverPayEdits) {
 	edits.AffectedStatements = nil
 }
 
-func preparedSaveCard(ctx context.Context, tx pgx.Tx, kind, id, week string, c *payrollCommand) (DriverPayDriver, error) {
+func preparedStatementDetail(ctx context.Context, tx pgx.Tx, kind, id, week, expected string, snapshot *string) (DriverPayDriver, error) {
 	var d DriverPayDriver
 	var body []byte
 	err := tx.QueryRow(ctx, `SELECT v.detail,g.input_snapshot FROM payroll_statement_state s JOIN payroll_statement_versions v ON v.id=s.version_id
  JOIN payroll_projection_weeks w ON w.week_start=s.week_start JOIN payroll_projection_generations g ON g.id=w.generation_id
- WHERE s.kind=$1 AND s.statement_id=$2::uuid AND s.week_start=$3::date AND s.version_id=$4::uuid`, kind, id, week, c.expected).Scan(&body, &c.beforeSnapshot)
+ WHERE s.kind=$1 AND s.statement_id=$2::uuid AND s.week_start=$3::date AND s.version_id=$4::uuid`, kind, id, week, expected).Scan(&body, snapshot)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, ErrDriverPayConflict
 	}
@@ -691,6 +715,11 @@ func preparedSaveCard(ctx context.Context, tx pgx.Tx, kind, id, week string, c *
 		return d, err
 	}
 	err = json.Unmarshal(body, &d)
+	return d, err
+}
+
+func preparedSaveCard(ctx context.Context, tx pgx.Tx, kind, id, week string, c *payrollCommand) (DriverPayDriver, error) {
+	d, err := preparedStatementDetail(ctx, tx, kind, id, week, c.expected, &c.beforeSnapshot)
 	if err == nil && kind == "driver" {
 		report := DriverPayWeek{WeekStart: week, Drivers: []DriverPayDriver{d}}
 		err = overlayDriverExpenseBalances(ctx, tx, &report)

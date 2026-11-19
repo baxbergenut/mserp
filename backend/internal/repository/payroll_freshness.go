@@ -129,25 +129,24 @@ const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (
  ), shared AS MATERIALIZED (
  SELECT d.fingerprint,refs.generation_id,d.dependencies<>'{}'::jsonb valid,
  d.dependencies ?| p.roots source_changed,
- ARRAY(SELECT e.key FROM jsonb_each_text(d.dependencies) e(key,value)
- LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
- WHERE coalesce(r.revision,0)<>e.value::bigint) changed_keys,
- ARRAY(SELECT e.key FROM jsonb_each_text(d.dependencies) e(key,value)
- LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
- WHERE coalesce(r.revision,0)<>e.value::bigint
- AND coalesce(r.revision,0)<>e.value::bigint+coalesce((p.deltas->>e.key)::bigint,0)) stale_keys
+ checks.changed_keys,checks.stale_keys
  FROM payroll_resource_dependency_sets d JOIN (
  SELECT DISTINCT resource_dependencies->>'$shared' fingerprint,generation_id FROM versions
  WHERE resource_dependencies ? '$shared') refs USING(fingerprint)
  LEFT JOIN proofs p USING(generation_id)
+ CROSS JOIN LATERAL (
+ SELECT array_agg(e.key) FILTER (WHERE coalesce(r.revision,0)<>e.value::bigint) changed_keys,
+ array_agg(e.key) FILTER (WHERE coalesce(r.revision,0)<>e.value::bigint
+ AND coalesce(r.revision,0)<>e.value::bigint+coalesce((p.deltas->>e.key)::bigint,0)) stale_keys
+ FROM jsonb_each_text(d.dependencies) e(key,value)
+ LEFT JOIN payroll_resource_revisions r ON r.resource_key=e.key
+ ) checks
  ), freshness AS (
  SELECT v.*,
  (CASE WHEN v.resource_dependencies ? '$shared' THEN shared.fingerprint IS NOT NULL
  AND NOT EXISTS(SELECT 1 FROM unnest(shared.changed_keys) key WHERE NOT v.resource_dependencies ? key)
  ELSE true END)
- AND NOT EXISTS(SELECT 1 FROM jsonb_each_text(v.resource_dependencies-'$shared') d(key,value)
- LEFT JOIN payroll_resource_revisions r ON r.resource_key=d.key
- WHERE coalesce(r.revision,0)<>d.value::bigint) resources_exact,
+ AND NOT local.changed resources_exact,
  coalesce(p.complete,false)
  AND (cardinality(p.roots)=0 OR (SELECT protocol_mode='resources' FROM payroll_projection_control WHERE singleton))
  AND NOT(v.resource_dependencies ?| coalesce(p.roots,ARRAY[]::text[]))
@@ -157,12 +156,16 @@ const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (
  OR (SELECT protocol_mode='global' FROM payroll_projection_control WHERE singleton))
  AND NOT EXISTS(SELECT 1 FROM unnest(shared.stale_keys) key WHERE NOT v.resource_dependencies ? key)
  ELSE v.resource_dependencies<>'{}'::jsonb OR (SELECT protocol_mode='global' FROM payroll_projection_control WHERE singleton) END
- AND NOT EXISTS(SELECT 1 FROM jsonb_each_text(v.resource_dependencies-'$shared') d(key,value)
- LEFT JOIN payroll_resource_revisions r ON r.resource_key=d.key
- WHERE coalesce(r.revision,0)<>d.value::bigint
- AND coalesce(r.revision,0)<>d.value::bigint+coalesce((p.deltas->>d.key)::bigint,0)) resources_current
+ AND NOT local.stale resources_current
  FROM versions v LEFT JOIN proofs p ON p.generation_id=v.generation_id
  LEFT JOIN shared ON shared.fingerprint=v.resource_dependencies->>'$shared' AND shared.generation_id=v.generation_id
+ CROSS JOIN LATERAL (
+ SELECT coalesce(bool_or(coalesce(r.revision,0)<>d.value::bigint),false) changed,
+ coalesce(bool_or(coalesce(r.revision,0)<>d.value::bigint AND
+ coalesce(r.revision,0)<>d.value::bigint+coalesce((p.deltas->>d.key)::bigint,0)),false) stale
+ FROM jsonb_each_text(v.resource_dependencies-'$shared') d(key,value)
+ LEFT JOIN payroll_resource_revisions r ON r.resource_key=d.key
+ ) local
  ) `
 
 // Rebase only certified unchanged statements, preserving their content/version.

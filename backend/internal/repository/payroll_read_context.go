@@ -64,6 +64,7 @@ type payrollPublicationReadState struct {
 	scale               map[string]payrollScaleWeek
 	truckInputs         map[string]truckPayInputs
 	truckPhases         map[string][]TruckChargePhase
+	investorEscrows     map[[2]string]map[string]investorEscrowSources
 	driverEligibility   map[string]map[string]payrollDriverEligibility
 }
 

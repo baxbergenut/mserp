@@ -35,7 +35,8 @@ func TestPreparedPayrollSourceActionsDatabase(t *testing.T) {
 		}
 		weeks := []time.Time{}
 		versions := map[string]string{}
-		for _, date := range []string{"2026-10-05", "2026-10-12", "2026-10-19"} {
+		// Include a prior materialized week with no native or manual placement.
+		for _, date := range []string{"2026-10-05", "2026-10-12", "2026-10-19", "2026-09-28"} {
 			week, _ := chargeWeek(date)
 			weeks = append(weeks, week)
 			if err := repo.RequestPayrollPreparation(ctx, week, false); err != nil {

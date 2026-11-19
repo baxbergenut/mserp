@@ -92,7 +92,8 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 	safe := true
 	periodOnly := c != nil && (strings.HasSuffix(c.name, ".finalize") || strings.HasSuffix(c.name, ".reopen"))
 	changedWeeks := map[string]bool{}
-	boardOnly := true
+	boardOrPlacementOnly := true
+	placementSeen := false
 	boardStart := ""
 	boardDrivers := map[string]bool{}
 	loadsOnly := true
@@ -117,8 +118,10 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		nonLiveEvents++
 		key, known := allowed[table]
 		loadsOnly = loadsOnly && table == "loads"
-		if table != "gross_board_entries" && table != "gross_board_extra_entries" {
-			boardOnly = false
+		placement := table == "payroll_load_placements" || table == "payroll_load_placement_history"
+		placementSeen = placementSeen || placement
+		if !placement && table != "gross_board_entries" && table != "gross_board_extra_entries" {
+			boardOrPlacementOnly = false
 		}
 		if table != "payroll_settlements" && table != "payroll_settlement_events" && table != "investor_pay_weeks" && table != "truck_settlement_events" {
 			periodOnly = false
@@ -137,15 +140,22 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		}
 		chargeProof.capture(table, operation, sourceXID, routes)
 		if len(routes) == 0 {
-			boardOnly = false
+			boardOrPlacementOnly = false
 		}
 		for _, route := range routes {
 			value := func(k string) string { var v string; _ = json.Unmarshal(route[k], &v); return v }
-			if boardOnly {
-				day, e := time.Parse(time.DateOnly, value("service_date"))
-				if e != nil || value("driver_id") == "" {
-					boardOnly = false
-				} else {
+			if boardOrPlacementOnly {
+				dates := []string{value("service_date")}
+				if placement {
+					// Both images matter when a placement moves to another week.
+					dates = []string{value("source_date"), value("week_start")}
+				}
+				for _, date := range dates {
+					day, e := time.Parse(time.DateOnly, date)
+					if e != nil || value("driver_id") == "" {
+						boardOrPlacementOnly = false
+						break
+					}
 					start := day.AddDate(0, 0, -(int(day.Weekday())+6)%7).Format(time.DateOnly)
 					if boardStart == "" || start < boardStart {
 						boardStart = start
@@ -457,7 +467,17 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		impact.snapshot = c.beforeSnapshot
 	}
 	earliest := ""
-	if boardOnly && boardStart != "" {
+	if boardOrPlacementOnly && boardStart != "" {
+		if placementSeen {
+			// A manual destination can suppress a native or transferred occurrence
+			// belonging to another driver. Include every matching source and history
+			// week before establishing a lower bound on dependent periods.
+			for nativeWeek := range loadWeeks {
+				if nativeWeek < boardStart {
+					boardStart = nativeWeek
+				}
+			}
+		}
 		// Board duplicate ranking is chronological and transfers only move a
 		// weekend into the following week. Ordinary board edits therefore cannot
 		// change earlier weeks. Explicit placements can bring that source back

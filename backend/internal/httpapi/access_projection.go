@@ -25,7 +25,9 @@ func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	path := w.request.URL.Path
 	// Financial fields have their own grants; embedded owner names still need Investors access.
 	financial := strings.HasPrefix(path, "/driver-pay") || strings.HasPrefix(path, "/investor-pay") || strings.HasPrefix(path, "/dispatcher-pay") || path == "/financial-dashboard" || strings.HasSuffix(path, "/pay-history")
-	if financial && repository.HasPermission(s.User, "investors.read") {
+	canReadInvestors := repository.HasPermission(s.User, "investors.read")
+	fields := fieldsFor(s.User, path)
+	if canReadInvestors && (financial || fields == (fieldProjection{})) {
 		return value
 	}
 	raw, err := json.Marshal(value)
@@ -38,11 +40,11 @@ func (w *permissionResponseWriter) ProjectJSON(value any) any {
 	if decoder.Decode(&result) != nil {
 		return nil
 	}
-	if !repository.HasPermission(s.User, "investors.read") {
+	if !canReadInvestors {
 		projectInvestorNames(result, path == "/lookups/investors")
 	}
-	if !financial {
-		projectFields(result, s.User, path)
+	if !financial && fields != (fieldProjection{}) {
+		fields.apply(result)
 	}
 	return result
 }
@@ -90,16 +92,38 @@ var driverPrivateFields = []string{"dateOfBirth", "address", "city", "state", "p
 var driverDocumentFields = []string{"cdlFileId", "cdlFileName", "cdlFileContentType", "cdlFileSizeBytes"}
 var truckDocumentFields = []string{"irpFileId", "irpFileName", "irpFileContentType", "irpFileSizeBytes"}
 
+type fieldProjection struct {
+	hidePlanning, hidePrivate, hideDriverDocs, hidePay, hideTruckDocs, hideTerms bool
+}
+
+func fieldsFor(user repository.AuthUser, path string) fieldProjection {
+	return fieldProjection{
+		hidePlanning:   !repository.HasPermission(user, "board.read") || (path != "/gross-board" && path != "/gross-board/events"),
+		hidePrivate:    !repository.HasPermission(user, "drivers.private.read"),
+		hideDriverDocs: !repository.HasPermission(user, "drivers.documents.read"),
+		hidePay:        !repository.HasPermission(user, "driver_compensation.read"),
+		hideTruckDocs:  !repository.HasPermission(user, "trucks.documents.read"),
+		hideTerms:      strings.HasPrefix(path, "/truck-charges") && !repository.HasPermission(user, "investor_terms.read"),
+	}
+}
+
 func projectFields(value any, user repository.AuthUser, path string) {
+	fields := fieldsFor(user, path)
+	if fields != (fieldProjection{}) {
+		fields.apply(value)
+	}
+}
+
+func (p fieldProjection) apply(value any) {
 	switch v := value.(type) {
 	case []any:
 		for _, item := range v {
-			projectFields(item, user, path)
+			p.apply(item)
 		}
 	case map[string]any:
 		// Planning text is dispatch-only even if a future generic projection
 		// accidentally receives a full board object.
-		if !repository.HasPermission(user, "board.read") || (path != "/gross-board" && path != "/gross-board/events") {
+		if p.hidePlanning {
 			delete(v, "planningEntries")
 		}
 		_, driver := v["payType"]
@@ -111,24 +135,24 @@ func projectFields(value any, user repository.AuthUser, path string) {
 			}
 		}
 		if driver || cdl {
-			if !repository.HasPermission(user, "drivers.private.read") {
+			if p.hidePrivate {
 				remove(driverPrivateFields)
 			}
-			if !repository.HasPermission(user, "drivers.documents.read") {
+			if p.hideDriverDocs {
 				remove(driverDocumentFields)
 			}
-			if !repository.HasPermission(user, "driver_compensation.read") {
+			if p.hidePay {
 				remove([]string{"payType", "payRate"})
 			}
 		}
-		if truck && !repository.HasPermission(user, "trucks.documents.read") {
+		if truck && p.hideTruckDocs {
 			remove(truckDocumentFields)
 		}
-		if strings.HasPrefix(path, "/truck-charges") && !repository.HasPermission(user, "investor_terms.read") {
+		if p.hideTerms {
 			delete(v, "terms")
 		}
 		for _, item := range v {
-			projectFields(item, user, path)
+			p.apply(item)
 		}
 	}
 }

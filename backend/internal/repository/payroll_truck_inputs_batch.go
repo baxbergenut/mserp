@@ -34,6 +34,9 @@ func preparePayrollTruckInputs(ctx context.Context, tx pgx.Tx, scopes []payrollT
 	if err != nil {
 		return err
 	}
+	if err = prepareInvestorEscrowSources(ctx, tx, publication, scopes, body); err != nil {
+		return err
+	}
 	values := map[string]*truckPayInputs{}
 	for _, scope := range scopes {
 		values[scope.Week] = &truckPayInputs{metadata: map[string]truckPayMetadata{}, assigned: map[string]map[string]bool{}, edits: map[string]investorWeekEdit{}, expenses: map[string][]truckExpense{}}

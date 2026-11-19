@@ -96,11 +96,22 @@ func ptiEligibility(active bool, condition string, crew []PTICrew) (string, stri
 }
 
 func (r *FleetRepository) EnsureCurrentPTIWeek(ctx context.Context) error {
-	var enabled bool
+	now := time.Now()
+	week := PTICurrentWeek(now)
+	var enabled, exists bool
 	if err := r.pool.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&enabled); err != nil || !enabled {
 		return err
 	}
-	return r.CreatePTIWeek(ctx, PTICurrentWeek(time.Now()), "")
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM weekly_pti_weeks WHERE week_start=$1)`, week).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		changed, err := changedPTIRows(ctx, r.pool, week, now)
+		if err != nil || len(changed) == 0 {
+			return err
+		}
+	}
+	return r.createPTIWeek(ctx, week, "", now)
 }
 
 func (r *FleetRepository) CreatePTIWeek(ctx context.Context, week, actor string) error {
@@ -131,46 +142,12 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 	if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_weeks(week_start,created_by,late_snapshot) VALUES($1,$2,false) ON CONFLICT DO NOTHING`, week, author); err != nil {
 		return err
 	}
-	// Reconcile only this week; prior checklists keep their last saved context.
-	rows, err := tx.Query(ctx, `SELECT t.id::text,t.unit_number,t.active,fleet_truck_operating_status(t.id),
- coalesce((SELECT jsonb_agg(jsonb_build_object('id',d.id,'name',d.full_name,
- 'availability',d.availability_status,'employment',CASE WHEN d.active THEN 'active' ELSE 'terminated' END) ORDER BY d.full_name,d.id)
- FROM drivers d WHERE d.id IN (
- SELECT a.driver_id FROM truck_driver_assignments a WHERE a.truck_id=t.id AND a.assigned_at<=$2::timestamptz AND (a.unassigned_at IS NULL OR a.unassigned_at>$2::timestamptz)
- UNION SELECT team.team_driver_id FROM driver_teams team JOIN truck_driver_assignments a ON a.driver_id=team.main_driver_id
- WHERE a.truck_id=t.id AND a.assigned_at<=$2::timestamptz AND (a.unassigned_at IS NULL OR a.unassigned_at>$2::timestamptz) AND team.start_week<=($2::timestamptz AT TIME ZONE 'America/New_York')::date AND (team.end_week IS NULL OR team.end_week>($2::timestamptz AT TIME ZONE 'America/New_York')::date)
- )), '[]'::jsonb)
- FROM trucks t WHERE t.created_at<=$2::timestamptz OR EXISTS(SELECT 1 FROM weekly_pti_rows p WHERE p.week_start=$1 AND p.truck_id=t.id) ORDER BY t.unit_number`, week, now)
+	entries, err := changedPTIRows(ctx, tx, week, now)
 	if err != nil {
 		return err
 	}
-
-	entries := []PTIRow{}
-	for rows.Next() {
-		var row PTIRow
-		var active bool
-		var crew []byte
-		if err = rows.Scan(&row.TruckID, &row.TruckUnit, &active, &row.Condition, &crew); err != nil {
-			break
-		}
-		if err = json.Unmarshal(crew, &row.Crew); err != nil {
-			break
-		}
-		row.WeekStart = week
-		row.Version = 1
-		row.Review = "pending"
-		row.Eligibility, row.EligibilityReason = ptiEligibility(active, row.Condition, row.Crew)
-		row.SnapshotEligibility = row.Eligibility
-		row.SnapshotReason = row.EligibilityReason
-		entries = append(entries, row)
-	}
-	readErr := rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	if readErr != nil {
-		return readErr
+	if len(entries) == 0 {
+		return tx.Commit(ctx)
 	}
 	raw, err := json.Marshal(entries)
 	if err != nil {
@@ -193,6 +170,57 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// Compute current eligibility from the same dated roster for both the idle check
+// and the locked write. Group the fleet's assignments and teams in one pass.
+func changedPTIRows(ctx context.Context, q interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}, week string, now time.Time) ([]PTIRow, error) {
+	rows, err := q.Query(ctx, `WITH assigned AS MATERIALIZED (
+ SELECT truck_id,driver_id FROM truck_driver_assignments WHERE assigned_at<=$2 AND (unassigned_at IS NULL OR unassigned_at>$2)
+ ), members AS (
+ SELECT truck_id,driver_id FROM assigned
+ UNION SELECT a.truck_id,t.team_driver_id FROM assigned a JOIN driver_teams t ON t.main_driver_id=a.driver_id
+ WHERE t.start_week<=($2::timestamptz AT TIME ZONE 'America/New_York')::date
+ AND (t.end_week IS NULL OR t.end_week>($2::timestamptz AT TIME ZONE 'America/New_York')::date)
+ ), crews AS (
+ SELECT m.truck_id,jsonb_agg(jsonb_build_object('id',d.id,'name',d.full_name,'availability',d.availability_status,
+ 'employment',CASE WHEN d.active THEN 'active' ELSE 'terminated' END) ORDER BY d.full_name,d.id) AS crew
+ FROM members m JOIN drivers d ON d.id=m.driver_id GROUP BY m.truck_id
+ ), current_rows AS MATERIALIZED (
+ SELECT t.id,t.unit_number,t.active,fleet_truck_operating_status(t.id) AS condition,coalesce(c.crew,'[]'::jsonb) AS crew,p.data
+ FROM trucks t LEFT JOIN crews c ON c.truck_id=t.id LEFT JOIN weekly_pti_rows p ON p.week_start=$1 AND p.truck_id=t.id
+ WHERE t.created_at<=$2 OR p.truck_id IS NOT NULL
+ )
+ SELECT id::text,unit_number,active,condition,crew,
+ (data->>'truckUnit',data->'crew',data->>'condition') IS NOT DISTINCT FROM (unit_number,crew,condition),
+ coalesce(data->>'eligibility',''),coalesce(data->>'eligibilityReason','') FROM current_rows`, week, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var changed []PTIRow
+	for rows.Next() {
+		var row PTIRow
+		var active, sameContext bool
+		var oldEligibility, oldReason string
+		var crew []byte
+		if err := rows.Scan(&row.TruckID, &row.TruckUnit, &active, &row.Condition, &crew, &sameContext, &oldEligibility, &oldReason); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(crew, &row.Crew); err != nil {
+			return nil, err
+		}
+		row.Eligibility, row.EligibilityReason = ptiEligibility(active, row.Condition, row.Crew)
+		if sameContext && oldEligibility == row.Eligibility && oldReason == row.EligibilityReason {
+			continue
+		}
+		row.WeekStart, row.Review, row.Version = week, "pending", 1
+		row.SnapshotEligibility, row.SnapshotReason = row.Eligibility, row.EligibilityReason
+		changed = append(changed, row)
+	}
+	return changed, rows.Err()
 }
 
 func (r *FleetRepository) PTIWeek(ctx context.Context, week string) (PTIWeek, error) {
@@ -372,10 +400,11 @@ func (r *FleetRepository) ChangePTI(ctx context.Context, week, truck, actor stri
 	row.Version++
 	after, _ := json.Marshal(row)
 	beforeRaw, _ := json.Marshal(before)
-	if _, err = tx.Exec(ctx, `UPDATE weekly_pti_rows SET version=$3,data=$4 WHERE week_start=$1 AND truck_id=$2`, week, truck, row.Version, after); err != nil {
-		return row, err
-	}
-	if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_events(id,request_hash,week_start,truck_id,before_data,after_data,actor_id,actor_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, in.RequestID, hash, week, truck, beforeRaw, after, actor, author); err != nil {
+	if _, err = tx.Exec(ctx, `WITH changed AS (
+ UPDATE weekly_pti_rows SET version=$3,data=$4 WHERE week_start=$1 AND truck_id=$2 RETURNING week_start,truck_id,data
+ )
+ INSERT INTO weekly_pti_events(id,request_hash,week_start,truck_id,before_data,after_data,actor_id,actor_name)
+ SELECT $5,$6,week_start,truck_id,$7,data,$8,$9 FROM changed`, week, truck, row.Version, after, in.RequestID, hash, beforeRaw, actor, author); err != nil {
 		return row, err
 	}
 	return row, tx.Commit(ctx)
