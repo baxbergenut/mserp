@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePermissions } from "../lib/access";
-import { fetchFeedbackMessageCount, fetchTaskCount, subscribeTaskEvents } from "../lib/api";
+import { fetchFeedbackMessageCount, fetchTaskBadgeCounts, subscribeTaskEvents } from "../lib/api";
 
 const TaskUpdates = createContext({ count: 0, feedbackCount: 0, revision: 0, refresh: () => {} });
 export const useTaskUpdates = () => useContext(TaskUpdates);
@@ -18,7 +18,8 @@ export function TaskUpdatesProvider({ children }: { children: React.ReactNode })
     let active = true;
     // A change arriving during a read needs one subsequent read of committed data.
     // Keep focus, visibility, subscription and timer bursts from stacking requests.
-    function reader(fetchCount: () => Promise<{ count: number }>, apply: (n: number) => void, clearOnError: boolean) {
+    let feedbackSequence = 0;
+    function reader<T>(fetchCount: () => Promise<T>, apply: (value: T, sequence: number) => void, clearOnError = false) {
       let running = false, pending = false;
       return async () => {
         if (document.hidden || !active) return;
@@ -29,19 +30,25 @@ export function TaskUpdatesProvider({ children }: { children: React.ReactNode })
           while (active && pending && !document.hidden) {
             pending = false;
             try {
+              const sequence = ++feedbackSequence;
               const value = await fetchCount();
-              if (active && !pending && Number.isFinite(value.count)) apply(value.count);
+              if (active && !pending) apply(value, sequence);
             } catch {
-              if (active && !pending && clearOnError) apply(0);
+              if (active && !pending && clearOnError) setCount(0);
             }
           }
         } finally { running = false; }
       };
     }
-    const feedback = reader(fetchFeedbackMessageCount, setFeedbackCount, false);
-    const tasks = reader(fetchTaskCount, setCount, true);
-    const both = () => { void feedback(); if (allowed) void tasks(); };
-    refreshCounts.current = both;
+    const applyFeedback = (value: number, sequence: number) => {
+      if (sequence === feedbackSequence && Number.isFinite(value)) setFeedbackCount(value);
+    };
+    const feedback = reader(fetchFeedbackMessageCount, (value, sequence) => applyFeedback(value.count, sequence));
+    const badges = reader(fetchTaskBadgeCounts, (value, sequence) => {
+      if (Number.isFinite(value.count)) setCount(value.count);
+      applyFeedback(value.feedbackCount, sequence);
+    }, true);
+    refreshCounts.current = allowed ? badges : feedback;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const changed = () => {
       clearTimeout(timer);
@@ -62,6 +69,6 @@ export function TaskUpdatesProvider({ children }: { children: React.ReactNode })
     };
   }, [allowed, refresh]);
   useEffect(() => { refreshCounts.current(); }, [allowed, revision]);
-  const value = useMemo(() => ({ count: (allowed ? count : 0) + feedbackCount, feedbackCount, revision, refresh }), [allowed, count, feedbackCount, revision, refresh]);
+  const value = { count: (allowed ? count : 0) + feedbackCount, feedbackCount, revision, refresh };
   return <TaskUpdates.Provider value={value}>{children}</TaskUpdates.Provider>;
 }

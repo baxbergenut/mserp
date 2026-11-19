@@ -194,6 +194,13 @@ func TestTaskAssignmentsDatabase(t *testing.T) {
 				if err := json.Unmarshal(call(user, "GET", "/tasks/count", nil, 200).Body.Bytes(), &result); err != nil {
 					t.Fatal(err)
 				}
+				var combined struct {
+					Count         int
+					FeedbackCount *int
+				}
+				if err := json.Unmarshal(call(user, "GET", "/tasks/count?includeFeedback=1", nil, 200).Body.Bytes(), &combined); err != nil || combined.Count != result.Count || combined.FeedbackCount == nil || *combined.FeedbackCount != 0 {
+					t.Fatalf("badge response for %s: %+v, %v", user, combined, err)
+				}
 				return result.Count
 			}
 			if badgeCount("assignee") != 1 || badgeCount("assigner") != 0 || badgeCount("admin") != 0 {

@@ -41,7 +41,7 @@ var payrollUnrelatedTables = []string{
 	"maintenance_changes", "maintenance_configuration", "maintenance_documents", "maintenance_odometer_readings", "maintenance_pm_baselines", "maintenance_reading_changes", "maintenance_records", "maintenance_schedules", "maintenance_types", "maintenance_vendors", "service_programs", "service_program_trucks",
 	"expense_documents", "expense_sheet_export_config", "expense_sheet_exports", "files",
 	"fleetscope_driver_intake", "fleetscope_driver_terminations", "fleetscope_webhook_receipts",
-	"prepass_toll_sync_days", "relay_fuel_sync_days", "prepass_truck_mapping_events", "toll_flag_review_events", "toll_reports", "toll_transaction_links",
+	"provider_sync_days", "prepass_toll_sync_days", "relay_fuel_sync_days", "prepass_truck_mapping_events", "toll_flag_review_events", "toll_reports", "toll_transaction_links",
 	"weighmytruck_audit", "weighmytruck_billing", "weighmytruck_events", "weighmytruck_imports", "weighmytruck_memberships", "weighmytruck_requests", "weighmytruck_sync_days",
 	"dispatcher_commission_rules", "dispatcher_pay_history", "dispatcher_pay_inputs", "dispatcher_pay_statements",
 	"weekly_pti_weeks", "weekly_pti_rows", "weekly_pti_events",
@@ -69,7 +69,7 @@ var payrollUnrelatedTables = []string{
 	"custom_tasks", "system_task_records", "system_task_assignments", "system_task_assignment_members",
 	"five_eld_locations", "five_eld_sync_state", "five_eld_truck_reviews",
 	"samsara_telemetry", "samsara_tracking", "samsara_sync_state", "maintenance_odometer_sources", "maintenance_telemetry",
-	"driver_service_requests", "driver_service_events", "profile_notes", "driver_board_presence", "gross_board_presence", "driver_board_automation",
+	"driver_service_requests", "driver_service_events", "profile_notes", "board_presence", "driver_board_presence", "gross_board_presence", "driver_board_automation",
 	// Delivery state and its fleet-source revision are not payroll inputs. The
 	// actual fleet records changed by those operations are captured separately.
 	"fleetscope_sync_state",

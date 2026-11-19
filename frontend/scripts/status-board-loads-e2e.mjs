@@ -98,7 +98,7 @@ export async function runStatusBoardLoadsE2E({ page, base, sql, schema, temp, id
   await panel.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(field('Destination')).toHaveValue('Richmond, Virginia, 23219');
   await field('Destination').fill('Manual destination');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'Board Cpm · Next load', exact: true }).click();
   await panel.getByLabel('Current load destination source').selectOption({ label: 'delivery · Boston, MA' });
   await expect(panel.getByLabel('Current load destination source')).toHaveValue(/.+/);

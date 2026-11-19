@@ -221,6 +221,9 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 				exec(string(weekLockActorMigration))
 				exec(string(stopGeocodeMigration))
 				exec(string(destinationGeocodeMigration))
+				for _, name := range []string{"223_retire_unused_tables.sql", "224_board_presence.sql", "225_provider_sync_days.sql"} {
+					exec(migrationSQLForTest(t, name))
+				}
 			}
 			exec("GRANT USAGE ON SCHEMA " + q + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + q + " TO mserp_app; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA " + q + " TO mserp_app")
 			app := cfg.Copy()

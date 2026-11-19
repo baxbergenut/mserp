@@ -23,7 +23,7 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await expect(notes(viewer)).toHaveValue('Live change from dispatcher', { timeout: 2500 });
   viewer.off('request',track);
   expect(extraReads).toEqual([]);
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await page.getByRole('heading', { name: 'Status Board', exact: true }).click();
   await page.keyboard.press('Control+z');
   await expect(notes(viewer)).not.toHaveValue('Live change from dispatcher', { timeout: 2500 });
@@ -45,7 +45,7 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await expect(page.getByLabel('Board Percent · Notes', { exact: true })).toHaveValue('Other row changed live', { timeout: 2500 });
   await expect(notes(page)).toHaveValue('Still typing locally');
   release();
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect(notes(viewer)).toHaveValue('Still typing locally', { timeout: 2500 });
   expect((await read(id)).notes).toBe('Still typing locally');
   // Measure actual input-to-other-screen time, rather than the assertion timeout.
@@ -69,7 +69,7 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
           const started=Date.now();
           await notes(page).fill(value);
           samples.push(await viewer.evaluate(() => window.liveProbe)-started);
-          await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+          await expect(page.getByText('Saved', { exact: true })).toBeVisible();
         }
       } finally { setNetworkLatency(0); }
       console.log(`Status Board actual edit-to-other-screen latency, ${latency}ms network RTT: ${samples.join(', ')}ms`);
@@ -80,7 +80,7 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await viewer.context().setOffline(true);
   await expect(viewer.getByText('Connecting…', { exact: true })).toBeVisible();
   await notes(page).fill('Saved while viewer offline');
-  await expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await viewer.context().setOffline(false);
   await expect(viewer.getByText('Live', { exact: true })).toBeVisible({ timeout: 10000 });
   await expect(notes(viewer)).toHaveValue('Saved while viewer offline', { timeout: 2500 });
@@ -88,7 +88,7 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await viewer.keyboard.press('Escape');
   await viewer.locator(`tr[data-driver-id="${id}"]`).locator('td').nth(8).click();
   await expect(cursor).toHaveAttribute('aria-label', /Notes/, { timeout: 2500 });
-  sql(`SET search_path TO ${schema},public; UPDATE driver_board_presence SET expires_at=now()-interval '1 second' WHERE user_id=(SELECT id FROM app_users WHERE username='Board Viewer'); SELECT pg_notify('mserp_board_presence','');`);
+  sql(`SET search_path TO ${schema},public; UPDATE board_presence SET expires_at=now()-interval '1 second' WHERE board='status' AND user_id=(SELECT id FROM app_users WHERE username='Board Viewer'); SELECT pg_notify('mserp_board_presence','');`);
   await expect(cursor).toHaveCount(0, { timeout: 2500 });
   await viewer.locator(`tr[data-driver-id="${id}"]`).locator('td').nth(7).click();
   await expect(cursor).toHaveCount(1, { timeout: 2500 });

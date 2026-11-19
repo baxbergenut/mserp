@@ -141,25 +141,22 @@ const grossBoardEntriesSQL = `(SELECT driver_id,service_date,0 AS slot,false AS 
 
 // Resolve an explicit selection, or a unique exact number. Ambiguous numbers
 // remain plans until a dispatcher chooses the intended upstream record.
-const grossBoardResolvedLoad = `
- LEFT JOIN LATERAL (
-   SELECT l.id FROM loads l
-   WHERE NOT e.deleted AND e.day_status='' AND l.id=e.load_record_id
-   UNION ALL
-   SELECT min(l.id) FROM loads l
-   WHERE NOT e.deleted AND e.day_status='' AND e.load_record_id IS NULL AND e.load_number<>''
-     AND lower(btrim(l.load_id))=lower(btrim(e.load_number))
-   HAVING count(*)=1
- ) matched ON true
- LEFT JOIN loads l ON l.id=matched.id `
+const boardLoadIdentityJoin = `
+ LEFT JOIN loads l ON l.id = CASE WHEN NOT e.deleted AND e.day_status='' THEN
+   coalesce(e.load_record_id, CASE WHEN e.load_number<>'' THEN (
+     SELECT min(l.id) FROM loads l
+     WHERE lower(btrim(l.load_id))=lower(btrim(e.load_number)) `
+const boardLoadIdentityEnd = ` HAVING count(*)=1
+   ) END) END `
+const grossBoardResolvedLoad = boardLoadIdentityJoin + boardLoadIdentityEnd
 
 // Entered values take precedence over current source values. Carry uses the same
 // effective entries as the grid, with exact numeric arithmetic. A repeated
 // system load for one driver contributes only on its earliest board date.
 var grossBoardEffective = `WITH ranked AS MATERIALIZED (
- SELECT e.*, matched.id AS matched_id,
- matched.id IS NOT NULL AND row_number() OVER (
-   PARTITION BY e.driver_id, matched.id,e.load_trip_id ORDER BY e.source_date,e.source_slot) > 1 AS duplicate
+ SELECT e.*, l.id AS matched_id,
+ l.id IS NOT NULL AND row_number() OVER (
+   PARTITION BY e.driver_id, l.id,e.load_trip_id ORDER BY e.source_date,e.source_slot) > 1 AS duplicate
  FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
  WHERE e.source_date < $1::date+7
 ), resolved AS (
@@ -169,7 +166,7 @@ var grossBoardEffective = `WITH ranked AS MATERIALIZED (
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles, CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END AS effective_miles,
  trip_source.original AS system_original, trip_source.miles AS system_miles, trip_source.driver_gross AS system_driver,
  trip_source.split,trip_source.review AS trip_review,trip_source.review_reason AS trip_review_reason,trip_source.options AS trips
- FROM ranked e LEFT JOIN loads l ON l.id=e.matched_id ` + loadTripSourceSQL + `
+ FROM ranked e LEFT JOIN loads l ON l.id=e.matched_id ` + boardTripSourceSQL + `
 ), effective AS (
  SELECT *, CASE WHEN NOT deleted AND day_status='' AND NOT duplicate AND
  effective_original IS NOT NULL AND driver_rate IS NOT NULL
@@ -392,7 +389,7 @@ func readGrossBoardOpenings(ctx context.Context, tx pgx.Tx, week time.Time, boar
 }
 
 func (r *GrossBoardRepository) BalanceHistory(ctx context.Context, driverID string, week time.Time) ([]GrossBoardBalanceLine, error) {
-	rows, err := r.pool.Query(ctx, grossBoardEffective+grossBoardOpenings+`SELECT service_date::text, display_number,
+	rows, err := r.pool.Query(ctx, grossBoardEffectiveForDriver()+grossBoardOpenings+`SELECT service_date::text, display_number,
  coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(balance_change::text,''),
  (coalesce(o.opening::numeric,0)+coalesce(sum(balance_change) OVER (ORDER BY service_date,slot ROWS UNBOUNDED PRECEDING),0))::text, duplicate

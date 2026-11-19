@@ -59,13 +59,13 @@ func readGrossBoardNextDayDestinations(ctx context.Context, tx pgx.Tx, week time
 	}
 	if len(mondayDrivers) != 0 {
 		rows, err := tx.Query(ctx, `
- SELECT e.driver_id::text,matched.id
+ SELECT e.driver_id::text,l.id
  FROM (SELECT DISTINCT ON (g.driver_id) g.* FROM `+grossBoardEntriesSQL+` g
        WHERE g.service_date=$1::date-1 AND g.driver_id=ANY($2::uuid[])
          AND NOT g.deleted AND g.day_status='' AND btrim(g.load_number)<>''
          AND NOT EXISTS (SELECT 1 FROM gross_board_transfers t WHERE t.active AND t.driver_id=g.driver_id
                          AND t.source_date=g.service_date AND t.source_slot=g.slot)
-       ORDER BY g.driver_id,g.slot DESC) e `+grossBoardResolvedLoad+` WHERE matched.id IS NOT NULL`, week, mondayDrivers)
+       ORDER BY g.driver_id,g.slot DESC) e `+grossBoardResolvedLoad+` WHERE l.id IS NOT NULL`, week, mondayDrivers)
 		if err != nil {
 			return nil, err
 		}

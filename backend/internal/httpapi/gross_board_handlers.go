@@ -166,7 +166,7 @@ func registerGrossBoardRoutes(r chi.Router, logger *slog.Logger, repo *repositor
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		board, err := snapshots.get(r.Context(), week, repo.Get)
+		board, err := snapshots.get(r.Context(), boardReadKey{week: week}, repo.Get)
 		if err != nil {
 			fail(w, err)
 			return

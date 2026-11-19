@@ -35,9 +35,13 @@ func (repo *FeedbackRepository) Messages(ctx context.Context, recipientID string
 	}
 	return NewPage(items, total, pagination), rows.Err()
 }
+
+const unreadFeedbackCountPrefix = "SELECT count(*) FROM feedback_messages WHERE read_at IS NULL AND recipient_id="
+const unreadFeedbackCountSQL = unreadFeedbackCountPrefix + "$1"
+
 func (repo *FeedbackRepository) UnreadMessageCount(ctx context.Context, recipientID string) (int, error) {
 	var count int
-	err := repo.pool.QueryRow(ctx, `SELECT count(*) FROM feedback_messages WHERE recipient_id=$1 AND read_at IS NULL`, recipientID).Scan(&count)
+	err := repo.pool.QueryRow(ctx, unreadFeedbackCountSQL, recipientID).Scan(&count)
 	return count, err
 }
 func (repo *FeedbackRepository) ReadMessage(ctx context.Context, id, recipientID string) error {

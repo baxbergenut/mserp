@@ -18,6 +18,18 @@ for routine work; use the map and targeted searches below first. Update this fil
 when architecture, commands, environment variables, or important invariants
 change.
 
+## Database performance and consolidation
+
+Migrations 223–225 remove the unused accounting cutover and transfer audit tables,
+merge board cursors by board/client, and scope provider completion days by provider,
+environment and date. Keep historical payroll captures and revision rows. Empty
+Relay/PrePass days can record completion directly. Canonical transactions still
+use their existing locks. Board GETs share only snapshots started after arrival.
+Status Board reads also key by viewer and administrator status for pending hires.
+Install the schema-compatible deploy helper before a future writer-quiesced rollout.
+See [the implementation plan](docs/DATABASE_SIMPLIFICATION_PLAN.md) and
+[the table inventory](docs/DATABASE_TABLE_INVENTORY.md).
+
 ## What this repository is
 
 Clustie (formerly MSERP) is an internal ERP for MS Express Inc. It has two independently run apps:
@@ -435,8 +447,8 @@ status while background source evidence refreshes.
 - Accounting cutover was retired by migration 161. Its Settings page, draft,
   preview, activation and opening-correction APIs are removed. The migration
   refuses populated/activated cutovers, disables activation and removes cutoff
-  write guards; empty migration-160 tables and constant SQL predicates remain
-  solely for release/schema compatibility. Ordinary unpaid balances carry normally.
+  write guards. Migration 223 removes the retired storage and keeps the constant
+  SQL predicates for financial callers. Ordinary unpaid balances carry normally.
   External expense settlements/reversals remain available with expenses.settle
   and category View permissions, immutable receipts, reservation limits and
   finalized-statement guards. The special Sheets adjustment control is removed

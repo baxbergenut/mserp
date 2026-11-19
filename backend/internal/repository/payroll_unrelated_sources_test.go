@@ -107,7 +107,7 @@ func TestPayrollUnrelatedSourcesDatabase(t *testing.T) {
 		for _, table := range payrollUnrelatedTables {
 			var classification, column string
 			var triggers int
-			e = pool.QueryRow(work, `SELECT s.classification,(SELECT count(*) FROM pg_trigger WHERE tgrelid=s.table_name::regclass AND (tgname LIKE 'payroll_projection_%' OR tgname LIKE 'payroll_protocol_%')),(SELECT attname FROM pg_attribute WHERE attrelid=s.table_name::regclass AND attnum>0 AND NOT attisdropped AND attgenerated='' AND attidentity='' ORDER BY attnum LIMIT 1) FROM payroll_projection_sources s WHERE table_name=$1`, table).Scan(&classification, &triggers, &column)
+			e = pool.QueryRow(work, `SELECT s.classification,(SELECT count(*) FROM pg_trigger WHERE tgrelid=s.table_name::regclass AND (tgname LIKE 'payroll_projection_%' OR tgname LIKE 'payroll_protocol_%')),(SELECT attname FROM pg_attribute WHERE attrelid=s.table_name::regclass AND attnum>0 AND NOT attisdropped AND attgenerated='' AND attidentity='' ORDER BY attnum LIMIT 1) FROM payroll_projection_sources s WHERE table_name=$1 AND to_regclass(s.table_name) IS NOT NULL`, table).Scan(&classification, &triggers, &column)
 			if e == pgx.ErrNoRows {
 				continue
 			}

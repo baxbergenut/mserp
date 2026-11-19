@@ -25,7 +25,7 @@ const browser = await chromium.launch(); let page;
 const errors=[];
 try {
  const context=await browser.newContext({viewport:{width:1440,height:1000}});page=await context.newPage();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message));
- await page.goto(access.base+'/login');await page.getByLabel('Email or existing username').fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
+ await page.goto(access.base+'/login');await page.getByLabel('Email',{exact:true}).fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
  const session=await (await context.request.get(access.base+'/api/auth/session')).json();
  const request=async(method,path,data)=>context.request.fetch(access.base+'/api'+path,{method,data,headers:{'X-CSRF-Token':session.csrfToken,'Origin':access.base}});
  const get=async path=>{const r=await request('GET',path);assert.equal(r.status(),200,await r.text());return r.json()};

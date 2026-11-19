@@ -149,6 +149,11 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 					t.Fatal(storageErr)
 				}
 				prior = strings.Replace(prior, strings.ReplaceAll(string(storageMigration), "\r\n", "\n"), "", 1)
+				retirement := migrationSQLForTest(t, "223_retire_unused_tables.sql")
+				presence := migrationSQLForTest(t, "224_board_presence.sql")
+				days := migrationSQLForTest(t, "225_provider_sync_days.sql")
+				prior = strings.Replace(prior, days, "", 1)
+				prior = strings.Replace(strings.Replace(prior, retirement, "", 1), presence, "", 1)
 				prior = withoutUnrelatedPayrollMigration(t, withoutPTIPayrollMigration(t, prior))
 				prior = strings.Replace(prior, strings.ReplaceAll(string(modifiedSyncMigration), "\r\n", "\n"), "", 1)
 				prior = strings.Replace(prior, strings.ReplaceAll(string(routeUsageMigration), "\r\n", "\n"), "", 1)
@@ -185,6 +190,9 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(string(weekLockActorMigration))
 				exec(string(stopGeocodeMigration))
 				exec(string(destinationGeocodeMigration))
+				exec(retirement)
+				exec(presence)
+				exec(days)
 			} else {
 				exec(body)
 			}

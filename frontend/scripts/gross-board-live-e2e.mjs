@@ -230,38 +230,40 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await page.getByLabel('Note for LIVE-A, load 1',{exact:true}).fill('Live seal note');
     await saved();await page.keyboard.press('Escape');
     await expect(viewerCell.getByRole('img',{name:'Has load note',exact:true})).toBeVisible();
-    // Dispatch-only day planning persists and reaches another user without
-    // changing the colocated load or becoming a financial/load-queue field.
+    // Each empty day can carry a custom status. A day with a load rejects it.
     const planningBefore = await entry(id);
     const planningReads = [];
     const planningTrack = req => { if (req.method() === 'GET' && new URL(req.url()).pathname === '/api/gross-board') planningReads.push(req.url()); };
     viewer.on('request', planningTrack);
-    for (const [kind, title, text] of [['note', 'Status / note', 'Available after 3 PM'], ['destination', 'Planned destination', 'Dallas, TX']]) {
-      await page.getByRole('button', {name:`Add entry for Gross Live A, ${week}`,exact:true}).click();
-      const planningDialog = page.getByRole('dialog', {name:'Day entry',exact:true});
-      await planningDialog.getByRole('button', {name:title,exact:true}).click();
-      await planningDialog.getByRole('textbox', {name:title,exact:true}).fill(text);
-      await planningDialog.getByRole('button', {name:'Save',exact:true}).click();
-      await expect(planningDialog.getByRole('status')).toHaveText('Saved');
-      await planningDialog.getByRole('button', {name:'Close',exact:true}).last().click();
-      await expect(planningDialog).toHaveCount(0);
-      await expect(viewer.getByLabel(`${title} for Gross Live A, ${week}`, {exact:true})).toContainText(text);
+    const planningDay = kind => add(kind === 'note' ? 2 : 3);
+    const planningLabel = kind => `Custom status for Gross Live A, ${planningDay(kind)}${kind === 'destination' ? ', existing destination' : ''}`;
+    const fixture = kind => ({driverId:id,date:planningDay(kind),kind,text:'Original '+kind,version:0});
+    const putPlanning = entries => page.request.put(base+'/api/gross-board/planning-entries', {headers,data:{weekStart:week,entries}});
+    expect((await putPlanning([{...fixture('note'),date:week}])).status()).toBe(409);
+    expect((await putPlanning([fixture('note'),fixture('destination')])).status()).toBe(200);
+    for (const [kind, text] of [['note', 'Available after 3 PM'], ['destination', 'Dallas, TX']]) {
+      const label = planningLabel(kind);
+      await page.getByRole('button', {name:label,exact:true}).press('Enter');
+      const editor = page.getByRole('textbox', {name:label,exact:true});
+      await editor.fill(text);
+      await editor.press('Enter');
+      await expect(viewer.getByLabel(label, {exact:true})).toContainText(text);
       const rows = (await board()).planningEntries;
-      expect(rows.find(e => e.driverId === id && e.date === week && e.kind === kind)?.text).toBe(text);
+      expect(rows.find(e => e.driverId === id && e.date === planningDay(kind) && e.kind === kind)?.text).toBe(text);
     }
     viewer.off('request', planningTrack);
     expect(planningReads).toEqual([]);
     const planningAfter = await entry(id);
     for (const field of ['loadNumber','originalRate','driverRate','miles','note','version']) expect(planningAfter[field]).toBe(planningBefore[field]);
-    const savedNote = (await board()).planningEntries.find(e => e.driverId === id && e.date === week && e.kind === 'note');
+    const savedNote = (await board()).planningEntries.find(e => e.driverId === id && e.date === planningDay('note') && e.kind === 'note');
     expect((await viewer.request.put(base+'/api/gross-board/planning-entries', {headers:{'X-CSRF-Token':viewerAuth.csrfToken},data:{weekStart:week,entries:[{...savedNote,text:'Viewer cannot edit'}]}})).status()).toBe(403);
     expect((await page.request.put(base+'/api/gross-board/planning-entries', {headers,data:{weekStart:week,entries:[{...savedNote,version:0,text:'Stale overwrite'}]}})).status()).toBe(409);
     // Legacy full-row saves know nothing about planningEntries and preserve them.
     expect((await page.request.put(base+'/api/gross-board', {headers,data:{weekStart:week,entries:[planningAfter]}})).status()).toBe(200);
-    expect((await board()).planningEntries.find(e => e.driverId === id && e.date === week && e.kind === 'note')?.text).toBe('Available after 3 PM');
+    expect((await board()).planningEntries.find(e => e.driverId === id && e.date === planningDay('note') && e.kind === 'note')?.text).toBe('Available after 3 PM');
     await page.reload();
-    await expect(page.getByLabel(`Status / note for Gross Live A, ${week}`, {exact:true})).toContainText('Available after 3 PM');
-    await expect(page.getByLabel(`Planned destination for Gross Live A, ${week}`, {exact:true})).toContainText('Dallas, TX');
+    await expect(page.getByLabel(planningLabel('note'), {exact:true})).toContainText('Available after 3 PM');
+    await expect(page.getByLabel(planningLabel('destination'), {exact:true})).toContainText('Dallas, TX');
     await expect(field(page, 'load number or status')).toHaveValue('LIVE-A');
     await page.screenshot({path:join(temp,'gross-board-live-planning.png'),fullPage:true,animations:'disabled'});
     // Keep newer typing while a committed response is deliberately delayed.
@@ -316,7 +318,7 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await expect(viewer.getByText('Live',{exact:true})).toBeVisible({timeout:10000});
     await expect.poll(()=>numeric(field(viewer)),{timeout:1500}).toBe(2111);
     await viewerCell.locator('[data-gross-field="driverRate"]').click();await expect(cursor).toHaveCount(1);
-    sql(`SET search_path TO ${schema},public;UPDATE gross_board_presence SET expires_at=now()-interval '1 second' WHERE user_id=(SELECT id FROM app_users WHERE username='Gross Viewer');SELECT pg_notify('mserp_gross_presence','');`);
+    sql(`SET search_path TO ${schema},public;UPDATE board_presence SET expires_at=now()-interval '1 second' WHERE board='gross' AND user_id=(SELECT id FROM app_users WHERE username='Gross Viewer');SELECT pg_notify('mserp_gross_presence','');`);
     await expect(cursor).toHaveCount(0);
     await viewerCell.locator('[data-gross-field="miles"]').click();await expect(cursor).toHaveCount(1);
     await viewer.goto(base+'/account');await expect(cursor).toHaveCount(0);

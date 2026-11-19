@@ -17,11 +17,11 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch();
 const base = `http://127.0.0.1:${server.address().port}`;
-const week = '2026-10-12';
-const drivers = ['Alice Grid', 'Bob Grid'].map((fullName, i) => ({ id: `driver-${i}`, fullName, active: true, driverType: i ? 'M-O' : 'O', truckId: `truck-${i}`, truckUnit: `T${i}`, dispatcherId: 'dispatcher', dispatcherName: 'Dispatch', phone: '', location: i ? null : { latitude: 41.881, longitude: -87.623, reportedAt: '2026-10-13T11:59:00Z', heading: null }, mainUpdaterName: 'Main updater', afterHoursUpdaterName: 'Night updater' }));
+const week = '2026-10-19';
+const drivers = ['Alice Grid', 'Bob Grid'].map((fullName, i) => ({ id: `driver-${i}`, fullName, active: true, driverType: i ? 'M-O' : 'O', truckId: `truck-${i}`, truckUnit: `T${i}`, dispatcherId: 'dispatcher', dispatcherName: 'Dispatch', phone: '', location: i ? null : { latitude: 41.881, longitude: -87.623, reportedAt: '2026-10-20T11:59:00Z', heading: null }, mainUpdaterName: 'Main updater', afterHoursUpdaterName: 'Night updater' }));
 const load = (driverId, date, slot = 0) => ({ driverId, date, slot, deleted: false, loadNumber: `LOAD-${slot}`, loadRecordId: null, dayStatus: '', originalRate: '400', driverRate: '350', miles: '90', enteredOriginalRate: '400', enteredMiles: '90', version: 1, duplicate: false });
 let statusEntries = drivers.map(d => ({ driverId: d.id, currentLoad: '', trailerNumber: 'OLD', status: '', destination: 'Chicago', eta: '', notes: 'Existing note', homeTime: '', version: 1 }));
-let grossEntries = drivers.flatMap(d => [load(d.id, week), load(d.id, '2026-10-13'), load(d.id, '2026-10-14'), load(d.id, '2026-10-14', 1)]);
+let grossEntries = drivers.flatMap(d => [load(d.id, week), load(d.id, '2026-10-20'), load(d.id, '2026-10-21'), load(d.id, '2026-10-21', 1)]);
 const emptyLoads = { current: null, week: [], next: [], earlier: [], hidden: [], unavailable: [], destinationSource: false, sourceDestination: '', stopKey: '', fromDate: week, revision: 'fixture', customOrder: false };
 const upcoming = { planId: 'next', loadId: 17, number: 'NEXT-17', stops: [{ key: 'pickup', type: 'pickup', location: 'Chicago, IL', schedule: { label: 'PU 14:00', detail: 'Pickup at 14:00' } }] };
 let readOnly = false;
@@ -31,7 +31,7 @@ const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
   page.on('pageerror', error => errors.push(error.message));
-  await page.clock.setFixedTime(new Date('2026-10-13T12:00:00Z'));
+  await page.clock.setFixedTime(new Date('2026-10-20T12:00:00Z'));
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname.replace('/lookups/','/').slice(4);
@@ -108,7 +108,7 @@ try {
   expect(statusEntries[0].notes).toBe('New note');
   await page.screenshot({ path: join(tmpdir(), 'mserp-status-board-grid.png'), fullPage: true });
 
-  drivers[0].location.reportedAt = '2026-10-13T09:00:00Z';
+  drivers[0].location.reportedAt = '2026-10-20T09:00:00Z';
   statusEntries[0].eta = '12:30';
   readOnly = true; await page.reload();
   await expect(field('Copy current location')).toHaveClass(/\btext-orange-400\b/);
@@ -152,17 +152,17 @@ try {
   await page.evaluate(() => navigator.clipboard.writeText('123'));
   await page.keyboard.press('Control+v'); await expect(original).toHaveValue('$123.00');
   await expect(original.locator('..')).toBeFocused();
-  await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-13').locator('..')).toBeFocused();
-  await page.keyboard.press('ArrowDown'); await expect(amount('2026-10-13', 'driver rate').locator('..')).toBeFocused();
+  await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-20').locator('..')).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(amount('2026-10-20', 'driver rate').locator('..')).toBeFocused();
   await page.keyboard.type('456'); await page.keyboard.press('Enter');
-  await page.keyboard.press('ArrowDown'); await expect(amount('2026-10-13', 'miles').locator('..')).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(amount('2026-10-20', 'miles').locator('..')).toBeFocused();
   await page.keyboard.type('12'); await page.keyboard.press('Enter'); await page.keyboard.press('Control+c');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('12.00');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Daily loads', exact: true });
   await expect(dialog).toBeVisible();
-  const modalAmounts = dialog.getByLabel('Alice Grid, 2026-10-14, total gross', { exact: true });
+  const modalAmounts = dialog.getByLabel('Alice Grid, 2026-10-21, total gross', { exact: true });
   await modalAmounts.first().click();
   await page.evaluate(() => navigator.clipboard.writeText('222'));
   await page.keyboard.press('Control+v');
@@ -172,7 +172,7 @@ try {
   await page.keyboard.type('333'); await page.keyboard.press('Enter');
   await dialog.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect.poll(() => grossEntries.find(e => e.driverId === 'driver-0' && e.date === '2026-10-14' && e.slot === 1)?.originalRate, { timeout: 10000 }).toBe('333');
+  await expect.poll(() => grossEntries.find(e => e.driverId === 'driver-0' && e.date === '2026-10-21' && e.slot === 1)?.originalRate, { timeout: 10000 }).toBe('333');
   expect(grossEntries.find(e => e.driverId === 'driver-0' && e.date === week).originalRate).toBe('123');
   await page.screenshot({ path: join(tmpdir(), 'mserp-gross-board-grid.png'), fullPage: true });
   readOnly = true;
@@ -198,8 +198,8 @@ try {
   await page.keyboard.press('Delete');
   await page.keyboard.type('4');
   await expect(original).toHaveValue('$123.00');
-  await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-13').locator('..')).toBeFocused();
-  const summaryAmount = page.getByRole('button', { name: 'Alice Grid, 2026-10-14, total gross', exact: true });
+  await page.keyboard.press('ArrowRight'); await expect(amount('2026-10-20').locator('..')).toBeFocused();
+  const summaryAmount = page.getByRole('button', { name: 'Alice Grid, 2026-10-21, total gross', exact: true });
   await summaryAmount.click(); await expect(summaryAmount.locator('..')).toBeFocused();
   await page.keyboard.press('Control+c');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('$555.00');

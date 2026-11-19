@@ -59,8 +59,18 @@ func main() {
 	escrowAdjustmentCapability := flag.Bool("escrow-balance-adjustments-capability", false, "print bidirectional escrow balance support and exit")
 	retainedPayCapability := flag.Bool("investor-retained-pay-capability", false, "print retained investor payment support and exit")
 	investorAccountsCapability := flag.Bool("investor-truck-accounts-capability", false, "print investor truck account schema support and exit")
+	providerDays := flag.Bool("provider-days-capability", false, "print shared sync-day schema support")
+	presenceCapability := flag.Bool("board-presence-capability", false, "print shared board presence schema support")
 	retiredTablesCapability := flag.Bool("retired-tables-capability", false, "print support for retired accounting and transfer tables")
 	flag.Parse()
+	if *providerDays {
+		fmt.Println("provider-days-v1")
+		return
+	}
+	if *presenceCapability {
+		fmt.Println("board-presence-v1")
+		return
+	}
 	if *retiredTablesCapability {
 		fmt.Println("retired-tables-v1")
 		return

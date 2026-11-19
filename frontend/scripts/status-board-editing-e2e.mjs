@@ -3,10 +3,10 @@ import { expect } from '@playwright/test';
 // Runs against the isolated real API/database used by --board-only.
 export async function runStatusBoardEditingE2E({ page, base, id, week }) {
   const field = name => page.getByLabel(`Board Cpm · ${name}`, { exact: true });
-  const saved = () => expect(page.getByText('All changes saved', { exact: true })).toBeVisible();
+  const saved = () => expect(page.getByText('Saved', { exact: true })).toBeVisible();
   const read = async () => (await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).entries.find(e => e.driverId === id);
   const columns = await page.getByRole('columnheader').allTextContents();
-  expect(columns.indexOf('Notes')).toBe(columns.indexOf('ETA') - 1);
+  expect(columns.slice(columns.indexOf('ETA'), columns.indexOf('Notes') + 1)).toEqual(['ETA', 'Next load', 'Notes']);
   const before = (await read()).notes;
   await field('Notes').fill('Instant ');
   await field('Notes').pressSequentially('typed note', { delay: 80 });
@@ -75,17 +75,17 @@ export async function runStatusBoardEditingE2E({ page, base, id, week }) {
   await page.keyboard.press('Control+z');
   await saved();
   await expect(field('ETA')).toHaveText('ETA 17:00');
-  const homeTime = (await read()).homeTime;
+  const trailer = (await read()).trailerNumber;
   for (let index = 0; index < 12; index++) {
     await field('Notes').fill(`Rapid note ${index} `);
-    await field('Home time').fill(`Rapid home ${index}`);
+    await field('Trailer').fill(`Rapid trailer ${index}`);
   }
   await saved();
   const rapid = await read();
   expect(rapid.notes).toBe('Rapid note 11 ');
-  expect(rapid.homeTime).toBe('Rapid home 11');
+  expect(rapid.trailerNumber).toBe('Rapid trailer 11');
   await field('Notes').fill(before);
-  await field('Home time').fill(homeTime);
+  await field('Trailer').fill(trailer);
   await saved();
   console.log('Status Board editing passed: immediate typing, spaces, grouped personal undo, trailer note persistence/deletion/undo, per-cell history and ETA time/miles.');
 }

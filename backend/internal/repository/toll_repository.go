@@ -219,8 +219,8 @@ func (r *TollRepository) CompletedDays(
 ) (map[string]struct{}, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT sync_date
-		FROM prepass_toll_sync_days
-		WHERE prepass_environment = $1 AND sync_date BETWEEN $2 AND $3`,
+		FROM provider_sync_days
+		WHERE provider='prepass' AND environment = $1 AND sync_date BETWEEN $2 AND $3`,
 		environment,
 		startDate.Format(time.DateOnly),
 		endDate.Format(time.DateOnly),
@@ -270,6 +270,12 @@ func (r *TollRepository) UpsertDay(
 	syncedAt time.Time,
 	markComplete bool,
 ) (TollSyncDayResult, error) {
+	if len(transactions) == 0 {
+		if !markComplete {
+			return TollSyncDayResult{}, nil
+		}
+		return TollSyncDayResult{}, recordSyncDay(ctx, r.pool, "prepass", environment, day.Format(time.DateOnly), 0, &syncedAt)
+	}
 	tx, err := beginPayrollSourceMutation(ctx, r.pool)
 	if err != nil {
 		return TollSyncDayResult{}, err
@@ -317,31 +323,17 @@ func (r *TollRepository) UpsertDay(
 			)
 		}
 		var unlinked bool
-		if err = tx.QueryRow(ctx, `SELECT truck_id IS NULL FROM tolls WHERE prepass_environment=$1 AND prepass_toll_id=$2`, environment, transaction.TollID).Scan(&unlinked); err != nil {
-			return TollSyncDayResult{}, err
+		if err = tx.QueryRow(ctx, updateTollLocationSQL+` RETURNING truck_id IS NULL`, tollLocationArgs(environment, transaction, syncedAt)...).Scan(&unlinked); err != nil {
+			return TollSyncDayResult{}, fmt.Errorf("save PrePass toll location: %w", err)
 		}
 		if unlinked {
 			result.Unmatched++
 		}
 		result.Saved++
-		if _, err := tx.Exec(ctx, updateTollLocationSQL, tollLocationArgs(environment, transaction, syncedAt)...); err != nil {
-			return TollSyncDayResult{}, fmt.Errorf("save PrePass toll location: %w", err)
-		}
 	}
 
 	if markComplete {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO prepass_toll_sync_days (
-				prepass_environment, sync_date, transaction_count, fetched_at
-			) VALUES ($1, $2, $3, $4)
-			ON CONFLICT (prepass_environment, sync_date) DO UPDATE SET
-				transaction_count = EXCLUDED.transaction_count,
-				fetched_at = EXCLUDED.fetched_at`,
-			environment,
-			day.Format(time.DateOnly),
-			len(transactions),
-			syncedAt,
-		); err != nil {
+		if err := recordSyncDay(ctx, tx, "prepass", environment, day.Format(time.DateOnly), len(transactions), &syncedAt); err != nil {
 			return TollSyncDayResult{}, err
 		}
 	}

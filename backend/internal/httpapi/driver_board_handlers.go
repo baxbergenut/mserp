@@ -274,7 +274,10 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		board, err := snapshots.get(r.Context(), week, repo.Get)
+		// Pending onboarding rows are authorized inside the repository transaction.
+		session, _ := authSessionFromContext(r.Context())
+		key := boardReadKey{week: week, viewer: session.User.ID, admin: session.User.Administrator}
+		board, err := snapshots.get(r.Context(), key, repo.Get)
 		if err != nil {
 			fail(w, err)
 			return

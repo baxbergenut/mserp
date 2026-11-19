@@ -15,6 +15,6 @@ var driverBoardCurrentEntries = `WITH matched_entries AS MATERIALIZED (
  CASE WHEN trip_source.review THEN NULL ELSE coalesce(e.entered_miles,CASE WHEN l.id IS NOT NULL THEN trip_source.miles ELSE e.miles END) END effective_miles,
  trip_source.original system_original,trip_source.miles system_miles,trip_source.driver_gross system_driver,
  trip_source.split,trip_source.review trip_review,trip_source.review_reason trip_review_reason,trip_source.options trips
- FROM matched_entries e LEFT JOIN loads l ON l.id=e.matched_id ` + loadTripSourceSQL + `
+ FROM matched_entries e LEFT JOIN loads l ON l.id=e.matched_id ` + boardTripSourceSQL + `
  WHERE e.service_date >= $1::date AND e.service_date < $1::date+7
 ), effective AS (SELECT * FROM resolved) `

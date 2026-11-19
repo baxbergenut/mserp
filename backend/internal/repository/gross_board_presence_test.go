@@ -70,7 +70,7 @@ func testGrossPresence(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	if rows = read(week); len(rows) != 1 || rows[0].Column != "originalRate" || rows[0].Slot != 0 {
 		t.Fatal("cursor did not move", rows)
 	}
-	exec(`UPDATE gross_board_presence SET expires_at=now()-interval '1 second'`)
+	exec(`UPDATE board_presence SET expires_at=now()-interval '1 second' WHERE board='gross'`)
 	if len(read(week)) != 0 {
 		t.Fatal("expired cursor visible")
 	}

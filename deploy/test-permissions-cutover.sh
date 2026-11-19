@@ -46,6 +46,9 @@ mock_investor_accounts=f
 mock_board_stop_geocoding=f
 mock_user_permissions=f
 mock_investor_access=f
+mock_retired_tables=f
+mock_shared_presence=f
+mock_shared_days=f
 mserp_db() {
     local result=$mock
     if [[ $* == *"column_name='permission_overrides'"* ]]; then result=$mock_user_permissions; fi
@@ -80,6 +83,9 @@ mserp_db() {
     if [[ $* == *"scaleOriginalAmount"* ]]; then result=$mock_scale_partial; fi
     if [[ $* == *"constraint_name='escrow_balance_movement_check'"* ]]; then result=$mock_escrow_adjustment; fi
     if [[ $* == *"retainedPay"* ]]; then result=$mock_investor_retained; fi
+    if [[ $* == *"public.expense_external_settlements"*"public.accounting_cutover"* ]]; then result=$mock_retired_tables; fi
+    if [[ $* == *"to_regclass('public.board_presence')"* ]]; then result=$mock_shared_presence; fi
+    if [[ $* == *"to_regclass('public.provider_sync_days')"* ]]; then result=$mock_shared_days; fi
     [[ $result != error ]] || return 1
     printf '%s\n' "$result"
 }
@@ -404,3 +410,22 @@ for mock_investor_access in error unexpected; do
 done
 mock_investor_access=t
 echo 'Investor privacy rollback fences passed'
+
+# Simulate a roll-forward and reject old binaries or unknown catalog results at each step.
+mv "$test_root/new/backend/mserp-api" "$test_root/new/backend/previous-api"
+for pair in 'mock_retired_tables retired-tables' 'mock_shared_presence board-presence' 'mock_shared_days provider-days'; do
+    read -r marker capability <<< "$pair"
+    printf -v "$marker" '%s' t
+    cp "$test_root/new/backend/previous-api" "$test_root/new/backend/mserp-api"
+    if compatible_release "$test_root/new"; then echo "missing $capability capability accepted" >&2; exit 1; fi
+    cat > "$test_root/new/backend/mserp-api" <<EOF
+#!/usr/bin/env bash
+if [[ \$1 == -$capability-capability ]]; then echo $capability-v1; else exec "$test_root/new/backend/previous-api" "\$@"; fi
+EOF
+    chmod +x "$test_root/new/backend/mserp-api"
+    compatible_release "$test_root/new"
+    printf -v "$marker" '%s' unexpected
+    if compatible_release "$test_root/new"; then echo "unknown $capability schema accepted" >&2; exit 1; fi
+    printf -v "$marker" '%s' f
+done
+echo 'Database consolidation rollback fences passed'

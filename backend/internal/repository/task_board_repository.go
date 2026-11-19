@@ -76,6 +76,27 @@ func (repo *CustomTaskRepository) Board(ctx context.Context, pagination Paginati
 	return NewPage(items, total, pagination), rows.Err()
 }
 
+const unreadFeedbackForViewerSQL = unreadFeedbackCountPrefix + "NULLIF($2,'')::uuid"
+
+const openPersonalTaskCountSQL = `SELECT count(*) FROM visible WHERE completed_at IS NULL
+ AND (system_task_kind IS NOT NULL OR assigned_to=NULLIF($2,'')::uuid)`
+
+// Both badges use the same authenticated viewer and the same database snapshot.
+func (repo *CustomTaskRepository) BadgeCounts(ctx context.Context, driverRead, truckRead bool) (int, int, error) {
+	admin, user := taskViewerArgs(ctx)
+	if user == "" {
+		return 0, 0, nil
+	}
+	var tasks, feedback int
+	if admin {
+		err := repo.pool.QueryRow(ctx, unreadFeedbackCountSQL, user).Scan(&feedback)
+		return 0, feedback, err
+	}
+	query := boardTaskCTE + "SELECT (" + openPersonalTaskCountSQL + "), (" + unreadFeedbackForViewerSQL + ")"
+	err := repo.pool.QueryRow(ctx, query, false, user, taskDirectoryKinds(driverRead, truckRead)).Scan(&tasks, &feedback)
+	return tasks, feedback, err
+}
+
 func (repo *CustomTaskRepository) OpenCount(ctx context.Context, driverRead, truckRead bool) (int, error) {
 	admin, user := taskViewerArgs(ctx)
 	// Badges represent personal assignments, independently of board oversight.
@@ -84,8 +105,7 @@ func (repo *CustomTaskRepository) OpenCount(ctx context.Context, driverRead, tru
 		return 0, nil
 	}
 	var count int
-	err := repo.pool.QueryRow(ctx, boardTaskCTE+`SELECT count(*) FROM visible WHERE completed_at IS NULL
- AND (system_task_kind IS NOT NULL OR assigned_to=NULLIF($2,'')::uuid)`, false, user, taskDirectoryKinds(driverRead, truckRead)).Scan(&count)
+	err := repo.pool.QueryRow(ctx, boardTaskCTE+openPersonalTaskCountSQL, false, user, taskDirectoryKinds(driverRead, truckRead)).Scan(&count)
 	return count, err
 }
 

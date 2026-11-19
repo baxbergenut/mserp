@@ -170,7 +170,7 @@ func TestPrePassFleetDatabase(t *testing.T) {
 			}
 			// Existing fleet tables need read/row-lock privileges; new tables must already
 			// be owned by the application role via the migration, not a blanket grant.
-			exec(`GRANT SELECT,UPDATE ON trucks TO mserp_app; GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app; GRANT INSERT,UPDATE ON tolls,prepass_toll_sync_days TO mserp_app`)
+			exec(`GRANT SELECT,UPDATE ON trucks TO mserp_app; GRANT SELECT ON ALL TABLES IN SCHEMA ` + quoted + ` TO mserp_app; GRANT INSERT,UPDATE ON tolls TO mserp_app`)
 			pc := cfg.Copy()
 			pc.MaxConns = 2
 			pc.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
