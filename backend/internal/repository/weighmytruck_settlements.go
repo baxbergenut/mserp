@@ -74,8 +74,13 @@ var wmtChargeJoins = wmtPayerJoins + `
  ON ` + truckTermCoversWeekSQL("date_trunc('week',t.transaction_date)::date") + `
 `
 
+// Reviewed links identify scale payments already included in a frozen manual
+// deduction. Only scale collection readers see these additional ticket receipts.
 const wmtStatementReportsSQL = `SELECT 'driver' kind,driver_id destination,week_start,report,finalized FROM payroll_settlements
- UNION ALL SELECT 'investor',truck_id,week_start,report,finalized FROM investor_pay_weeks`
+ UNION ALL SELECT 'investor',truck_id,week_start,
+ CASE WHEN edits ? 'manualScalePayment' THEN jsonb_set(report,'{autoCharges}',
+  coalesce(nullif(report->'autoCharges','null'),'[]') || (edits->'manualScalePayment'->'charges'))
+ ELSE report END,finalized FROM investor_pay_weeks`
 
 // Older receipts collected the entire ticket. New receipts record the original
 // ticket amount alongside the signed portion collected by that statement.

@@ -214,6 +214,32 @@ func TestWMTSettlementDatabase(t *testing.T) {
 			if e != nil || len(list.Items) != 1 || list.Items[0].Payer != "review" {
 				t.Fatalf("conflicting tractor billed to investor: %+v %v", list, e)
 			}
+			// A reviewed manual deduction pays the linked ticket once. The
+			// frozen card keeps its original line; reopening restores the
+			// native ticket without also charging the manual deduction.
+			source := "weighmytruck:" + list.Items[0].ID
+			run(`UPDATE investor_pay_weeks SET finalized=true,
+ report=jsonb_set(jsonb_set(report,'{autoCharges}','[]'),'{edits,adjustments}',
+ '[{"id":"manual","kind":"deduction","amount":"15.25","name":"scale tickets"}]'),
+ edits=jsonb_set(edits,'{manualScalePayment}',jsonb_build_object('adjustmentId','manual','charges',
+ jsonb_build_array(jsonb_build_object('source',$2::text,'amount','-15.25','scaleOriginalAmount','-15.25'))))
+ WHERE truck_id=$1`, truck, source)
+			revised.Tractor = "074"
+			if e = repo.StoreSettlements(ctx, day, []weighmytruck.Ticket{revised}); e != nil {
+				t.Fatal(e)
+			}
+			next, e := pay.InvestorPay(ctx, date.AddDate(0, 0, 7))
+			if e != nil || len(scales(next)) != 1 || scales(next)[0].Source == source {
+				t.Fatalf("manual payment leaked to next week: %+v %v", scales(next), e)
+			}
+			frozen, e = pay.InvestorPay(ctx, date)
+			if e != nil || len(scales(frozen)) != 0 || len(frozen.Drivers[0].Edits.Adjustments) != 1 {
+				t.Fatalf("manual payment changed frozen card: %+v %v", frozen, e)
+			}
+			updated, e = pay.SettleInvestor(ctx, date, truck, frozen.Revision, actor, "", true, false)
+			if e != nil || len(scales(updated)) != 2 || len(updated.Drivers[0].Edits.Adjustments) != 0 {
+				t.Fatalf("manual payment reopen: %+v %v", updated, e)
+			}
 			verifyWMTAutoRouting(t, ctx, pool)
 			// Automatic removal is one mutation, including repeated worker runs.
 			run(`UPDATE drivers SET status='terminated',termination_date=current_date WHERE id=$1`, driver)

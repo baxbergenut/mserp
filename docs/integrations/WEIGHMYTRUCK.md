@@ -132,6 +132,14 @@ frozen statement remains intact. Link corrections protect the statement that
 collected the ticket, including a statement from a different week. No expense
 directory row is created.
 
+A reviewed manual scale deduction can have exact ticket receipts recorded in
+the investor week's server-owned edits under `manualScalePayment`. The frozen
+report retains the manual deduction. The corresponding draft excludes that
+line so reopening releases the tickets for ordinary native collection. Such a
+link requires an exact frozen adjustment, unpaid ticket IDs, matching payer
+and amounts, an audit entry and the payroll source lock. Install the matching
+deploy helper before linking a payment.
+
 Migration 202 adds the statement-local driver choices to `driver_pay_weeks`.
 Investor choices use the existing statement edits JSON. Install the matching
 deploy helper before releasing partial deductions. It rejects older binaries
