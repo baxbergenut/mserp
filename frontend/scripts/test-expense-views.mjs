@@ -30,6 +30,7 @@ const writes = [];
 const extractionRequests = [];
 const applicants = [{ id: 'applicant-001', fullName: 'Hiring Applicant', status: 'applied' }];
 let applicantReads = 0;
+let sessionReads = 0;
 const receiptUploads = [];
 let entries = [], verificationRole = "accountant", administrator = true;
 const verified = [];
@@ -85,6 +86,7 @@ try {
     }
     const q = new URL(route.request().url()).searchParams;
     if (path === '/expenses') applicantReads++;
+    if (path === '/auth/session') sessionReads++;
     const filtered = entries.filter(e => ['unitNumber','driverName','paymentType','paidBy','coveredBy'].every(key => !q.get(key) || e[key] === q.get(key)) && (!q.get('accountantVerified') || e.accountingVerified === (q.get('accountantVerified') === 'true')));
     const fixtures = {
       '/auth/session': { user: { id: 'user', administrator, username: 'Entry User', expenseVerificationRole: verificationRole, permissions: ['expenses.read', 'expense_settings.manage', 'drivers.read','trucks.read','dispatchers.read','updaters.read','investors.read'], expenseCategoryAccess: [{ categoryId: 'maintenance', canView: true, canCreate: true, canEdit: true, canDelete: true },{categoryId:'penalties',canView:true,canCreate:true,canEdit:true,canDelete:false}] }, csrfToken: 'fixture' },
@@ -96,6 +98,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/expenses`);
   await expect(page.getByRole('button', { name: 'Add entry', exact: true })).toBeVisible();
   await expect.poll(() => applicantReads).toBeGreaterThan(0);
+  expect(sessionReads).toBe(1);
   const pageDropTransfer = await page.evaluateHandle(() => { const data = new DataTransfer(); data.items.add(new File(['page receipt'], 'page-receipt.txt', { type: 'text/plain' })); return data; });
   await page.getByTestId('expenses-drop-target').evaluate(element => { element.style.minHeight = '3000px'; });
   await page.getByTestId('expenses-drop-target').dispatchEvent('dragenter', { dataTransfer: pageDropTransfer });
