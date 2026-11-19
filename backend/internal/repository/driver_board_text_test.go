@@ -29,6 +29,10 @@ func testConcurrentBoardText(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if _, err = lock.Exec(ctx, `SELECT fleet_status_lock(),pg_advisory_xact_lock(736281940)`); err != nil {
 		t.Fatal(err)
 	}
+	// A concurrent foreign-key check can continue referencing this driver.
+	if _, err = lock.Exec(ctx, `SELECT id FROM drivers WHERE id=$1 FOR KEY SHARE`, driver.ID); err != nil {
+		t.Fatal(err)
+	}
 	work, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	save := func(e DriverBoardEntry) (DriverBoardEntry, error) {

@@ -88,7 +88,7 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 	batch.Queue(`SELECT set_config('jit','off',true), set_config('mserp.board_actor',$1,true),
  set_config('mserp.board_source','board',true),set_config('mserp.payroll.board_operational','on',true),
  set_config('mserp.board_text_edit','on',true)`, actor)
-	batch.Queue(`SELECT id FROM drivers WHERE active AND id=ANY($1::uuid[]) ORDER BY id FOR UPDATE`, ids).Query(func(rows pgx.Rows) error {
+	batch.Queue(`SELECT id FROM drivers WHERE active AND id=ANY($1::uuid[]) ORDER BY id FOR NO KEY UPDATE`, ids).Query(func(rows pgx.Rows) error {
 		locked, err := pgx.CollectRows(rows, pgx.RowTo[string])
 		if err == nil && !slices.Equal(locked, ids) {
 			return ErrDriverBoardConflict
