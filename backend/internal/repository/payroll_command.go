@@ -314,14 +314,14 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 				}
 			}
 			eligiblePeriods[date] = eligibleSnapshots[previous]
-			if !eligiblePeriods[date] && !concurrent && impacts[0].chargeScoped && impacts[0].weeks[date] {
-				// An earlier charge command may have intentionally retained this
+			if !eligiblePeriods[date] && !concurrent && (impacts[0].chargeScoped || impacts[0].placementScoped) && impacts[0].weeks[date] {
+				// An earlier period-scoped command may have retained this
 				// header. Prove the entire earlier interval before using its scope.
 				prior, e := payrollChangedSourceImpact(ctx, tx, previous, impacts[0].snapshot, date)
 				if e != nil {
 					return nil, e
 				}
-				eligiblePeriods[date] = prior != nil && prior.chargeScoped && !prior.weeks[date]
+				eligiblePeriods[date] = prior != nil && (prior.chargeScoped || prior.placementScoped) && !prior.weeks[date]
 			}
 			if resource, ok := tx.(*payrollResourceTransaction); ok && resource.periodSources[date+":"+previous] {
 				eligiblePeriods[date] = true
@@ -344,11 +344,13 @@ func publishPayrollCommand(ctx context.Context, tx pgx.Tx, week string, impacts 
 	scopes := []payrollBalanceScope{}
 	truckScopes := []payrollTruckInputScope{}
 	for _, w := range weeks {
-		if len(impacts) > 0 && impacts[0] != nil && impacts[0].chargeScoped && !impacts[0].weeks[w.Format(time.DateOnly)] {
+		if len(impacts) > 0 && impacts[0] != nil && (impacts[0].chargeScoped || impacts[0].placementScoped) && !impacts[0].weeks[w.Format(time.DateOnly)] {
 			// Reads and workers can certify unchanged membership and exact
 			// resource deltas from the captured events. Retain this generation
 			// instead of writing an identical header and statement pointers.
-			db.Event(ctx, "truck_charge_skipped_weeks")
+			if impacts[0].chargeScoped {
+				db.Event(ctx, "truck_charge_skipped_weeks")
+			}
 			continue
 		}
 		readCtx := ctx

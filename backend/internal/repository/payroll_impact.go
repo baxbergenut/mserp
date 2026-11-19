@@ -12,15 +12,16 @@ import (
 )
 
 type payrollPublicationImpact struct {
-	roots         []string
-	snapshot      string
-	weeks         map[string]bool // nil means every materialized week may be affected.
-	refreshHeader bool
-	loadIDs       []int64 // Changed sources need new immutable facts before publication.
-	finalizedKind string  // Metadata-only freeze/reopen preserves the other page's values.
-	changeIDs     []int64 // Complete captured events for source/command revision proofs.
-	chargeScoped  bool    // Proven interval for a pure recurring phase edit.
-	liveOnly      bool    // Base membership is certified; only dynamic expense balances changed.
+	roots           []string
+	snapshot        string
+	weeks           map[string]bool // nil means every materialized week may be affected.
+	refreshHeader   bool
+	loadIDs         []int64 // Changed sources need new immutable facts before publication.
+	finalizedKind   string  // Metadata-only freeze/reopen preserves the other page's values.
+	changeIDs       []int64 // Complete captured events for source/command revision proofs.
+	placementScoped bool    // Complete lower bound for board and placement changes.
+	chargeScoped    bool    // Proven interval for a pure recurring phase edit.
+	liveOnly        bool    // Base membership is certified; only dynamic expense balances changed.
 }
 type payrollPublicationSelectionKey struct{}
 type payrollPublicationHeaderKey struct{}
@@ -496,6 +497,7 @@ func payrollCapturedImpact(ctx context.Context, tx pgx.Tx, c *payrollCommand, ki
 		}
 	}
 	if earliest != "" {
+		impact.placementScoped = placementSeen && boardOrPlacementOnly
 		periods, e := tx.Query(ctx, `SELECT week_start::text FROM payroll_projection_weeks WHERE week_start >= $1::date`, earliest)
 		if e != nil {
 			return nil, e

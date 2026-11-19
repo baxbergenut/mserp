@@ -118,10 +118,38 @@ func payrollStatementSourceProofs(ctx context.Context, tx pgx.Tx, week time.Time
 // The same source proof and exact resource arithmetic feed reads and derived
 // rebasing. A financial command's extra epoch cannot be mistaken for a harmless
 // source change, including commands that deliberately do not bump source counters.
-const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (
- SELECT v.id,v.summary,v.statement_id,v.generation_id,v.resource_dependencies
+const payrollSelectedVersionsSQL = `SELECT v.id,v.summary,v.statement_id,v.generation_id,v.resource_dependencies
  FROM payroll_statement_state s JOIN payroll_statement_current v ON v.id=s.version_id
- WHERE s.week_start=$1 AND ($2='' OR s.kind=$2) AND ($3='' OR v.id=nullif($3,'')::uuid)
+ WHERE s.week_start=$1 AND ($2='' OR s.kind=$2) AND ($3='' OR v.id=nullif($3,'')::uuid)`
+
+const payrollStatementFreshnessSQL = `WITH versions AS MATERIALIZED (` + payrollSelectedVersionsSQL + payrollFreshnessProofsSQL
+
+// A financial writer may update only statements whose non-statement keys it
+// holds. Check each packed shared key set once before calculating freshness for
+// the remaining versions. Local keys still require their own containment check.
+const payrollRebaseClaimsSQL = `WITH claims AS MATERIALIZED (
+ SELECT raw IS NULL AS unrestricted,coalesce((SELECT jsonb_object_agg(k,true)
+ FROM jsonb_array_elements_text(raw::jsonb) k),'{}'::jsonb) held
+ FROM (SELECT nullif(current_setting('mserp.payroll.resources',true),'') raw) setting
+ ), candidates AS MATERIALIZED (`
+
+const payrollRebasePermittedSQL = `
+ ), permitted_shared AS MATERIALIZED (
+ SELECT d.fingerprint FROM payroll_resource_dependency_sets d
+ JOIN (SELECT DISTINCT resource_dependencies->>'$shared' fingerprint FROM candidates WHERE resource_dependencies ? '$shared') s USING(fingerprint)
+ CROSS JOIN claims WHERE NOT claims.unrestricted AND NOT EXISTS (
+ SELECT 1 FROM jsonb_object_keys(d.dependencies) k WHERE k NOT LIKE 'statement:%' AND NOT claims.held ? k)
+ ), versions AS MATERIALIZED (
+ SELECT v.* FROM candidates v CROSS JOIN claims
+ WHERE claims.unrestricted OR ((NOT v.resource_dependencies ? '$shared' OR EXISTS (
+ SELECT 1 FROM permitted_shared p WHERE p.fingerprint=v.resource_dependencies->>'$shared'))
+ AND NOT EXISTS (SELECT 1 FROM jsonb_object_keys(v.resource_dependencies-'$shared') k
+ WHERE k NOT LIKE 'statement:%' AND NOT claims.held ? k))`
+
+const payrollRebaseFreshnessSQL = payrollRebaseClaimsSQL + payrollSelectedVersionsSQL + `
+ AND v.generation_id<>$5::uuid AND (NOT $6::boolean OR v.xmin<>pg_current_xact_id()::text::xid)` + payrollRebasePermittedSQL + payrollFreshnessProofsSQL
+
+const payrollFreshnessProofsSQL = `
  ), proofs AS MATERIALIZED (
  SELECT key::uuid generation_id,coalesce((value->>'complete')::boolean,false) complete,
  ARRAY(SELECT jsonb_array_elements_text(value->'roots')) roots,value->'deltas' deltas
@@ -179,14 +207,11 @@ func rebasePayrollStatementResources(ctx context.Context, tx pgx.Tx, week time.T
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, payrollStatementFreshnessSQL+`UPDATE payroll_statement_current c
+	_, err = tx.Exec(ctx, payrollRebaseFreshnessSQL+`UPDATE payroll_statement_current c
 	 SET generation_id=$5::uuid,resource_dependencies=CASE WHEN f.resources_exact THEN f.resource_dependencies ELSE payroll_pack_resource_snapshot(
 	 ARRAY(SELECT jsonb_object_keys(payroll_expand_resource_dependencies(f.resource_dependencies))),
 	 'statement:'||c.kind||':'||c.statement_id::text||':'||c.week_start::text) END
  FROM freshness f WHERE c.id=f.id AND f.sources_current AND f.resources_current AND f.generation_id<>$5::uuid
-	 AND (NOT $6::boolean OR c.xmin<>pg_current_xact_id()::text::xid)
- AND (coalesce(current_setting('mserp.payroll.resources',true),'')='' OR
- ARRAY(SELECT key FROM jsonb_object_keys(payroll_expand_resource_dependencies(f.resource_dependencies)) key WHERE key NOT LIKE 'statement:%')
-	 <@ ARRAY(SELECT jsonb_array_elements_text(current_setting('mserp.payroll.resources')::jsonb)))`, week, "", "", proofs, generation, len(commands) > 0)
+	 AND (NOT $6::boolean OR c.xmin<>pg_current_xact_id()::text::xid)`, week, "", "", proofs, generation, len(commands) > 0)
 	return err
 }
