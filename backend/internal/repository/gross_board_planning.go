@@ -31,6 +31,7 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 			return nil, err
 		}
 	}
+	defer r.workPriority.interactive()()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err

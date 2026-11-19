@@ -334,7 +334,7 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
-    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 300);
+    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 60);
     return () => clearTimeout(timer);
   }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 

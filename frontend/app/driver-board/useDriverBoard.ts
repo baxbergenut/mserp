@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
-import { fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
+import { APIError, fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
-import { applyCommittedFleetStatus, progressStatus, reconcileDriverBoard } from "./board";
+import { applyCommittedFleetStatus, progressStatus, rebaseBoardDraft, reconcileDriverBoard } from "./board";
 import { usePermissions } from "@/app/lib/access";
 import { useBoardLive } from "./useBoardLive";
 import { selectedBoardCell } from "./boardCells";
@@ -21,6 +21,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   const [orderSaving, setOrderSaving] = useState(false);
   const orderSavingRef = useRef(false);
   const [error, setError] = useState("");
+  const [conflictingRows, setConflictingRows] = useState<{ latest: DriverBoardEntry; message: string }[]>([]);
   const [refreshError, setRefreshError] = useState("");
   const [eldRefreshing, setELDRefreshing] = useState(false);
   const activity = useRef(0);
@@ -207,10 +208,37 @@ export function useDriverBoard(lockedDriverId?: string) {
     const snapshot = { ...changesRef.current };
     busyDrivers.current = Object.keys(snapshot);
     const draftActions = draftUndo.current;
+    const baselines = { ...savedRef.current };
     draftUndo.current = [];
     setSaving(true); setError("");
     try {
-      const committed = await saveDriverBoard(Object.values(snapshot));
+      let committed: DriverBoardEntry[];
+      try {
+        committed = await saveDriverBoard(Object.values(snapshot));
+      } catch (err) {
+        if (!(err instanceof APIError) || err.code !== "board_row_changed") throw err;
+        const current = await fetchDriverBoard(currentChargeWeek());
+        const latestById = new Map(current.entries.map(entry => [entry.driverId, entry]));
+        const retry = [];
+        const review = [];
+        for (const draft of Object.values(snapshot)) {
+          const latest = latestById.get(draft.driverId), base = baselines[draft.driverId];
+          if (!latest || !base || base.version !== draft.version) throw err;
+          const { entry, conflicts } = rebaseBoardDraft(base, draft, latest);
+          if (conflicts.length) {
+            const name = current.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
+            const fields = conflicts.map(key => key + " is now " + (typeof latest[key] === "object" ? JSON.stringify(latest[key]) : latest[key] || "(empty)"));
+            review.push({ latest, message: name + " · " + fields.join(", ") });
+          }
+          retry.push(entry);
+        }
+        if (review.length) {
+          setConflictingRows(review);
+          throw new Error("Another edit changed fields used by your draft. Review the saved values below.");
+        }
+        committed = await saveDriverBoard(retry);
+      }
+      setConflictingRows([]);
       const loadIds = committed.filter(e => { const base = savedRef.current[e.driverId]; return !base || base.currentLoad !== e.currentLoad || base.status !== e.status || base.destination !== e.destination || base.eta !== e.eta || snapshot[e.driverId]?.resolveCurrentLoad; }).map(e => e.driverId);
       // Advance the authoritative refs before releasing the save lock. A new
       // keystroke can arrive before React renders this response.
@@ -238,6 +266,26 @@ export function useDriverBoard(lockedDriverId?: string) {
     finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); }
   }, [canEdit, loading, refreshLoads]);
 
+  function resolveConflict(latest: DriverBoardEntry, keepDraft: boolean) {
+    if (savingRef.current) return;
+    const id = latest.driverId, draft = changesRef.current[id], base = savedRef.current[id];
+    if (!draft || !base) return;
+    const next = { ...changesRef.current };
+    if (keepDraft) next[id] = rebaseBoardDraft(base, draft, latest).entry;
+    else {
+      delete next[id];
+      draftUndo.current = draftUndo.current.filter(a => a.id !== id);
+    }
+    savedRef.current[id] = latest;
+    changesRef.current = next;
+    setChanges(next);
+    setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === id ? latest : e) } : current);
+    const remaining = conflictingRows.filter(row => row.latest.driverId !== id);
+    setConflictingRows(remaining);
+    if (!remaining.length) setError("");
+    refreshWanted.current();
+  }
+
   useEffect(() => {
     if (!dirty || saving || error || loading) return;
     let cancelled = false;
@@ -249,7 +297,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     if (savingRef.current) return;
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved Status Board?")) return;
     activity.current += 1; idle.current = false;
-    setLoading(true); setError(""); cancelNavigation(); changesRef.current = {}; setChanges({}); draftUndo.current = []; undoStack.current = [];
+    setLoading(true); setError(""); setConflictingRows([]); cancelNavigation(); changesRef.current = {}; setChanges({}); draftUndo.current = []; undoStack.current = [];
     try { setBoard(await fetchDriverBoard(currentChargeWeek())); setRefreshError(""); }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to load Status Board"); }
     finally { setLoading(false); }
@@ -362,5 +410,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   const entries = useMemo(() => Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [
     id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) },
   ])), [saved, changes, board?.statusSyncEnabled, board?.loads]);
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, conflictingRows, resolveConflict, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
 }

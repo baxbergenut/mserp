@@ -29,10 +29,7 @@ type DriverBoardHistory struct {
 }
 
 func setBoardActor(ctx context.Context, tx pgx.Tx, actor, source string) error {
-	if _, err := tx.Exec(ctx, `SELECT fleet_status_lock()`); err != nil {
-		return err
-	}
-	_, err := tx.Exec(ctx, `SELECT set_config('mserp.board_actor',$1,true),set_config('mserp.board_source',$2,true)`, actor, source)
+	_, err := tx.Exec(ctx, `SELECT set_config('mserp.board_actor',$1,true),set_config('mserp.board_source',$2,true) FROM fleet_status_lock()`, actor, source)
 	return err
 }
 
@@ -75,7 +72,7 @@ func (r *DriverBoardRepository) History(ctx context.Context, ids []string, befor
 // Undo is a new audited correction. A later edit of any affected field prevents
 // reversing the older event, even if that field has since returned to its value.
 func (r *DriverBoardRepository) Undo(ctx context.Context, id int64, driver string, version int, actor string, personal ...bool) (DriverBoardEntry, error) {
-	return runBoardCommand(func(source bool) (DriverBoardEntry, error) {
+	return runBoardCommand(r.workPriority, func(source bool) (DriverBoardEntry, error) {
 		return r.undo(ctx, id, driver, version, actor, source, personal...)
 	})
 }

@@ -373,7 +373,7 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 }
 
 func readGrossBoardOpenings(ctx context.Context, tx pgx.Tx, week time.Time, board *GrossBoard) error {
-	rows, err := tx.Query(ctx, grossBoardEffective+grossBoardOpenings+`SELECT driver_id::text,opening,incomplete,reset_this_week FROM openings`, week)
+	rows, err := tx.Query(ctx, grossBoardOpeningValues+`SELECT driver_id::text,opening,incomplete,reset_this_week FROM openings`, week)
 	if err != nil {
 		return err
 	}

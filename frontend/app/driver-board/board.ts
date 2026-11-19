@@ -112,6 +112,39 @@ export function statusColor(status: string) {
   return "text-zinc-400";
 }
 
+const boardFieldGroups = [
+  ["notes"], ["trailerNumber", "trailerNote"],
+  ["currentLoad", "destination", "eta", "status", "homeTime", "leavePlan"],
+] as const;
+type BoardField = (typeof boardFieldGroups)[number][number];
+const sameField = (a: DriverBoardEntry, b: DriverBoardEntry, field: BoardField) =>
+  field === "leavePlan"
+    ? a.leavePlan?.homeStart === b.leavePlan?.homeStart && a.leavePlan?.homeEnd === b.leavePlan?.homeEnd && a.leavePlan?.vacationReturn === b.leavePlan?.vacationReturn
+    : a[field] === b[field];
+
+// Reapply only this dispatcher's editable fields to a newer committed row.
+// A load, status, ETA and leave dates may change together in the database.
+export function rebaseBoardDraft(base: DriverBoardEntry, draft: DriverBoardEntry, latest: DriverBoardEntry) {
+  const entry = { ...latest };
+  if (draft.resolveCurrentLoad && (!base.resolveCurrentLoad || draft.currentLoad !== base.currentLoad)) entry.resolveCurrentLoad = true;
+  if (draft.statusEdited && (!base.statusEdited || draft.status !== base.status || draft.effectiveAt !== base.effectiveAt || draft.statusReason !== base.statusReason)) {
+    entry.statusEdited = true;
+    entry.statusReason = draft.statusReason;
+    entry.effectiveAt = draft.effectiveAt;
+  }
+  const conflicts: BoardField[] = [];
+  for (const group of boardFieldGroups) {
+    const changed = group.filter(field => !sameField(base, draft, field));
+    const hasIntent = group[0] === "currentLoad" && (entry.resolveCurrentLoad || entry.statusEdited);
+    if (!changed.length && !hasIntent) continue;
+    for (const field of group) {
+      if (!sameField(base, latest, field) && (!sameField(draft, latest, field) || hasIntent)) conflicts.push(field);
+    }
+    for (const field of changed) Object.assign(entry, { [field]: draft[field] });
+  }
+  return { entry, conflicts };
+}
+
 // An in-flight save may finish after more typing. Keep the new text, while
 // advancing both concurrency tokens to the committed response.
 export function reconcileDriverBoard(current: Record<string, DriverBoardEntry>, snapshot: Record<string, DriverBoardEntry>, committed: DriverBoardEntry[]) {
@@ -119,7 +152,7 @@ export function reconcileDriverBoard(current: Record<string, DriverBoardEntry>, 
   for (const entry of committed) {
     const draft = current[entry.driverId];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[entry.driverId])) delete remaining[entry.driverId];
-    else remaining[entry.driverId] = { ...draft, version: entry.version };
+    else remaining[entry.driverId] = rebaseBoardDraft(snapshot[entry.driverId], draft, entry).entry;
   }
   return remaining;
 }

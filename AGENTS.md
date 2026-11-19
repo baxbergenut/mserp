@@ -90,6 +90,8 @@ conversion used that faulty check and created duplicate slots.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
+Status Board row conflicts return `board_row_changed`. The browser rebases independent fields once and shows conflicting saved values for review. Load actions use the row version and queue revision from the same load snapshot. Exercise `frontend/scripts/test-investors-e2e.mjs --board-save-only` for two-user save, conflict and reload behavior.
+
 ## Reports
 
 Reports v1 (`/reports`) includes only active Gross Board load entries and selected
