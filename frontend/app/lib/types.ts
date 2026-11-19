@@ -1162,6 +1162,7 @@ export interface ExpenseCategoryAccess {
 export interface PermissionDefinition { key: string; label: string; group: string; action: string; requires: string[]; sensitive: boolean; }
 
 export interface AuthSession {
+  parallelBoardOpening?: boolean;
   permissionCatalog?: PermissionDefinition[];
   user: AuthUser;
   csrfToken: string;

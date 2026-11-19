@@ -67,7 +67,7 @@ func (request *driverBoardRequest) validate() error {
 	return nil
 }
 
-func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository) {
+func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository, openings *boardOpenings) {
 	registerBoardPresenceRoutes(r, logger, repo)
 	fail := func(w http.ResponseWriter, err error) {
 		var statusError *pgconn.PgError
@@ -299,6 +299,9 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		// Pending onboarding rows are authorized inside the repository transaction.
 		session, _ := authSessionFromContext(r.Context())
 		key := boardReadKey{week: week, viewer: session.User.ID, admin: session.User.Administrator}
+		if !openings.admit(w, r) {
+			return
+		}
 		board, err := snapshots.get(r.Context(), key, repo.Get)
 		if err != nil {
 			fail(w, err)
@@ -309,13 +312,13 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		}
 		switch r.URL.Query().Get("compact") {
 		case "grid":
-			writeJSON(w, 200, repository.CompactBoardGrid(board))
+			writeBoardSnapshot(w, r, repository.CompactBoardGrid(board))
 			return
 		case "1":
-			writeJSON(w, 200, repository.CompactBoard(board))
+			writeBoardSnapshot(w, r, repository.CompactBoard(board))
 			return
 		}
-		writeJSON(w, 200, board)
+		writeBoardSnapshot(w, r, board)
 	})
 	r.Put("/driver-board", func(w http.ResponseWriter, r *http.Request) {
 		var request driverBoardRequest

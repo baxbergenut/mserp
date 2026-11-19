@@ -28,6 +28,7 @@ type taskEvents struct {
 	config          *pgx.ConnConfig
 	logger          *slog.Logger
 	stopped         chan struct{}
+	openings        *boardOpenings
 	channel         string
 	permission      string
 	revision        uint64
@@ -269,6 +270,11 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 		}
 		changes, unsubscribe := h.subscribe()
 		defer unsubscribe()
+		if h.openings != nil {
+			if key, ok := boardOpeningScope(r); ok {
+				defer h.openings.register(key)()
+			}
+		}
 		var presenceChanges chan struct{}
 		if len(presence) > 0 {
 			var closePresence func()
