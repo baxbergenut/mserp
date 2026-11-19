@@ -75,6 +75,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				}
 				body = withoutAccountingCutoverMigration(t, strings.Replace(body, mig, "", 1))
 				body = strings.Replace(body, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
+				body = strings.Replace(body, migrationSQLForTest(t, "227_status_board_text_edits.sql"), "", 1)
 			}
 			exec(body)
 			const driver = "91000000-0000-0000-0000-000000000001"
@@ -107,6 +108,7 @@ func TestLoadWeekTransfersDatabase(t *testing.T) {
 				}
 				exec(string(balance))
 				exec(string(boardMigration))
+				exec(migrationSQLForTest(t, "227_status_board_text_edits.sql"))
 			}
 			const legacyAuditInsert = `INSERT INTO gross_board_transfer_history(actor_id,reason,after_value) VALUES('accountant','Legacy audit','{}')`
 			if migrated {

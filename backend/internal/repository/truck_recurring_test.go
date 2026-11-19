@@ -139,6 +139,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 					t.Fatal(boardErr)
 				}
 				prior = strings.Replace(prior, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
+				prior = strings.Replace(prior, migrationSQLForTest(t, "227_status_board_text_edits.sql"), "", 1)
 				storageMigration, storageErr := os.ReadFile("../../sql/189_payroll_current_storage.sql")
 				if storageErr != nil {
 					t.Fatal(storageErr)
@@ -206,6 +207,7 @@ func withTruckChargeDatabase(t *testing.T, check func(*testing.T, context.Contex
 					t.Fatal(boardErr)
 				}
 				exec(string(boardUpgrade))
+				exec(migrationSQLForTest(t, "227_status_board_text_edits.sql"))
 				storageUpgrade, e := os.ReadFile("../../sql/189_payroll_current_storage.sql")
 				if e != nil {
 					t.Fatal(e)

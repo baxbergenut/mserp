@@ -76,6 +76,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 				}
 				initial = withoutAccountingCutoverMigration(t, strings.Replace(initial, body, "", 1))
 				initial = strings.Replace(initial, strings.ReplaceAll(string(boardMigration), "\r\n", "\n"), "", 1)
+				initial = strings.Replace(initial, migrationSQLForTest(t, "227_status_board_text_edits.sql"), "", 1)
 			}
 			exec(initial)
 			var legacyExpense, legacyDriver string
@@ -93,6 +94,7 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 			applyAccountingCutoverMigration(t, ctx, admin)
 			if mode == "migration" {
 				exec(string(boardMigration))
+				exec(migrationSQLForTest(t, "227_status_board_text_edits.sql"))
 			}
 			exec("GRANT USAGE ON SCHEMA " + quoted + " TO mserp_app; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA " + quoted + " TO mserp_app")
 			cfg, e := pgxpool.ParseConfig(dsn)
