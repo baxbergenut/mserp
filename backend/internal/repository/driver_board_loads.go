@@ -560,7 +560,12 @@ type boardLoadViewOptions struct {
 	queuePresenceOnly bool
 }
 
-func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, options boardLoadViewOptions, cache *boardWeekCache[map[string][]BoardLoad], sourceKey string) (map[string]BoardLoads, error) {
+type boardLoadSourceCaches struct {
+	plans  boardWeekCache[map[string][]BoardLoad]
+	manual boardWeekCache[map[string][]BoardLoad]
+}
+
+func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, options boardLoadViewOptions, cache *boardLoadSourceCaches, sourceKey string) (map[string]BoardLoads, error) {
 	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return nil, err
 	}
@@ -644,14 +649,14 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		if err != nil {
 			return nil, err
 		}
-		plans, err = cache.get(ctx, planKey, readPlans)
+		plans, err = cache.plans.get(ctx, planKey, cloneBoardPlans, readPlans)
 	} else {
 		plans, err = readPlans()
 	}
 	if err != nil {
 		return nil, err
 	}
-	manualPlans, err := readManualBoardLoads(ctx, tx, states)
+	manualPlans, err := cache.readManual(ctx, tx, sourceKey, states)
 	if err != nil {
 		return nil, err
 	}

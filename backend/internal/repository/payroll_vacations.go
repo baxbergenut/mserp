@@ -40,19 +40,23 @@ func readVacationStateUncached(ctx context.Context, q chargeQuery, week string, 
 	v := vacationWeek{drivers: map[string]bool{}, trucks: map[string]bool{}}
 	query := `WITH status_history AS MATERIALIZED (
  SELECT * FROM fleet_status_history WHERE entity_kind='driver' AND track='availability'
-), ` + effectiveFleetStatusHistoryCTE + `, vacation_drivers AS MATERIALIZED (
+), ` + effectiveFleetStatusHistoryCTE + `, monday_status AS (
+ SELECT DISTINCT ON (entity_id) entity_id,status FROM effective_status_history
+ WHERE effective_at < (($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
+ ORDER BY entity_id,effective_at DESC,id DESC
+), history_by_driver AS (
+ SELECT entity_id,bool_or(status<>'vacation'
+   AND effective_at >= (($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
+   AND effective_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York')) AS worked_later
+ FROM effective_status_history GROUP BY entity_id
+), vacation_drivers AS MATERIALIZED (
  SELECT d.id FROM drivers d
- WHERE coalesce((SELECT h.status FROM effective_status_history h
-   WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability'
-   AND h.effective_at < (($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
-   ORDER BY h.effective_at DESC,h.id DESC LIMIT 1),
-   CASE WHEN $1::date>=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date
-   AND NOT EXISTS(SELECT 1 FROM effective_status_history h WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability')
+ LEFT JOIN monday_status m ON m.entity_id=d.id
+ LEFT JOIN history_by_driver h ON h.entity_id=d.id
+ WHERE coalesce(m.status,CASE WHEN h.entity_id IS NULL
+   AND $1::date>=date_trunc('week',now() AT TIME ZONE 'America/New_York')::date
    THEN d.availability_status ELSE 'active' END)='vacation'
- AND NOT EXISTS(SELECT 1 FROM effective_status_history h
-   WHERE h.entity_kind='driver' AND h.entity_id=d.id AND h.track='availability' AND h.status<>'vacation'
-   AND h.effective_at >= (($1::date+1)::timestamp AT TIME ZONE 'America/New_York')
-   AND h.effective_at < (($1::date+7)::timestamp AT TIME ZONE 'America/New_York'))
+ AND NOT coalesce(h.worked_later,false)
 )`
 	if includeTrucks {
 		query += `, assignments AS MATERIALIZED (

@@ -72,12 +72,28 @@ func logBoardClientTimings(logger *slog.Logger, raw string) {
 			logger.Info("board browser timing", "operation", name, "duration_ms", ms)
 			continue
 		}
-		before, received, ok := strings.Cut(phases, "/")
-		submit, submitErr := strconv.Atoi(before)
-		ack, ackErr := strconv.Atoi(received)
-		if ok && submitErr == nil && ackErr == nil && 0 <= submit && submit <= ack && ack <= ms {
-			logger.Info("board browser timing", "operation", name, "duration_ms", ms, "before_request_ms", submit, "request_ms", ack-submit, "response_to_paint_ms", ms-ack)
+		parts := strings.Split(phases, "/")
+		if len(parts) != 2 && len(parts) != 4 {
+			continue
 		}
+		points := make([]int, 0, len(parts))
+		previous := 0
+		for _, part := range parts {
+			point, err := strconv.Atoi(part)
+			if err != nil || point < previous || point > ms {
+				break
+			}
+			points = append(points, point)
+			previous = point
+		}
+		if len(points) != len(parts) {
+			continue
+		}
+		fields := []any{"operation", name, "duration_ms", ms, "before_request_ms", points[0], "request_ms", points[1] - points[0], "response_to_paint_ms", ms - points[1]}
+		if len(points) == 4 {
+			fields = append(fields, "response_to_commit_ms", points[2]-points[1], "commit_to_frame_ms", points[3]-points[2], "frame_interval_ms", ms-points[3])
+		}
+		logger.Info("board browser timing", fields...)
 	}
 }
 

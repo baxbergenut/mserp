@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
+	"slices"
 	"sync"
 	"time"
 
@@ -39,11 +39,11 @@ func boardWeekRevision(ctx context.Context, tx pgx.Tx, week time.Time, openings 
 type boardWeekCache[T any] struct {
 	mu      sync.Mutex
 	key     string
-	data    []byte
+	data    T
 	pending map[string]chan struct{}
 }
 
-func (c *boardWeekCache[T]) get(ctx context.Context, key string, read func() (T, error)) (T, error) {
+func (c *boardWeekCache[T]) get(ctx context.Context, key string, clone func(T) T, read func() (T, error)) (T, error) {
 	if c == nil || key == "" {
 		return read()
 	}
@@ -52,9 +52,7 @@ func (c *boardWeekCache[T]) get(ctx context.Context, key string, read func() (T,
 		if c.key == key {
 			data := c.data
 			c.mu.Unlock()
-			var result T
-			err := json.Unmarshal(data, &result)
-			return result, err
+			return clone(data), nil
 		}
 		if done := c.pending[key]; done != nil {
 			c.mu.Unlock()
@@ -73,19 +71,63 @@ func (c *boardWeekCache[T]) get(ctx context.Context, key string, read func() (T,
 		c.pending[key] = done
 		c.mu.Unlock()
 		result, err := read()
-		var data []byte
-		if err == nil {
-			data, err = json.Marshal(result)
-		}
 		c.mu.Lock()
 		if err == nil {
-			c.key, c.data = key, data
+			c.key, c.data = key, result
 		}
 		delete(c.pending, key)
 		close(done)
 		c.mu.Unlock()
-		return result, err
+		if err != nil {
+			return result, err
+		}
+		return clone(result), nil
 	}
+}
+
+// All cached values are owned by their cache. HTTP, live streams and workers
+// receive independent copies, including fields used internally for stop lookup.
+func copyBoardPointer[T any](v *T) *T {
+	if v == nil {
+		return nil
+	}
+	value := *v
+	return &value
+}
+
+func cloneBoardPlans(src map[string][]BoardLoad) map[string][]BoardLoad {
+	out := make(map[string][]BoardLoad, len(src))
+	for driver, plans := range src {
+		rows := slices.Clone(plans)
+		for i := range rows {
+			p := &rows[i]
+			p.LoadID = copyBoardPointer(p.LoadID)
+			p.Stops = slices.Clone(p.Stops)
+			for j := range p.Stops {
+				s := &p.Stops[j]
+				s.geocode = copyBoardPointer(s.geocode)
+				s.Latitude = copyBoardPointer(s.Latitude)
+				s.Longitude = copyBoardPointer(s.Longitude)
+				s.Schedule = copyBoardPointer(s.Schedule)
+			}
+		}
+		out[driver] = rows
+	}
+	return out
+}
+
+func cloneWeekEntries(src []GrossBoardEntry) []GrossBoardEntry {
+	out := slices.Clone(src)
+	for i := range out {
+		e := &out[i]
+		// readBoardWeekEntries scans saved display rows. Write intents
+		// (Fields, PreviousLoadNumber and SplitReview) are never populated.
+		e.LoadRecordID = copyBoardPointer(e.LoadRecordID)
+		e.LoadTripID = copyBoardPointer(e.LoadTripID)
+		e.Note = copyBoardPointer(e.Note)
+		e.Trips = slices.Clone(e.Trips)
+	}
+	return out
 }
 
 func readBoardWeekEntries(ctx context.Context, tx pgx.Tx, week time.Time) ([]GrossBoardEntry, error) {
