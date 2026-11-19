@@ -5,9 +5,14 @@ import { Check, MapPin, TriangleAlert } from "lucide-react";
 import type { DriverBoardLocation } from "@/app/lib/types";
 import { isOldLocation } from "./board";
 
-const locationTime = (value: string) => new Date(value).toLocaleString("en-US", {
+const locationDateFormat = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
 });
+
+export function locationTime(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? locationDateFormat.format(date) : "Invalid Date";
+}
 
 export function formatCoordinates(location: DriverBoardLocation) {
   return `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;

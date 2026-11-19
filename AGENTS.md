@@ -3663,6 +3663,12 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   read complete paginated vehicle/stat snapshots into separate caches. Server-only
   `SAMSARA_API_TOKEN`, optional `SAMSARA_API_VERSION`, `SAMSARA_API_URL` and
   `SAMSARA_SYNC_INTERVAL` configure a startup/minute worker. No provider writes.
+- Automatic dispatch GPS continues when Service Programs are paused. Request Samsara
+  odometers only while at least one program has an enabled schedule. Store each
+  fleet GPS snapshot in bulk and retain timestamp and provider identity guards.
+  Weekly PTI sync writes changed truck context in one batch and preserves manual
+  checklist edits. Healthy Status and Gross Board streams carry peer snapshots;
+  presence GETs recover a disconnected or stale stream.
 - Exact VINs match only one local truck. Duplicate Samsara VINs resolve only to
   one attached gateway; multiple gateways or duplicate IDs/stats stay ambiguous.
   Fleet maps remain Samsara-first. Status Board GPS, arrivals and ETA use Five ELD

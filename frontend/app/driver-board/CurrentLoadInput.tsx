@@ -18,12 +18,14 @@ export function CurrentLoadInput({ value, label, disabled, entries, week, onChan
   const [position, setPosition] = useState({ left: 0, top: 0, width: 280, height: 240 });
   const query = value.trim().toLowerCase();
   const seen = new Set<string>();
-  const options = entries.filter(e => {
+  const showSuggestions = focused && !disabled && !!query;
+  const weekEnd = showSuggestions ? addDays(week, 6) : "";
+  const options = showSuggestions ? entries.filter(e => {
     const number = e.loadNumber.trim().toLowerCase();
-    if (e.deleted || e.dayStatus || e.date < week || e.date > addDays(week, 6) || !number || !number.includes(query) || seen.has(number)) return false;
+    if (e.deleted || e.dayStatus || e.date < week || e.date > weekEnd || !number || !number.includes(query) || seen.has(number)) return false;
     seen.add(number); return true;
-  }).slice(0, 10);
-  const open = focused && !disabled && !!query && options.length > 0;
+  }).slice(0, 10) : [];
+  const open = options.length > 0;
   const selected = Math.min(active, options.length - 1);
   useEffect(() => {
     if (!open) return;

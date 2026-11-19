@@ -18,9 +18,10 @@ type LocationRefresher interface {
 var ErrTelemetrySyncInProgress = errors.New("Telematics refresh is already in progress")
 
 type samsaraClient interface {
-	Snapshot(context.Context, time.Time) (samsara.Snapshot, error)
+	Snapshot(context.Context, time.Time, bool) (samsara.Snapshot, error)
 }
 type samsaraRepository interface {
+	MileageEnabled(context.Context) (bool, error)
 	Store(context.Context, samsara.Snapshot, time.Time) error
 	RecordFailure(context.Context, time.Time, error) error
 }
@@ -40,7 +41,11 @@ func (j *SyncSamsaraJob) Run(ctx context.Context) (repository.FiveELDSyncResult,
 	}
 	defer j.running.Store(false)
 	now := j.now().UTC()
-	snapshot, err := j.client.Snapshot(ctx, now)
+	mileage, err := j.repo.MileageEnabled(ctx)
+	var snapshot samsara.Snapshot
+	if err == nil {
+		snapshot, err = j.client.Snapshot(ctx, now, mileage)
+	}
 	if err == nil {
 		err = j.repo.Store(ctx, snapshot, now)
 	}

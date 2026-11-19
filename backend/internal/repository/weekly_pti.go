@@ -172,18 +172,25 @@ func (r *FleetRepository) createPTIWeek(ctx context.Context, week, actor string,
 	if readErr != nil {
 		return readErr
 	}
-	for _, row := range entries {
-		raw, e := json.Marshal(row)
-		if e != nil {
-			return e
-		}
-		if _, err = tx.Exec(ctx, `INSERT INTO weekly_pti_rows(week_start,truck_id,data) VALUES($1,$2,$3)
- ON CONFLICT(week_start,truck_id) DO UPDATE SET version=weekly_pti_rows.version+1,
+	raw, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	// Keep marks, reviews and initial eligibility. Stable trucks do not even
+	// enter the conflict path or take a row lock on each minute tick.
+	_, err = tx.Exec(ctx, `WITH incoming AS (
+ SELECT (data->>'truckId')::uuid AS truck_id, data FROM jsonb_array_elements($2::jsonb) AS rows(data)
+ )
+ INSERT INTO weekly_pti_rows(week_start,truck_id,data)
+ SELECT $1,i.truck_id,i.data FROM incoming i LEFT JOIN weekly_pti_rows p ON p.week_start=$1 AND p.truck_id=i.truck_id
+ WHERE p.truck_id IS NULL OR (p.data->'truckUnit',p.data->'crew',p.data->'condition',p.data->'eligibility',p.data->'eligibilityReason')
+ IS DISTINCT FROM (i.data->'truckUnit',i.data->'crew',i.data->'condition',i.data->'eligibility',i.data->'eligibilityReason')
+ ORDER BY i.truck_id ON CONFLICT(week_start,truck_id) DO UPDATE SET version=weekly_pti_rows.version+1,
  data=weekly_pti_rows.data || jsonb_build_object('truckUnit',EXCLUDED.data->'truckUnit','crew',EXCLUDED.data->'crew','condition',EXCLUDED.data->'condition','eligibility',EXCLUDED.data->'eligibility','eligibilityReason',EXCLUDED.data->'eligibilityReason')
  WHERE (weekly_pti_rows.data->'truckUnit',weekly_pti_rows.data->'crew',weekly_pti_rows.data->'condition',weekly_pti_rows.data->'eligibility',weekly_pti_rows.data->'eligibilityReason')
- IS DISTINCT FROM (EXCLUDED.data->'truckUnit',EXCLUDED.data->'crew',EXCLUDED.data->'condition',EXCLUDED.data->'eligibility',EXCLUDED.data->'eligibilityReason')`, week, row.TruckID, raw); err != nil {
-			return err
-		}
+ IS DISTINCT FROM (EXCLUDED.data->'truckUnit',EXCLUDED.data->'crew',EXCLUDED.data->'condition',EXCLUDED.data->'eligibility',EXCLUDED.data->'eligibilityReason')`, week, raw)
+	if err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }

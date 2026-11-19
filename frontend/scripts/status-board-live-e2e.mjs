@@ -6,6 +6,11 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await viewer.getByRole('button', { name: 'Close loads', exact: true }).click();
   await expect(page.getByText('Live', { exact: true })).toBeVisible();
   await expect(viewer.getByText('Live', { exact: true })).toBeVisible();
+  const presenceReads = [];
+  const trackPresence = request => {
+    if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/driver-board/presence') presenceReads.push(request.url());
+  };
+  page.on('request', trackPresence);
   const notes = p => p.getByLabel('Board Cpm · Notes', { exact: true });
   const read = async driver => (await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).entries.find(e => e.driverId === driver);
   const cursor = page.locator('[data-board-presence="Board Viewer"]');
@@ -16,6 +21,8 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await page.locator('[data-scroll-key="driver-board"]').evaluate(element => { element.scrollLeft = 0; });
   await expect(cursor).toHaveAttribute('aria-label', /Board Cpm.*Trailer/, { timeout: 2500 });
   await page.screenshot({ path: join(temp, 'status-board-live-presence.png'), fullPage: true, animations: 'disabled' });
+  page.off('request', trackPresence);
+  expect(presenceReads).toEqual([]);
   const extraReads = [];
   const track = request => { if (request.method()==='GET' && new URL(request.url()).pathname==='/api/driver-board') extraReads.push(request.url()); };
   viewer.on('request',track);

@@ -7,6 +7,8 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
   sql(`SET search_path TO ${schema},public;
     INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES
     ('${id}','Progress Browser','progress browser','cpm',0.6),('${other}','Progress Other','progress other','cpm',0.6);
+    INSERT INTO trucks(id,unit_number,vin,status) VALUES ('e4500000-0000-0000-0000-000000000093','PROGRESS-93','1M8GDM9AXKP042793','assigned');
+    INSERT INTO truck_driver_assignments(truck_id,driver_id) VALUES ('e4500000-0000-0000-0000-000000000093','${id}');
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
     (88131,'BROWSER-A','Dispatched',100,100,100,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Dallas","state":"TX"}}]}'),
     (88132,'BROWSER-B','Dispatched',200,200,200,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Boston","state":"MA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Miami","state":"FL"}}]}');
@@ -61,7 +63,11 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
   await expect(location).toHaveValue('Dallas, TX');
   await field('Notes').fill('Unsaved draft');
   await undo(); await expect(field('Notes')).toHaveValue('');
-  await field('Status').selectOption('SHOP'); await saved();
+  await field('Status').selectOption('SHOP');
+  await page.getByLabel('Truck status reason').fill('Scheduled maintenance');
+  await page.getByRole('button', { name: 'Apply status', exact: true }).click();
+  await saved();
+  await expect(field('Status')).toHaveValue('SHOP');
   await expect(advance).toBeDisabled();
   expect(await field('Status').locator('option').evaluateAll(options => new Set(options.map(o => o.className)).size)).toBe(1);
   await undo(); await expect(field('Status')).toHaveValue('RESERVED');

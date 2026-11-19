@@ -145,7 +145,7 @@ func (c *Client) pages(ctx context.Context, path string, query url.Values, out f
 	return fmt.Errorf("Samsara pagination limit exceeded")
 }
 
-func (c *Client) Snapshot(ctx context.Context, now time.Time) (Snapshot, error) {
+func (c *Client) Snapshot(ctx context.Context, now time.Time, mileage bool) (Snapshot, error) {
 	started := time.Now()
 	result := Snapshot{Vehicles: []Vehicle{}, Ambiguous: []string{}}
 	roster := []rosterVehicle{}
@@ -160,7 +160,11 @@ func (c *Client) Snapshot(ctx context.Context, now time.Time) (Snapshot, error) 
 	}); err != nil {
 		return result, err
 	}
-	if err := c.pages(ctx, "/fleet/vehicles/stats", url.Values{"types": {"gps,obdOdometerMeters,gpsOdometerMeters"}}, func(raw json.RawMessage) error {
+	types := "gps"
+	if mileage {
+		types += ",obdOdometerMeters,gpsOdometerMeters"
+	}
+	if err := c.pages(ctx, "/fleet/vehicles/stats", url.Values{"types": {types}}, func(raw json.RawMessage) error {
 		var page []rawStats
 		if e := json.Unmarshal(raw, &page); e != nil {
 			return e
@@ -232,7 +236,7 @@ func (c *Client) Snapshot(ctx context.Context, now time.Time) (Snapshot, error) 
 				}
 			}
 			for _, o := range []*rawOdometer{s.OBD, s.Estimated} {
-				if o == nil || o.Value == nil || !finite(*o.Value) || *o.Value < 0 {
+				if !mileage || o == nil || o.Value == nil || !finite(*o.Value) || *o.Value < 0 {
 					continue
 				}
 				at, e := time.Parse(time.RFC3339Nano, o.Time)

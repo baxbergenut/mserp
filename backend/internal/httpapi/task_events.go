@@ -316,7 +316,7 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 		defer lifetime.Stop()
 		var nextBoardFrame time.Time
 		for {
-			changed, presenceChanged := false, false
+			changed := false
 			select {
 			case <-r.Context().Done():
 				return
@@ -328,7 +328,6 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			case <-changes:
 				changed = true
 			case <-presenceChanges:
-				presenceChanged = true
 			}
 			if changed {
 				// Send an isolated board commit immediately. Under sustained writes
@@ -381,7 +380,9 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 					}
 					lastFrame = frame
 				}
-			} else if presenceChanged {
+			} else if presenceChanges != nil {
+				// The heartbeat also confirms lease renewals and silent expirations
+				// through one shared snapshot for subscribers to this board/week.
 				if !send(presence[0].frame(r.Context(), "presence")) {
 					return
 				}
