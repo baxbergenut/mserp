@@ -312,6 +312,14 @@ func readBoardPendingDrivers(ctx context.Context, tx pgx.Tx) ([]BoardPendingDriv
 }
 
 func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {
+	saved, err := r.saveWithConflict(ctx, entries, actor...)
+	if errors.Is(err, ErrDriverBoardConflict) {
+		return nil, ErrDriverBoardConflict
+	}
+	return saved, err
+}
+
+func (r *DriverBoardRepository) saveWithConflict(ctx context.Context, entries []DriverBoardEntry, actor ...string) ([]DriverBoardEntry, error) {
 	// An explicit equipment restriction updates the assigned truck. Start with
 	// the source lock to avoid replaying the command after its guarded rollback.
 	for _, e := range entries {
@@ -377,7 +385,7 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if err != nil {
 			return nil, err
 		}
-		if active && len(entries) == 1 && old.Version != e.Version {
+		if matchCurrentLoad && active && len(entries) == 1 && old.Version != e.Version {
 			return nil, &DriverBoardRowConflict{Entries: []DriverBoardEntry{old}}
 		}
 		if !active || old.Version != e.Version {

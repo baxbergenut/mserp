@@ -63,18 +63,18 @@ func (r *DriverBoardRepository) SaveWithTextBase(ctx context.Context, entries []
 		bases = map[string]DriverBoardEntry{edit.DriverID: base}
 	}
 	if len(bases) != len(entries) || len(entries) == 0 {
-		return r.Save(ctx, entries, actor)
+		return r.saveWithConflict(ctx, entries, actor)
 	}
 	for _, e := range entries {
 		if !boardTextOnly(bases[e.DriverID], e) {
-			return r.Save(ctx, entries, actor)
+			return r.saveWithConflict(ctx, entries, actor)
 		}
 	}
 	saved, err := r.saveText(ctx, entries, bases, actor)
 	var pgErr *pgconn.PgError
 	if errors.Is(err, errBoardFullSave) || (errors.As(err, &pgErr) && pgErr.Code == "55P03") {
 		// The first transaction has rolled back, including any earlier batch rows.
-		return r.Save(ctx, entries, actor)
+		return r.saveWithConflict(ctx, entries, actor)
 	}
 	return saved, err
 }
