@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, Check, Copy, History, RefreshCw, X } from "lucide-react";
 import { compactLoadLocation } from "@/app/lib/usStates";
-import { fetchBoardLoads } from "@/app/lib/api";
+import { APIError, fetchBoardLoads } from "@/app/lib/api";
 import type { BoardLoad, BoardLoads as Loads, BoardLoadAction } from "@/app/lib/types";
 import { controlClass } from "@/app/components/management/ManagementUI";
 import { useLoadQueueDrag } from "./useLoadQueueDrag";
@@ -34,6 +34,8 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   onClose: () => void; onHistory: () => void;
 }) {
   const sourceKey = `${initial.fromDate}:${initial.revision}`;
+  const latestSource = useRef(sourceKey);
+  useLayoutEffect(() => { latestSource.current = sourceKey; }, [sourceKey]);
   const overview = !!initial.detailsOmitted;
   const [details, setDetails] = useState({ sourceKey, view: initial });
   const { view } = details;
@@ -49,7 +51,7 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
   const [expandedCurrent, setExpandedCurrent] = useState(initial.current?.planId ?? null);
   const panel = useRef<HTMLElement>(null);
   const detailsPending = !!view.detailsOmitted || sourceKey !== details.sourceKey;
-  const locked = busy || waiting || detailsPending || !canEdit;
+  const locked = busy || waiting || detailsPending || !!detailsError || !canEdit;
   const past = view.unavailable.filter(load => load.completed || load.cancelled);
   const unavailable = view.unavailable.filter(load => !load.completed && !load.cancelled);
   const drag = useLoadQueueDrag(view.next, `${view.fromDate}:${view.revision}`, locked, order => act({ action: "order", order }));
@@ -97,6 +99,19 @@ export function BoardLoads({ driverId, name, initial, canEdit, waiting, onChange
       return true;
     }
     catch (err) {
+      if (err instanceof APIError && (err.code === "board_load_row_changed" || err.code === "board_load_plans_changed")) {
+        setSelect(null); setClear(false);
+        try {
+          const current = await fetchBoardLoads(driverId, view.fromDate);
+          if (latestSource.current !== sourceKey) return false;
+          setDetails({ sourceKey, view: current });
+          setDetailsError("");
+          setError("The driver's loads changed. Review the updated list and choose your action again.");
+        } catch {
+          if (latestSource.current === sourceKey) setDetailsError("The driver's loads changed. Refresh the list to try again.");
+        }
+        return false;
+      }
       setError(err instanceof Error ? err.message : "Could not save. Reload the board and review its current values.");
       return false;
     }

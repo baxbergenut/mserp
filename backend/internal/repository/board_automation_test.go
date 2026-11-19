@@ -153,7 +153,7 @@ func testNextPickupTimesDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 	if result.Loads.Current != nil || result.Entry.CurrentLoad != "" || result.Entry.ETA != "" || result.Loads.Next[0].Stops[0].Schedule.Label != "PU 03:00 FRI" {
 		t.Fatal("queue edit changed current load or lost time", result)
 	}
-	if _, err = repo.ChangeLoads(ctx, edit, ""); err != ErrDriverBoardConflict {
+	if _, err = repo.ChangeLoads(ctx, edit, ""); !errors.Is(err, ErrBoardLoadRowChanged) {
 		t.Fatal("stale edit accepted", err)
 	}
 	if result.Entry.UndoID == 0 {
@@ -194,7 +194,7 @@ func testNextPickupTimesDatabase(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	edit.Version, edit.Revision = result.Entry.Version, result.Loads.Revision
-	if _, err = repo.ChangeLoads(ctx, edit, ""); err != ErrBoardLoadSelection {
+	if _, err = repo.ChangeLoads(ctx, edit, ""); !errors.Is(err, ErrBoardLoadPlansChanged) {
 		t.Fatal("source change did not fence queued time edit", err)
 	}
 	view, err = repo.Loads(ctx, d.ID, "")

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"mserp/internal/db"
 	"mserp/internal/repository"
 )
 
@@ -159,6 +160,26 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		session, _ := authSessionFromContext(r.Context())
 		result, err := repo.ChangeLoads(r.Context(), a, session.User.ID)
 		if err != nil {
+			code := ""
+			switch {
+			case errors.Is(err, repository.ErrBoardLoadRowChanged):
+				code = "board_load_row_changed"
+			case errors.Is(err, repository.ErrBoardLoadPlansChanged):
+				code = "board_load_plans_changed"
+			case errors.Is(err, repository.ErrTruckUnavailable):
+				code = "board_load_truck_unavailable"
+			case errors.Is(err, repository.ErrBoardLoadCompleted):
+				code = "board_load_completed"
+			case errors.Is(err, repository.ErrBoardGrossPlanRemoval):
+				code = "board_load_gross_plan"
+			case errors.Is(err, repository.ErrBoardLoadSelection):
+				code = "board_load_selection_unavailable"
+			}
+			if code != "" {
+				db.Event(r.Context(), code)
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error(), "code": code})
+				return
+			}
 			fail(w, err)
 			return
 		}

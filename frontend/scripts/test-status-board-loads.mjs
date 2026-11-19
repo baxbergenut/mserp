@@ -35,6 +35,7 @@ let editorRole = "Updater";
 let editable = true;
 let detailReads = 0, boardReads = 0, mutations = 0, holdDetails = false, failDetails = false;
 const pending = [], errors = [];
+let loadError = "", rejectedAdds = 0;
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', error => errors.push(error.message));
@@ -51,7 +52,14 @@ try {
       if (req.method() === 'POST') {
         const input = req.postDataJSON();
         expect(input.revision).toBe(full.revision);
-        expect(input.version).toBe(entry.version);
+        expect(input.version).toBe(full.entryVersion ?? entry.version);
+        if (loadError && input.action === "add") {
+          rejectedAdds++;
+          if (loadError === "board_load_plans_changed") {
+            full = { ...full, revision: "newly-reviewed", entryVersion: entry.version, earlier: [...full.earlier, load("NEW-HISTORY")] };
+          }
+          return route.fulfill({status:409,json:{code:loadError,error:"Load action rejected"}});
+        }
         if (input.action === 'order') {
           expect(input.order).toEqual(full.next.map(load => load.planId).reverse());
           full = { ...full, next: [...full.next].reverse(), revision: `order-${entry.version}`, customOrder: true };
@@ -267,6 +275,9 @@ try {
   await sequence.getByRole('button', { name: 'CURRENT · Current load', exact: true }).click();
   await expect(destination).toBeEnabled();
 
+  // The preceding drags and explicit edits can scroll the panel and clear its alert.
+  // Compare the position immediately before and during the delayed refresh.
+  const beforeSourceRefreshY = (await sequence.boundingBox()).y;
   // Source changes rehydrate the whole panel, retaining old details during the read.
   holdDetails = true;
   full = { ...full, current: next, next: [], earlier: [earlier, current], revision: 'second' };
@@ -276,7 +287,7 @@ try {
   await expect.poll(() => detailReads).toBeGreaterThan(before);
   await expect(history).toBeVisible();
   await expect(destination).toBeDisabled();
-  expect((await sequence.boundingBox()).y).toBe(originalY);
+  expect((await sequence.boundingBox()).y).toBe(beforeSourceRefreshY);
   await expect(panel.getByText('Loading load history…', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => window.loadHistoryFlashes)).toBe(0);
   release();
@@ -421,6 +432,23 @@ try {
   await panel.getByRole('button', { name: 'Mark completed', exact: true }).click();
   await expect(panel.locator('[data-queued-load="84V7859"]')).toHaveCount(0);
   await expect(markedComplete).toBeVisible();
+  const addDraft = panel.getByLabel("Add next load", {exact:true});
+  const submitAdd = panel.getByRole("button", {name:"Add next load", exact:true});
+  const openingReads = detailReads, openingBoards = boardReads;
+  loadError = "board_load_plans_changed";
+  await addDraft.fill("KEEP-MY-DRAFT");
+  await submitAdd.click();
+  await expect(panel.getByRole("alert")).toContainText("Review the updated list");
+  await expect(panel.getByRole("button",{name:"NEW-HISTORY",exact:true})).toBeVisible();
+  await expect(addDraft).toHaveValue("KEEP-MY-DRAFT");
+  expect([detailReads,boardReads,rejectedAdds]).toEqual([openingReads+1,openingBoards,1]);
+  loadError = "board_load_truck_unavailable";
+  await submitAdd.click();
+  await expect(panel.getByRole("alert")).toHaveText("Load action rejected");
+  expect([detailReads,rejectedAdds]).toEqual([openingReads+1,2]);
+  loadError = "";
+  await addDraft.fill("");
+
   expect(errors).toEqual([]);
   console.log('Status Board loads passed: queue ordering, completion and cancellation with actor attribution, read-only permissions, history restoration, live refresh, and multi-pickup progression.');
 } finally {
