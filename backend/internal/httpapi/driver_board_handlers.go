@@ -309,7 +309,12 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		session, _ := authSessionFromContext(r.Context())
 		entries, err := repo.SaveWithTextBase(r.Context(), request.Entries, request.TextBase, session.User.ID)
 		if errors.Is(err, repository.ErrDriverBoardConflict) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error(), "code": "board_row_changed"})
+			body := map[string]any{"error": err.Error(), "code": "board_row_changed"}
+			var conflict *repository.DriverBoardRowConflict
+			if errors.As(err, &conflict) {
+				body["currentEntries"] = conflict.Entries
+			}
+			writeJSON(w, http.StatusConflict, body)
 			return
 		}
 		if err != nil {

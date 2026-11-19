@@ -114,6 +114,11 @@ weekly gross, ELD summary and pending-driver reads. The ETA sweep checks READY
 location freshness before taking a driver lock, then rechecks due work under
 that lock. It writes arrival evidence and ETA context only when needed.
 
+Single-row version conflicts and overlapping text edits return the board values
+already read under the driver lock. The browser uses them to rebase independent
+edits or show the saved value next to the local draft. A version check still
+applies to the next submission. Older responses use the board refresh fallback.
+
 ## References
 
 - [PostgreSQL 16: EXPLAIN](https://www.postgresql.org/docs/16/using-explain.html)

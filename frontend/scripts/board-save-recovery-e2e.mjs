@@ -32,9 +32,20 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await expect(input('Current load')).toHaveValue('SAVE-52');
     await input('Notes').focus();
     await write({notes:'latest on server'});
+    let boardReads = 0;
+    const countReads = request => {
+      if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/driver-board') boardReads++;
+    };
+    page.on('request', countReads);
+    const rejection = page.waitForResponse(response => response.status() === 409 && new URL(response.url()).pathname === '/api/driver-board');
     await input('Notes').fill('my overlapping change');
     const alert=page.getByRole('main').getByRole('alert');
     await expect(alert).toContainText('latest on server');
+    const rejected = await (await rejection).json();
+    expect(rejected.currentEntries).toHaveLength(1);
+    expect(rejected.currentEntries[0]).toMatchObject({driverId:id, notes:'latest on server'});
+    page.off('request', countReads);
+    expect(boardReads).toBe(0);
     await expect(input('Notes')).toHaveValue('my overlapping change');
     await alert.getByRole('button',{name:'Apply my edits'}).click();
     await expect.poll(async()=>(await read()).notes).toBe('my overlapping change');

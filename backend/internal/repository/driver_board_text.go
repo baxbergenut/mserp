@@ -33,6 +33,15 @@ func leaveValues(plan *DriverLeavePlan) DriverLeavePlan {
 	return *plan
 }
 
+// A rejected save can return the row read under the driver lock. These values
+// predate every write in the rejected transaction.
+type DriverBoardRowConflict struct {
+	Entries []DriverBoardEntry
+}
+
+func (*DriverBoardRowConflict) Error() string { return ErrDriverBoardConflict.Error() }
+func (*DriverBoardRowConflict) Unwrap() error { return ErrDriverBoardConflict }
+
 var errBoardFullSave = errors.New("board edit requires the full save path")
 
 func (r *DriverBoardRepository) SaveWithTextBase(ctx context.Context, entries []DriverBoardEntry, bases map[string]DriverBoardEntry, actor string) ([]DriverBoardEntry, error) {
@@ -122,7 +131,7 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 		notes, number, note := current.Notes, current.TrailerNumber, current.TrailerNote
 		if base.Notes != edit.Notes {
 			if notes != base.Notes && notes != edit.Notes {
-				return nil, ErrDriverBoardConflict
+				return nil, &DriverBoardRowConflict{Entries: currentRows}
 			}
 			notes = edit.Notes
 		}
@@ -130,7 +139,7 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 			matchesBase := number == base.TrailerNumber && note == base.TrailerNote
 			matchesEdit := number == edit.TrailerNumber && note == edit.TrailerNote
 			if !matchesBase && !matchesEdit {
-				return nil, ErrDriverBoardConflict
+				return nil, &DriverBoardRowConflict{Entries: currentRows}
 			}
 			number, note = edit.TrailerNumber, edit.TrailerNote
 		}

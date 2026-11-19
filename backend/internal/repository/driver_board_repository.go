@@ -377,6 +377,9 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		if err != nil {
 			return nil, err
 		}
+		if active && len(entries) == 1 && old.Version != e.Version {
+			return nil, &DriverBoardRowConflict{Entries: []DriverBoardEntry{old}}
+		}
 		if !active || old.Version != e.Version {
 			return nil, ErrDriverBoardConflict
 		}
