@@ -65,7 +65,7 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 					scenario += "_primary"
 				}
 			}
-			logger.Info("http performance", "scenario", scenario, "phases_ms", phases, "events", m.Events(), "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
+			logger.Info("http performance", "scenario", scenario, "phases_ms", phases, "events", m.Events(), "method", r.Method, "route", route, "status", counted.Status(), "duration_ms", time.Since(start).Milliseconds(), "db_calls", m.Queries.Load(), "pool_acquires", m.Acquires.Load(), "pool_hold_ms", float64(m.HoldNanos.Load())/1e6, "batch_sends", m.Batches.Load(), "db_ms", float64(m.QueryNanos.Load())/1e6, "pool_ms", float64(m.AcquireNanos.Load())/1e6, "response_bytes", counted.BytesWritten())
 		})
 	}
 }

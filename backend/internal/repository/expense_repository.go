@@ -304,10 +304,11 @@ WHERE ` + search + `
  COALESCE(array_agg(DISTINCT COALESCE(t.unit_number,e.unit_number) ORDER BY COALESCE(t.unit_number,e.unit_number)) FILTER(WHERE COALESCE(t.unit_number,e.unit_number,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.payment_type ORDER BY e.payment_type) FILTER(WHERE coalesce(e.payment_type,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.paid_by ORDER BY e.paid_by) FILTER(WHERE coalesce(e.paid_by,'')<>''),'{}'),
- COALESCE(array_agg(DISTINCT e.covered_by ORDER BY e.covered_by) FILTER(WHERE coalesce(e.covered_by,'')<>''),'{}')
+ COALESCE(array_agg(DISTINCT e.covered_by ORDER BY e.covered_by) FILTER(WHERE coalesce(e.covered_by,'')<>''),'{}'),
+ (SELECT COALESCE(array_agg(username ORDER BY lower(username)), '{}') FROM app_users WHERE active)
  FROM expenses e LEFT JOIN trucks t ON t.id=e.truck_id LEFT JOIN drivers d ON d.id=COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))
  WHERE e.category_id=ANY($1::uuid[])`, query.VisibleCategoryIDs).Scan(
-		&options.Filters.Drivers, &options.Filters.Trucks, &options.Filters.PaymentTypes, &options.Filters.PaidBy, &options.Filters.CoveredBy,
+		&options.Filters.Drivers, &options.Filters.Trucks, &options.Filters.PaymentTypes, &options.Filters.PaidBy, &options.Filters.CoveredBy, &options.PaidBy,
 	); err != nil {
 		return ExpensePage{}, err
 	}
@@ -340,9 +341,6 @@ WHERE ` + search + `
 		}
 	}
 	options.PaymentTypes = []string{}
-	if err := r.pool.QueryRow(ctx, `SELECT COALESCE(array_agg(username ORDER BY lower(username)), '{}') FROM app_users WHERE active`).Scan(&options.PaidBy); err != nil {
-		return ExpensePage{}, err
-	}
 	// Keep the legacy field; defaults now come from category-linked settings.
 	options.ExpenseTypes = []string{}
 	for _, item := range options.Settings {

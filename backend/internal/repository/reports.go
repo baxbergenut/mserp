@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -135,7 +136,29 @@ var reportsUnrelatedTables = func() []string {
 	return result
 }()
 
+// Other callers can be calculating the same committed period. Return their
+// completion signal through the snapshot reader so its connection is released
+// before waiting. A retry checks the source revision in a new snapshot.
+type reportInProgress struct{ done <-chan struct{} }
+
+func (*reportInProgress) Error() string { return "report period calculation in progress" }
+
 func (r *ReportsRepository) Read(ctx context.Context, q ReportsQuery) (ReportsResult, error) {
+	for {
+		result, err := r.readSnapshot(ctx, q)
+		var pending *reportInProgress
+		if !errors.As(err, &pending) {
+			return result, err
+		}
+		select {
+		case <-ctx.Done():
+			return ReportsResult{}, ctx.Err()
+		case <-pending.done:
+		}
+	}
+}
+
+func (r *ReportsRepository) readSnapshot(ctx context.Context, q ReportsQuery) (ReportsResult, error) {
 	result := ReportsResult{Period: q.Period}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -161,30 +184,19 @@ func (r *ReportsRepository) Read(ctx context.Context, q ReportsQuery) (ReportsRe
 	result.Revision = revision
 	readPeriod := func(from, to string) ([]ReportRow, error) {
 		key := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join([]string{revision, q.View, q.Truck, q.Driver, q.Dispatcher, from, to}, "/"))))
-		var cached reportsCacheEntry
-		var hit bool
-		for {
-			r.mu.Lock()
-			cached, hit = r.cache[key]
-			if hit && time.Since(cached.used) < 5*time.Minute {
-				r.mu.Unlock()
-				break
-			}
+		r.mu.Lock()
+		cached, hit := r.cache[key]
+		hit = hit && time.Since(cached.used) < 5*time.Minute
+		if !hit {
 			if flight := r.inFlight[key]; flight != nil {
 				r.mu.Unlock()
-				select {
-				case <-flight:
-					continue
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				}
+				return nil, &reportInProgress{flight}
 			}
 			r.inFlight[key] = make(chan struct{})
-			r.mu.Unlock()
 			defer func() { r.mu.Lock(); close(r.inFlight[key]); delete(r.inFlight, key); r.mu.Unlock() }()
-			break
 		}
-		if hit && time.Since(cached.used) < 5*time.Minute {
+		r.mu.Unlock()
+		if hit {
 			var saved struct {
 				Rows    []ReportRow
 				Options ReportOptions

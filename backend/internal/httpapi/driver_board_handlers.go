@@ -267,13 +267,14 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 	r.Post("/driver-board/dispatcher-order", func(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusGone, "Dispatcher ordering is now personal to this browser. Reload the page to reorder.")
 	})
+	var snapshots boardSnapshotReads[repository.DriverBoard]
 	r.Get("/driver-board", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		board, err := repo.Get(r.Context(), week)
+		board, err := snapshots.get(r.Context(), week, repo.Get)
 		if err != nil {
 			fail(w, err)
 			return

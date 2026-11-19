@@ -40,6 +40,19 @@ func (r *GrossBoardRepository) Presence(ctx context.Context, week time.Time) ([]
 	return result, rows.Err()
 }
 func (r *GrossBoardRepository) SetPresence(ctx context.Context, client, user, session string, cell GrossBoardCell) error {
+	// Expired rows need the original cleanup transaction so their removal publishes
+	// the correct notifications and releases client IDs for a different session.
+	const insert = `INSERT INTO gross_board_presence(client_id,user_id,session_hash,driver_id,week_start,cell_date,slot,column_key,expires_at)
+ SELECT $1,$2,$3,$4,$5::date,NULLIF($6,'')::date,$7,$8,now()+interval '30 seconds'
+ WHERE EXISTS(SELECT 1 FROM drivers WHERE id=$4) AND EXISTS(SELECT 1 FROM auth_sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now())`
+	const onConflict = ` ON CONFLICT(client_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,week_start=EXCLUDED.week_start,cell_date=EXCLUDED.cell_date,slot=EXCLUDED.slot,column_key=EXCLUDED.column_key,expires_at=EXCLUDED.expires_at
+ WHERE gross_board_presence.user_id=EXCLUDED.user_id AND gross_board_presence.session_hash=EXCLUDED.session_hash`
+	result, err := r.pool.Exec(ctx, insert+` AND NOT EXISTS (
+		SELECT 1 FROM gross_board_presence WHERE expires_at <= now()
+	)`+onConflict, client, user, session, cell.DriverID, cell.WeekStart, cell.Date, cell.Slot, cell.Column)
+	if err != nil || result.RowsAffected() == 1 {
+		return err
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -48,11 +61,7 @@ func (r *GrossBoardRepository) SetPresence(ctx context.Context, client, user, se
 	if _, err = tx.Exec(ctx, `DELETE FROM gross_board_presence WHERE expires_at<=now()`); err != nil {
 		return err
 	}
-	result, err := tx.Exec(ctx, `INSERT INTO gross_board_presence(client_id,user_id,session_hash,driver_id,week_start,cell_date,slot,column_key,expires_at)
- SELECT $1,$2,$3,$4,$5::date,NULLIF($6,'')::date,$7,$8,now()+interval '30 seconds'
- WHERE EXISTS(SELECT 1 FROM drivers WHERE id=$4) AND EXISTS(SELECT 1 FROM auth_sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now())
- ON CONFLICT(client_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,week_start=EXCLUDED.week_start,cell_date=EXCLUDED.cell_date,slot=EXCLUDED.slot,column_key=EXCLUDED.column_key,expires_at=EXCLUDED.expires_at
- WHERE gross_board_presence.user_id=EXCLUDED.user_id AND gross_board_presence.session_hash=EXCLUDED.session_hash`, client, user, session, cell.DriverID, cell.WeekStart, cell.Date, cell.Slot, cell.Column)
+	result, err = tx.Exec(ctx, insert+onConflict, client, user, session, cell.DriverID, cell.WeekStart, cell.Date, cell.Slot, cell.Column)
 	if err != nil {
 		return err
 	}

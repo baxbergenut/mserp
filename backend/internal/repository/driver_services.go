@@ -276,6 +276,11 @@ func (r *DriverServiceRepository) Request(ctx context.Context, driver, actor str
 // Only queued requests cause external writes. Review/deferred requests are checked
 // against confirmed local membership evidence so manual fixes close the same task.
 func (r *DriverServiceRepository) Process(ctx context.Context) error {
+	// Completed or canceled requests have no reconciliation, reminder or delivery work.
+	var pending bool
+	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM driver_service_requests WHERE state NOT IN ('done','canceled'))`).Scan(&pending); err != nil || !pending {
+		return err
+	}
 	if _, err := r.pool.Exec(ctx, `UPDATE driver_service_requests q SET state='canceled',version=version+1,updated_at=now(),last_error='Driver terminated; setup canceled.' FROM drivers d WHERE d.id=q.driver_id AND d.status='terminated' AND q.state NOT IN ('done','canceled');
  UPDATE driver_service_requests SET state='review',version=version+1,updated_at=now(),last_error='Setup was interrupted. Check the service result before retrying.' WHERE state='running' AND updated_at<now()-interval '10 minutes'`); err != nil {
 		return err

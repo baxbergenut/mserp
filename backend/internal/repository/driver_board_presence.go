@@ -36,6 +36,19 @@ func (r *DriverBoardRepository) Presence(ctx context.Context) ([]BoardPresence, 
 }
 
 func (r *DriverBoardRepository) SetPresence(ctx context.Context, client, user, session, driver, column string) error {
+	// Expired rows need the original cleanup transaction so their removal publishes
+	// the correct notifications and releases client IDs for a different session.
+	const insert = `INSERT INTO driver_board_presence(client_id,user_id,session_hash,driver_id,column_key,expires_at)
+ SELECT $1,$2,$3,$4,$5,now()+interval '30 seconds' WHERE EXISTS(SELECT 1 FROM drivers WHERE id=$4 AND active)
+ AND EXISTS(SELECT 1 FROM auth_sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now())`
+	const onConflict = ` ON CONFLICT(client_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,column_key=EXCLUDED.column_key,expires_at=EXCLUDED.expires_at
+ WHERE driver_board_presence.user_id=EXCLUDED.user_id AND driver_board_presence.session_hash=EXCLUDED.session_hash`
+	result, err := r.pool.Exec(ctx, insert+` AND NOT EXISTS (
+		SELECT 1 FROM driver_board_presence WHERE expires_at <= now()
+	)`+onConflict, client, user, session, driver, column)
+	if err != nil || result.RowsAffected() == 1 {
+		return err
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -44,11 +57,7 @@ func (r *DriverBoardRepository) SetPresence(ctx context.Context, client, user, s
 	if _, err = tx.Exec(ctx, `DELETE FROM driver_board_presence WHERE expires_at<=now()`); err != nil {
 		return err
 	}
-	result, err := tx.Exec(ctx, `INSERT INTO driver_board_presence(client_id,user_id,session_hash,driver_id,column_key,expires_at)
- SELECT $1,$2,$3,$4,$5,now()+interval '30 seconds' WHERE EXISTS(SELECT 1 FROM drivers WHERE id=$4 AND active)
- AND EXISTS(SELECT 1 FROM auth_sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now())
- ON CONFLICT(client_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,column_key=EXCLUDED.column_key,expires_at=EXCLUDED.expires_at
- WHERE driver_board_presence.user_id=EXCLUDED.user_id AND driver_board_presence.session_hash=EXCLUDED.session_hash`, client, user, session, driver, column)
+	result, err = tx.Exec(ctx, insert+onConflict, client, user, session, driver, column)
 	if err != nil {
 		return err
 	}
