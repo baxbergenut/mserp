@@ -31,7 +31,7 @@ WITH aliases AS (
  FROM tolls t WHERE t.posting_date BETWEEN $1::date AND $2::date AND (t.prepass_environment IS NULL OR t.prepass_environment='production')
  UNION ALL
  SELECT 'Scales',t.id::text,t.ticket_number,t.transaction_date,t.transaction_date,t.truck_id,t.driver_id,t.amount,
- CASE WHEN t.source_conflict OR b.payer='review' THEN 'review' WHEN b.payer='company' THEN 'company' ELSE 'operator' END
+ CASE WHEN b.payer='review' THEN 'review' WHEN b.payer='company' THEN 'company' ELSE 'operator' END
  FROM weighmytruck_transactions t` + wmtPayerJoins + ` WHERE t.transaction_date BETWEEN $1::date AND $2::date
  UNION ALL
  SELECT CASE WHEN EXISTS(SELECT 1 FROM maintenance_configuration m WHERE m.category_id=e.category_id) THEN 'Maintenance' ELSE 'Equipment' END,

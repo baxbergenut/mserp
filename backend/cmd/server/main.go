@@ -54,6 +54,7 @@ func main() {
 	expenseDraftCapability := flag.Bool("payroll-expense-drafts-capability", false, "print finalization-only expense collection support and exit without opening a database")
 	scaleCarryCapability := flag.Bool("payroll-scale-carry-capability", false, "print cross-week CAT Scale collection support and exit without opening a database")
 	scalePartialCapability := flag.Bool("payroll-scale-partial-capability", false, "print partial CAT Scale collection support and exit without opening a database")
+	scaleManualCapability := flag.Bool("payroll-scale-manual-link-capability", false, "print manual CAT Scale payment link support and exit")
 	escrowSettlementCapability := flag.Bool("driver-pay-escrow-capability", false, "print statement escrow schema support and exit")
 	escrowBalanceCapability := flag.Bool("escrow-balance-reductions-capability", false, "print escrow balance reduction support and exit")
 	escrowAdjustmentCapability := flag.Bool("escrow-balance-adjustments-capability", false, "print bidirectional escrow balance support and exit")
@@ -73,6 +74,10 @@ func main() {
 	}
 	if *retiredTablesCapability {
 		fmt.Println("retired-tables-v1")
+		return
+	}
+	if *scaleManualCapability {
+		fmt.Println("payroll-scale-manual-link-v1")
 		return
 	}
 	if *investorAccountsCapability {

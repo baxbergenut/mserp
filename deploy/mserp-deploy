@@ -176,6 +176,11 @@ compatible_release() {
         if [[ $investor_retained == t ]]; then
             [[ $("$1/backend/mserp-api" -investor-retained-pay-capability 2>/dev/null) == investor-retained-pay-v1 ]] || return 1
         elif [[ $investor_retained != f ]]; then return 1; fi
+        local scale_manual
+        scale_manual=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "SELECT EXISTS(SELECT 1 FROM public.investor_pay_weeks WHERE edits ? 'manualScalePayment')") || return 1
+        if [[ $scale_manual == t ]]; then
+            [[ $("$1/backend/mserp-api" -payroll-scale-manual-link-capability 2>/dev/null) == payroll-scale-manual-link-v1 ]] || return 1
+        elif [[ $scale_manual != f ]]; then return 1; fi
         local scale_carry
         scale_carry=$(mserp_db psql -X -At -v ON_ERROR_STOP=1 --dbname=mserp -c "
             SELECT EXISTS(
