@@ -302,6 +302,7 @@ func TestDriverBoardDatabase(t *testing.T) {
 			testReadyLocationDatabase(t, ctx, pool, repo, fleet)
 			testBoardStopGeocoding(t, ctx, pool, repo, fleet)
 			testDriverBoardDepartureWeek(t, ctx, pool, fleet)
+			testConcurrentBoardText(t, ctx, pool, repo, fleet)
 		})
 	}
 }

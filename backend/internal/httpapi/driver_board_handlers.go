@@ -16,7 +16,8 @@ import (
 
 type driverBoardRequest struct {
 	// Entries may carry resolveCurrentLoad to explicitly reselect an unchanged number.
-	Entries []repository.DriverBoardEntry `json:"entries"`
+	Entries  []repository.DriverBoardEntry          `json:"entries"`
+	TextBase map[string]repository.DriverBoardEntry `json:"textBase,omitempty"`
 }
 
 func (request *driverBoardRequest) validate() error {
@@ -302,7 +303,7 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			return
 		}
 		session, _ := authSessionFromContext(r.Context())
-		entries, err := repo.Save(r.Context(), request.Entries, session.User.ID)
+		entries, err := repo.SaveWithTextBase(r.Context(), request.Entries, request.TextBase, session.User.ID)
 		if errors.Is(err, repository.ErrDriverBoardConflict) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error(), "code": "board_row_changed"})
 			return

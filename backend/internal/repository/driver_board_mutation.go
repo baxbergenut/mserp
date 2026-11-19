@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"mserp/internal/db"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -116,7 +117,10 @@ func beginBoardMutation(ctx context.Context, pool *pgxpool.Pool, source bool, ac
 	if !source {
 		settings += `,set_config('mserp.payroll.board_operational','on',true)`
 	}
-	if _, err = tx.Exec(ctx, settings+" FROM fleet_status_lock()", actor, action); err != nil {
+	finish := db.Phase(ctx, "board_fleet_lock_wait")
+	_, err = tx.Exec(ctx, settings+" FROM fleet_status_lock()", actor, action)
+	finish()
+	if err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, err
 	}

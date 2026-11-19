@@ -124,6 +124,14 @@ const sameField = (a: DriverBoardEntry, b: DriverBoardEntry, field: BoardField) 
 
 // Reapply only this dispatcher's editable fields to a newer committed row.
 // A load, status, ETA and leave dates may change together in the database.
+export function isBoardTextEdit(base: DriverBoardEntry | undefined, draft: DriverBoardEntry) {
+  return !!base && base.version > 0 && base.version === draft.version &&
+    !draft.statusEdited && !draft.resolveCurrentLoad && !draft.statusReason && !draft.effectiveAt &&
+    !base.homeTime && !base.leavePlan?.homeStart &&
+    boardFieldGroups[2].every(field => sameField(base, draft, field)) &&
+    (base.notes !== draft.notes || base.trailerNumber !== draft.trailerNumber || base.trailerNote !== draft.trailerNote);
+}
+
 export function rebaseBoardDraft(base: DriverBoardEntry, draft: DriverBoardEntry, latest: DriverBoardEntry) {
   const entry = { ...latest };
   if (draft.resolveCurrentLoad && (!base.resolveCurrentLoad || draft.currentLoad !== base.currentLoad)) entry.resolveCurrentLoad = true;
