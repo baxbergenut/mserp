@@ -182,17 +182,19 @@ export default function GrossBoardPage() {
     let inFlight = false;
     let pending = false;
     let latest: GrossBoard | undefined;
+    let applied: { value: GrossBoard; keys: Set<string>; days: Set<string> } | undefined;
+    let blurTimer: ReturnType<typeof setTimeout> | undefined;
     let revision = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const accept = (value: GrossBoard) => {
       if (cancelled || value.weekStart !== week) return;
       latest = value;
       if (!idleRef.current) return;
-      setBoard(current => {
-        const keys = new Set([...Object.keys(changesRef.current), ...busyKeys.current]);
-        const days = new Set(Array.from(document.querySelectorAll<HTMLElement>('[data-gross-editor-day]')).map(e => e.dataset.grossEditorDay!));
-        return mergeGrossLive(current, value, keys, days, canEditLockedWeek);
-      });
+      const keys = new Set([...Object.keys(changesRef.current), ...busyKeys.current]);
+      const days = new Set(Array.from(document.querySelectorAll<HTMLElement>('[data-gross-editor-day]')).map(e => e.dataset.grossEditorDay!));
+      if (applied?.value === value && [...applied.keys].every(key => keys.has(key)) && [...applied.days].every(day => days.has(day))) return;
+      applied = { value, keys, days };
+      setBoard(current => mergeGrossLive(current, value, new Set(keys), days, canEditLockedWeek));
       setRefreshError("");
     };
     const refresh = async () => {
@@ -214,9 +216,9 @@ export default function GrossBoardPage() {
     const focus = schedule;
     window.addEventListener("focus", focus);
     document.addEventListener("visibilitychange", focus);
-    const blur = () => { clearTimeout(timer); timer = setTimeout(() => { if (latest) accept(latest); }, 0); };
+    const blur = () => { clearTimeout(blurTimer); blurTimer = setTimeout(() => { if (latest) accept(latest); }, 0); };
     document.addEventListener("focusout", blur);
-    return () => { cancelled = true; receiveLive.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", blur); };
+    return () => { cancelled = true; receiveLive.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearTimeout(blurTimer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", blur); };
   }, [week, canEditLockedWeek]);
 
   const saved = useMemo(() => Object.fromEntries((board?.entries ?? []).map((entry) => [entryKey(entry.driverId, entry.date, entry.slot), entry])), [board]);

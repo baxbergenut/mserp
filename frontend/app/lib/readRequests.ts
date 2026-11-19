@@ -35,7 +35,12 @@ export class ReadRequests {
       };
       const abort = () => { if (release()) reject(new DOMException("Aborted", "AbortError")); };
       signal?.addEventListener("abort", abort, { once: true });
-      current.promise.then(value => { if (release()) resolve(structuredClone(value) as T); }, error => { if (release()) reject(error); });
+      current.promise.then(value => {
+        if (!release()) return;
+        // Earlier consumers receive independent copies. The last one owns the
+        // original, which is no longer reachable through the pending map.
+        resolve((current.users ? structuredClone(value) : value) as T);
+      }, error => { if (release()) reject(error); });
     });
   }
 }

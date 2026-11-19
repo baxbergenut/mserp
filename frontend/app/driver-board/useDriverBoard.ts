@@ -69,6 +69,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   useEffect(() => {
     let cancelled = false, inFlight = false, pending = false;
     let latest: DriverBoard | undefined;
+    let applied: { value: DriverBoard; held: Set<string> } | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let blurTimer: ReturnType<typeof setTimeout> | undefined;
     let revision = 0;
@@ -76,12 +77,16 @@ export function useDriverBoard(lockedDriverId?: string) {
       if (cancelled) return;
       latest = value;
       if (!idle.current || document.hidden) return;
+      const held = new Set([...Object.keys(changesRef.current), ...busyDrivers.current]);
+      const focused = document.activeElement?.matches('input,textarea,select') ? selectedBoardCell(document.activeElement) : null;
+      if (focused) held.add(focused.driverId);
+      if (lockedDriver.current) held.add(lockedDriver.current);
+      // Only a newly released row can gain anything from the same snapshot.
+      if (applied?.value === value && [...applied.held].every(id => held.has(id))) return;
+      applied = { value, held };
       setBoard(current => {
         if (!current) return value;
-        const retained = new Set([...Object.keys(changesRef.current), ...busyDrivers.current]);
-        const focused = document.activeElement?.matches('input,textarea,select') ? selectedBoardCell(document.activeElement) : null;
-        if (focused) retained.add(focused.driverId);
-        if (lockedDriver.current) retained.add(lockedDriver.current);
+        const retained = new Set(held);
         for (const entry of value.entries) {
           if ((savedRef.current[entry.driverId]?.version ?? 0) > entry.version) retained.add(entry.driverId);
         }

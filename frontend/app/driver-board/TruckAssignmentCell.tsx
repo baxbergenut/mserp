@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { assignDriverTruckToday, fetchDriverTruckAssignment } from "@/app/lib/api";
 import type { DriverTruckAssignment, TruckAssignmentChoice } from "@/app/lib/types";
 
@@ -13,8 +13,8 @@ function canAssignTruck(truck: TruckAssignmentChoice) {
   return truck.active && ["ready", "in_use", "shop"].includes(truck.status);
 }
 
-export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled, onFocus, onSaved, onError }: {
-  id: string; name: string; truckId: string; unit: string; choices: TruckAssignmentChoice[] | null;
+export function TruckAssignmentCell({ id, name, truckId, unit, choices, currentChoice, disabled, onFocus, onSaved, onError }: {
+  id: string; name: string; truckId: string; unit: string; choices: TruckAssignmentChoice[] | null; currentChoice?: TruckAssignmentChoice;
   disabled: boolean; onFocus: () => void; onSaved: (unit: string) => void; onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -60,9 +60,9 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
     } catch (err) { onError(err instanceof Error ? err.message : "Could not assign truck"); }
     finally { submitting.current = false; setBusy(false); }
   }
-  const currentChoice = choices?.find(truck => truck.id === truckId);
+  const [expanded, setExpanded] = useState(false);
   const selectedId = currentChoice?.status === "terminated" ? "" : truckId;
-  const options = (choices ?? [])
+  const options = (expanded ? choices ?? [] : [])
     .filter(truck => truck.status !== "terminated")
     .map(truck => {
       const loadBlocked = truck.id !== truckId && !!truck.driverId && !!truck.activeLoad;
@@ -76,11 +76,12 @@ export function TruckAssignmentCell({ id, name, truckId, unit, choices, disabled
     {truckId ? <Link href={`/trucks/detail?id=${truckId}`} className="block truncate hover:text-blue-300">{unit}</Link> : <span>—</span>}
     <div className="relative">
       <select aria-label={`${name} · Assign truck`} title={busy ? "Saving assignment…" : "Assign truck effective today (New York)"}
-        value={selectedId} disabled={disabled || busy || !!pending || choices === null} onFocus={onFocus}
+        value={selectedId} disabled={disabled || busy || !!pending || choices === null} onPointerDown={() => { if (!expanded) flushSync(() => setExpanded(true)); }}
+        onFocus={() => { setExpanded(true); onFocus(); }} onBlur={() => setExpanded(false)}
         onChange={event => void choose(event.target.value)}
         className="truck-assignment-select peer block h-8 w-full cursor-pointer appearance-none bg-transparent text-transparent disabled:cursor-default">
         <option value="" disabled hidden>—</option>
-        {truckId && !currentChoice && <option value={truckId} hidden>{unit}</option>}
+        {selectedId && (!expanded || !currentChoice) && <option value={truckId} hidden>{unit}</option>}
         {options.map(({ truck, loadBlocked, unavailable }) => {
           const current = truck.id === truckId;
           const detail = loadBlocked ? `${truck.driverName} · Active load ${truck.activeLoad}`

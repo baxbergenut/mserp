@@ -16,7 +16,7 @@ const server = createServer(async (req, res) => {
     const path = new URL(req.url, 'http://localhost').pathname;
     if (path.startsWith('/api/')) {
       if (path === '/api/gross-board' || path === '/api/driver-board') await new Promise(resolve => setTimeout(resolve, delay));
-      const fixtures = { '/api/auth/session': { user: { id: 'benchmark', username: 'Benchmark', permissions: ['driver_board.read', 'driver_board.write', 'board.read', 'board.write'] }, csrfToken: 'fixture' }, '/api/gross-board': gross, '/api/driver-board': status, '/api/tasks/count': { count: 0 }, '/api/sidebar-counts': {}, '/api/settings/theme-usage': { counts: {}, totalUsers: 0 } };
+      const fixtures = { '/api/auth/session': { user: { id: 'benchmark', username: 'Benchmark', permissions: ['driver_board.read', 'driver_board.write', 'board.read', 'board.write', 'drivers.edit', 'trucks.read'] }, csrfToken: 'fixture' }, '/api/drivers/truck-assignment-choices': drivers.map(d => ({ id: d.id, unit: d.truckUnit, active: true, status: 'in_use', driverId: d.id, driverName: d.fullName, activeLoad: '' })), '/api/gross-board': gross, '/api/driver-board': status, '/api/tasks/count': { count: 0 }, '/api/sidebar-counts': {}, '/api/settings/theme-usage': { counts: {}, totalUsers: 0 } };
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fixtures[path] ?? [])); return;
     }
     const file = path === '/' ? 'index.html' : extname(path) ? path.slice(1) : `${path.slice(1)}.html`;
@@ -30,7 +30,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
   const cdp = await page.context().newCDPSession(page); await cdp.send('Performance.enable'); const cpu = [];
   const errors = []; page.on('pageerror', e => errors.push(e.message));
-  await page.clock.install({ time: new Date('2026-11-12T14:00:00Z') });
+  await page.clock.setFixedTime(new Date('2026-11-12T14:00:00Z'));
   await page.addInitScript(() => {
     window.EventSource = class extends EventTarget { constructor() { super(); setTimeout(() => this.dispatchEvent(new Event('open')), 0); } close() {} };
     window.openingTimes = []; window.longTasks = [];
@@ -48,6 +48,13 @@ try {
   await page.waitForFunction(() => window.openingTimes.length === 1);
   for (const path of ['/gross-board', '/driver-board', '/gross-board', '/driver-board', '/gross-board']) {
     await page.waitForFunction(() => !document.querySelector('[data-board-row-pending]'));
+    if (path === '/gross-board') {
+      const pickers = page.locator('select.truck-assignment-select');
+      if (await pickers.count() !== drivers.length || await pickers.locator('option').count() > 2 * drivers.length) throw new Error('Idle truck selectors mounted the roster for every driver');
+      await pickers.first().focus();
+      await page.waitForFunction(() => document.activeElement?.querySelectorAll('option').length >= 160);
+      await pickers.first().blur();
+    }
     const count = await page.evaluate(() => window.openingTimes.length);
     await page.evaluate(path => { window.measureBoard(path); document.querySelector(`a[href="${path}"]`).click(); }, path);
     await page.waitForFunction(count => window.openingTimes.length > count, count, { timeout: 10000 }).catch(async error => { console.error(JSON.stringify({ path, errors, state: await page.evaluate(() => ({ path: location.pathname, times: window.openingTimes, rows: document.querySelectorAll('td[data-gross-driver]').length, body: document.body.innerText.slice(-500) })) })); throw error; });

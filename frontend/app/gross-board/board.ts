@@ -114,9 +114,11 @@ export function hundredths(value: string) {
   return (BigInt(whole) * BigInt(100) + BigInt(fraction.padEnd(2, "0"))) * BigInt(negative ? -1 : 1);
 }
 
+const wholeNumberFormatter = new Intl.NumberFormat("en-US");
+
 export function decimalDisplay(value: bigint, currency = false) {
   const absolute = value < BigInt(0) ? -value : value;
-  return `${value < BigInt(0) ? "-" : ""}${currency ? "$" : ""}${(absolute / BigInt(100)).toLocaleString("en-US")}.${(absolute % BigInt(100)).toString().padStart(2, "0")}`;
+  return `${value < BigInt(0) ? "-" : ""}${currency ? "$" : ""}${wholeNumberFormatter.format(absolute / BigInt(100))}.${(absolute % BigInt(100)).toString().padStart(2, "0")}`;
 }
 
 export function amountDisplay(value: string, currency = false) {
