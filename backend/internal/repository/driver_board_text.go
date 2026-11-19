@@ -12,14 +12,18 @@ import (
 )
 
 // A text edit compares the notes cell or the trailer number/note pair against
-// the dispatcher’s baseline. The full submitted row remains usable by older APIs.
+// the dispatcher’s baseline.
 func boardTextOnly(base, edit DriverBoardEntry) bool {
-	return base.DriverID == edit.DriverID && base.Version > 0 && base.Version == edit.Version &&
-		!edit.StatusEdited && !edit.ResolveCurrentLoad && edit.EffectiveAt == nil && edit.StatusReason == "" &&
+	return base.DriverID == edit.DriverID && base.Version == edit.Version && boardTextCandidate(edit) &&
 		base.CurrentLoad == edit.CurrentLoad && base.Status == edit.Status && base.Destination == edit.Destination &&
-		base.ETA == edit.ETA && base.HomeTime == "" && edit.HomeTime == "" &&
-		leaveValues(base.LeavePlan) == leaveValues(edit.LeavePlan) && leaveValues(base.LeavePlan).HomeStart == "" &&
+		base.ETA == edit.ETA && base.HomeTime == "" &&
+		leaveValues(base.LeavePlan) == leaveValues(edit.LeavePlan) &&
 		(base.Notes != edit.Notes || base.TrailerNumber != edit.TrailerNumber || base.TrailerNote != edit.TrailerNote)
+}
+
+func boardTextCandidate(e DriverBoardEntry) bool {
+	return e.Version > 0 && !e.StatusEdited && !e.ResolveCurrentLoad && e.EffectiveAt == nil &&
+		e.StatusReason == "" && e.HomeTime == "" && leaveValues(e.LeavePlan).HomeStart == ""
 }
 
 func leaveValues(plan *DriverLeavePlan) DriverLeavePlan {
@@ -32,6 +36,23 @@ func leaveValues(plan *DriverLeavePlan) DriverLeavePlan {
 var errBoardFullSave = errors.New("board edit requires the full save path")
 
 func (r *DriverBoardRepository) SaveWithTextBase(ctx context.Context, entries []DriverBoardEntry, bases map[string]DriverBoardEntry, actor string) ([]DriverBoardEntry, error) {
+	// Older tabs send a complete row without the values the dispatcher saw. A
+	// matching persisted version supplies that baseline. Stale legacy rows still
+	// go through conflict review. New clients opt out of this probe for full saves.
+	if bases == nil && len(entries) == 1 && boardTextCandidate(entries[0]) {
+		edit := entries[0]
+		base, err := scanBoardEntry(r.pool.QueryRow(ctx, boardEntryQuery, edit.DriverID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrDriverBoardConflict
+		}
+		if err != nil {
+			return nil, err
+		}
+		if base.Version != edit.Version {
+			return nil, ErrDriverBoardConflict
+		}
+		bases = map[string]DriverBoardEntry{edit.DriverID: base}
+	}
 	if len(bases) != len(entries) || len(entries) == 0 {
 		return r.Save(ctx, entries, actor)
 	}
@@ -74,18 +95,23 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 		}
 		return err
 	})
-	finish := db.Phase(ctx, "board_text_driver_lock")
+	currentRows := make([]DriverBoardEntry, len(entries))
+	for i, edit := range entries {
+		batch.Queue(boardEntryQuery, edit.DriverID).QueryRow(func(row pgx.Row) error {
+			entry, readErr := scanBoardEntry(row)
+			currentRows[i] = entry
+			return readErr
+		})
+	}
+	finish := db.Phase(ctx, "board_text_driver_read")
 	err = tx.SendBatch(ctx, &batch).Close()
 	finish()
 	if err != nil {
 		return nil, err
 	}
 	result := make([]DriverBoardEntry, 0, len(entries))
-	for _, edit := range entries {
-		current, err := boardEntry(ctx, tx, edit.DriverID)
-		if err != nil {
-			return nil, err
-		}
+	for i, edit := range entries {
+		current := currentRows[i]
 		if current.Version == 0 || current.Version < edit.Version {
 			return nil, ErrDriverBoardConflict
 		}

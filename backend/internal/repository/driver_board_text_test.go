@@ -65,6 +65,17 @@ func testConcurrentBoardText(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if _, err = save(trailer); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("crossed trailer identities", err)
 	}
+	// An already-open client can save ordinary text under the same held locks.
+	oldTab := second
+	oldTab.Notes = "Legacy tab edit"
+	legacy, err := repo.SaveWithTextBase(work, []DriverBoardEntry{oldTab}, nil, "")
+	if err != nil || legacy[0].TrailerNumber != second.TrailerNumber || legacy[0].Notes != oldTab.Notes || legacy[0].UndoID == 0 {
+		t.Fatal("legacy tab", err)
+	}
+	if _, err = repo.SaveWithTextBase(work, []DriverBoardEntry{oldTab}, nil, ""); !errors.Is(err, ErrDriverBoardConflict) {
+		t.Fatal("legacy stale version", err)
+	}
+	second = legacy[0]
 	// A dispatch change must still wait behind the held fleet lock.
 	mixed := second
 	mixed.Status = "ENROUTE"

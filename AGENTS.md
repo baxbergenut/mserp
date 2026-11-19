@@ -108,7 +108,8 @@ cell baseline. Notes are independent of the trailer number/note pair. Migration
 227 allows those updates beside fleet and payroll work, retaining driver-row
 serialization, the team-membership check, atomic history and undo. Mixed edits,
 first board rows and home-time cleanup use the ordinary versioned command.
-A concurrent team configuration write retries through that command.
+A concurrent team configuration write retries through that command. Older open tabs
+can use the narrow save when their full row version matches the stored baseline.
 
 ## Reports
 
