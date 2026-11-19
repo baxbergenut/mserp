@@ -169,6 +169,24 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 15000 });
   await page.reload();
   await expect(field('ETA')).toHaveText('300mi');
+  // Interleave a second dispatcher's trailer write after the browser has
+  // composed its notes save. The first HTTP response must contain both edits.
+  let mergedTextSave;
+  await page.route('**/api/driver-board', async route => {
+    const payload = route.request().postDataJSON();
+    const original = payload.textBase[id];
+    const remote = await page.request.put(base + '/api/driver-board', { headers,
+      data: { entries: [{ ...original, trailerNumber: 'Concurrent trailer' }], textBase: { [id]: original } } });
+    expect(remote.status()).toBe(200);
+    const response = await route.fetch();
+    mergedTextSave = { status: response.status(), row: (await response.json())[0] };
+    await route.fulfill({ response });
+  }, { times: 1 });
+  await field('Notes').fill('Independent note');
+  await expect.poll(() => mergedTextSave?.status).toBe(200);
+  expect(mergedTextSave.row.notes).toBe('Independent note');
+  expect(mergedTextSave.row.trailerNumber).toBe('Concurrent trailer');
+  await expect(field('Trailer')).toHaveValue('Concurrent trailer');
   await field('Current load').fill('LOAD 8841');
   await field('Trailer').fill('TA 102');
   await field('Status').selectOption('ENROUTE');

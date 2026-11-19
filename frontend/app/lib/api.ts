@@ -211,8 +211,8 @@ export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) 
   await boardReadiness.wait("status");
   return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "1" }), { signal }).then(expandBoard);
 };
-export const saveDriverBoard = (entries: DriverBoardEntry[]) =>
-  apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries }, (key, value) => key === "fleetStatus" ? undefined : value) });
+export const saveDriverBoard = (entries: DriverBoardEntry[], textBase?: Record<string, DriverBoardEntry>) =>
+  apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries, textBase }, (key, value) => key === "fleetStatus" ? undefined : value) });
 export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAction) =>
   apiRequest<import("./types").DriverBoardOrder>("/driver-board/order", { method: "POST", body: JSON.stringify(action) });
 export const updateBoardAutoOrder = (dispatcherId: string, enabled: boolean) =>

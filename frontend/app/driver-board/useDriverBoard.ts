@@ -6,7 +6,7 @@ import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
 import { APIError, fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
-import { applyCommittedFleetStatus, progressStatus, rebaseBoardDraft, reconcileDriverBoard } from "./board";
+import { applyCommittedFleetStatus, progressStatus, isBoardTextEdit, rebaseBoardDraft, reconcileDriverBoard } from "./board";
 import { usePermissions } from "@/app/lib/access";
 import { useBoardLive } from "./useBoardLive";
 import { selectedBoardCell } from "./boardCells";
@@ -237,7 +237,10 @@ export function useDriverBoard(lockedDriverId?: string) {
     try {
       let committed: DriverBoardEntry[];
       try {
-        committed = await saveDriverBoard(Object.values(snapshot));
+        const drafts = Object.values(snapshot);
+        const textBase = drafts.every(d => isBoardTextEdit(baselines[d.driverId], d))
+          ? Object.fromEntries(drafts.map(d => [d.driverId, baselines[d.driverId]])) : undefined;
+        committed = await saveDriverBoard(drafts, textBase);
       } catch (err) {
         if (!(err instanceof APIError) || err.code !== "board_row_changed") throw err;
         const current = await fetchDriverBoard(currentChargeWeek());

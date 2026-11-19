@@ -103,6 +103,13 @@ for visible board opens and confirmed edits travel on subsequent ordinary board
 requests. Full-board HTTP and stream snapshots share two build slots per API
 process so bursts of refreshes leave database connections available for writes.
 
+Status Board autosaves for existing notes and trailer text use the submitted
+cell baseline. Notes are independent of the trailer number/note pair. Migration
+227 allows those updates beside fleet and payroll work, retaining driver-row
+serialization, the team-membership check, atomic history and undo. Mixed edits,
+first board rows and home-time cleanup use the ordinary versioned command.
+A concurrent team configuration write retries through that command.
+
 ## Reports
 
 Reports v1 (`/reports`) includes only active Gross Board load entries and selected
