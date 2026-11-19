@@ -253,8 +253,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await field('Notes').fill('Local unsaved edit');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('changed', { timeout: 15000 });
   await expect(field('Notes')).toHaveValue('Local unsaved edit');
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.getByRole('link', { name: 'Board Cpm', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard edits and leave', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Board Cpm', exact: true })).toBeVisible();
+  await page.goto(`${base}/driver-board`);
   await expect(field('Notes')).toHaveValue('Other dispatcher edit');
   // A delayed response cannot drop text typed while that save is in flight.
   let release, intercepted;

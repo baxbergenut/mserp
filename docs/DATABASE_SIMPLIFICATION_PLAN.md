@@ -31,6 +31,10 @@ Separate single-connection diagnostics ran five uncached board reads per process
 
 Both boards returned identical serialized results from the two binaries against the same dataset. Driver Pay and Investor Pay summary comparison found only the expected top-level input revision difference when the migration-222 binary inspected migration-225 revision rows. Financial fields matched. Fresh-schema, incremental, concurrency and browser verification exercise writes and reversals separately.
 
+### Browser verification
+
+The board grid, two-board presence, Gross Board multi-user edits and reconnects, sensitive investor access, accounting retirement, and concurrent Driver Pay and Investor Pay finalization checks passed. The longer Status Board browser script passed editing, history and undo, conflict recovery, destination selection and queue reads. It stopped at its legacy expectation that Status Board can remove a Gross Board-owned plan. The original and revised backends reproduced the same failure with the same browser build and fixture. The application directs users to Gross Board to remove that plan. Later steps of that script remain unverified.
+
 ### Reproduce locally
 
 Use a disposable loopback PostgreSQL database and the repository's review-local fixture. Compare the migration-222 build and this branch with equivalent seeded schemas. Load `backend/internal/repository/testdata/reports_scale.sql` inside each synthetic review schema. Run `node frontend/scripts/measure-database-load.mjs` with `MSERP_REVIEW_BASELINE_FILE` and `MSERP_REVIEW_ACCESS_FILE` pointing to the respective private review access files. Set `MSERP_REVIEW_WEEK=2026-10-12`, `MSERP_REVIEW_ROUNDS=2` and `MSERP_REVIEW_COMBINED_BADGES=1`. The default is five logged-in clients. The existing `backend/cmd/perf-audit` supplies independent per-route query fingerprints and content hashes.
