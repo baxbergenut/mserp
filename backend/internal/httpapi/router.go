@@ -27,6 +27,10 @@ type shutdownRouter struct {
 	board    *repository.DriverBoardRepository
 }
 
+func (r *shutdownRouter) ConfigureBoardWritePriority(priority *repository.PayrollWorkPriority) {
+	r.board.ConfigurePayrollWorkPriority(priority)
+}
+
 func (r *shutdownRouter) ConfigureBoardETARetry(routes *boardroutes.Client, eld *fiveeld.Client, usdot string) {
 	r.board.ConfigureETARetry(routes, eld, usdot)
 }

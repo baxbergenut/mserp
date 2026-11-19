@@ -19,7 +19,7 @@ const artifacts=join(dirname(accessFile),'fleet-status');await mkdir(artifacts,{
 const browser=await chromium.launch();
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(access.base+'/login');await page.getByLabel('Email or existing username').fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
+ await page.goto(access.base+'/login');await page.getByLabel('Email',{exact:true}).fill(access.email);await page.getByLabel('Password',{exact:true}).fill(access.password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(u=>u.pathname!='/login');
  const session=await(await page.request.get(access.base+'/api/auth/session')).json();const headers={'X-CSRF-Token':session.csrfToken,Origin:access.base};
  const api=async(method,path,data)=>{const r=await page.request[method](access.base+'/api'+path,{headers,...(data?{data}:{})});if(!r.ok())throw Error(path+': '+r.status()+' '+await r.text());return r.status()===204?null:r.json();};
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());const monday=new Date(today+'T12:00:00Z');monday.setUTCDate(monday.getUTCDate()-(monday.getUTCDay()+6)%7);const boardPath='/driver-board?weekStart='+monday.toISOString().slice(0,10);
@@ -28,7 +28,7 @@ try{
  await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('family_issue');await page.getByRole('button',{name:'Save status',exact:true}).click();
  await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Family issue',{timeout:15000});
  await page.goto(access.base+'/trucks/detail?id='+driver.truckId);await page.getByRole('button',{name:'Change status',exact:true}).click();await page.getByLabel('Truck status',{exact:true}).selectOption('shop');await page.getByLabel('Reason',{exact:true}).fill('Synthetic repair reason');await page.getByRole('button',{name:'Save status',exact:true}).click();
- await expect(page.getByRole('dialog')).toHaveCount(0);await expect(live.getByRole('row').filter({hasText:driver.fullName}).locator('td').filter({has:live.locator(`a[href="/trucks/detail?id=${driver.truckId}"]`)})).toHaveText(driver.truckUnit);await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Family issue');
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(live.getByRole('row').filter({hasText:driver.fullName}).locator(`a[href="/trucks/detail?id=${driver.truckId}"]`)).toHaveText(driver.truckUnit);await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Shop · Family issue');
  board=await api('get',boardPath);let entry=board.entries.find(e=>e.driverId===driver.id);
  expect(board.drivers.find(d=>d.id===driver.id).truckOperatingStatus).toBe('shop');
  expect((await page.request.put(access.base+'/api/driver-board',{headers,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
@@ -46,18 +46,23 @@ try{
  await page.getByLabel('History track').selectOption('');await expect(page.getByRole('table').getByText('Shop',{exact:true})).toHaveCount(0);await expect(page.getByRole('table').getByText('Ready',{exact:true})).toHaveCount(0);
  await page.getByLabel('History track').selectOption('availability');await expect(page.getByRole('table').getByText('Family issue',{exact:true}).first()).toBeVisible();await page.screenshot({path:join(artifacts,'driver-history-table.png'),fullPage:true});
  await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('active');await page.getByRole('button',{name:'Save status',exact:true}).click();
- await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('READY',{timeout:15000});
+ await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Ready',{timeout:15000});
  const personal=await api('get','/drivers/'+driver.id);await api('patch','/drivers/'+driver.id+'/availability',{status:'home',version:personal.statusVersion,leavePlanVersion:personal.leavePlanVersion,leavePlan:{homeStart:today,homeEnd:today},reason:'Synthetic availability round trip'});
  for(const next of ['READY','HOME']){board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);await api('put','/driver-board',{entries:[{...entry,status:next,statusEdited:true}]});}
  const roundTrip=await api('get','/drivers/'+driver.id+'/status-history?track=availability');expect(roundTrip.items.slice(0,3).map(v=>v.status)).toEqual(['home','active','home']);
  await page.getByRole('button',{name:'Refresh',exact:true}).click();await expect(page.getByRole('table').locator('tbody tr td:first-child > span').nth(0)).toHaveText('Home');expect((await page.getByRole('table').locator('tbody tr td:first-child > span').allTextContents()).slice(0,3)).toEqual(['Home','Active','Home']);await page.screenshot({path:join(artifacts,'driver-home-active-home.png'),fullPage:true});
  const afterRoundTrip=await api('get','/drivers/'+driver.id);await api('patch','/drivers/'+driver.id+'/availability',{status:'active',version:afterRoundTrip.statusVersion,reason:'Synthetic test cleanup'});
- const roleName='Status Board only '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['driver_board.read','driver_board.write']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName);const email=randomUUID()+'@example.test';const password='Synthetic-'+randomUUID();await api('post','/settings/users',{username:roleName,email,password,roleId:role.id,active:true});
+ const roleName='Status Board only '+randomUUID();await api('post','/settings/roles',{name:roleName,permissions:['driver_board.read','driver_board.write']});const role=(await api('get','/settings/access')).roles.find(r=>r.name===roleName);const email=randomUUID()+'@example.test';const password='Synthetic-'+randomUUID();await api('post','/settings/users',{firstName:"Board",lastName:randomUUID(),email,password,roleId:role.id,active:true});
  const restricted=await browser.newContext();await restricted.request.post(access.base+'/api/auth/login',{headers:{Origin:access.base},data:{email,password}});const restrictedSession=await(await restricted.request.get(access.base+'/api/auth/session')).json();const restrictedHeaders={'X-CSRF-Token':restrictedSession.csrfToken,Origin:access.base};
  board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);
+ await api('put','/driver-board',{entries:[{...entry,status:'REST',statusEdited:true}]});
+ board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);
  const held=await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'SHOP',statusEdited:true,statusReason:'Synthetic board restriction'}]}});expect(held.ok(),await held.text()).toBe(true);
- const truck=await api('get','/trucks/'+driver.truckId);expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/condition',{headers:restrictedHeaders,data:{status:'ready',version:truck.statusVersion,reason:''}})).status()).toBe(403);
- expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/status',{headers:restrictedHeaders,data:{status:'ready',version:truck.statusVersion,reason:'Unauthorized release'}})).status()).toBe(403);
+ await live.reload();
+ await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Shop · Rest');
+ await expect(live.getByLabel(driver.fullName+' · Status',{exact:true})).toHaveValue('SHOP');
+ const truck=await api('get','/trucks/'+driver.truckId);expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/condition',{headers:restrictedHeaders,data:{status:'ready',version:truck.statusVersion,reason:''}})).status()).toBe(409);
+ expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/status',{headers:{Origin:access.base},data:{status:'ready',version:truck.statusVersion,reason:'Missing CSRF token'}})).status()).toBe(403);
  expect((await restricted.request.get(access.base+'/api/drivers/'+driver.id+'/status-history')).status()).toBe(403);
  board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);expect((await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
  await api('patch','/trucks/'+truck.id+'/condition',{status:'ready',version:truck.statusVersion,reason:'Synthetic test release'});await restricted.close();
