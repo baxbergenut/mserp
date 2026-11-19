@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CurrentUserIDContext } from "@/app/lib/access";
 
 type Peer = { clientId: string; userId: string; expiresAt: string };
@@ -12,9 +12,33 @@ export type LiveBoardOptions<T, P extends Peer, S extends { driverId: string }> 
   subscribe: (changed: (board?: T) => void, presence: (peers?: P[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) => () => void;
 };
 
+// Peer frames update only the cursor overlay. Re-rendering every editor for a
+// cursor movement competes with the dispatcher's own input and save receipts.
+function createPresenceStore<P>() {
+  let peers: P[] = [];
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => peers,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    publish: (rows: P[]) => {
+      if (peers === rows) return;
+      peers = rows;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+export type BoardPresenceStore<P> = ReturnType<typeof createPresenceStore<P>>;
+export function useBoardPeers<P>(store: BoardPresenceStore<P>) {
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
+
 export function useLiveBoard<T, P extends Peer, S extends { driverId: string }>(options: LiveBoardOptions<T, P, S>, onChanged: (board?: T) => void) {
   const userId = useContext(CurrentUserIDContext);
-  const [peers, setPeers] = useState<P[]>([]);
+  const [presence] = useState(createPresenceStore<P>);
+  useLayoutEffect(() => { presence.publish([]); }, [presence, options, userId]);
   const [connected, setConnected] = useState(false);
   const callback = useRef(onChanged);
   useLayoutEffect(() => { callback.current = onChanged; }, [onChanged]);
@@ -33,9 +57,9 @@ export function useLiveBoard<T, P extends Peer, S extends { driverId: string }>(
     const accept = (rows: P[]) => {
       lastSnapshot = Date.now();
       latest = rows.filter(p => p.clientId !== clientId && p.userId !== userId);
-      if (ready()) setPeers(latest);
+      if (ready()) presence.publish(latest);
       clearTimeout(staleTimer);
-      staleTimer = setTimeout(() => { latest = []; if (active) setPeers([]); }, 35000);
+      staleTimer = setTimeout(() => { latest = []; if (active) presence.publish([]); }, 35000);
     };
     const read = async () => {
       if (!ready()) return;
@@ -69,15 +93,15 @@ export function useLiveBoard<T, P extends Peer, S extends { driverId: string }>(
     };
     const visible = () => {
       if (document.hidden) leave();
-      else { announce(); if (streaming && Date.now() - lastSnapshot < 35000) setPeers(latest); else schedule(); callback.current(); }
+      else { announce(); if (streaming && Date.now() - lastSnapshot < 35000) presence.publish(latest); else schedule(); callback.current(); }
     };
     let close = () => {};
     const connect = () => {
       close();
-      if (navigator.onLine && authorized) close = options.subscribe(value => callback.current(value), rows => { if (rows) { pushVersion++; accept(rows); } else schedule(); }, value => { streaming = value; if (active) setConnected(value); }, () => { authorized = false; if (active) { setPeers([]); setConnected(false); } });
+      if (navigator.onLine && authorized) close = options.subscribe(value => callback.current(value), rows => { if (rows) { pushVersion++; accept(rows); } else schedule(); }, value => { streaming = value; if (active) setConnected(value); }, () => { authorized = false; if (active) { presence.publish([]); setConnected(false); } });
     };
     const online = () => { connect(); announce(); callback.current(); };
-    const offline = () => { streaming = false; close(); setConnected(false); setPeers([]); };
+    const offline = () => { streaming = false; close(); setConnected(false); presence.publish([]); };
     connect();
     const heartbeat = setInterval(announce, 10000);
     // The stream sends an initial peers frame, pushes moves and confirms leases on heartbeat.
@@ -92,6 +116,6 @@ export function useLiveBoard<T, P extends Peer, S extends { driverId: string }>(
       window.removeEventListener("online", online); window.removeEventListener("offline", offline);
       leave();
     };
-  }, [options, userId]);
-  return { peers, connected };
+  }, [options, userId, presence]);
+  return { presence, connected };
 }

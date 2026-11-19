@@ -117,7 +117,9 @@ that lock. It writes arrival evidence and ETA context only when needed.
 Single-row version conflicts and overlapping text edits return the board values
 already read under the driver lock. The browser uses them to rebase independent
 edits or show the saved value next to the local draft. A version check still
-applies to the next submission. Older responses use the board refresh fallback.
+applies to the next submission. Accepting the saved values replaces only the
+conflicting field groups. Independent draft edits on the same driver still save.
+Older responses use the board refresh fallback.
 
 The automated DataTruck replacement job yields to an interactive board command
 during an uncommitted repair. A retry after the board is quiet checks provider
@@ -129,6 +131,14 @@ On a disposable PostgreSQL database, the 250-load reconciliation fixture went
 from 1,009 SQL calls to 15. The 253-observation existing-only refresh went from
 1,021 to 16. Both database layouts also forced a dispatcher save during a
 blocked repair publication and checked the posted result after the repair resumed.
+
+Live cursor frames update the presence overlay independently of both editable grids.
+The Gross Board computes visible row totals and carried balances once for each
+data or filter change. Autosave credits time already spent rendering a typing
+burst. Browser timing logs include pre-request, request-through-decoding and
+response-to-paint durations when the client has all three timestamps. They use
+the next ordinary request. The board read logs time the roster, weekly entries,
+load views, stop cities, row ordering and Gross Board openings.
 
 ## References
 

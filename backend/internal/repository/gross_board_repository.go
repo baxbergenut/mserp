@@ -210,23 +210,31 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	}
 	defer tx.Rollback(ctx)
 
+	endRevision := db.Phase(ctx, "board_week_revision")
 	key, err := boardWeekRevision(ctx, tx, week, true)
+	endRevision()
 	if err != nil {
 		return GrossBoard{}, err
 	}
+	endEntries := db.Phase(ctx, "board_week_entries")
 	entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+	endEntries()
 	if err != nil {
 		return GrossBoard{}, err
 	}
+	endRows := db.Phase(ctx, "gross_board_rows")
 	board, err := readGrossBoardSnapshot(ctx, tx, week, true, entries)
+	endRows()
 	if err != nil {
 		return board, err
 	}
+	endBalances := db.Phase(ctx, "gross_opening_balances")
 	board.Balances, err = r.openings.get(ctx, key, func() ([]GrossBoardBalance, error) {
 		snapshot := GrossBoard{Balances: []GrossBoardBalance{}}
 		err := readGrossBoardOpenings(ctx, tx, week, &snapshot)
 		return snapshot.Balances, err
 	})
+	endBalances()
 	if err != nil {
 		return board, err
 	}

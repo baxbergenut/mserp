@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"mserp/internal/db"
 )
 
 var ErrDriverBoardConflict = errors.New("status board changed; reload to review the latest values before editing again")
@@ -167,6 +168,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	// Retained departure rows are history, not live assignments.
 	location, _ := time.LoadLocation("America/New_York")
 	today := r.now().In(location).Format(time.DateOnly)
+	endRoster := db.Phase(ctx, "status_roster")
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,coalesce(i.driver_id=d.id,false),
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
@@ -223,6 +225,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	}
 	err = rows.Err()
 	rows.Close()
+	endRoster()
 	if err != nil {
 		return result, err
 	}
@@ -231,7 +234,9 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		ids = append(ids, d.ID)
 	}
 	if displayBoard {
+		endEntries := db.Phase(ctx, "board_week_entries")
 		entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+		endEntries()
 		if err != nil {
 			return result, err
 		}
@@ -250,12 +255,17 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		}
 		result.ELD.Configured = r.fiveELDConfigured
 	}
+	endLoads := db.Phase(ctx, "status_load_views")
 	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{}, r.plans, key)
+	endLoads()
 	if err != nil {
 		return result, err
 	}
 	if displayBoard {
-		if err := applyBoardStopCities(ctx, tx, result.Loads); err != nil {
+		endCities := db.Phase(ctx, "status_stop_cities")
+		err = applyBoardStopCities(ctx, tx, result.Loads)
+		endCities()
+		if err != nil {
 			return result, err
 		}
 	}
@@ -268,7 +278,10 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 			e.ETA = ""
 		}
 	}
-	if err = applyBoardDriverOrder(ctx, tx, &result); err != nil {
+	endOrder := db.Phase(ctx, "status_driver_order")
+	err = applyBoardDriverOrder(ctx, tx, &result)
+	endOrder()
+	if err != nil {
 		return result, err
 	}
 	applyBoardDispatcherOrder(&result)

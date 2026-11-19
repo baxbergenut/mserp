@@ -53,10 +53,14 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await input('Notes').focus();
     await write({notes:'second user final'});
     await input('Notes').fill('discard this draft');
-    await alert.getByRole('button',{name:'Use saved row'}).click();
+    await expect(alert).toContainText('second user final');
+    await input('Trailer').fill('KEEP-42');
+    await alert.getByRole('button',{name:'Use saved values'}).click();
+    await expect.poll(async()=> {const e=await read(); return [e.notes,e.trailerNumber];}).toEqual(['second user final','KEEP-42']);
     await expect(input('Notes')).toHaveValue('second user final');
     await page.reload();
     await expect(input('Notes')).toHaveValue('second user final');
+    await expect(input('Trailer')).toHaveValue('KEEP-42');
     const view=await (await other.request.get('/api/driver-board/loads/'+id)).json();
     expect(view.entryVersion).toBe((await read()).version);
     console.log('Two-user Status Board save recovery passed for load edits, unrelated notes, overlapping edits, review, discard and reload.');

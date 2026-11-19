@@ -98,16 +98,17 @@ export default function GrossBoardPage() {
   const [issues, setIssues] = useState<GrossBoardSaveIssue[]>([]);
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
+  const response = useRef({ open: 0, save: 0, submitted: 0 });
   const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0);
   const dirty = canEdit && Object.keys(changes).length > 0;
   useLayoutEffect(() => {
     if (loading || !board || board.weekStart !== week) return;
     if (openStarted.current) {
-      recordBoardPaint("gross", "open", openStarted.current);
+      recordBoardPaint("gross", "open", openStarted.current, openStarted.current, response.current.open);
       openStarted.current = 0;
     }
     if (!dirty && !saving && confirmedEdit.current) {
-      recordBoardPaint("gross", "save", confirmedEdit.current);
+      recordBoardPaint("gross", "save", confirmedEdit.current, response.current.submitted, response.current.save);
       confirmedEdit.current = 0;
     }
   }, [board, dirty, loading, saving, week]);
@@ -157,8 +158,10 @@ export default function GrossBoardPage() {
   useEffect(() => {
     let cancelled = false;
     openStarted.current = performance.now();
+    response.current.open = 0;
     fetchGrossBoard(week).then((value) => {
       if (cancelled) return;
+      response.current.open = performance.now();
       const recovery = hasEditPermission ? readGrossDrafts(draftKey) : null;
       const restored = recovery ? restoreGrossDrafts(recovery.changes, recovery.baselines, value.entries) : null;
       baselinesRef.current = restored?.baselines ?? {};
@@ -231,32 +234,45 @@ export default function GrossBoardPage() {
           && entry.loadNumber.toLowerCase().includes(query))));
   }, [rows, selectedDispatchers, search, driverTarget, entryIndex]);
   const dispatchers = useMemo(() => Array.from(new Map(rows.map((driver) => [driver.dispatcherId, driver.dispatcherName || "Unassigned"])).entries()), [rows]);
-  const shownEntries = useMemo(() => {
-    return Object.values(allEntries).filter(entry => drivers.some(driver => driver.id === entry.driverId && driver.dates.includes(entry.date) && entryForDispatcher(entry,driver.dispatcherId,driver)));
-  }, [allEntries, drivers]);
   const targetEntry = loadTarget && allEntries[entryKey(loadTarget.driverId, loadTarget.date, loadTarget.slot)];
   const targetMatches = !!targetEntry && !targetEntry.deleted && !targetEntry.dayStatus
     && targetEntry.loadNumber.trim().toLowerCase() === loadTarget?.loadNumber.trim().toLowerCase();
   const targetReady = loadTarget && board?.weekStart === loadTarget.week && week === loadTarget.week;
-  const summary = totals(shownEntries);
-  const openings = new Map((board?.balances ?? []).map((balance) => [balance.driverId, balance]));
-  const selectedDriver = drivers.find((driver) => driver.id === balanceDriver);
-  const uniqueDrivers = Array.from(new Map(drivers.map(driver => [driver.id, driver])).values());
-  const balanceOwners = new Map([...drivers].sort((a, b) => (a.dates.at(-1) ?? "").localeCompare(b.dates.at(-1) ?? "")).map(driver => [driver.id, driver.dispatcherId]));
-  const endingBalances = uniqueDrivers.map((driver) => rateBalance(openings.get(driver.id)?.openingBalance ?? "0",
-    entryIndex.byDriver.get(driver.id) ?? []));
-  const balanceTotal = endingBalances.reduce((sum, value) => sum + value, BigInt(0));
-  const uncoveredTotal = endingBalances.filter((value) => value < BigInt(0)).reduce((sum, value) => sum - value, BigInt(0));
-  const dispatcherTotals = new Map<string, { original: bigint; driver: bigint; miles: bigint; balance: bigint }>();
-  for (const driver of drivers) {
-    const entries = driver.dates.flatMap(date => (entryIndex.byDay.get(`${driver.id}:${date}`) ?? []).filter(entry => entryForDispatcher(entry,driver.dispatcherId,driver)));
-    const subtotal = totals(entries);
-    const opening = openings.get(driver.id);
-    const group = dispatcherTotals.get(driver.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0), balance: BigInt(0) };
-    group.original += subtotal.original; group.driver += subtotal.driver; group.miles += subtotal.miles;
-    if (balanceOwners.get(driver.id) === driver.dispatcherId) group.balance += rateBalance(opening?.openingBalance ?? "0", entryIndex.byDriver.get(driver.id) ?? []);
-    dispatcherTotals.set(driver.dispatcherId, group);
-  }
+  const openings = useMemo(() => new Map((board?.balances ?? []).map(balance => [balance.driverId, balance])), [board?.balances]);
+  const selectedDriver = drivers.find(driver => driver.id === balanceDriver);
+  const { rowStats, driverCount, summary, balanceTotal, uncoveredTotal, dispatcherTotals } = useMemo(() => {
+    const balanceOwners = new Map([...drivers].sort((a, b) => (a.dates.at(-1) ?? "").localeCompare(b.dates.at(-1) ?? "")).map(d => [d.id, d.dispatcherId]));
+    const balances = new Map<string, { balance: bigint; incomplete: number }>();
+    const shown = new Set<GrossBoardEntry>();
+    const dispatcherTotals = new Map<string, { original: bigint; driver: bigint; miles: bigint; balance: bigint }>();
+    const rowStats = drivers.map(driver => {
+      let driverBalance = balances.get(driver.id);
+      if (!driverBalance) {
+        const entries = entryIndex.byDriver.get(driver.id) ?? [];
+        const opening = openings.get(driver.id);
+        const balance = rateBalance(opening?.openingBalance ?? "0", entries);
+        driverBalance = { balance, incomplete: (opening?.openingIncomplete ?? 0) + incompleteRates(entries) };
+        balances.set(driver.id, driverBalance);
+      }
+      const dayEntries = dates.map(date => (entryIndex.byDay.get(`${driver.id}:${date}`) ?? [emptyEntry(driver.id, date)]).filter(e => entryForDispatcher(e, driver.dispatcherId, driver)));
+      const entries = dayEntries.filter((_, i) => driver.dates.includes(dates[i])).flat();
+      for (const entry of entries) shown.add(entry);
+      const sum = totals(entries);
+      const group = dispatcherTotals.get(driver.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0), balance: BigInt(0) };
+      group.original += sum.original;
+      group.driver += sum.driver;
+      group.miles += sum.miles;
+      if (balanceOwners.get(driver.id) === driver.dispatcherId) group.balance += driverBalance.balance;
+      dispatcherTotals.set(driver.dispatcherId, group);
+      return { dayEntries, sum, repeated: entries.some(entry => entry.duplicate), ...driverBalance };
+    });
+    let balanceTotal = BigInt(0), uncoveredTotal = BigInt(0);
+    for (const { balance } of balances.values()) {
+      balanceTotal += balance;
+      if (balance < BigInt(0)) uncoveredTotal -= balance;
+    }
+    return { rowStats, driverCount: balances.size, summary: totals([...shown]), balanceTotal, uncoveredTotal, dispatcherTotals };
+  }, [drivers, dates, entryIndex, openings]);
   const invalid = Object.values(changes).some((entry) => !validDecimal(entry.originalRate) || !validDecimal(entry.driverRate) || !validDecimal(entry.miles, true));
 
   function switchWeek(next: string) {
@@ -304,9 +320,11 @@ export default function GrossBoardPage() {
     busyKeys.current = Object.keys(snapshot);
     setSaving(true); setError(""); setMessage("");
     try {
+      response.current.submitted = performance.now();
       const { entries: committed, issues: rejected } = await saveGrossBoard(week, Object.entries(snapshot).map(([key, entry]) => ({
         ...entry, fields: grossDraftFields(entry, baselinesRef.current[key]), previousLoadNumber: baselinesRef.current[key]?.loadNumber,
       })));
+      response.current.save = performance.now();
       committed.forEach(entry => { savedRef.current[entryKey(entry.driverId,entry.date,entry.slot)] = entry; });
       const remaining = reconcileGrossPatches(changesRef.current,snapshot,committed);
       // New typing may already have fixed a rejected group while it was in flight.
@@ -351,7 +369,8 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
-    const timer = setTimeout(() => { void save(); }, pendingWeek || pendingLink ? 0 : 60);
+    const delay = pendingWeek || pendingLink ? 0 : Math.max(0, 60 - (performance.now() - editStarted.current));
+    const timer = setTimeout(() => { void save(); }, delay);
     return () => clearTimeout(timer);
   }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
 
@@ -410,7 +429,7 @@ export default function GrossBoardPage() {
           <div className="flex items-center gap-3">
             <CalendarRange className="h-5 w-5 text-zinc-500" />
             <h1 className="text-lg font-semibold text-zinc-100">Gross Board</h1>
-            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : uniqueDrivers.length}</span>
+            <span className="rounded-full bg-zinc-800/60 px-2.5 py-0.5 text-[12px] font-medium text-zinc-400">{loading ? <SkeletonBar className="h-3 w-4" /> : driverCount}</span>
           </div>
 
         </div></PageHeader>
@@ -475,13 +494,7 @@ export default function GrossBoardPage() {
           </thead>
           <tbody>
             {drivers.map((driver, index) => {
-              const dayEntries = dates.map(date => (entryIndex.byDay.get(`${driver.id}:${date}`) ?? [emptyEntry(driver.id, date)]).filter(entry => entryForDispatcher(entry,driver.dispatcherId,driver)));
-              const entries = dayEntries.filter((_, i) => driver.dates.includes(dates[i])).flat();
-              const sum = totals(entries);
-              const driverEntries = entryIndex.byDriver.get(driver.id) ?? [];
-              const balance = rateBalance(openings.get(driver.id)?.openingBalance ?? "0", driverEntries);
-              const incomplete = (openings.get(driver.id)?.openingIncomplete ?? 0) + incompleteRates(driverEntries);
-
+              const { dayEntries, sum, repeated, balance, incomplete } = rowStats[index];
               const groupStart = index === 0 || drivers[index - 1].dispatcherId !== driver.dispatcherId;
               const group = dispatcherTotals.get(driver.dispatcherId)!;
               return <Fragment key={`${driver.id}:${driver.dispatcherId}`}>
@@ -508,7 +521,7 @@ export default function GrossBoardPage() {
                     <button aria-label={`Rate balance for ${driver.fullName}`} className={`w-full rounded py-3 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 ${balance < BigInt(0) ? "text-red-300" : balance > BigInt(0) ? "text-emerald-300" : "text-zinc-400"}`} onClick={() => setBalanceDriver(driver.id)}>
                       <span className="font-mono">{signedMoney(balance)}</span><span className="mt-1 block text-[10px]">{balanceLabel(balance)}</span>
                       {incomplete > 0 && <span className="mt-1 block text-[10px] text-amber-300">{incomplete} incomplete</span>}
-                      {entries.some((entry) => entry.duplicate) && <span className="mt-1 block text-[10px] text-amber-300">Repeated load</span>}
+                      {repeated && <span className="mt-1 block text-[10px] text-amber-300">Repeated load</span>}
                     </button>
                   </td>
                 </tr>}</ProgressiveBoardRow>
@@ -525,7 +538,7 @@ export default function GrossBoardPage() {
           </tr></tfoot>
         </table>
       </BoardScrollArea>}
-      <GrossPresence peers={live.peers} />
+      <GrossPresence presence={live.presence} week={week} />
       {selectedDriver && <BalanceDetails key={selectedDriver.id + week} driverName={selectedDriver.fullName}
         resetThisWeek={openings.get(selectedDriver.id)?.resetThisWeek}
         onReset={canManageWeek && !board?.managedInSheets && week === currentChargeWeek() ? async (amount) => {
