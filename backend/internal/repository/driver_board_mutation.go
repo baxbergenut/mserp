@@ -85,12 +85,13 @@ func prepareBoardLoadAssignment(ctx context.Context, tx pgx.Tx, driver, explicit
 // Board saves commit operational data and status history. Canonical fleet
 // changes are captured atomically for the payroll worker; a board request never
 // runs payroll calculations before acknowledging the save.
-func runBoardCommand[T any](run func(bool) (T, error)) (T, error) {
+func runBoardCommand[T any](priority *PayrollWorkPriority, run func(bool) (T, error)) (T, error) {
 	value, err := run(false)
 	var conflict *pgconn.PgError
 	if errors.As(err, &conflict) && conflict.ConstraintName == "board_requires_payroll_source" {
 		// The first transaction rolled back completely. Revalidate the same
 		// caller versions after taking source -> fleet -> driver locks in order.
+		defer priority.interactive()()
 		return run(true)
 	}
 	return value, err

@@ -139,6 +139,7 @@ func lateBoardStop(s boardLoadState, current BoardLoad, status, destination stri
 }
 
 type BoardLoads struct {
+	EntryVersion      *int             `json:"entryVersion,omitempty"`
 	CompletedStopKeys []string         `json:"completedStopKeys,omitempty"`
 	DetailsOmitted    bool             `json:"detailsOmitted,omitempty"`
 	ResolutionWarning string           `json:"resolutionWarning,omitempty"`
@@ -786,7 +787,9 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 			}
 			return a < b
 		})
-		view.Revision = boardLoadsRevision(view, states[id], entries[id].Version)
+		version := entries[id].Version
+		view.Revision = boardLoadsRevision(view, states[id], version)
+		view.EntryVersion = &version
 		for i := range view.Next {
 			view.Next[i] = boardStopTimes(view.Next[i], s.ManualStopTimes)
 		}
@@ -841,7 +844,7 @@ func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, er
 	return e, err
 }
 func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadAction, actor string) (BoardLoadResult, error) {
-	return runBoardCommand(func(source bool) (BoardLoadResult, error) { return r.changeLoads(ctx, a, actor, source) })
+	return runBoardCommand(r.workPriority, func(source bool) (BoardLoadResult, error) { return r.changeLoads(ctx, a, actor, source) })
 }
 
 func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadAction, actor string, source bool) (BoardLoadResult, error) {

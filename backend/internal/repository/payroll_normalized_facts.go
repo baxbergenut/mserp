@@ -37,7 +37,7 @@ const payrollSourceLedgerBucketsSQL = `(SELECT source,owner_id,week_start,kind,s
 // Only inputs consumed by trip validation participate in this content revision.
 // Identity is the source record, never its nonunique displayed load number.
 const payrollLoadFactHashSQL = `md5(jsonb_build_object('gross',l.total_pay,'miles',l.total_miles,
- 'trips',l.raw_payload->'trips','allocation',to_jsonb(l)->'split_allocation')::text)`
+ 'trips',l.raw_payload->'trips','allocation',l.split_allocation)::text)`
 
 // Facts are reusable across weeks and processes. New or corrected sources create
 // a distinct immutable fact; timestamp-only syncs reuse the existing version.

@@ -626,6 +626,7 @@ export interface BoardLoad {
   sourceStatus: string; sourceDriver: string; sourceMissing?: boolean; syncedAt: string; stops: BoardStop[]; warning: string;
 }
 export interface BoardLoads {
+  entryVersion?: number;
 	completedStopKeys?: string[];
   detailsOmitted?: boolean;
   resolutionWarning?: string;

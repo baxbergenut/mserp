@@ -245,7 +245,7 @@ export const fetchBoardMapRoute = (driverId: string, signal?: AbortSignal) =>
 export const fetchBoardMapHistory = (driverId: string, signal?: AbortSignal) =>
   apiRequest<{ truckId: string; points: import("./types").BoardMapHistoryPoint[] }>(`/driver-board/loads/${encodeURIComponent(driverId)}/map-history`, { signal });
 export const changeBoardLoads = (entry: DriverBoardEntry, view: BoardLoads, action: BoardLoadAction) =>
-  apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: entry.version, revision: view.revision, fromDate: view.fromDate }) });
+  apiRequest<{ entry: DriverBoardEntry; loads: BoardLoads }>(`/driver-board/loads/${entry.driverId}`, { method: "POST", body: JSON.stringify({ ...action, version: view.entryVersion ?? entry.version, revision: view.revision, fromDate: view.fromDate }) });
 export const undoDriverBoardEvent = (id: number, entry: DriverBoardEntry, personal = false) =>
   apiRequest<DriverBoardEntry>(`/driver-board/history/${id}/undo`, { method: "POST", body: JSON.stringify({ driverId: entry.driverId, version: entry.version, personal }) });
 export const resetGrossBoardBalance = (driverId: string, weekStart: string, balance: string) =>

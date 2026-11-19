@@ -316,7 +316,7 @@ func (r *DriverBoardRepository) Save(ctx context.Context, entries []DriverBoardE
 			return r.save(ctx, entries, true, actor...)
 		}
 	}
-	return runBoardCommand(func(source bool) ([]DriverBoardEntry, error) { return r.save(ctx, entries, source, actor...) })
+	return runBoardCommand(r.workPriority, func(source bool) ([]DriverBoardEntry, error) { return r.save(ctx, entries, source, actor...) })
 }
 
 func (r *DriverBoardRepository) save(ctx context.Context, entries []DriverBoardEntry, source bool, actor ...string) ([]DriverBoardEntry, error) {
@@ -498,10 +498,11 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		}
 		e.StatusEdited = false
 		var version int
-		err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time,trailer_note,leave_plan)
-   SELECT $1,$2,$3,$4,$5,$6,$7,$8,$10,$11 WHERE $9::int=0
-   ON CONFLICT(driver_id) DO NOTHING RETURNING version`, e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.Version, e.TrailerNote, e.LeavePlan).Scan(&version)
-		if errors.Is(err, pgx.ErrNoRows) && e.Version > 0 {
+		if e.Version == 0 {
+			err = tx.QueryRow(ctx, `INSERT INTO driver_board(driver_id,current_load,trailer_number,status,destination,eta,notes,home_time,trailer_note,leave_plan)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+   ON CONFLICT(driver_id) DO NOTHING RETURNING version`, e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.TrailerNote, e.LeavePlan).Scan(&version)
+		} else {
 			err = tx.QueryRow(ctx, `UPDATE driver_board SET current_load=$2,trailer_number=$3,status=$4,destination=$5,eta=$6,notes=$7,home_time=$8,trailer_note=$10,leave_plan=$11,
     version=version+1,updated_at=now() WHERE driver_id=$1 AND version=$9 RETURNING version`,
 				e.DriverID, e.CurrentLoad, e.TrailerNumber, e.Status, e.Destination, e.ETA, e.Notes, e.HomeTime, e.Version, e.TrailerNote, e.LeavePlan).Scan(&version)
