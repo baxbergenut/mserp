@@ -710,16 +710,28 @@ func preparedSaveCard(ctx context.Context, tx pgx.Tx, kind, id, week string, c *
 }
 
 func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, week, expected string) error {
-	if expected == "" {
-		return nil
+	ctx = payrollValidationContext(ctx, tx)
+	current, err := validatePreparedPayrollStatement(ctx, tx, kind, id, week, expected)
+	if err != nil || expected == "" {
+		return err
 	}
+	return retainPayrollPeriodSourceProofs(ctx, tx, current)
+}
+
+func payrollValidationContext(ctx context.Context, tx pgx.Tx) context.Context {
 	// Share capture proofs only during this read-only validation phase. The
 	// context never escapes into posting, so own writes cannot reuse an old proof.
-	ctx = context.WithValue(ctx, payrollSourceImpactMemoKey{}, &payrollSourceImpactMemo{
+	return context.WithValue(ctx, payrollSourceImpactMemoKey{}, &payrollSourceImpactMemo{
 		tx: tx, proofs: map[[3]string]*payrollPublicationImpact{},
 	})
+}
+
+func validatePreparedPayrollStatement(ctx context.Context, tx pgx.Tx, kind, id, week, expected string) (string, error) {
+	if expected == "" {
+		return "", nil
+	}
 	if err := payrollProjectionCoverage(ctx, tx); err != nil {
-		return err
+		return "", err
 	}
 	var revision, snapshot, calendar, calculator string
 	var schema int
@@ -731,28 +743,28 @@ func validatePreparedPayrollCommand(ctx context.Context, tx pgx.Tx, kind, id, we
  THEN v.generation_id ELSE w.generation_id END
  WHERE s.kind=$1 AND s.statement_id=$2::uuid AND s.week_start=$3::date`, kind, id, week).Scan(&revision, &snapshot, &calendar, &calculator, &schema, &currentResources)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrDriverPayConflict
+		return "", ErrDriverPayConflict
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	current, err := payrollCacheSnapshot(ctx, tx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if revision != expected || calendar != ChargeCurrentWeek() || calculator != payrollCalculatorVersion || schema != payrollProjectionSchemaVersion {
-		return ErrDriverPayConflict
+		return "", ErrDriverPayConflict
 	}
 	if snapshot != current || !currentResources {
 		unrelated, err := preparedPayrollStatementCurrent(ctx, tx, kind, id, week, expected, current)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if !unrelated {
-			return ErrDriverPayConflict
+			return "", ErrDriverPayConflict
 		}
 	}
-	return retainPayrollPeriodSourceProofs(ctx, tx, current)
+	return current, nil
 }
 
 func finishPaySaveCommand(ctx context.Context, tx pgx.Tx, c *payrollCommand, kind string, edits *DriverPayEdits, publish bool) error {

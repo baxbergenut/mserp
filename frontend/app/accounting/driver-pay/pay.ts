@@ -203,16 +203,18 @@ export function validAdjustments(edits: DriverPayEdits, driver?: DriverPayDriver
   }) && normalizedPayEdits(edits).adjustments.every(item => item.name.trim() && validDecimal(item.amount, true) && hundredths(item.amount) > BigInt(0));
 }
 
-export function normalizedPayEdits(edits: DriverPayEdits): DriverPayEdits {
+export function normalizedPayEdits(edits: DriverPayEdits, investorBaseline?: DriverPayEdits): DriverPayEdits {
   const payload = { ...edits };
   delete payload.inputRevision;
   delete payload.statementRevision;
   delete payload.committedStatement;
   delete payload.affectedStatements;
+  // An investor adjustment changes the payable without collecting displayed
+  // balances. An explicitly edited deduction already carries its own apply flag.
+  const adjustmentChanged = investorBaseline &&
+    JSON.stringify(edits.adjustments) !== JSON.stringify(investorBaseline.adjustments);
   return { ...payload,
-    // Ordinary expenses persist only explicit draft choices. Credits and escrow
-    // retain their existing save behavior.
-    ...(edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => !row.source || row.source === "accessorial" || row.saved ? row : { ...row, apply: true }) }),
+    ...(!adjustmentChanged && edits.expenseDeductions && { expenseDeductions: edits.expenseDeductions.map(row => !row.source || row.source === "accessorial" || row.saved ? row : { ...row, apply: true }) }),
     adjustments: edits.adjustments.filter(item => item.name.trim() !== "" || item.amount.trim() !== "" || item.kind === "deduction"),
   };
 }

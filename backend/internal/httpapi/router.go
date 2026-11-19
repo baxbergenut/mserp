@@ -33,8 +33,9 @@ func (r *shutdownRouter) ConfigureBoardETARetry(routes *boardroutes.Client, eld 
 
 func (r *shutdownRouter) Shutdown() { r.shutdown() }
 
-func (r *shutdownRouter) ConfigurePreparedPayroll(enabled bool) {
+func (r *shutdownRouter) ConfigurePreparedPayroll(enabled bool, priority *repository.PayrollWorkPriority) {
 	r.payroll.ConfigurePreparedReads(enabled)
+	r.payroll.ConfigurePayrollWorkPriority(priority)
 }
 
 func (r *shutdownRouter) ConfigurePreparedFinancial(ctx context.Context, commands, finalization, resources bool) error {
