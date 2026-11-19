@@ -46,6 +46,16 @@ try {
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/driver-board`);
   await page.waitForFunction(() => window.openingTimes.length === 1);
+  const typing = await page.evaluate(() => {
+    const input = document.querySelector('tr[data-driver-id] input');
+    const pending = () => document.querySelectorAll('[data-board-row-pending]').length;
+    const before = pending(), start = performance.now();
+    input.dispatchEvent(new KeyboardEvent('keydown', {key:'Shift',shiftKey:true,bubbles:true}));
+    input.dispatchEvent(new KeyboardEvent('keydown', {key:'A',shiftKey:true,bubbles:true}));
+    return { before, after:pending(), keyMS:Math.round(performance.now()-start) };
+  });
+  console.log("Status Board uppercase key", JSON.stringify(typing));
+  if (!typing.before || typing.after !== typing.before) throw new Error("Typing in one cell mounted off-screen editors");
   for (const path of ['/gross-board', '/driver-board', '/gross-board', '/driver-board', '/gross-board']) {
     await page.waitForFunction(() => !document.querySelector('[data-board-row-pending]'));
     if (path === '/gross-board') {
