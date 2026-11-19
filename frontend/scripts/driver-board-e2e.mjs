@@ -342,7 +342,9 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
     await runStatusBoardOrderE2E({ page, viewer, base, sql, schema, headers, temp, week });
   } finally { await context.close(); }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  const collapse = page.getByRole('button', { name: 'Collapse sidebar' });
+  if (await collapse.isVisible()) await collapse.click();
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: join(temp, 'driver-board-mobile.png'), fullPage: true, animations: 'disabled' });
   await page.screenshot({ path: join(temp, 'driver-board-mobile-table.png'), fullPage: true, animations: 'disabled' });

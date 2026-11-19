@@ -95,6 +95,10 @@ func (s *fakeAuthStore) FindSessionByTokenHash(_ context.Context, tokenHash stri
 	return session, nil
 }
 
+func (s *fakeAuthStore) FindBoardSessionByTokenHash(ctx context.Context, hash string) (repository.AuthSession, error) {
+	return s.FindSessionByTokenHash(ctx, hash)
+}
+
 func (s *fakeAuthStore) DeleteSessionByTokenHash(_ context.Context, tokenHash string) error {
 	delete(s.sessions, tokenHash)
 	return nil

@@ -89,6 +89,21 @@ func TestFleetStatusDatabase(t *testing.T) {
 				return v
 			}
 			fleet := NewFleetRepository(pool)
+			t.Run("idle reconciliation leaves payroll available", func(t *testing.T) {
+				lock, err := pool.Begin(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lock.Rollback(ctx)
+				if _, err = lock.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940),fleet_status_lock()`); err != nil {
+					t.Fatal(err)
+				}
+				check, cancel := context.WithTimeout(ctx, 2*time.Second)
+				defer cancel()
+				if err = fleet.ReconcileStatusProgress(check); err != nil {
+					t.Fatal(err)
+				}
+			})
 			checkChoices := func() {
 				t.Helper()
 				got, err := fleet.TruckAssignmentChoices(ctx)
@@ -367,6 +382,14 @@ func TestFleetStatusDatabase(t *testing.T) {
 			}
 			if got := scalar(`SELECT status FROM driver_board WHERE driver_id=$1`, d.ID); got != "RESERVED" {
 				t.Fatal("queue did not persist reserved", got)
+			}
+			// Simulate an out-of-band operational change after the plan was saved.
+			exec(`UPDATE driver_board SET status='ENROUTE',version=version+1 WHERE driver_id=$1`, d.ID)
+			if e = fleet.ReconcileStatusProgress(ctx); e != nil {
+				t.Fatal(e)
+			}
+			if got := scalar(`SELECT status FROM driver_board WHERE driver_id=$1`, d.ID); got != "RESERVED" {
+				t.Fatal("minute reconciliation missed the outstanding plan", got)
 			}
 			plans[0].LoadNumber = ""
 			plans[0].Deleted = true

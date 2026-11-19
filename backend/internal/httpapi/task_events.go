@@ -314,6 +314,7 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 		defer heartbeat.Stop()
 		lifetime := time.NewTimer(10 * time.Minute)
 		defer lifetime.Stop()
+		var nextBoardFrame time.Time
 		for {
 			changed, presenceChanged := false, false
 			select {
@@ -330,13 +331,25 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 				presenceChanged = true
 			}
 			if changed {
-				// A commit may notify once for each row. Collapse that short burst.
-				timer := time.NewTimer(100 * time.Millisecond)
-				select {
-				case <-r.Context().Done():
-					timer.Stop()
-					return
-				case <-timer.C:
+				// Send an isolated board commit immediately. Under sustained writes
+				// still combine notifications within the same 100 ms interval.
+				const interval = 100 * time.Millisecond
+				delay := interval
+				board := h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard"
+				if board {
+					delay = time.Until(nextBoardFrame)
+				}
+				if delay > 0 {
+					timer := time.NewTimer(delay)
+					select {
+					case <-r.Context().Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+					}
+				}
+				if board {
+					nextBoardFrame = time.Now().Add(interval)
 				}
 			drain:
 				for {
@@ -350,7 +363,7 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			// Role changes, disabled accounts and revoked/expired sessions take effect
 			// on this connection too. Every data fetch also performs normal authorization.
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-			session, err := auth.store.FindSessionByTokenHash(ctx, hashToken(cookie.Value))
+			session, err := auth.requestSession(ctx, r.URL.Path, hashToken(cookie.Value))
 			cancel()
 			if err != nil && !errors.Is(err, repository.ErrAuthRecordNotFound) {
 				return

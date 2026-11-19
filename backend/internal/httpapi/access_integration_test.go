@@ -269,8 +269,21 @@ func TestAccessDatabase(t *testing.T) {
 				t.Fatal("heartbeat throttle did not cover durable activity")
 			}
 			exec(`UPDATE auth_sessions SET last_seen_at=now()-interval '3 minutes' WHERE user_id=$1`, id)
-			if _, e := repo.FindSessionByTokenHash(ctx, hashToken(sessionCookie.Value)); e != nil {
+			full, e := repo.FindSessionByTokenHash(ctx, hashToken(sessionCookie.Value))
+			if e != nil {
 				t.Fatal(e)
+			}
+			boardSession, e := repo.FindBoardSessionByTokenHash(ctx, hashToken(sessionCookie.Value))
+			if e != nil || boardSession.User.ID != full.User.ID || boardSession.CSRFToken != full.CSRFToken || !boardSession.ExpiresAt.Equal(full.ExpiresAt) || len(boardSession.User.ExpenseCategoryAccess) != 0 {
+				t.Fatal("board session identity or category scope differs", e)
+			}
+			for _, key := range []string{"driver_board.read", "driver_board.edit", "board.read", "board.edit", "investors.read"} {
+				if repository.HasPermission(full.User, key) != repository.HasPermission(boardSession.User, key) {
+					t.Fatalf("board session permission differs for %s", key)
+				}
+			}
+			if _, e := repo.FindBoardSessionByTokenHash(ctx, strings.Repeat("a", 64)); e != repository.ErrAuthRecordNotFound {
+				t.Fatal("invalid board session accepted", e)
 			}
 			if current := assertActivity(false, loginAt); !current.LastActivityAt.Equal(*seen.LastActivityAt) {
 				t.Fatal("background session validation advanced activity")

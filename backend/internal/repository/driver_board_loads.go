@@ -552,9 +552,15 @@ func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, n
 }
 
 func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, includeRoute bool) (map[string]BoardLoads, error) {
-	return readBoardLoadViewsCached(ctx, tx, ids, from, now, includeRoute, nil, "")
+	return readBoardLoadViewsCached(ctx, tx, ids, from, now, boardLoadViewOptions{includeRoute: includeRoute}, nil, "")
 }
-func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, includeRoute bool, cache *boardWeekCache[map[string][]BoardLoad], sourceKey string) (map[string]BoardLoads, error) {
+
+type boardLoadViewOptions struct {
+	includeRoute      bool
+	queuePresenceOnly bool
+}
+
+func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, options boardLoadViewOptions, cache *boardWeekCache[map[string][]BoardLoad], sourceKey string) (map[string]BoardLoads, error) {
 	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return nil, err
 	}
@@ -831,9 +837,17 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 				p.CanRestoreToQueue = p.PreviouslyActive && !strings.EqualFold(strings.TrimSpace(entries[id].CurrentLoad), strings.TrimSpace(p.Number))
 				view.Earlier = append(view.Earlier, p)
 			} else {
+				if options.queuePresenceOnly {
+					view.Next = append(view.Next, p)
+					break
+				}
 				p.Overdue = boardLoadOverdue(boardStopTimes(p, s.ManualStopTimes), from, now)
 				view.Next = append(view.Next, p)
 			}
+		}
+		if options.queuePresenceOnly {
+			result[id] = view
+			continue
 		}
 		rank := map[string]int{}
 		for i, key := range s.Order {
@@ -862,7 +876,10 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		}
 		result[id] = view
 	}
-	if err := enrichBoardAutomation(ctx, tx, result, states, entries, includeRoute); err != nil {
+	if options.queuePresenceOnly {
+		return result, nil
+	}
+	if err := enrichBoardAutomation(ctx, tx, result, states, entries, options.includeRoute); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -904,6 +921,7 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 	}
 	return views[id], tx.Commit(ctx)
 }
+
 const boardEntryQuery = `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb)
  FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`
 
