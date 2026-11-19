@@ -193,6 +193,9 @@ func (r *DriverPayRepository) SettleInvestor(ctx context.Context, week time.Time
 	if len(commands) > 0 {
 		request, expected = commands[0].RequestID, commands[0].ExpectedStatementRevision
 	}
+	if !reopen {
+		ctx = context.WithValue(ctx, payrollPlanningWeekKey{}, week.Format(time.DateOnly))
+	}
 	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, request, expected, root)
 	if err != nil {
 		return empty, err

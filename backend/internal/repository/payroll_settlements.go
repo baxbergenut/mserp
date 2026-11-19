@@ -169,6 +169,9 @@ func (r *DriverPayRepository) Settle(ctx context.Context, week time.Time, driver
 			lockRevision = ""
 		}
 	}
+	if !reopen {
+		ctx = context.WithValue(ctx, payrollPlanningWeekKey{}, week.Format(time.DateOnly))
+	}
 	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, request, lockRevision, root)
 	if err != nil {
 		return empty, err

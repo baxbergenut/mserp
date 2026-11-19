@@ -96,6 +96,8 @@ func run() error {
 			return e
 		}
 	}
+	statusBoard := repository.NewDriverBoardRepository(pool)
+	grossBoard := repository.NewGrossBoardRepository(pool)
 	for i := 0; i < *runs; i++ {
 		sampleCtx, metrics := db.WithQueryMetrics(ctx)
 		start := time.Now()
@@ -123,9 +125,9 @@ func run() error {
 			end := week.AddDate(0, 0, 6)
 			value, e = repository.NewDashboardRepository(pool).GetFinancialDashboard(sampleCtx, repository.FinancialDashboardQuery{DateFrom: &week, DateTo: &end})
 		case "board":
-			value, e = repository.NewDriverBoardRepository(pool).Get(sampleCtx, week)
+			value, e = statusBoard.Get(sampleCtx, week)
 		case "gross":
-			value, e = repository.NewGrossBoardRepository(pool).Get(sampleCtx, week)
+			value, e = grossBoard.Get(sampleCtx, week)
 		default:
 			return fmt.Errorf("unknown mode")
 		}
