@@ -113,7 +113,38 @@ func TestGrossBoardPlanningDatabase(t *testing.T) {
 			verifyGrossBoardPlanning(t, ctx, pool, admin)
 			verifyGrossBoardModeWrites(t, ctx, pool)
 			verifyGrossBoardNextDayDestinations(t, ctx, pool)
+			verifyCurrentPlanningLocks(t, ctx, pool, admin)
 		})
+	}
+}
+
+func verifyCurrentPlanningLocks(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+	t.Helper()
+	week := ChargeCurrentWeek()
+	repo := NewGrossBoardRepository(pool)
+	entries := []GrossBoardPlanningEntry{{DriverID: projectionDriver, Date: week, Kind: "note", Text: "Current dispatch"}}
+	hold, err := admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hold.Rollback(ctx)
+	if _, err = hold.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
+		t.Fatal(err)
+	}
+	fast, cancel := context.WithTimeout(ctx, 2*time.Second)
+	saved, err := repo.SavePlanningChanges(fast, entries, "")
+	cancel()
+	if err != nil || len(saved) != 1 {
+		t.Fatal("current planning waited for unrelated payroll", err)
+	}
+	if _, err = hold.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(1163352403,$1::date-date '2000-01-03')`, week); err != nil {
+		t.Fatal(err)
+	}
+	blocked, stop := context.WithTimeout(ctx, 150*time.Millisecond)
+	_, err = repo.SavePlanningChanges(blocked, saved, "")
+	stop()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("planning bypassed a freeze of its own week", err)
 	}
 }
 

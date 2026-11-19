@@ -500,11 +500,61 @@ func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) stri
 }
 
 // Read-only reconciliation: no calendar or upstream status can promote a load.
+const boardPlanSourceSelect = `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),` + boardStopSourceSQL + `,NOT (` + boardAvailableSourceSQL + `)
+ FROM ` + boardPlansSQL + ` e ` + boardResolvedLoad + ``
+
+func scanBoardPlan(row pgx.Row) (string, BoardLoad, error) {
+	var id string
+	var p BoardLoad
+	var raw []byte
+	if err := row.Scan(&id, &p.PlanID, &p.Date, &p.Slot, &p.Number, &p.LoadID, &p.SourceStatus, &p.SourceDriver, &p.SyncedAt, &raw, &p.SourceMissing); err != nil {
+		return "", p, err
+	}
+	p.Stops = boardStops(raw)
+	annotateLoad(&p, id)
+	return id, p, nil
+}
+
+// The text editor resolves only against this driver's weekly native plans.
+// Queue history, ETA and manual queue entries do not establish a weekly match.
+func selectBoardCurrentLoad(ctx context.Context, tx pgx.Tx, driver, today, number string) (*BoardLoad, error) {
+	rows, err := tx.Query(ctx, boardPlanSourceSelect+` WHERE e.driver_id=$1 AND e.service_date >= $2::date AND e.service_date < $2::date+7
+ AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>'' AND e.plan_id IS NOT NULL
+ ORDER BY e.service_date,e.slot`, driver, boardLoadWeekStart(today))
+	if err != nil {
+		return nil, err
+	}
+	var candidates []BoardLoad
+	for rows.Next() {
+		_, plan, err := scanBoardPlan(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if strings.EqualFold(strings.TrimSpace(plan.Number), strings.TrimSpace(number)) {
+			plan.Completed = !plan.SourceMissing && providerCompletedLoad(plan.SourceStatus)
+			candidates = append(candidates, plan)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return importedBoardLoad(ctx, tx, number)
+	}
+	return matchBoardCurrentLoad(candidates, number), nil
+}
+
 func readBoardLoads(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time) (map[string]BoardLoads, error) {
 	return readBoardLoadViews(ctx, tx, ids, from, now, false)
 }
 
 func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, includeRoute bool) (map[string]BoardLoads, error) {
+	return readBoardLoadViewsCached(ctx, tx, ids, from, now, includeRoute, nil, "")
+}
+func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, includeRoute bool, cache *boardWeekCache[map[string][]BoardLoad], sourceKey string) (map[string]BoardLoads, error) {
 	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
 		return nil, err
 	}
@@ -548,9 +598,9 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 	if err != nil {
 		return nil, err
 	}
-	plans := map[string][]BoardLoad{}
-	rows, err = tx.Query(ctx, `SELECT e.driver_id,e.plan_id,e.service_date::text,e.slot,e.load_number,l.id,coalesce(l.status,''),e.driver_id::text,coalesce(l.synced_at::text,''),`+boardStopSourceSQL+`,NOT (`+boardAvailableSourceSQL+`)
- FROM `+boardPlansSQL+` e `+boardResolvedLoad+`
+	readPlans := func() (map[string][]BoardLoad, error) {
+		plans := map[string][]BoardLoad{}
+		rows, err := tx.Query(ctx, boardPlanSourceSelect+`
  LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
  AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.payload->'current'->>'loadId'
@@ -558,23 +608,40 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
  OR current_state.payload->'order' ? e.plan_id::text
  OR current_state.payload->'cancelled' ?| ARRAY['plan:' || e.plan_id::text, 'load:' || l.id::text])
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, week, selected)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var id string
-		var p BoardLoad
-		var raw []byte
-		if err = rows.Scan(&id, &p.PlanID, &p.Date, &p.Slot, &p.Number, &p.LoadID, &p.SourceStatus, &p.SourceDriver, &p.SyncedAt, &raw, &p.SourceMissing); err != nil {
-			rows.Close()
+		if err != nil {
 			return nil, err
 		}
-		p.Stops = boardStops(raw)
-		annotateLoad(&p, id)
-		plans[id] = append(plans[id], p)
+		for rows.Next() {
+			id, p, scanErr := scanBoardPlan(rows)
+			if scanErr != nil {
+				rows.Close()
+				return nil, scanErr
+			}
+			plans[id] = append(plans[id], p)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		return plans, nil
 	}
-	err = rows.Err()
-	rows.Close()
+	var plans map[string][]BoardLoad
+	if cache != nil && sourceKey != "" {
+		// Include every driver's selection, custom order and cancellations used by the
+		// historical-plan query, even when that driver has no Status Board row yet.
+		slices.Sort(selected)
+		var planKey string
+		err = tx.QueryRow(ctx, `SELECT jsonb_build_array($2::text,$3::date,$1::uuid[],$4::uuid[],
+ (SELECT jsonb_object_agg(s.driver_id,jsonb_build_array(s.payload->'current'->>'loadId',s.payload->'order',s.payload->'cancelled'))
+ FROM driver_board_load_state s WHERE s.driver_id=ANY($1::uuid[])))::text`, ids, sourceKey, week, selected).Scan(&planKey)
+		if err != nil {
+			return nil, err
+		}
+		plans, err = cache.get(ctx, planKey, readPlans)
+	} else {
+		plans, err = readPlans()
+	}
 	if err != nil {
 		return nil, err
 	}

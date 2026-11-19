@@ -37,6 +37,8 @@ func payrollConcurrent(tx pgx.Tx) bool {
 	return ok
 }
 
+type payrollPlanningWeekKey struct{}
+
 func (r *DriverPayRepository) beginPreparedPayrollWrite(ctx context.Context, actor, request, expected string, roots ...string) (pgx.Tx, func(), error) {
 	if request != "" {
 		var parsed pgtype.UUID
@@ -57,6 +59,8 @@ func (r *DriverPayRepository) beginPayrollWriteProtocol(ctx context.Context, con
 	if concurrent {
 		lock, unlock = `SELECT pg_advisory_lock_shared(736281940)`, `SELECT pg_advisory_unlock_shared(736281940)`
 	}
+	planningWeek, _ := ctx.Value(payrollPlanningWeekKey{}).(string)
+	planningLockAttempted := false
 	receiptLocked := false
 	cleanup := func() {
 		if releaseResources != nil {
@@ -66,6 +70,11 @@ func (r *DriverPayRepository) beginPayrollWriteProtocol(ctx context.Context, con
 		defer cancel()
 		if receiptLocked {
 			if _, e := conn.Exec(releaseCtx, `SELECT pg_advisory_unlock(hashtextextended($1,182))`, actor+":"+request); e != nil {
+				_ = conn.Conn().Close(context.Background())
+			}
+		}
+		if planningLockAttempted {
+			if _, e := conn.Exec(releaseCtx, `SELECT pg_advisory_unlock_shared(1163352403,$1::date-date '2000-01-03')`, planningWeek); e != nil {
 				_ = conn.Conn().Close(context.Background())
 			}
 		}
@@ -80,6 +89,15 @@ func (r *DriverPayRepository) beginPayrollWriteProtocol(ctx context.Context, con
 	if err != nil {
 		cleanup()
 		return nil, nil, err
+	}
+	// Acquire before starting the repeatable snapshot. Independent settlements
+	// share the week lock. A dispatcher editing another week never competes here.
+	if planningWeek != "" {
+		planningLockAttempted = true
+		if _, err = conn.Exec(ctx, `SELECT pg_advisory_lock_shared(1163352403,$1::date-date '2000-01-03')`, planningWeek); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
 	}
 	var resources *payrollResourceSet
 	replay := false

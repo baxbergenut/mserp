@@ -20,9 +20,9 @@ type GrossBoardPlanningEntry struct {
 	Version  int    `json:"version"`
 }
 
-// SavePlanningChanges enters the source gate before day/row locks so finalization
-// freezes one coherent planning snapshot. It does not invalidate financial inputs
-// or touch load slots. Shared day locks also serialize competing day types.
+// Current-week planning and statement finalization coordinate by statement week.
+// Historical and mixed batches also coordinate with the global source protocol.
+// Day locks still serialize changes to competing day types.
 // Unchanged retries return the current version without a write/notification.
 func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries []GrossBoardPlanningEntry, actor string) ([]GrossBoardPlanningEntry, error) {
 	entries = append([]GrossBoardPlanningEntry{}, entries...)
@@ -31,15 +31,31 @@ func (r *GrossBoardRepository) SavePlanningChanges(ctx context.Context, entries 
 			return nil, err
 		}
 	}
-	defer r.workPriority.interactive()()
+	week := ChargeCurrentWeek()
+	monday, _ := time.Parse(time.DateOnly, week)
+	nextWeek := monday.AddDate(0, 0, 7).Format(time.DateOnly)
+	currentWeek := len(entries) > 0
+	for _, e := range entries {
+		if e.Date < week || e.Date >= nextWeek {
+			currentWeek = false
+			break
+		}
+	}
+	if !currentWeek {
+		defer r.workPriority.interactive()()
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	// Finalization holds this gate before pinning its snapshot in both global and
-	// resource mode. Take it first, including when changing an absent/tombstoned row.
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`); err != nil {
+	// A save crossing Monday still owns the old week's lock until commit.
+	if currentWeek {
+		_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(1163352403,$1::date-date '2000-01-03')`, week)
+	} else {
+		_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(736281940)`)
+	}
+	if err != nil {
 		return nil, err
 	}
 	changed, dismissed := false, false

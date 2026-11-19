@@ -51,10 +51,52 @@ func testBoardSourceAvailability(t *testing.T, ctx context.Context, pool *pgxpoo
 	if err = pool.QueryRow(ctx, `SELECT jsonb_agg(to_jsonb(l) ORDER BY id)::text FROM loads l WHERE id BETWEEN 88120 AND 88122`).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
+	week, _ := time.Parse(time.DateOnly, boardLoadWeekStart(today.Format(time.DateOnly)))
+	gross := NewGrossBoardRepository(pool)
+	checkSnapshot := func(missing bool) {
+		t.Helper()
+		status, err := board.Get(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dispatch, err := gross.Get(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, rows := range [][]GrossBoardEntry{status.GrossEntries, dispatch.Entries} {
+			found := false
+			for _, row := range rows {
+				if row.DriverID == d.ID && row.LoadNumber == "SOURCE-PINNED-PLAN" {
+					found = true
+					if row.SourceMissing != missing {
+						t.Fatal("stale board source availability", row.SourceMissing, missing)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("missing pinned entry in weekly board")
+			}
+		}
+		found := false
+		for _, p := range status.Loads[d.ID].Next {
+			if p.Number == "SOURCE-PINNED-PLAN" {
+				found = true
+				if p.SourceMissing != missing {
+					t.Fatal("stale queued source availability", p.SourceMissing, missing)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("missing pinned queue plan")
+		}
+	}
+	checkSnapshot(false)
+	checkSnapshot(false)
 	source := NewLoadRepository(pool)
 	if err = source.RecordLoadSourceLookup(ctx, []int{88120, 88121, 88122, 88123, 88124}, []int{88121}); err != nil {
 		t.Fatal(err)
 	}
+	checkSnapshot(true)
 	view, err = board.Loads(ctx, d.ID, "")
 	if err != nil || view.Current == nil || view.Current.LoadID == nil || *view.Current.LoadID != 88121 || len(view.Current.Stops) != 2 || view.SourceDestination != "New, TX" {
 		t.Fatal("remaining live source did not resolve", view, err)

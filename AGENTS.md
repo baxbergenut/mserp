@@ -92,6 +92,13 @@ conversion used that faulty check and created duplicate slots.
 
 Status Board row conflicts return `board_row_changed`. The browser rebases independent fields once and shows conflicting saved values for review. Load actions use the row version and queue revision from the same load snapshot. Exercise `frontend/scripts/test-investors-e2e.mjs --board-save-only` for two-user save, conflict and reload behavior.
 
+Current-week Gross Board planning text takes a lock for its own New York week.
+Driver and Investor Pay acquire the shared side before pinning a finalization
+snapshot, including at Monday rollover. Historical or mixed planning saves
+retain the global source gate. Load-slot and financial writes retain their
+existing protocol. Status Board text load selection resolves weekly native
+plans before the unique available provider fallback.
+
 ## Reports
 
 Reports v1 (`/reports`) includes only active Gross Board load entries and selected
