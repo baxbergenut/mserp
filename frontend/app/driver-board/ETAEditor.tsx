@@ -5,9 +5,9 @@ import { createPortal } from "react-dom";
 import { parseETA } from "./board";
 import type { BoardAutomation, BoardLoadAction, BoardStop } from "@/app/lib/types";
 
-export function ETAEditor({ name, value, anchor, onApply, onClose, automation, waiting, onAction, pickup }: {
+export function ETAEditor({ name, value, anchor, onApply, onClose, automation, waiting, targetChanged, onAction, pickup }: {
   name: string; value: string; anchor: HTMLButtonElement; onApply: (value: string) => void; onClose: () => void;
-  automation?: BoardAutomation; waiting?: boolean; onAction?: (action: BoardLoadAction) => Promise<void>; pickup?: BoardStop;
+  automation?: BoardAutomation; waiting?: boolean; targetChanged?: boolean; onAction?: (action: BoardLoadAction) => Promise<void>; pickup?: BoardStop;
 }) {
   const initial = parseETA(value);
   const [miles, setMiles] = useState(initial?.miles ?? "");
@@ -20,7 +20,7 @@ export function ETAEditor({ name, value, anchor, onApply, onClose, automation, w
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function act(action: BoardLoadAction) {
-    if (!onAction || busy || waiting) return;
+    if (!onAction || busy || waiting || targetChanged) return;
     setBusy(true); setError("");
     try { await onAction(action); } catch (err) { setError(err instanceof Error ? err.message : "Could not save stop time"); }
     finally { setBusy(false); }
@@ -65,14 +65,15 @@ export function ETAEditor({ name, value, anchor, onApply, onClose, automation, w
     event.preventDefault();
     if (pickup) { void act({ action: "stop_time", manualStopTime: manualStopTime.trim() }); return; }
     const next = time || (miles ? `${Number(miles)} mi` : "");
-    if (!busy && !waiting && (!next || parseETA(next))) onApply(next);
+    if (!busy && !waiting && !targetChanged && (!next || parseETA(next))) onApply(next);
   }}>
     <div className="mb-3 flex items-center justify-between text-xs"><span className="font-medium text-zinc-100">{heading}</span><span className="text-zinc-500">{pickup ? "Facility local time" : "New York time"}</span></div>
     {appointment?.label && <p className="mb-2 text-xs text-zinc-300" title={appointment.detail}>{appointment.label} · {appointment.kind === "manual" ? "Manual stop time" : "DataTruck appointment"}</p>}
+    {targetChanged && <p role="alert" className="mb-2 text-xs text-amber-200">The load or destination changed. Reopen ETA to edit the updated stop.</p>}
     {error && <p role="alert" className="mb-2 text-xs text-red-400">{error}</p>}
     {automation?.customDestination && (!value || automation.manualETAValid === false) && !automation.travelValue && <p className="mb-2 text-xs text-zinc-400">{automation.reason || "Waiting for custom destination ETA"}</p>}
-    {(pickup || automation?.stopType) && (stopType === "pickup" || stopType === "delivery") && <div className="mb-3"><label className="block text-[11px] text-zinc-400">Manual {stopType} time<input aria-label={`Manual ${stopType} time`} type="text" maxLength={80} placeholder="e.g. 14:00 MON" value={manualStopTime} disabled={busy || waiting} onChange={e => setManualStopTime(e.target.value)} className={inputClass} /></label><div className="mt-1 flex items-center justify-between"><span className="text-[10px] text-zinc-500">Clear to restore the DataTruck time.</span><button type="button" disabled={busy || waiting || !onAction || manualStopTime.trim() === savedStopTime} className="rounded px-2 py-1 text-xs text-blue-400 hover:bg-zinc-800 disabled:text-zinc-600" onClick={() => void act({ action: "stop_time", manualStopTime: manualStopTime.trim() })}>Save time</button></div></div>}
-    {pickup ? <div className="flex justify-end"><button type="button" className={buttonClass} onClick={onClose}>Close</button></div> : <fieldset disabled={busy || waiting}>
+    {(pickup || automation?.stopType) && (stopType === "pickup" || stopType === "delivery") && <div className="mb-3"><label className="block text-[11px] text-zinc-400">Manual {stopType} time<input aria-label={`Manual ${stopType} time`} type="text" maxLength={80} placeholder="e.g. 14:00 MON" value={manualStopTime} disabled={busy || waiting || targetChanged} onChange={e => setManualStopTime(e.target.value)} className={inputClass} /></label><div className="mt-1 flex items-center justify-between"><span className="text-[10px] text-zinc-500">Clear to restore the DataTruck time.</span><button type="button" disabled={busy || waiting || targetChanged || !onAction || manualStopTime.trim() === savedStopTime} className="rounded px-2 py-1 text-xs text-blue-400 hover:bg-zinc-800 disabled:text-zinc-600" onClick={() => void act({ action: "stop_time", manualStopTime: manualStopTime.trim() })}>Save time</button></div></div>}
+    {pickup ? <div className="flex justify-end"><button type="button" className={buttonClass} onClick={onClose}>Close</button></div> : <fieldset disabled={busy || waiting || targetChanged}>
     {!initial && value && <p className="mb-2 break-words text-xs text-amber-200">Existing ETA: {value}. Enter a time or miles to replace it.</p>}
     <div className="grid grid-cols-[1.1fr_1fr] gap-2">
       <label className="text-[11px] text-zinc-400">Miles left<input type="number" min="0" max="9999999" step="0.01" value={miles} onChange={e => { setMiles(e.target.value); setTime(""); }} className={inputClass} /></label>

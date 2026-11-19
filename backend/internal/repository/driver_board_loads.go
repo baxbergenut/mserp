@@ -904,10 +904,16 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 	}
 	return views[id], tx.Commit(ctx)
 }
+const boardEntryQuery = `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb)
+ FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`
+
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
+	return scanBoardEntry(tx.QueryRow(ctx, boardEntryQuery, id))
+}
+
+func scanBoardEntry(row pgx.Row) (DriverBoardEntry, error) {
 	var e DriverBoardEntry
-	err := tx.QueryRow(ctx, `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb)
- FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`, id).Scan(&e.DriverID, &e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan)
+	err := row.Scan(&e.DriverID, &e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan)
 	return e, err
 }
 func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadAction, actor string) (BoardLoadResult, error) {
@@ -916,7 +922,7 @@ func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadActi
 
 func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadAction, actor string, source bool) (BoardLoadResult, error) {
 	var result BoardLoadResult
-	tx, err := beginBoardMutation(ctx, r.pool, source)
+	tx, err := beginBoardMutation(ctx, r.pool, source, actor, "board")
 	if err != nil {
 		return result, err
 	}
@@ -1272,9 +1278,6 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		if err != nil {
 			return result, err
 		}
-	}
-	if err = setBoardActor(ctx, tx, actor, "board"); err != nil {
-		return result, err
 	}
 	if assigning {
 		queueOnly := a.Action == "add" || a.Action == "restore" || a.Action == "restore_previous"

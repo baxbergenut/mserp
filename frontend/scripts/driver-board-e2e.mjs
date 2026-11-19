@@ -172,11 +172,31 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await field('Current load').fill('LOAD 8841');
   await field('Trailer').fill('TA 102');
   await field('Status').selectOption('ENROUTE');
+  // Deliver the updated load context while the dispatcher is typing the ETA.
+  const loadDetailsURL = url => url.pathname === `/api/driver-board/loads/${id}`;
+  let releaseDetails;
+  const detailsGate = new Promise(resolve => { releaseDetails = resolve; });
+  let destinationDetailsReady = false;
+  await page.route(loadDetailsURL, async route => {
+    const response = await route.fetch();
+    if ((await response.json()).automation?.customDestination) {
+      destinationDetailsReady = true;
+      await detailsGate;
+    }
+    await route.fulfill({ response });
+  });
   await field('Destination').fill('Memphis, TN → Louisville, KY');
   await field('ETA').click();
   await page.getByLabel('Miles left', { exact: true }).fill('');
   await page.getByLabel('Arrival time', { exact: true }).fill('17:00');
+  try {
+    await expect.poll(() => destinationDetailsReady).toBe(true);
+  } finally {
+    releaseDetails();
+  }
+  await page.unrouteAll({ behavior: 'wait' });
   await page.screenshot({ path: join(temp, 'status-board-eta-picker.png'), fullPage: true, animations: 'disabled' });
+  await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('17:00');
   await page.getByRole('button', { name: 'Apply ETA', exact: true }).click();
   await field('Notes').fill('Call before arrival');
   await field('Home time').click();
