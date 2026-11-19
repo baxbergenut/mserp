@@ -111,6 +111,11 @@ Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisi
 
 ## Pay-page actions
 
+Restore finalized investor cards from a freshly decoded saved report. Omitted
+fields represent empty values at finalization. Merging live expenses into that
+report changes the payable and makes reopening look for nonexistent postings.
+TestInvestorFrozenLateExpenseDatabase covers prepared reads and reopening.
+
 Investor Pay adjustment edits leave suggested escrow and reimbursement rows for
 finalization unless explicitly edited. A prepared statement-local adjustment
 reuses the locked truck's generated charges and publishes its own receipt even
