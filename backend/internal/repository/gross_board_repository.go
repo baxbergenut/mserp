@@ -494,10 +494,11 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 }
 
 func lockGrossBoardWrite(ctx context.Context, tx pgx.Tx, actor string) error {
-	if _, err := tx.Exec(ctx, `SET LOCAL jit=off; SET LOCAL plan_cache_mode=force_custom_plan`); err != nil {
-		return err
-	}
-	if err := setBoardActor(ctx, tx, actor, "gross_board"); err != nil {
+	finishFleetLock := db.Phase(ctx, "gross_fleet_lock_wait")
+	_, err := tx.Exec(ctx, `SELECT set_config('jit','off',true),set_config('plan_cache_mode','force_custom_plan',true),
+ set_config('mserp.board_actor',$1,true),set_config('mserp.board_source','gross_board',true) FROM fleet_status_lock()`, actor)
+	finishFleetLock()
+	if err != nil {
 		return err
 	}
 	// Preserve the existing fleet-status then financial lock order.
@@ -559,7 +560,15 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 	for index, e := range entries {
 		editing = &e
 		var transferred bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND active AND ((source_date=$2::date AND source_slot=$3) OR (dispatch_date=$2::date AND dispatch_slot=$3)))`, e.DriverID, e.Date, e.Slot).Scan(&transferred); err != nil {
+		var oldTrip *int
+		var oldID *int
+		var oldNumber string
+		var oldActive bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND active AND ((source_date=$2::date AND source_slot=$3) OR (dispatch_date=$2::date AND dispatch_slot=$3))),
+ CASE WHEN NOT p.deleted THEN p.load_trip_id END,p.load_record_id,coalesce(p.load_number,''),
+ coalesce(NOT p.deleted AND p.day_status='' AND btrim(p.load_number)<>'',false)
+ FROM (SELECT 1) seed LEFT JOIN `+grossBoardEntriesSQL+` p
+ ON p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3`, e.DriverID, e.Date, e.Slot).Scan(&transferred, &oldTrip, &oldID, &oldNumber, &oldActive); err != nil {
 			return nil, err
 		}
 		if transferred {
@@ -586,24 +595,14 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 			enteredMiles = e.Miles
 		}
 		// Preserve an existing selection for older clients that omit the field.
-		var previousTrip *int
-		var oldTrip *int
-		var oldID *int
-		var oldNumber string
-		var oldActive bool
-		if err = tx.QueryRow(ctx, `SELECT CASE WHEN NOT p.deleted THEN p.load_trip_id END,p.load_record_id,coalesce(p.load_number,''),
- coalesce(NOT p.deleted AND p.day_status='' AND btrim(p.load_number)<>'',false)
- FROM (SELECT 1) seed LEFT JOIN `+grossBoardEntriesSQL+` p
- ON p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3`, e.DriverID, e.Date, e.Slot).Scan(&oldTrip, &oldID, &oldNumber, &oldActive); err != nil {
-			return nil, err
-		}
 		if oldTrip != nil {
 			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
 				return nil, err
 			}
 		}
-		if err = tx.QueryRow(ctx, `SELECT (SELECT load_trip_id FROM `+grossBoardEntriesSQL+` p WHERE p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3 AND NOT p.deleted AND p.load_record_id=$4)`, e.DriverID, e.Date, e.Slot, loadID).Scan(&previousTrip); err != nil {
-			return nil, err
+		var previousTrip *int
+		if loadID != nil && oldID != nil && *loadID == *oldID {
+			previousTrip = oldTrip
 		}
 		if e.LoadTripID == nil && !e.Deleted && e.DayStatus == "" {
 			e.LoadTripID = previousTrip

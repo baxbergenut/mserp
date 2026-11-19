@@ -56,8 +56,10 @@ var grossBoardOpeningValues = `WITH ` + grossBoardCheckpoints + `, ranked AS MAT
  AND l.split_allocation IS NULL AND (l.raw_payload->'trips'->1) IS NULL AS use_parent) simple
  LEFT JOIN LATERAL (
  SELECT trip_source.review,trip_source.reviewed,trip_source.original
- FROM (SELECT 1) seed ` + loadTripSourceSQL + `
- WHERE l.id IS NOT NULL AND NOT simple.use_parent AND NOT e.duplicate AND NOT e.deleted AND e.day_status=''
+ -- Feed the validator only complex sources. A filter after the lateral join
+ -- can still expand trip JSON for every ordinary historical row.
+ FROM (SELECT l.* WHERE l.id IS NOT NULL AND NOT simple.use_parent AND NOT e.duplicate
+   AND NOT e.deleted AND e.day_status='' OFFSET 0) l ` + loadTripSourceSQL + `
  ) detail ON true
 ), effective AS (
  SELECT *,effective_original-driver_rate balance_change FROM amounts

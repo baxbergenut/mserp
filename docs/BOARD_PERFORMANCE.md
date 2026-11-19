@@ -98,6 +98,22 @@ Use the existing `Server-Timing` response header to distinguish app, database an
 pool time. After deployment, verify migration 213 and the indexed history query on
 the live database before claiming its production speedup.
 
+## Gross Board writes and weekly reads
+
+Single-entry saves roll back the whole transaction on a rejected edit. Multi-entry
+saves keep their savepoints for independent groups. Prior load identity, trip and
+transfer protection are read together. The weekly balance query feeds only
+complex allocations to the trip validator. Board grids use the same trip-field
+parsing for ordinary single-trip loads and retain the full split validation
+for selected trips or reviewed allocations.
+
+Status Board requests can use `overview=1&compact=grid` for weekly totals and
+current-load suggestions. Full Gross Board editing data stays on its own
+endpoint. The route and stop-city workers omit the display-only commission,
+weekly gross, ELD summary and pending-driver reads. The ETA sweep checks READY
+location freshness before taking a driver lock, then rechecks due work under
+that lock. It writes arrival evidence and ETA context only when needed.
+
 ## References
 
 - [PostgreSQL 16: EXPLAIN](https://www.postgresql.org/docs/16/using-explain.html)

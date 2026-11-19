@@ -209,7 +209,7 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
 }
 export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) => {
   await boardReadiness.wait("status");
-  return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "1" }), { signal }).then(expandBoard);
+  return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "grid" }), { signal }).then(expandBoard);
 };
 export function saveDriverBoard(entries: DriverBoardEntry[], textBase: Record<string, DriverBoardEntry> = {}) {
   const omitReceipt = (key: string, value: unknown) => key === "fleetStatus" ? undefined : value;

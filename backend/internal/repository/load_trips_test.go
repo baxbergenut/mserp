@@ -65,6 +65,7 @@ func TestLoadTripsDatabase(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer pool.Close()
+			testBoardTripProjection(t, ctx, pool)
 			exec := func(sql string, args ...any) {
 				t.Helper()
 				if _, e := pool.Exec(ctx, sql, args...); e != nil {
@@ -310,5 +311,28 @@ func TestLoadTripsDatabase(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func testBoardTripProjection(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	// Compare every wire field, including malformed and null single-trip evidence.
+	const sources = `WITH examples AS (
+ SELECT trips,selected,expected FROM (VALUES ('null'::jsonb),('{}'),('[]'),('[null]'),
+ ('[{"id":"01","mile":"bad"}]'),('[{"id":4,"total_load_pay":100,"mile":50,"empty_mile":5,"driver__full_name":"A"}]'),
+ ('[{"id":4,"total_load_pay":90,"mile":1,"empty_mile":2,"driver__full_name":""}]'),
+ ('[{"id":4},{"id":5}]')) v(trips) CROSS JOIN (VALUES (NULL::int),(4)) s(selected)
+ CROSS JOIN (VALUES (false),(true)) x(expected)
+ ), inputs AS (SELECT row_number() OVER () n, jsonb_build_object('trips',trips) raw_payload,
+  selected load_trip_id,expected split_expected,NULL::jsonb split_allocation,100::numeric total_pay,55::numeric total_miles FROM examples)
+ `
+	const values = `SELECT l.n,trip_source.split,trip_source.driver_gross,trip_source.review,trip_source.original,
+ trip_source.miles,trip_source.options,trip_source.reviewed,trip_source.review_reason
+ FROM inputs l CROSS JOIN LATERAL (SELECT l.load_trip_id) e `
+	var equal bool
+	err := pool.QueryRow(ctx, sources+", reference AS ("+values+loadTripSourceSQL+"), board AS ("+values+boardTripSourceSQL+
+		`) SELECT NOT EXISTS((TABLE reference EXCEPT ALL TABLE board) UNION ALL (TABLE board EXCEPT ALL TABLE reference))`).Scan(&equal)
+	if err != nil || !equal {
+		t.Fatal("board trip projection differs from canonical source", err)
 	}
 }

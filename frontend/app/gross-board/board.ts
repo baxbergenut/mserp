@@ -1,4 +1,4 @@
-import type { GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
+import type { DriverBoardGrossEntry, GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
 
 export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[], entries: GrossBoardEntry[] = []) {
   return drivers.flatMap(driver => {
@@ -116,7 +116,7 @@ export function amountDisplay(value: string, currency = false) {
   return value === "" || !validDecimal(value) ? value : decimalDisplay(hundredths(value), currency);
 }
 
-export function totals(entries: GrossBoardEntry[]) {
+export function totals(entries: DriverBoardGrossEntry[]) {
   return entries.filter((entry) => !entry.dayStatus && !entry.deleted && !entry.duplicate).reduce((sum, entry) => ({
     original: sum.original + (entry.tripReview ? BigInt(0) : hundredths(entry.originalRate)),
     driver: sum.driver + hundredths(entry.driverRate),
@@ -223,9 +223,9 @@ export function reconcileAutosave(current: Record<string, GrossBoardEntry>, snap
 
 // Build lookup buckets once per board revision instead of scanning every entry
 // for every driver/day. Keep tombstones and slot order for editing/versioning.
-export function indexBoardEntries(entries: GrossBoardEntry[]) {
-  const byDriver = new Map<string, GrossBoardEntry[]>();
-  const byDay = new Map<string, GrossBoardEntry[]>();
+export function indexBoardEntries<T extends Pick<GrossBoardEntry, "driverId" | "date" | "slot">>(entries: T[]) {
+  const byDriver = new Map<string, T[]>();
+  const byDay = new Map<string, T[]>();
   for (const entry of entries) {
     const driverEntries = byDriver.get(entry.driverId) ?? [];
     driverEntries.push(entry); byDriver.set(entry.driverId, driverEntries);

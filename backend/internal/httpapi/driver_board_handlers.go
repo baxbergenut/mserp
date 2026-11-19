@@ -286,7 +286,11 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 		if r.URL.Query().Get("overview") == "1" {
 			board = repository.BoardOverview(board)
 		}
-		if r.URL.Query().Get("compact") == "1" {
+		switch r.URL.Query().Get("compact") {
+		case "grid":
+			writeJSON(w, 200, repository.CompactBoardGrid(board))
+			return
+		case "1":
 			writeJSON(w, 200, repository.CompactBoard(board))
 			return
 		}

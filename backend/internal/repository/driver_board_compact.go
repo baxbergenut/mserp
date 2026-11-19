@@ -20,6 +20,37 @@ type CompactDriverBoard struct {
 	Loads map[string]CompactBoardLoads `json:"loads"`
 }
 
+// The Status Board grid uses weekly gross entries for totals and current-load
+// suggestions. Full Gross Board editing and historical details have their own API.
+type BoardGrossEntry struct {
+	DriverID     string `json:"driverId"`
+	Date         string `json:"date"`
+	Slot         int    `json:"slot"`
+	LoadNumber   string `json:"loadNumber"`
+	DayStatus    string `json:"dayStatus"`
+	OriginalRate string `json:"originalRate"`
+	DriverRate   string `json:"driverRate"`
+	Miles        string `json:"miles"`
+	Duplicate    bool   `json:"duplicate"`
+	Deleted      bool   `json:"deleted"`
+	TripReview   bool   `json:"tripReview"`
+}
+
+type DriverBoardGrid struct {
+	CompactDriverBoard
+	GrossEntries []BoardGrossEntry `json:"grossEntries"`
+}
+
+func CompactBoardGrid(board DriverBoard) DriverBoardGrid {
+	grid := DriverBoardGrid{CompactDriverBoard: CompactBoard(board), GrossEntries: make([]BoardGrossEntry, len(board.GrossEntries))}
+	for i, e := range board.GrossEntries {
+		grid.GrossEntries[i] = BoardGrossEntry{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot, LoadNumber: e.LoadNumber,
+			DayStatus: e.DayStatus, OriginalRate: e.OriginalRate, DriverRate: e.DriverRate, Miles: e.Miles,
+			Duplicate: e.Duplicate, Deleted: e.Deleted, TripReview: e.TripReview}
+	}
+	return grid
+}
+
 // Deduplicate by complete value, not plan ID: a removed current selection can
 // carry a historical stop snapshot that differs from this week's live plan.
 func CompactBoard(board DriverBoard) CompactDriverBoard {
