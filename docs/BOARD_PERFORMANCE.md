@@ -152,3 +152,15 @@ load views, stop cities, row ordering and Gross Board openings.
   200 ms at the 75th percentile for interactions and reducing blocking main-thread work.
 - [Google: optimizing TTFB](https://web.dev/articles/optimize-ttfb) gives 800 ms as
   a general TTFB guideline. That is distinct from this stricter 400 ms board-opening target.
+
+The Status Board caches the resolved manual queue using the same committed
+load and availability revision as its native plans. Each key also includes the
+driver, queue order, entered text and local plan identity. A missing revision
+uses the transaction's direct read. Cached stops retain the internal geocoding
+evidence used to fill city labels. Each caller owns its copy of the stop and
+schedule data. TestBoardPlanCacheKeepsStopEvidence and
+TestBoardManualSourcesDatabase cover repeated reads and source changes.
+
+Weekly vacation eligibility groups corrected availability history by driver
+before applying the existing Monday and later-week rules. The live read-only
+comparison covered ten weeks and found identical driver membership.

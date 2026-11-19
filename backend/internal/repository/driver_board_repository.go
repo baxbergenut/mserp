@@ -96,7 +96,7 @@ type DriverBoard struct {
 }
 
 type DriverBoardRepository struct {
-	plans             *boardWeekCache[map[string][]BoardLoad]
+	loadSources       *boardLoadSourceCaches
 	weekEntries       *boardWeekCache[[]GrossBoardEntry]
 	workPriority      *PayrollWorkPriority
 	retryRoutes       *boardroutes.Client
@@ -109,7 +109,7 @@ type DriverBoardRepository struct {
 
 func NewDriverBoardRepository(pool *pgxpool.Pool, fiveELDConfigured ...bool) *DriverBoardRepository {
 	configured := len(fiveELDConfigured) > 0 && fiveELDConfigured[0]
-	return &DriverBoardRepository{pool: pool, plans: new(boardWeekCache[map[string][]BoardLoad]), weekEntries: new(boardWeekCache[[]GrossBoardEntry]), now: time.Now, fiveELDConfigured: configured}
+	return &DriverBoardRepository{pool: pool, loadSources: new(boardLoadSourceCaches), weekEntries: new(boardWeekCache[[]GrossBoardEntry]), now: time.Now, fiveELDConfigured: configured}
 }
 
 // Ownership and pay method are independent. An owner driving their own truck
@@ -235,7 +235,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	}
 	if displayBoard {
 		endEntries := db.Phase(ctx, "board_week_entries")
-		entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+		entries, err := r.weekEntries.get(ctx, key, cloneWeekEntries, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
 		endEntries()
 		if err != nil {
 			return result, err
@@ -256,7 +256,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		result.ELD.Configured = r.fiveELDConfigured
 	}
 	endLoads := db.Phase(ctx, "status_load_views")
-	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{}, r.plans, key)
+	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{}, r.loadSources, key)
 	endLoads()
 	if err != nil {
 		return result, err

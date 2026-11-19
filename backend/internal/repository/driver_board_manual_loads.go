@@ -2,10 +2,36 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
+
+// A manual plan resolves from the entered number, its queue identity and the
+// exact load/availability revision in this transaction. Driver and slice order
+// matter because the same source can appear in different drivers' queues.
+func (cache *boardLoadSourceCaches) readManual(ctx context.Context, tx pgx.Tx, sourceKey string, states map[string]boardLoadState) (map[string][]BoardLoad, error) {
+	if cache == nil || sourceKey == "" {
+		return readManualBoardLoads(ctx, tx, states)
+	}
+	queues := make(map[string][][2]string)
+	for driver, state := range states {
+		for _, plan := range state.Manual {
+			queues[driver] = append(queues[driver], [2]string{plan.PlanID, plan.Number})
+		}
+	}
+	if len(queues) == 0 {
+		return map[string][]BoardLoad{}, nil
+	}
+	encoded, err := json.Marshal(queues)
+	if err != nil {
+		return nil, err
+	}
+	return cache.manual.get(ctx, sourceKey+"\x00"+string(encoded), cloneBoardPlans, func() (map[string][]BoardLoad, error) {
+		return readManualBoardLoads(ctx, tx, states)
+	})
+}
 
 // Resolve all manually queued numbers in one cached database query. Never choose
 // between multiple imported records, and retain the entered number and queue ID.

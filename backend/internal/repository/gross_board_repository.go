@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -217,7 +218,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return GrossBoard{}, err
 	}
 	endEntries := db.Phase(ctx, "board_week_entries")
-	entries, err := r.weekEntries.get(ctx, key, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+	entries, err := r.weekEntries.get(ctx, key, cloneWeekEntries, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
 	endEntries()
 	if err != nil {
 		return GrossBoard{}, err
@@ -229,7 +230,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return board, err
 	}
 	endBalances := db.Phase(ctx, "gross_opening_balances")
-	board.Balances, err = r.openings.get(ctx, key, func() ([]GrossBoardBalance, error) {
+	board.Balances, err = r.openings.get(ctx, key, slices.Clone[[]GrossBoardBalance], func() ([]GrossBoardBalance, error) {
 		snapshot := GrossBoard{Balances: []GrossBoardBalance{}}
 		err := readGrossBoardOpenings(ctx, tx, week, &snapshot)
 		return snapshot.Balances, err
