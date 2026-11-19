@@ -28,7 +28,7 @@ try{
  await page.goto(access.base+'/drivers/detail?id='+driver.id);await page.getByRole('button',{name:'Change availability',exact:true}).click();await page.getByLabel('Availability',{exact:true}).selectOption('family_issue');await page.getByRole('button',{name:'Save status',exact:true}).click();
  await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Family issue',{timeout:15000});
  await page.goto(access.base+'/trucks/detail?id='+driver.truckId);await page.getByRole('button',{name:'Change status',exact:true}).click();await page.getByLabel('Truck status',{exact:true}).selectOption('shop');await page.getByLabel('Reason',{exact:true}).fill('Synthetic repair reason');await page.getByRole('button',{name:'Save status',exact:true}).click();
- await expect(page.getByRole('dialog')).toHaveCount(0);await expect(live.getByRole('row').filter({hasText:driver.fullName}).locator(`a[href="/trucks/detail?id=${driver.truckId}"]`)).toHaveText(driver.truckUnit);await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Shop · Family issue');
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(live.getByRole('row').filter({hasText:driver.fullName}).locator(`a[href="/trucks/detail?id=${driver.truckId}"]`)).toHaveText(driver.truckUnit);await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Shop');
  board=await api('get',boardPath);let entry=board.entries.find(e=>e.driverId===driver.id);
  expect(board.drivers.find(d=>d.id===driver.id).truckOperatingStatus).toBe('shop');
  expect((await page.request.put(access.base+'/api/driver-board',{headers,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
@@ -59,13 +59,14 @@ try{
  board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);
  const held=await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'SHOP',statusEdited:true,statusReason:'Synthetic board restriction'}]}});expect(held.ok(),await held.text()).toBe(true);
  await live.reload();
- await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Shop · Rest');
+ await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Shop');
  await expect(live.getByLabel(driver.fullName+' · Status',{exact:true})).toHaveValue('SHOP');
  const truck=await api('get','/trucks/'+driver.truckId);expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/condition',{headers:restrictedHeaders,data:{status:'ready',version:truck.statusVersion,reason:''}})).status()).toBe(409);
  expect((await restricted.request.patch(access.base+'/api/trucks/'+truck.id+'/status',{headers:{Origin:access.base},data:{status:'ready',version:truck.statusVersion,reason:'Missing CSRF token'}})).status()).toBe(403);
  expect((await restricted.request.get(access.base+'/api/drivers/'+driver.id+'/status-history')).status()).toBe(403);
  board=await api('get',boardPath);entry=board.entries.find(e=>e.driverId===driver.id);expect((await restricted.request.put(access.base+'/api/driver-board',{headers:restrictedHeaders,data:{entries:[{...entry,status:'READY',statusEdited:true}]}})).status()).toBe(409);
  await api('patch','/trucks/'+truck.id+'/condition',{status:'ready',version:truck.statusVersion,reason:'Synthetic test release'});await restricted.close();
+ await expect(live.getByRole('button',{name:driver.fullName+' · Advance load',exact:true})).toHaveText('Rest',{timeout:15000});
  await live.getByLabel(driver.fullName+' · Status',{exact:true}).selectOption('Left');await expect(live.getByRole('dialog')).toBeVisible();await expect(live.getByLabel('Termination date',{exact:true})).toBeVisible();await live.getByRole('button',{name:'Cancel',exact:true}).click();expect((await api('get','/drivers/'+driver.id)).active).toBe(true);
  expect(errors).toEqual([]);console.log('Fleet status E2E passed: synchronization, change-date table/timeline, separate driver/truck histories, Home/Active/Home, permissions, explicit release and termination. Screenshots: '+artifacts);
 }finally{await browser.close();}

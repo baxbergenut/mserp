@@ -46,13 +46,9 @@ export function statusLabel(status: string) {
   return status.toLowerCase().replace(/[a-z]/, letter => letter.toUpperCase());
 }
 
-const personalStatuses = new Set(["HOME", "HOME (YARD)", "VACATION", "REST", "34 RESET", "Family issue", "Health issue", "NEW DRIVER"]);
-
-export function boardStatusDisplay(status: string, driver: DriverBoardDriver, syncEnabled?: boolean) {
-  if (syncEnabled && !driver.departed && driver.truckId && driver.truckOperatingStatus === "shop" && personalStatuses.has(status)) {
-    return { primary: "SHOP", label: `Shop · ${statusLabel(status)}` };
-  }
-  return { primary: status, label: statusLabel(status) };
+export function displayedBoardStatus(status: string, driver: DriverBoardDriver, syncEnabled?: boolean) {
+  if (syncEnabled && !driver.departed && driver.truckId && driver.truckOperatingStatus === "shop") return "SHOP";
+  return status;
 }
 
 export function boardProgressChoice(status: string, loads: BoardLoads) {

@@ -29,7 +29,7 @@ import { formatDriverLeave, leaveToday, leavePlanDetails } from "@/app/lib/drive
 import { StatusCell } from "./StatusCell";
 import type { BoardLoads as BoardLoadsView, BoardStop, DriverBoardEntry, DriverBoardDriver } from "@/app/lib/types";
 import { decimalDisplay, indexBoardEntries, totals } from "@/app/gross-board/board";
-import { statuses, statusColor, statusLabel, boardStatusDisplay, boardProgressChoice, previewCurrentLoad, readyDestination } from "./board";
+import { statuses, statusColor, statusLabel, displayedBoardStatus, boardProgressChoice, previewCurrentLoad, readyDestination } from "./board";
 import { NextStopDialog } from "./NextStopDialog";
 import { boardColumns, boardHistoryField, type BoardColumn } from "./boardCells";
 import { useBoardColumnLayout } from "./useBoardColumnLayout";
@@ -152,8 +152,7 @@ export default function DriverBoardPage() {
   }, [refreshTruckChoices]);
   const drivers = useMemo(() => (board?.drivers ?? []).filter(d =>
     (selectedDispatchers === null || selectedDispatchers.includes(d.dispatcherId)) &&
-    (selectedStatuses === null || selectedStatuses.includes(entries[d.id]?.status ?? "") ||
-      selectedStatuses.includes(boardStatusDisplay(entries[d.id]?.status ?? "", d, board?.statusSyncEnabled).primary)) &&
+    (selectedStatuses === null || selectedStatuses.includes(displayedBoardStatus(entries[d.id]?.status ?? "", d, board?.statusSyncEnabled))) &&
     [d.fullName, d.truckUnit, d.phone, d.dispatcherName, d.location ? formatCoordinates(d.location) : "", entries[d.id]?.currentLoad, entries[d.id]?.trailerNumber, ...(board?.loads[d.id]?.next ?? []).map(p => p.number)].join(" ").toLowerCase().includes(search.trim().toLowerCase())), [board, entries, search, selectedDispatchers, selectedStatuses]);
   const autoOrder = board?.autoOrderDispatchers;
   const rowDrag = useDriverRowDrag(drivers, moveDriver, autoOrder, autoOrderGroupNames);
@@ -165,7 +164,7 @@ export default function DriverBoardPage() {
     const next = loads?.next[0];
     const pickup = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
     return {
-      currentLoad: entry.currentLoad, truck: driver.truckUnit, status: boardStatusDisplay(entry.status, driver, board?.statusSyncEnabled).label,
+      currentLoad: entry.currentLoad, truck: driver.truckUnit, status: statusLabel(displayedBoardStatus(entry.status, driver, board?.statusSyncEnabled)),
       destination: getDestination(entry, driver, loads).value,
       eta: entry.status === "READY" ? "" : appointmentCellText(entry.eta, loads?.automation).full,
       loadPlan: [next?.number, next?.overdue ? "Overdue" : "", pickup?.schedule?.label || (pickup ? "PU —" : "")].filter(Boolean).join("  "),
@@ -391,7 +390,7 @@ export default function DriverBoardPage() {
             const orderDisabled = disabled || saving || dirty;
             const i = renderedDrivers.indexOf(d);
             const entry = entries[d.id];
-            const statusDisplay = boardStatusDisplay(entry.status, d, board?.statusSyncEnabled);
+            const displayedStatus = displayedBoardStatus(entry.status, d, board?.statusSyncEnabled);
             const homeAddress = compactLoadLocation([d.city, d.state].filter(Boolean).join(", "));
             const sum = totals(index.byDriver.get(d.id) ?? []);
             const grossTier = board?.grossTierMinimumCents?.reduce(
@@ -442,8 +441,8 @@ export default function DriverBoardPage() {
               originalGross: <td key="originalGross" data-board-column="originalGross" className={grossCellClass}>{decimalDisplay(sum.original, true)}</td>,
               driverGross: <td key="driverGross" data-board-column="driverGross" className={grossCellClass}>{decimalDisplay(sum.driver, true)}</td>,
               phone: <td key="phone" data-board-column="phone" className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>,
-              status: <td key="status" data-board-column="status" className={`${cellClass} ${statusColor(statusDisplay.primary)}`}><StatusCell name={d.fullName} value={statusDisplay.primary} label={statusDisplay.label} disabled={disabled}
-                  canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(entry.status)}
+              status: <td key="status" data-board-column="status" className={`${cellClass} ${statusColor(displayedStatus)}`}><StatusCell name={d.fullName} value={displayedStatus} disabled={disabled}
+                  canAdvance={!!entry.currentLoad.trim() && !!loads && !destinationBusy && ["DISPATCHED", "ENROUTE", "RESERVED"].includes(displayedStatus)}
                   choices={statusChoices} onChange={value => {if(["SHOP","STOP","ACCIDENT"].includes(value)){setRestriction({id:d.id,name:d.fullName,status:value});setRestrictionReason("");return;}if(["HOME","HOME (YARD)","VACATION"].includes(value)){setLeaveEditor({id:d.id,name:d.fullName,status:value,changingStatus:true});return;}if(value==="Left"){if(!permissions.includes("drivers.edit")){setDestinationError("Driver-edit permission is required for termination.");return;}if(dirty||saving){setDestinationError("Save pending board changes before terminating a driver.");return;}void fetchDriver(d.id).then(setTerminating).catch(e=>setDestinationError(e.message));return;}edit(d.id,"status",value);}} onAdvance={async () => {
                     if (!loads || destinationBusy) return;
                     setDestinationError("");
