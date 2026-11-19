@@ -275,6 +275,9 @@ try {
   await sequence.getByRole('button', { name: 'CURRENT · Current load', exact: true }).click();
   await expect(destination).toBeEnabled();
 
+  // The preceding drags and explicit edits can scroll the panel and clear its alert.
+  // Compare the position immediately before and during the delayed refresh.
+  const beforeSourceRefreshY = (await sequence.boundingBox()).y;
   // Source changes rehydrate the whole panel, retaining old details during the read.
   holdDetails = true;
   full = { ...full, current: next, next: [], earlier: [earlier, current], revision: 'second' };
@@ -284,7 +287,7 @@ try {
   await expect.poll(() => detailReads).toBeGreaterThan(before);
   await expect(history).toBeVisible();
   await expect(destination).toBeDisabled();
-  expect((await sequence.boundingBox()).y).toBe(originalY);
+  expect((await sequence.boundingBox()).y).toBe(beforeSourceRefreshY);
   await expect(panel.getByText('Loading load history…', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => window.loadHistoryFlashes)).toBe(0);
   release();
