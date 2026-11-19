@@ -132,6 +132,8 @@ Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisi
 
 ## Pay-page actions
 
+New Bonuses expenses pay the linked driver through Driver Pay. Moving a Reimburse expense to Bonuses preserves its open payout weeks and amounts. Bonus credits count as earnings in the Driver Pay export. Previously saved non-payroll Bonuses keep their recorded route. Migration 226 allows this category correction on owner-linked reimbursements with open driver reservations. See `docs/PAYROLL_EXPENSE_FINALIZATION.md`.
+
 Restore finalized investor cards from a freshly decoded saved report. Omitted
 fields represent empty values at finalization. Merging live expenses into that
 report changes the payable and makes reopening look for nonexistent postings.

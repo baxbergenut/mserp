@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"mserp/internal/db"
@@ -73,6 +74,7 @@ func payrollBalanceBatchContext(ctx context.Context, tx pgx.Tx, scopes []payroll
 				rows.Close()
 				return ctx, err
 			}
+			d.DriverBonus = part.source == "reimburse" && strings.EqualFold(strings.TrimSpace(d.Category), "Bonuses")
 			batch.rows[week][driver] = append(batch.rows[week][driver], d)
 		}
 		rows.Close()

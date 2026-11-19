@@ -215,7 +215,7 @@ func (s *reportRead) addReportPayroll(ctx context.Context, groups reportGroups, 
 			cards = append(cards, reportPayCard{card, week})
 			// Load earnings already have dated identity. Only whole-week settlements
 			// and additional earnings need the seven-day assignment graph.
-			if s.query.View == ReportOperator || len(card.Layovers) > 0 || len(card.Edits.Adjustments) > 0 {
+			if s.query.View == ReportOperator || len(card.Layovers) > 0 || len(card.Edits.Adjustments) > 0 || slices.ContainsFunc(card.Edits.ExpenseDeductions, func(row ExpenseDeduction) bool { return row.DriverBonus }) {
 				for day := 0; day < 7; day++ {
 					keys[reportAssignmentKey{card.ID, reportAddDays(week, day)}] = true
 				}
@@ -436,8 +436,16 @@ func (s *reportRead) addReportStatement(groups reportGroups, d DriverPayDriver, 
 			State: "finalized", Note: "Layover earnings", Values: map[string]float64{"earnedPay": float64(n)}})
 		g.Metrics["earnedPay"] += float64(n)
 	}
-	// Weekly manual earnings adjustments carry no service date.
+	// Weekly additions and bonus payouts belong to the statement that paid them.
 	if week >= from && week <= to {
+		for _, payout := range d.Edits.ExpenseDeductions {
+			if payout.DriverBonus {
+				n, err := chargeCents(payout.Amount)
+				if err == nil && n > 0 {
+					values["earnedPay"] += float64(n)
+				}
+			}
+		}
 		for _, a := range d.Edits.Adjustments {
 			if a.Kind != "addition" {
 				continue

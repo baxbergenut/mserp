@@ -144,6 +144,7 @@ func expenseReimbursementDeductionsBulk(ctx context.Context, tx pgx.Tx, drivers 
 		if err = rows.Scan(&driver, &d.ExpenseID, &d.Name, &d.Category, &d.ExpenseDate, &d.Total, &d.Available, &d.Amount, &d.Remaining, &d.OpeningBalance, &d.Version, &d.Saved); err != nil {
 			return nil, err
 		}
+		d.DriverBonus = strings.EqualFold(strings.TrimSpace(d.Category), "Bonuses")
 		result[driver] = append(result[driver], d)
 	}
 	return result, rows.Err()

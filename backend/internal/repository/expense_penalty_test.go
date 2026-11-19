@@ -113,9 +113,9 @@ func TestPenaltyCategoryDatabase(t *testing.T) {
 			if err != nil || !renamed.DriverOnly {
 				t.Fatalf("rename lost rule: %+v %v", renamed, err)
 			}
-			only, err := repo.ExpenseCategoryDriverOnly(ctx, penalty.ID)
-			if err != nil || !only {
-				t.Fatalf("lookup after rename: %t %v", only, err)
+			rule, err := repo.ExpenseCategoryRules(ctx, penalty.ID)
+			if err != nil || !rule.DriverOnly {
+				t.Fatalf("lookup after rename: %t %v", rule.DriverOnly, err)
 			}
 		})
 	}

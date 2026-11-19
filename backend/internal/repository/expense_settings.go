@@ -57,10 +57,13 @@ func (r *ExpenseRepository) ListExpenseSettings(ctx context.Context) ([]ExpenseS
 	return result, rows.Err()
 }
 
-func (r *ExpenseRepository) ExpenseCategoryDriverOnly(ctx context.Context, id string) (bool, error) {
-	var driverOnly bool
-	err := r.pool.QueryRow(ctx, `SELECT coalesce((SELECT driver_only FROM expense_settings WHERE id=$1 AND kind='category'),false)`, id).Scan(&driverOnly)
-	return driverOnly, err
+func (r *ExpenseRepository) ExpenseCategoryRules(ctx context.Context, id string) (ExpenseSetting, error) {
+	var category ExpenseSetting
+	err := r.pool.QueryRow(ctx, `SELECT name,driver_only,coalesce((to_jsonb(s)->>'accessorials')::boolean,false) FROM expense_settings s WHERE id=$1 AND kind='category'`, id).Scan(&category.Name, &category.DriverOnly, &category.Accessorials)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return category, nil
+	}
+	return category, err
 }
 
 func (r *ExpenseRepository) SaveExpenseSetting(ctx context.Context, id string, input ExpenseSetting) (ExpenseSetting, error) {

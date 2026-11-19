@@ -269,7 +269,7 @@ func (d DriverPayDriver) NetPayCents() int64 {
 func (d DriverPayDriver) ReimbursedCents() int64 {
 	var total int64
 	for _, row := range d.Edits.ExpenseDeductions {
-		if row.Source == "reimburse" {
+		if row.Source == "reimburse" && !row.DriverBonus {
 			amount, _ := chargeCents(row.Amount)
 			total += max(0, amount)
 		}
