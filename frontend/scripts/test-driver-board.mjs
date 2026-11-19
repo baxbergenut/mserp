@@ -4,7 +4,7 @@ import ts from 'typescript';
 import { createRequire } from 'node:module';
 const source = fs.readFileSync(new URL('../app/driver-board/board.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-const { readyDestination, boardProgressChoice, rebaseBoardDraft, reconcileDriverBoard, parseETA, formatETA, previewCurrentLoad, progressStatus, isOldLocation } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { readyDestination, boardProgressChoice, boardConflictGroupFields, rebaseBoardDraft, reconcileDriverBoard, parseETA, formatETA, previewCurrentLoad, progressStatus, isOldLocation } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 const locationNow = Date.parse('2026-10-05T16:00:00Z');
 assert.equal(isOldLocation('2026-10-05T13:00:00.001Z', locationNow), false);
 assert.equal(isOldLocation('2026-10-05T13:00:00Z', locationNow), true);
@@ -25,6 +25,9 @@ const nextLoad = { ...initialRow, currentLoad: 'LOAD-B', destination: '', resolv
 const persisted = { ...initialRow, currentLoad: 'LOAD-C', destination: 'Boston', version: 2 };
 assert.deepEqual(rebaseBoardDraft(initialRow, nextNote, persisted), {entry:{...persisted,notes:nextNote.notes},conflicts:[]});
 assert.deepEqual(rebaseBoardDraft(initialRow, nextLoad, persisted).conflicts, ['currentLoad','destination']);
+const savedDispatchFields = boardConflictGroupFields(['destination']);
+assert.ok(savedDispatchFields.includes('currentLoad'));
+assert.deepEqual(rebaseBoardDraft(initialRow, {...nextLoad, notes:'keep'}, persisted, savedDispatchFields), {entry:{...persisted,notes:'keep'},conflicts:[]});
 const overlapping = { ...initialRow, notes: 'other', version: 2 };
 assert.deepEqual(rebaseBoardDraft(initialRow, nextNote, overlapping).conflicts, ['notes']);
 assert.equal(reconcileDriverBoard({a:{...nextLoad,notes:'typed while saving'}},{a:nextLoad},[{...initialRow,currentLoad:'LOAD-B',destination:'Austin',version:2}]).a.destination,'Austin');
