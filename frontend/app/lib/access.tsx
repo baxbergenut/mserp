@@ -1,8 +1,9 @@
 "use client";
 
 import { createContext, useContext, useMemo } from "react";
-import type { ExpenseCategoryAccess, PermissionDefinition } from "./types";
+import type { AuthUser, ExpenseCategoryAccess, PermissionDefinition } from "./types";
 
+export const CurrentUserContext = createContext<AuthUser | null>(null);
 export const CurrentUserIDContext = createContext("");
 export const AdministratorContext = createContext(false);
 export const useAdministrator = () => useContext(AdministratorContext);

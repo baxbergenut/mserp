@@ -9,7 +9,7 @@ import { TableFilters } from "@/app/components/management/TableFilters";
 import { useViewState } from "@/app/lib/viewMemory";
 import { useQuickCreate } from "@/app/lib/topNavigation";
 
-import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type SelectHTMLAttributes } from "react";
+import { useCallback, useContext, useEffect, useId, useRef, useState, type DragEvent, type SelectHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import Link from "@/app/components/AccessLink";
 
@@ -21,7 +21,6 @@ import {
   fetchExpensesPage,
   fetchExpense,
 
-  fetchAuthSession,
   fetchExpenseFormChoices,
   updateExpense,
   verifyExpense,
@@ -50,7 +49,7 @@ import { ExpenseBalanceAction } from "@/app/components/expenses/ExpenseBalanceEd
 import { ExternalSettlements } from "./ExternalSettlements";
 import { ExpenseDocuments } from "./ExpenseDocuments";
 import { defaultExpenseResponsibility, expenseAssignment } from "./assignments";
-import { useExpenseCategoryAccess, usePermissions } from "../lib/access";
+import { CurrentUserContext, useExpenseCategoryAccess, usePermissions } from "../lib/access";
 
 const filterClass =
   "rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-[13px] text-zinc-300 outline-none transition-colors focus:border-zinc-600";
@@ -149,9 +148,10 @@ export default function ExpensesPage() {
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
   const saveLock=useRef(false);
   const accessorialRequest=useRef<{ key: string; body: string } | null>(null);
-  const [currentUser, setCurrentUser] = useState("");
-  const [currentUserId, setCurrentUserId] = useState("");
-  const [administrator, setAdministrator] = useState(false);
+  const user = useContext(CurrentUserContext);
+  const currentUser = user?.username ?? "";
+  const currentUserId = user?.id ?? "";
+  const administrator = user?.administrator ?? false;
   const [showHistory,setShowHistory]=useState(false);
   const [ownerReview,setOwnerReview]=useState(false);
   const actionsId = useId();
@@ -160,7 +160,7 @@ export default function ExpensesPage() {
   const verificationUndo = useRef<{ expenseId: string; verificationId: string }[]>([]);
   const verificationBusy = useRef(false);
   const [verificationNotice, setVerificationNotice] = useState("");
-  const [verificationRole, setVerificationRole] = useState<"accountant" | "">("");
+  const verificationRole = user?.expenseVerificationRole ?? "";
   const [verifying, setVerifying] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
@@ -170,13 +170,9 @@ export default function ExpensesPage() {
   const loadData = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     try {
-      const [response, session] = await Promise.all([fetchExpensesPage({
+      const response = await fetchExpensesPage({
         history:showHistory || ownerReview?"1":"",ownerReimbursementReview:ownerReview?"1":"",page, pageSize, search: debouncedSearch, categoryId: category, truckId, dateFrom, dateTo, accountantVerified, unitNumber, driverName, paymentType, paidBy, coveredBy,
-      }), fetchAuthSession()]);
-      setCurrentUser(session.user.username);
-      setCurrentUserId(session.user.id);
-      setVerificationRole(session.user.expenseVerificationRole ?? "");
-      setAdministrator(session.user.administrator);
+      });
       setExpenses(response.items);
       setPage(response.page);
       setTotal(response.total);

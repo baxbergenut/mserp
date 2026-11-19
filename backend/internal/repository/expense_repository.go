@@ -261,9 +261,7 @@ WHERE ` + search + `
 	if err := r.pool.QueryRow(ctx, `
 		SELECT count(*), COALESCE(sum(amount), 0)::text,
 			count(*) FILTER (WHERE expense_date IS NULL OR amount IS NULL)
-		FROM expenses e
-		LEFT JOIN trucks t ON t.id = e.truck_id
-		LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id)) `+where, args...).Scan(
+		`+expenseListFromSQL+where, args...).Scan(
 		&total, &summary.Amount, &summary.IncompleteCount,
 	); err != nil {
 		return ExpensePage{}, err
@@ -271,9 +269,13 @@ WHERE ` + search + `
 
 	query.Pagination = query.Pagination.Normalize(total)
 	pageArgs := append(args, query.Pagination.PageSize, query.Pagination.Offset())
-	rows, err := r.pool.Query(ctx, selectExpensesSQL+where+`
-		ORDER BY `+searchRelevanceOrder(query.Relevance, "coalesce(nullif(e.expense_type,''), e.category)", "e.reference_number")+`e.expense_date DESC NULLS LAST, e.created_at DESC, e.id
-		`+fmt.Sprintf("LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2), pageArgs...)
+	order := " ORDER BY " + searchRelevanceOrder(query.Relevance, "coalesce(nullif(e.expense_type,''), e.category)", "e.reference_number") + "e.expense_date DESC NULLS LAST, e.created_at DESC, e.id"
+	// Sort narrow keys before reading invoice bodies, payment history and balances.
+	// Repeat the deterministic order because the outer joins do not preserve it.
+	pageSQL := "WITH page_ids AS MATERIALIZED (SELECT e.id " + expenseListFromSQL + where + order +
+		fmt.Sprintf(" LIMIT $%d OFFSET $%d) ", len(args)+1, len(args)+2) +
+		selectExpensesSQL + " JOIN page_ids page ON page.id=e.id" + order
+	rows, err := r.pool.Query(ctx, pageSQL, pageArgs...)
 	if err != nil {
 		return ExpensePage{}, err
 	}
@@ -804,7 +806,9 @@ SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applica
 , coalesce((SELECT jsonb_agg(jsonb_build_object('id',v.id,'role',v.verifier_role,'userId',v.user_id,'userName',v.user_name,'verifiedAt',v.verified_at) ORDER BY v.verifier_role) FROM expense_verifications v WHERE v.expense_id=e.id AND v.verifier_role='accountant' AND v.revoked_at IS NULL),'[]'::jsonb)
 , e.base_amount::text, e.payment_fee::text, e.cost_breakdown, e.applicant_id, coalesce((SELECT role_id::text FROM app_users WHERE id=e.created_by),''), NOT coalesce(accounting_live_source('expense',e.id,e.expense_date),false),e.balance_version
  , to_jsonb(e)->>'broker_load_number', EXISTS(SELECT 1 FROM expense_documents doc WHERE doc.expense_id=e.id),coalesce((to_jsonb(e)->>'owner_recovery')::boolean,false)
-FROM expenses e
+` + expenseListFromSQL
+
+const expenseListFromSQL = `FROM expenses e
 LEFT JOIN trucks t ON t.id = e.truck_id
 LEFT JOIN drivers d ON d.id = COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id))`
 
