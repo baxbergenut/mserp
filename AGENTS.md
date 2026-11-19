@@ -4070,6 +4070,11 @@ Status Board database tests verify the production payroll coverage check.
   TestPayrollPlanningSaveReceiptDatabase and TestPayrollPlanningFinalizationRaceDatabase.
 - Install the matching deploy helper before migration 206. It quiesces writers
   and rejects rollback binaries without -gross-board-planning-capability.
+Status Board shows Shop alongside a concurrent personal status and matches both
+status filters. Explicit SHOP/STOP/ACCIDENT saves take the existing payroll
+source gate before fleet and driver locks and share Gross Board's interactive
+priority. Other board saves retain the operational-first guard.
+
 ## Previously active Status Board loads
 
 - A Dispatched source leaves Next only when the exact driver/source ID's latest

@@ -379,8 +379,9 @@ func main() {
 		cfg.FleetScope,
 	)
 	router.(interface {
-		ConfigurePreparedPayroll(bool, *repository.PayrollWorkPriority)
-	}).ConfigurePreparedPayroll(cfg.PayrollPreparedReads, payrollPriority)
+		ConfigureWritePriority(*repository.PayrollWorkPriority)
+	}).ConfigureWritePriority(payrollPriority)
+	router.(interface{ ConfigurePreparedPayroll(bool) }).ConfigurePreparedPayroll(cfg.PayrollPreparedReads)
 	if err = router.(interface {
 		ConfigurePreparedFinancial(context.Context, bool, bool, bool) error
 	}).ConfigurePreparedFinancial(ctx, cfg.PayrollPreparedCommands, cfg.PayrollPreparedFinalization, cfg.PayrollResourceLocks); err != nil {

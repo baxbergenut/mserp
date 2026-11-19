@@ -27,15 +27,19 @@ type shutdownRouter struct {
 	board    *repository.DriverBoardRepository
 }
 
+func (r *shutdownRouter) ConfigureWritePriority(priority *repository.PayrollWorkPriority) {
+	r.board.ConfigurePayrollWorkPriority(priority)
+	r.payroll.ConfigurePayrollWorkPriority(priority)
+}
+
 func (r *shutdownRouter) ConfigureBoardETARetry(routes *boardroutes.Client, eld *fiveeld.Client, usdot string) {
 	r.board.ConfigureETARetry(routes, eld, usdot)
 }
 
 func (r *shutdownRouter) Shutdown() { r.shutdown() }
 
-func (r *shutdownRouter) ConfigurePreparedPayroll(enabled bool, priority *repository.PayrollWorkPriority) {
+func (r *shutdownRouter) ConfigurePreparedPayroll(enabled bool) {
 	r.payroll.ConfigurePreparedReads(enabled)
-	r.payroll.ConfigurePayrollWorkPriority(priority)
 }
 
 func (r *shutdownRouter) ConfigurePreparedFinancial(ctx context.Context, commands, finalization, resources bool) error {

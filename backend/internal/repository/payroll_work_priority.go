@@ -28,6 +28,9 @@ func NewPayrollWorkPriority() *PayrollWorkPriority {
 func (r *GrossBoardRepository) ConfigurePayrollWorkPriority(priority *PayrollWorkPriority) {
 	r.workPriority = priority
 }
+func (r *DriverBoardRepository) ConfigurePayrollWorkPriority(priority *PayrollWorkPriority) {
+	r.workPriority = priority
+}
 func (r *DriverPayRepository) ConfigurePayrollWorkPriority(priority *PayrollWorkPriority) {
 	r.workPriority = priority
 }

@@ -74,6 +74,9 @@ DRIVER affect only personal availability. READY activates availability but canno
 release a truck restriction. Operational dispatch labels require an employed,
 available driver and an unrestricted truck. Clearing an annotation releases
 nothing. Crew share truck status; personal availability remains individual.
+When an assigned truck is in Shop and its driver has a personal status, the
+Status cell shows both (for example, Shop · Rest) and matches either filter.
+The selector already shows Shop, so selecting Shop again requires no save.
 
 Entering or selecting a current load, adding or restoring a queued load, or
 promoting the next load returns an employed driver from Home, Rest, or 34 Reset and releases a
