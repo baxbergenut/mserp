@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { recordBoardPaint } from "@/app/lib/boardTiming";
 import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
 import { APIError, fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
@@ -38,6 +39,8 @@ export function useDriverBoard(lockedDriverId?: string) {
   const changesRef = useRef(changes);
   const undoStack = useRef<{ id: number; driverId: string; group: number }[]>([]);
   const draftUndo = useRef<{ id: string; field: keyof DriverBoardEntry; before?: DriverBoardEntry; group: number }[]>([]);
+  const lastTextEdit = useRef(-Infinity);
+  const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0), confirmedLoad = useRef(0);
   const editSession = useRef<{ id: string; field: keyof DriverBoardEntry; group: number } | null>(null);
   const editSequence = useRef(0);
   const pendingUndo = useRef(false);
@@ -54,6 +57,7 @@ export function useDriverBoard(lockedDriverId?: string) {
 
   useEffect(() => {
     let cancelled = false;
+    openStarted.current = performance.now();
     fetchDriverBoard(currentChargeWeek()).then(value => { if (!cancelled) setBoard(value); })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load Status Board"); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -118,8 +122,27 @@ export function useDriverBoard(lockedDriverId?: string) {
     return () => { cancelled = true; refreshWanted.current = () => {}; resumeLive.current = () => {}; clearTimeout(timer); clearTimeout(blurTimer); clearInterval(fallback); window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); document.removeEventListener("focusout", blur); };
   }, []);
 
+  useLayoutEffect(() => {
+    if (loading || !board) return;
+    if (openStarted.current) {
+      recordBoardPaint("status", "open", openStarted.current);
+      openStarted.current = 0;
+    }
+    if (!actionBusy && confirmedLoad.current) {
+      recordBoardPaint("status", "load", confirmedLoad.current);
+      confirmedLoad.current = 0;
+    }
+    if (!dirty && !saving && confirmedEdit.current) {
+      recordBoardPaint("status", "save", confirmedEdit.current);
+      confirmedEdit.current = 0;
+    }
+  }, [actionBusy, board, dirty, loading, saving]);
+
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string, patch?: Partial<DriverBoardEntry>) => {
     if (!canEdit) return;
+    editStarted.current = performance.now();
+    confirmedEdit.current = 0;
+    lastTextEdit.current = ["currentLoad", "notes", "trailerNumber", "trailerNote", "destination", "eta", "homeTime"].includes(field) ? performance.now() : -Infinity;
     activity.current += 1;
     if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
     const last = draftUndo.current.at(-1);
@@ -244,6 +267,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       // keystroke can arrive before React renders this response.
       committed.forEach(e => { savedRef.current[e.driverId] = e; });
       const remaining = reconcileDriverBoard(changesRef.current, snapshot, committed);
+      if (!Object.keys(remaining).length) confirmedEdit.current = editStarted.current;
       changesRef.current = remaining;
       setChanges(remaining);
       const editOrder = draftActions.map(a => a.id);
@@ -288,10 +312,14 @@ export function useDriverBoard(lockedDriverId?: string) {
 
   useEffect(() => {
     if (!dirty || saving || error || loading) return;
-    let cancelled = false;
-    queueMicrotask(() => { if (!cancelled) void save(); });
-    return () => { cancelled = true; };
-  }, [dirty, saving, error, loading, save, pendingLink]);
+    // A short typing burst should produce one committed command. Leaving the
+    // input or navigating flushes the draft, including edits made during a save.
+    const flush = () => { void save(); };
+    const delay = pendingLink ? 0 : Math.max(0, 120 - (performance.now() - lastTextEdit.current));
+    const timer = setTimeout(flush, delay);
+    document.addEventListener("focusout", flush);
+    return () => { clearTimeout(timer); document.removeEventListener("focusout", flush); };
+  }, [changes, dirty, saving, error, loading, save, pendingLink]);
 
   async function reload() {
     if (savingRef.current) return;
@@ -334,6 +362,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   }
 
   async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction) {
+    const started = performance.now();
     if (!canEdit) return view;
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
     const entry = savedRef.current[driverId];
@@ -346,6 +375,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       if (result.entry.undoId) undoStack.current.push({ id: result.entry.undoId, driverId, group: ++editSequence.current });
       savedRef.current[driverId] = result.entry;
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), drivers: applyCommittedFleetStatus(current.drivers, [result.entry]), loads: { ...current.loads, [driverId]: result.loads } } : current);
+      confirmedLoad.current = started;
       return result.loads;
     } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }

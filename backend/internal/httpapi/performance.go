@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,34 @@ func (w *timedWriter) Flush() {
 	_ = http.NewResponseController(w.ResponseWriter).Flush()
 }
 func (w *timedWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// Browser timings ride on the next ordinary request and carry no identifiers.
+// Only bounded numeric observations and known operation names reach the log.
+func logBoardClientTimings(logger *slog.Logger, raw string) {
+	if raw == "" || len(raw) > 300 {
+		return
+	}
+	samples := strings.Split(raw, ",")
+	if len(samples) > 12 {
+		return
+	}
+	for _, sample := range samples {
+		name, value, ok := strings.Cut(sample, "=")
+		if !ok {
+			continue
+		}
+		switch name {
+		case "status-open", "status-save", "status-load", "gross-open", "gross-save":
+		default:
+			continue
+		}
+		ms, err := strconv.Atoi(value)
+		if err == nil && ms >= 0 && ms <= 120000 {
+			logger.Info("board browser timing", "operation", name, "duration_ms", ms)
+		}
+	}
+}
+
 func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +78,9 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 			counted := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(&timedWriter{ResponseWriter: counted, start: start, metrics: m}, r.WithContext(ctx))
 			route := chi.RouteContext(r.Context()).RoutePattern()
+			if counted.Status() >= 200 && counted.Status() < 300 && (strings.HasPrefix(route, "/driver-board") || strings.HasPrefix(route, "/gross-board")) {
+				logBoardClientTimings(logger, r.Header.Get("X-Clustie-Board-Timing"))
+			}
 			phases, _ := m.Details()
 			scenario := "default"
 			if strings.HasPrefix(route, "/driver-pay") || strings.HasPrefix(route, "/investor-pay") {

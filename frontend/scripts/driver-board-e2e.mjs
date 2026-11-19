@@ -147,6 +147,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await expect(loadDestination).toHaveValue('Atlanta, GA');
   await expect(page.getByRole('columnheader', { name: 'Dispatcher', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'My view', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect(field('ETA')).toHaveText('—');
   await field('ETA').click();
   await expect(page.getByLabel('Arrival time', { exact: true })).toHaveValue('');

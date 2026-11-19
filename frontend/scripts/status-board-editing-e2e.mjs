@@ -8,9 +8,16 @@ export async function runStatusBoardEditingE2E({ page, base, id, week }) {
   const columns = await page.getByRole('columnheader').allTextContents();
   expect(columns.slice(columns.indexOf('ETA'), columns.indexOf('Notes') + 1)).toEqual(['ETA', 'Next load', 'Notes']);
   const before = (await read()).notes;
+  let writes = 0;
+  const countWrite = request => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname === '/api/driver-board') writes++;
+  };
+  page.on('request', countWrite);
   await field('Notes').fill('Instant ');
-  await field('Notes').pressSequentially('typed note', { delay: 80 });
+  await field('Notes').pressSequentially('typed note', { delay: 20 });
   await saved();
+  page.off('request', countWrite);
+  expect(writes).toBe(1);
   expect((await read()).notes).toBe('Instant typed note');
   await page.getByRole('heading', { name: 'Status Board', exact: true }).click();
   await page.keyboard.press('Control+z');

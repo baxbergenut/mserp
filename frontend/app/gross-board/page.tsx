@@ -18,6 +18,7 @@ import { WeekSelector } from "@/app/components/WeekSelector";
 import { useCurrentWeek } from "@/app/accounting/components/useLatestPayrollWeek";
 import { clampWeek } from "@/app/accounting/payrollWeek";
 import { APIError, fetchGrossBoard, resetGrossBoardBalance, saveGrossBoard, setGrossBoardWeekLock } from "@/app/lib/api";
+import { recordBoardPaint } from "@/app/lib/boardTiming";
 import { useGrossLive } from "./useGrossLive";
 import { readGrossDrafts, writeGrossDrafts, restoreGrossDrafts, grossDraftFields, grossLocationKey, reconcileGrossPatches, refreshRejectedSources, type GrossDrafts } from "./drafts";
 import { mergePlanningEntries } from "./planning";
@@ -97,7 +98,20 @@ export default function GrossBoardPage() {
   const [issues, setIssues] = useState<GrossBoardSaveIssue[]>([]);
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
+  const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0);
   const dirty = canEdit && Object.keys(changes).length > 0;
+  useLayoutEffect(() => {
+    if (loading || !board || board.weekStart !== week) return;
+    if (openStarted.current) {
+      recordBoardPaint("gross", "open", openStarted.current);
+      openStarted.current = 0;
+    }
+    if (!dirty && !saving && confirmedEdit.current) {
+      recordBoardPaint("gross", "save", confirmedEdit.current);
+      confirmedEdit.current = 0;
+    }
+  }, [board, dirty, loading, saving, week]);
+
   const cancelWeekChange = useCallback(() => setPendingWeek(null), []);
   const { pendingLink, requestNavigation, cancelNavigation, leave } = useBoardNavigation(dirty || saving, cancelWeekChange);
   const payReturn = loadTarget?.fromPay ? (previousHref?.startsWith("/accounting/driver-pay") ? previousHref : `/accounting/driver-pay?weekStart=${loadTarget.week}`) : null;
@@ -142,6 +156,7 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    openStarted.current = performance.now();
     fetchGrossBoard(week).then((value) => {
       if (cancelled) return;
       const recovery = hasEditPermission ? readGrossDrafts(draftKey) : null;
@@ -269,6 +284,7 @@ export default function GrossBoardPage() {
     const previous = current[key] ?? baseline;
     const next = update(previous);
     if (next === previous) return;
+    editStarted.current = performance.now(); confirmedEdit.current = 0;
     if (!current[key]) baselinesRef.current[key] = baseline;
     const result = { ...current, [key]: next };
     // A revert during an in-flight save is a new edit; the old saved value
@@ -310,6 +326,7 @@ export default function GrossBoardPage() {
         return { ...current, entries: Object.values(entries) };
       });
       setDrafts(remaining);
+      if (committed.length && !Object.keys(remaining).length) confirmedEdit.current = editStarted.current;
       setMessage("Saved");
       // The stream refreshes carry and matching metadata. Recover by GET when
       // disconnected, preserving newer edits and navigation flushes.
