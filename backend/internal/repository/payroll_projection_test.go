@@ -152,6 +152,8 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				retirement := migrationSQLForTest(t, "223_retire_unused_tables.sql")
 				presence := migrationSQLForTest(t, "224_board_presence.sql")
 				days := migrationSQLForTest(t, "225_provider_sync_days.sql")
+				bonus := migrationSQLForTest(t, "226_driver_bonus_reclassification.sql")
+				prior = strings.Replace(prior, bonus, "", 1)
 				prior = strings.Replace(prior, days, "", 1)
 				prior = strings.Replace(strings.Replace(prior, retirement, "", 1), presence, "", 1)
 				prior = withoutUnrelatedPayrollMigration(t, withoutPTIPayrollMigration(t, prior))
@@ -193,6 +195,7 @@ func withPayrollProjectionDatabase(t *testing.T, run func(*testing.T, context.Co
 				exec(retirement)
 				exec(presence)
 				exec(days)
+				exec(bonus)
 			} else {
 				exec(body)
 			}

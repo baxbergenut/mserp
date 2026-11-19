@@ -54,6 +54,7 @@ func registerExpenseRoutes(
 }
 
 type expenseRequest struct {
+	driverBonus   bool
 	Maintenance   *repository.ExpenseMaintenance `json:"maintenance"`
 	ApplicantID   *string                        `json:"applicantId"`
 	CostBreakdown *[]repository.ExpenseCostItem  `json:"costBreakdown"`
@@ -93,17 +94,43 @@ func (request *expenseRequest) applyDriverOnly() {
 }
 
 // Apply category rules before fee/driver validation, including for older clients.
-func (handler expenseHandler) normalizeExpenseRequest(ctx context.Context, request *expenseRequest) error {
+func (handler expenseHandler) normalizeExpenseRequest(ctx context.Context, request *expenseRequest, existing *repository.Expense) error {
 	if !isUUID(strings.TrimSpace(request.CategoryID)) {
 		return nil
 	}
-	driverOnly, err := handler.repo.ExpenseCategoryDriverOnly(ctx, strings.TrimSpace(request.CategoryID))
+	category, err := handler.repo.ExpenseCategoryRules(ctx, strings.TrimSpace(request.CategoryID))
 	if err != nil {
 		return err
 	}
-	if driverOnly {
+	if category.DriverOnly {
 		request.applyDriverOnly()
+		return nil
 	}
+	if category.Accessorials {
+		return nil
+	}
+	// Same-category edits retain the original payout route. In particular, older
+	// Bonuses may already have a separate manual addition on Driver Pay.
+	name := category.Name
+	if existing != nil && existing.CategoryID == strings.TrimSpace(request.CategoryID) {
+		name = existing.Category
+	}
+	if !strings.EqualFold(strings.TrimSpace(name), "Bonuses") {
+		return nil
+	}
+	if existing != nil && (existing.PaymentType == nil || !strings.EqualFold(strings.TrimSpace(*existing.PaymentType), "Reimburse")) {
+		// Editing an independently paid expense must not create another payout.
+		if strings.EqualFold(strings.TrimSpace(request.PaymentType), "Reimburse") {
+			request.PaymentType = ""
+			if existing.PaymentType != nil {
+				request.PaymentType = *existing.PaymentType
+			}
+		}
+		return nil
+	}
+	request.driverBonus = true
+	request.PaymentType = "Reimburse"
+	request.PaidBy = ""
 	return nil
 }
 
@@ -155,6 +182,18 @@ func (request expenseRequest) validate() (repository.ExpenseInput, error) {
 			if utf8.RuneCountInString(field.value) > field.max {
 				return repository.ExpenseInput{}, errors.New("shop details are too long")
 			}
+		}
+	}
+	if request.driverBonus {
+		if request.DriverID == nil || request.ApplicantID != nil {
+			return repository.ExpenseInput{}, errors.New("select a linked driver for the payroll bonus")
+		}
+		amount := request.Amount
+		if request.BaseAmount != nil {
+			amount = *request.BaseAmount
+		}
+		if value, ok := new(big.Rat).SetString(strings.TrimSpace(amount)); !ok || value.Sign() <= 0 {
+			return repository.ExpenseInput{}, errors.New("enter a positive bonus amount")
 		}
 	}
 	efs := strings.EqualFold(strings.TrimSpace(request.PaymentType), "EFS")
@@ -436,7 +475,7 @@ func (handler expenseHandler) createExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := handler.normalizeExpenseRequest(r.Context(), &request); err != nil {
+	if err := handler.normalizeExpenseRequest(r.Context(), &request, nil); err != nil {
 		handler.writeError(w, err)
 		return
 	}
@@ -485,7 +524,7 @@ func (handler expenseHandler) createExpenses(w http.ResponseWriter, r *http.Requ
 	inputs := make([]repository.ExpenseInput, 0, len(request.Expenses))
 	session, _ := authSessionFromContext(r.Context())
 	for index, expense := range request.Expenses {
-		if err := handler.normalizeExpenseRequest(r.Context(), &expense); err != nil {
+		if err := handler.normalizeExpenseRequest(r.Context(), &expense, nil); err != nil {
 			handler.writeError(w, err)
 			return
 		}
@@ -740,15 +779,6 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := handler.normalizeExpenseRequest(r.Context(), &request); err != nil {
-		handler.writeError(w, err)
-		return
-	}
-	input, err := request.validate()
-	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	session, _ := authSessionFromContext(r.Context())
 	existing, err := handler.repo.GetExpense(r.Context(), id)
 	if err != nil {
@@ -757,6 +787,15 @@ func (handler expenseHandler) updateExpense(w http.ResponseWriter, r *http.Reque
 	}
 	if !repository.CanEditExpenseRecord(session.User, existing.CategoryID, existing.CreatorRoleID) {
 		writeAPIError(w, http.StatusForbidden, "you do not have permission to edit entries in that category")
+		return
+	}
+	if err := handler.normalizeExpenseRequest(r.Context(), &request, &existing); err != nil {
+		handler.writeError(w, err)
+		return
+	}
+	input, err := request.validate()
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if input.CategoryID != existing.CategoryID && !hasExpenseCategoryAction(session.User.ExpenseCategoryAccess, input.CategoryID, "create") {

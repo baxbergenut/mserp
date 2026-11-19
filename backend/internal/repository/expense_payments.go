@@ -12,6 +12,7 @@ import (
 // Amounts are magnitudes; source=reimburse adds to pay, other rows deduct.
 // Apply persists the allocation; a saved zero explicitly defers this week.
 type ExpenseDeduction struct {
+	DriverBonus    bool   `json:"driverBonus,omitempty"`
 	EscrowEligible bool   `json:"escrowEligible,omitempty"`
 	EscrowAmount   string `json:"escrowAmount,omitempty"`
 	Mode           string `json:"mode,omitempty"`

@@ -26,7 +26,7 @@ export function ExpenseRows({ driver, edits, disabled, onEdit, onOpenExpense, ex
       const isExpense = row.source !== "escrow";
       const accessorial = row.source === "accessorial";
       const credit = row.source === "reimburse" || accessorial;
-      const label = accessorial ? `Accessorial · ${row.name}` : row.name;
+      const label = row.driverBonus ? `Bonus · ${row.name}` : accessorial ? `Accessorial · ${row.name}` : row.name;
       const escrow = hundredths(row.escrowAmount ?? "0");
       const available = hundredths(row.available) - escrow;
       const valid = validExpenseAmount(row.amount, centsAmount(available));
@@ -42,7 +42,7 @@ export function ExpenseRows({ driver, edits, disabled, onEdit, onOpenExpense, ex
             <span className="ml-auto shrink-0 text-[10px] text-zinc-500">{balance}</span>
           </div>
         </td>
-        <td className="border-b border-zinc-800 p-0 align-top"><PayInput disabled={disabled} aria-label={`${driver.fullName}, expense ${row.name}, ${accessorial ? "accessorial credit" : credit ? "reimbursement" : "deduction"}`} aria-invalid={!valid} inputMode="decimal" normalizeValue={value => {
+        <td className="border-b border-zinc-800 p-0 align-top"><PayInput disabled={disabled} aria-label={`${driver.fullName}, expense ${row.name}, ${row.driverBonus ? "bonus earnings" : accessorial ? "accessorial credit" : credit ? "reimbursement" : "deduction"}`} aria-invalid={!valid} inputMode="decimal" normalizeValue={value => {
           const amount = value.trim().replace(/^[+-]/, "");
           return decimalInputValue(amount, true) ?? amount;
         }} value={value}

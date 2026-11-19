@@ -44,6 +44,24 @@ func prepareExpensePayerCorrection(ctx context.Context, tx pgx.Tx, id string, in
 	if in.UpdatedAt != nil && !old.UpdatedAt.Equal(*in.UpdatedAt) {
 		return nil, ErrExpenseSettingConflict
 	}
+	if old.CategoryID != in.CategoryID && normalizedExpenseText(old.PaymentType) == "reimburse" {
+		var bonusChange, externallyPaid bool
+		err = tx.QueryRow(ctx, `SELECT (lower(btrim(name))='bonuses') <> (lower(btrim($2::text))='bonuses'), expense_external_total($3)>0
+ FROM expense_settings WHERE id=$1`, in.CategoryID, old.Category, id).Scan(&bonusChange, &externallyPaid)
+		if err != nil {
+			return nil, err
+		}
+		if bonusChange {
+			if externallyPaid {
+				return nil, fmt.Errorf("%w: Reverse the external payout before changing the bonus classification", ErrExpensePayerCorrection)
+			}
+			if err = checkExpensePayrollOpen(ctx, tx, id); errors.Is(err, ErrExpenseFinalized) {
+				return nil, fmt.Errorf("%w: Reopen the affected payroll statement before changing this payout to or from bonus earnings", ErrExpensePayerCorrection)
+			} else if err != nil {
+				return nil, err
+			}
+		}
+	}
 	covered := normalizedExpenseText(in.CoveredBy)
 	owner, driver := in.OwnerID, in.DriverID
 	if covered == "truck owner" && owner != nil {

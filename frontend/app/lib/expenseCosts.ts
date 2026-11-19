@@ -24,6 +24,7 @@ export const isEFSPayment = (method: string) => method.trim().toUpperCase() === 
 
 export function expensePayload(value: ExpenseInput) {
   const { legacyPaymentTotal, savedAmount, ...input } = value;
+  delete input.savedPaymentType;
   const preserveLegacyTotal = !!input.updatedAt && legacyPaymentTotal === input.amount && isEFSPayment(input.paymentType);
   return { ...input, efsReferenceNumber: isEFSPayment(input.paymentType) ? input.efsReferenceNumber.trim() : "", baseAmount: preserveLegacyTotal ? undefined : input.amount, costBreakdown: input.updatedAt && savedAmount === input.amount ? undefined : [] };
 }

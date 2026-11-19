@@ -9,7 +9,7 @@ import { ExpenseMaintenanceFields } from "./ExpenseMaintenanceFields";
 import { centsLabel, expenseCents } from "@/app/lib/expenseCosts";
 import { ExpenseFeePreview } from "./ExpenseFeePreview";
 import { isEFSPayment } from "../lib/expenseCosts";
-import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isDriverOnlyExpense } from "./catalog";
+import { activeExpenseCategories, applyExpenseCategoryRules, changeExpenseCategory, expenseNames, isBonusCategory, isDriverOnlyExpense } from "./catalog";
 
 import type { Expense, ExpensePage, ExpenseInput } from "../lib/types";
 import {
@@ -45,6 +45,7 @@ export function expenseToInput(expense: Expense): ExpenseInput {
     maintenance: expense.maintenance,
     legacyPaymentTotal: expense.baseAmount == null && expense.paymentType?.toUpperCase() === "EFS" ? expense.amount ?? undefined : undefined,
     updatedAt: expense.updatedAt,
+    savedPaymentType: expense.paymentType ?? "",
     savedAmount: expense.baseAmount ?? expense.amount ?? "",
     ownerId: expense.ownerId,
     categoryId: expense.categoryId,
@@ -88,6 +89,9 @@ export function ExpenseForm({
 }) {
   const driverOnly = isDriverOnlyExpense(options.settings, initialValue.categoryId);
   const value = applyExpenseCategoryRules(initialValue, options.settings);
+  const bonusCategory = isBonusCategory(options.settings, value.categoryId);
+  const bonus = bonusCategory && value.paymentType.trim().toLowerCase() === "reimburse";
+  const legacyBonusWithoutMethod = bonusCategory && !!value.updatedAt && !value.paymentType;
   const accessorial = value.paymentType === "Driver payroll";
   const responsibility = expenseResponsibility(value,trucks,owners);
   const savedOwner = owners.find(owner => owner.id === value.ownerId);
@@ -137,7 +141,7 @@ export function ExpenseForm({
           <input aria-label="Amount"
             required
             type="number"
-            step="0.01" min={accessorial ? "0.01" : undefined}
+            step="0.01" min={accessorial || bonus ? "0.01" : undefined}
             value={value.amount}
             onChange={(event) => set("amount", event.target.value)}
             className={controlClass}
@@ -165,7 +169,7 @@ export function ExpenseForm({
 
         </Field>
         <Field label="Driver">
-          <ExpenseDriverSelect value={value} drivers={drivers} applicants={accessorial ? [] : options.applicants} trucks={trucks} owners={owners} onChange={change} required={driverOnly || accessorial} className={controlClass} />
+          <ExpenseDriverSelect value={value} drivers={drivers} applicants={accessorial ? [] : options.applicants} trucks={trucks} owners={owners} onChange={change} required={driverOnly || accessorial || bonus} className={controlClass} />
 
         </Field>
         {driverOnly ? <p className="text-xs text-zinc-400 sm:col-span-2">Charged to the selected driver.</p> : <>
@@ -174,10 +178,10 @@ export function ExpenseForm({
             <option>Company</option><option disabled={!responsibility.privatelyOwned && value.coveredBy !== "Truck Owner"}>Truck Owner</option>
           </select> : <ExpenseResponsibilitySelect value={value} trucks={trucks} owners={owners} onChange={change} className={controlClass} />}
         </Field>
-        <Field label="Payment method">
-          {accessorial ? <p className="text-sm">Driver payroll</p> : <ExpensePaymentMethodSelect value={value.paymentType} methods={options.paymentTypes} onChange={next => set("paymentType", next)} saved={!!value.updatedAt} className={controlClass} />}
-        </Field>
-        {accessorial ? <p role="status" className="text-sm text-zinc-400">Driver earnings: {previewAmount ? `+${previewAmount}` : "—"}. {value.coveredBy === "Truck Owner" ? `Owner charge${savedOwner ? ` (${savedOwner.fullName})` : ""}: ${previewAmount ? `−${previewAmount}` : "—"}.` : "Company covers the cost."}</p> : <Field label="Paid by">
+        {bonus ? <p role="status" className="text-sm text-zinc-400">Paid through Driver Pay as bonus earnings.</p> : !legacyBonusWithoutMethod && <Field label="Payment method">
+          {accessorial ? <p className="text-sm">Driver payroll</p> : <ExpensePaymentMethodSelect value={value.paymentType} methods={bonusCategory && value.updatedAt ? options.paymentTypes.filter(method => method.trim().toLowerCase() !== "reimburse") : options.paymentTypes} onChange={next => set("paymentType", next)} saved={!!value.updatedAt} className={controlClass} />}
+        </Field>}
+        {accessorial ? <p role="status" className="text-sm text-zinc-400">Driver earnings: {previewAmount ? `+${previewAmount}` : "—"}. {value.coveredBy === "Truck Owner" ? `Owner charge${savedOwner ? ` (${savedOwner.fullName})` : ""}: ${previewAmount ? `−${previewAmount}` : "—"}.` : "Company covers the cost."}</p> : !bonus && !legacyBonusWithoutMethod && <Field label="Paid by">
           <ExpensePayerSelect value={value.paidBy} users={options.paidBy} onChange={next => set("paidBy", next)} className={controlClass} />
         </Field>}
         </>}

@@ -16,6 +16,12 @@ by an ordinary expense choice. Frozen statement JSON and historical receipts rem
 authoritative. A fixed choice exceeding the current available amount stays visible
 for correction; finalization rejects it rather than silently reducing it.
 
+## Driver bonuses
+
+Choose Bonuses in Expenses and select the driver. Driver Pay shows the expense as bonus earnings and includes it in Salary on the weekly export. Changing a reimbursement to Bonuses retains each open week's reserved amount, including partial and deferred payouts. The credit uses the existing Reimburse payout ledger internally. The bonus classification is saved on the statement at finalization. Older frozen statements retain their saved classification. Existing Bonuses entered separately from payroll keep their payment treatment when edited.
+
+Migration 226 permits the category change for owner-linked reimbursements with open driver reservations. Owner collections, settled expenses and finalized statements retain their financial guards.
+
 ## Accessorials and owner reimbursements
 
 Accessorials, including DOT inspection bonuses, are entered through the ordinary

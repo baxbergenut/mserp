@@ -1059,6 +1059,7 @@ export interface DriverEscrowSetting {
 }
 
 export interface ExpenseInput {
+  savedPaymentType?: string;
   savedAmount?: string;
   legacyPaymentTotal?: string;
   maintenance?: ExpenseMaintenance;
@@ -1341,6 +1342,7 @@ export interface DriverPayAdjustment {
   amount: string;
 }
 export interface ExpenseDeduction {
+  driverBonus?: boolean;
   escrowAmount?: string;
 	mode?: "auto" | "fixed" | "skip";
 	liveBalance?: boolean;

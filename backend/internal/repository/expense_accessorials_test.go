@@ -105,17 +105,31 @@ func TestAccessorialPayrollDatabase(t *testing.T) {
 		}
 		d := card(read("driver", week), projectionDriver)
 		credit := row(d, e.ID, "accessorial", "150.00")
-		row(d, reimb.ID, "reimburse", "75.00")
+		reimbursement := row(d, reimb.ID, "reimburse", "75.00")
+		reimbursement.Apply = true
 		companyCredit := row(d, company.ID, "accessorial", "25.00")
 		inv := card(read("investor", week), projectionTruck)
 		row(inv, e.ID, "", "150.00")
 		row(inv, reimb.ID, "", "75.00")
 		credit.Amount, credit.Mode, credit.Apply = "60.00", "fixed", true
 		companyCredit.Amount, companyCredit.Mode, companyCredit.Apply = "0.00", "skip", true
-		d.Edits.ExpenseDeductions = []ExpenseDeduction{credit, companyCredit}
+		d.Edits.ExpenseDeductions = []ExpenseDeduction{credit, companyCredit, reimbursement}
 		if _, err = pay.Save(ctx, d.Edits, actor); err != nil {
 			t.Fatal("draft", err)
 		}
+		bonuses := id(`INSERT INTO expense_settings(kind,name) VALUES('category','Bonuses') RETURNING id`)
+		correct := ExpenseInput{CategoryID: bonuses, ExpenseDate: pastDate, DriverID: reimb.DriverID, TruckID: reimb.TruckID, OwnerID: reimb.OwnerID,
+			CoveredBy: reimb.CoveredBy, PaymentType: reimb.PaymentType, Amount: "75.00", ExpenseType: reimb.ExpenseType, CreatedBy: actor}
+		beforeBonus := card(read("driver", week), projectionDriver)
+		if _, err = expenses.UpdateExpense(ctx, reimb.ID, correct); err != nil {
+			t.Fatal("correct owner-funded bonus", err)
+		}
+		afterBonus := card(read("driver", week), projectionDriver)
+		posted := row(afterBonus, reimb.ID, "reimburse", "75.00")
+		if !posted.Saved || !posted.DriverBonus || beforeBonus.NetPayCents() != afterBonus.NetPayCents() || afterBonus.ReimbursedCents() != beforeBonus.ReimbursedCents()-7500 {
+			t.Fatal("owner bonus changed reservation or earnings", posted)
+		}
+		row(card(read("investor", week), projectionTruck), reimb.ID, "", "75.00")
 		balances(e.ID, "150.00", "150.00")
 		balances(company.ID, "25.00", "")
 		later := week.AddDate(0, 0, 7)
@@ -127,6 +141,10 @@ func TestAccessorialPayrollDatabase(t *testing.T) {
 		}
 		balances(e.ID, "90.00", "150.00")
 		balances(reimb.ID, "0.00", "75.00")
+		correct.CategoryID = other
+		if _, err = expenses.UpdateExpense(ctx, reimb.ID, correct); !errors.Is(err, ErrExpensePayerCorrection) {
+			t.Fatal("changed frozen bonus classification", err)
+		}
 		balances(company.ID, "25.00", "")
 		if err = expenses.DeleteExpense(ctx, e.ID); !errors.Is(err, ErrExpenseFinalized) {
 			t.Fatal("frozen expense was not protected", err)

@@ -210,7 +210,7 @@ func (r *ExpenseRepository) ListExpensesPage(ctx context.Context, query ExpenseP
 WHERE ` + search + `
 	AND e.category_id=ANY($2::uuid[])
 	AND ($3 = '' OR e.category_id = $3::uuid)
-	AND ($4 = '' OR e.payment_type = $4)
+	AND ($4 = '' OR ` + expenseDisplayPaymentSQL + ` = $4)
 	AND ($5::date IS NULL OR e.expense_date >= $5)
 	AND ($6::date IS NULL OR e.expense_date <= $6)
 	AND ($7::uuid IS NULL OR e.truck_id = $7)
@@ -304,7 +304,7 @@ WHERE ` + search + `
 	if err := r.pool.QueryRow(ctx, `SELECT
  COALESCE(array_agg(DISTINCT COALESCE(d.full_name,e.driver_name) ORDER BY COALESCE(d.full_name,e.driver_name)) FILTER(WHERE COALESCE(d.full_name,e.driver_name,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT COALESCE(t.unit_number,e.unit_number) ORDER BY COALESCE(t.unit_number,e.unit_number)) FILTER(WHERE COALESCE(t.unit_number,e.unit_number,'')<>''),'{}'),
- COALESCE(array_agg(DISTINCT e.payment_type ORDER BY e.payment_type) FILTER(WHERE coalesce(e.payment_type,'')<>''),'{}'),
+ COALESCE(array_agg(DISTINCT `+expenseDisplayPaymentSQL+` ORDER BY `+expenseDisplayPaymentSQL+`) FILTER(WHERE coalesce(e.payment_type,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.paid_by ORDER BY e.paid_by) FILTER(WHERE coalesce(e.paid_by,'')<>''),'{}'),
  COALESCE(array_agg(DISTINCT e.covered_by ORDER BY e.covered_by) FILTER(WHERE coalesce(e.covered_by,'')<>''),'{}'),
  (SELECT COALESCE(array_agg(username ORDER BY lower(username)), '{}') FROM app_users WHERE active)
@@ -736,15 +736,8 @@ func (r *ExpenseRepository) DeleteExpense(ctx context.Context, id string, actors
 	return commitPayrollMutation(ctx, tx)
 }
 
-// deleteExpenseTx shares finalized-statement and draft-allocation handling with
-// maintenance voids. The caller holds the payroll gate and accounting lock.
-func deleteExpenseTx(ctx context.Context, tx pgx.Tx, id string) error {
-	var expenseID string
-	if err := tx.QueryRow(ctx, `SELECT id::text FROM expenses WHERE id=$1 FOR UPDATE`, id).Scan(&expenseID); err != nil {
-		return mapNotFound(err)
-	}
-	// Saved allocations are drafts until finalization. Check frozen snapshots as
-	// well as ledgers, including legacy reimbursements without payout receipts.
+// Check frozen snapshots as well as ledger routes, including legacy payouts.
+func checkExpensePayrollOpen(ctx context.Context, tx pgx.Tx, id string) error {
 	var finalized bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payroll_settlements s WHERE s.finalized AND (
  s.report @> jsonb_build_object('edits',jsonb_build_object('expenseDeductions',jsonb_build_array(jsonb_build_object('expenseId',$1::text))))
@@ -764,18 +757,31 @@ func deleteExpenseTx(ctx context.Context, tx pgx.Tx, id string) error {
 	if finalized {
 		return ErrExpenseFinalized
 	}
-	// Keep the parent while deleting allocations so existing database guards can
-	// resolve driver/team/truck identity. Any later failure restores every row.
-	if _, err = tx.Exec(ctx, `DELETE FROM expense_payments WHERE expense_id=$1`, id); err != nil {
+	return nil
+}
+
+// deleteExpenseTx shares finalized-statement and draft-allocation handling with
+// maintenance voids. The caller holds the payroll gate and accounting lock.
+func deleteExpenseTx(ctx context.Context, tx pgx.Tx, id string) error {
+	var expenseID string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM expenses WHERE id=$1 FOR UPDATE`, id).Scan(&expenseID); err != nil {
+		return mapNotFound(err)
+	}
+	if err := checkExpensePayrollOpen(ctx, tx, id); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `DELETE FROM expense_reimbursement_payments WHERE expense_id=$1`, id); err != nil {
+	// Keep the parent while deleting allocations so existing database guards can
+	// resolve driver/team/truck identity. Any later failure restores every row.
+	if _, err := tx.Exec(ctx, `DELETE FROM expense_payments WHERE expense_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM expense_reimbursement_payments WHERE expense_id=$1`, id); err != nil {
 		return err
 	}
 	if available, checkErr := accessorialLedgerAvailable(ctx, tx); checkErr != nil {
 		return checkErr
 	} else if available {
-		if _, err = tx.Exec(ctx, `DELETE FROM expense_accessorial_payments WHERE expense_id=$1`, id); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM expense_accessorial_payments WHERE expense_id=$1`, id); err != nil {
 			return err
 		}
 	}
@@ -788,6 +794,9 @@ func deleteExpenseTx(ctx context.Context, tx pgx.Tx, id string) error {
 	}
 	return nil
 }
+
+// Driver bonus earnings share the credit reservation ledger with reimbursements.
+const expenseDisplayPaymentSQL = `CASE WHEN lower(btrim(e.category))='bonuses' AND lower(btrim(e.payment_type))='reimburse' THEN 'Driver Pay' ELSE e.payment_type END`
 
 const selectExpensesSQL = `
 SELECT e.id, e.truck_id, COALESCE(e.driver_id,expense_applicant_driver(e.applicant_id)), e.category, e.category_id, e.created_by_name,

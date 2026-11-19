@@ -296,6 +296,33 @@ func TestExpenseReimbursementsDatabase(t *testing.T) {
 			if row(current, expense).Available != "90.25" {
 				t.Fatal("future reservation ignored")
 			}
+			// Reclassify the original expense through the same repository update the editor uses.
+			bonuses := id(`INSERT INTO expense_settings(kind,name) VALUES('category','Bonuses') RETURNING id`)
+			invoice, e = expenses.GetExpense(ctx, expense)
+			if e != nil {
+				t.Fatal(e)
+			}
+			date, _ := time.Parse(time.DateOnly, *invoice.ExpenseDate)
+			bonusEdit := ExpenseInput{CategoryID: bonuses, ExpenseDate: date, DriverID: invoice.DriverID, Amount: *invoice.Amount,
+				PaymentType: invoice.PaymentType, ExpenseType: invoice.ExpenseType, CoveredBy: invoice.CoveredBy, UpdatedAt: &invoice.UpdatedAt, CreatedBy: actor}
+			if _, e = expenses.UpdateExpense(ctx, expense, bonusEdit); e != nil {
+				t.Fatal("move reimbursement to Bonuses", e)
+			}
+			for _, test := range []struct {
+				date   time.Time
+				amount string
+				cents  int64
+			}{{week, "40.10", 4010}, {week.AddDate(0, 0, 7), "10.00", 1000}} {
+				after := read(driver, test.date)
+				credit := row(after, expense)
+				if credit == nil || !credit.DriverBonus || !credit.Saved || credit.Amount != test.amount {
+					t.Fatalf("bonus reservation changed in %s: %+v", test.date, credit)
+				}
+				if test.date.Equal(week) && (after.NetPayCents() != current.NetPayCents() || after.ReimbursedCents() != current.ReimbursedCents()-test.cents) {
+					t.Fatal("bonus did not move from reimbursement to earnings at the same net")
+				}
+			}
+			current = read(driver, week)
 			over := *row(current, expense)
 			over.Apply = true
 			over.Amount = "90.26"
