@@ -242,7 +242,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		return result, err
 	}
 	result.ELD.Configured = r.fiveELDConfigured
-	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), false, r.plans, key)
+	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{}, r.plans, key)
 	if err != nil {
 		return result, err
 	}

@@ -42,6 +42,7 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
     await expect(page.locator('[data-row-dragging]')).toHaveCount(0);
   };
   // Within-group animation and delayed response preserve the preview until saved.
+  await handle().scrollIntoViewIfNeeded();
   const start = await handle().boundingBox(), top = await row(ids[0]).boundingBox();
   await page.mouse.move(start.x+start.width/2,start.y+start.height/2); await page.mouse.down();
   await page.mouse.move(top.x+400,top.y+4,{steps:8});
@@ -229,6 +230,8 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await expect(dialog.getByLabel('First name',{exact:true})).toHaveValue('');
   await dialog.getByLabel('First name',{exact:true}).fill('Order');
   await dialog.getByLabel('Last name',{exact:true}).fill('New Hire');
+  const distinctPerson = dialog.getByLabel('This is a different person.');
+  if (await distinctPerson.isVisible()) await distinctPerson.check();
   const next=()=>dialog.getByRole('button',{name:'Continue',exact:true}).click();
   await next();
   await dialog.getByLabel('Truck',{exact:true}).selectOption('');

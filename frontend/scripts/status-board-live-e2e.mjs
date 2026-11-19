@@ -10,9 +10,9 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   const read = async driver => (await (await page.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).entries.find(e => e.driverId === driver);
   const cursor = page.locator('[data-board-presence="Board Viewer"]');
   // A viewer may select a cell without having permission to change its value.
-  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('td').nth(8).click();
+  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('[data-board-column="notes"]').click();
   await expect(cursor).toHaveAttribute('aria-label', /Board Cpm.*Notes/, { timeout: 2500 });
-  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('td').nth(2).click();
+  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('[data-board-column="trailerNumber"]').click();
   await page.locator('[data-scroll-key="driver-board"]').evaluate(element => { element.scrollLeft = 0; });
   await expect(cursor).toHaveAttribute('aria-label', /Board Cpm.*Trailer/, { timeout: 2500 });
   await page.screenshot({ path: join(temp, 'status-board-live-presence.png'), fullPage: true, animations: 'disabled' });
@@ -86,11 +86,11 @@ export async function runStatusBoardLiveE2E({ page, viewer, base, id, week, head
   await expect(notes(viewer)).toHaveValue('Saved while viewer offline', { timeout: 2500 });
   // Expiry removes crashed/offline tabs; navigation actively clears presence.
   await viewer.keyboard.press('Escape');
-  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('td').nth(8).click();
+  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('[data-board-column="notes"]').click();
   await expect(cursor).toHaveAttribute('aria-label', /Notes/, { timeout: 2500 });
   sql(`SET search_path TO ${schema},public; UPDATE board_presence SET expires_at=now()-interval '1 second' WHERE board='status' AND user_id=(SELECT id FROM app_users WHERE username='Board Viewer'); SELECT pg_notify('mserp_board_presence','');`);
   await expect(cursor).toHaveCount(0, { timeout: 2500 });
-  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('td').nth(7).click();
+  await viewer.locator(`tr[data-driver-id="${id}"]`).locator('[data-board-column="destination"]').click();
   await expect(cursor).toHaveCount(1, { timeout: 2500 });
   await viewer.goto(`${base}/account`);
   await expect(cursor).toHaveCount(0, { timeout: 2500 });

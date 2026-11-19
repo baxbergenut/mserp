@@ -313,35 +313,81 @@ func (r *FleetRepository) ActivateStatuses(ctx context.Context, revision string)
 	return commitPayrollMutation(ctx, tx)
 }
 
-func syncFleetStatusProgress(ctx context.Context, tx pgx.Tx, ids []string) error {
+type fleetProgressChange struct {
+	driver string
+	status string
+}
+
+// nil selects the whole board for the minute worker. Native saves supply their
+// affected drivers. Only these two statuses depend on whether the queue is empty.
+func pendingFleetProgress(ctx context.Context, tx pgx.Tx, ids []string) ([]fleetProgressChange, error) {
 	var enabled bool
-	if err := tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&enabled); err != nil {
-		return err
+	if err := tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&enabled); err != nil || !enabled {
+		return nil, err
 	}
-	if !enabled {
-		return nil
+	rows, err := tx.Query(ctx, `SELECT driver_id::text,status FROM driver_board
+ WHERE status IN ('ENROUTE','RESERVED') AND ($1::uuid[] IS NULL OR driver_id=ANY($1))
+ ORDER BY driver_id`, ids)
+	if err != nil {
+		return nil, err
 	}
-	views, err := readBoardLoads(ctx, tx, ids, boardLoadToday(time.Now()), time.Now())
+	candidates, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct{ ID, Status string }])
+	if err != nil || len(candidates) == 0 {
+		return nil, err
+	}
+	drivers := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		drivers = append(drivers, candidate.ID)
+	}
+	now := time.Now()
+	views, err := readBoardLoadViewsCached(ctx, tx, drivers, boardLoadToday(now), now, boardLoadViewOptions{queuePresenceOnly: true}, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	var changes []fleetProgressChange
+	for _, candidate := range candidates {
+		if next := boardProgressStatus(candidate.Status, views[candidate.ID].Next); next != candidate.Status {
+			changes = append(changes, fleetProgressChange{candidate.ID, next})
+		}
+	}
+	return changes, nil
+}
+
+func syncFleetStatusProgress(ctx context.Context, tx pgx.Tx, ids []string) error {
+	changes, err := pendingFleetProgress(ctx, tx, ids)
 	if err != nil {
 		return err
 	}
-	for id, view := range views {
-		var current string
-		if err = tx.QueryRow(ctx, `SELECT status FROM driver_board WHERE driver_id=$1`, id).Scan(&current); errors.Is(err, pgx.ErrNoRows) {
-			continue
-		} else if err != nil {
+	for _, change := range changes {
+		if _, err := tx.Exec(ctx, `UPDATE driver_board SET status=$2,version=version+1,updated_at=now() WHERE driver_id=$1`, change.driver, change.status); err != nil {
 			return err
-		}
-		next := boardProgressStatus(current, view.Next)
-		if next != current {
-			if _, err = tx.Exec(ctx, `UPDATE driver_board SET status=$2,version=version+1,updated_at=now() WHERE driver_id=$1`, id, next); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
 }
+
+const fleetTruckStatusMismatch = `condition_status IS DISTINCT FROM fleet_truck_operating_status(id)`
+
+func (r *FleetRepository) statusProgressNeeded(ctx context.Context) (bool, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	var trucksChanged bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trucks WHERE `+fleetTruckStatusMismatch+`)`).Scan(&trucksChanged); err != nil || trucksChanged {
+		return trucksChanged, err
+	}
+	changes, err := pendingFleetProgress(ctx, tx, nil)
+	return len(changes) > 0, err
+}
+
 func (r *FleetRepository) ReconcileStatusProgress(ctx context.Context) error {
+	// A stable fleet should never take the payroll source gate on a timer.
+	// A positive preflight is only a hint. Re-evaluate after taking both locks.
+	if needed, err := r.statusProgressNeeded(ctx); err != nil || !needed {
+		return err
+	}
 	tx, err := beginPayrollMutation(ctx, r.pool)
 	if err != nil {
 		return err
@@ -350,31 +396,11 @@ func (r *FleetRepository) ReconcileStatusProgress(ctx context.Context) error {
 	if err = setBoardActor(ctx, tx, "", "system_queue"); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `SELECT fleet_status_refresh_truck(id) FROM trucks WHERE condition_status IS DISTINCT FROM fleet_truck_operating_status(id) ORDER BY id`); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT fleet_status_refresh_truck(id) FROM trucks WHERE `+fleetTruckStatusMismatch+` ORDER BY id`); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT driver_id::text FROM driver_board WHERE status IN ('ENROUTE','RESERVED') ORDER BY driver_id`)
-	if err != nil {
+	if err = syncFleetStatusProgress(ctx, tx, nil); err != nil {
 		return err
-	}
-	ids := []string{}
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	if len(ids) > 0 {
-		if err = syncFleetStatusProgress(ctx, tx, ids); err != nil {
-			return err
-		}
 	}
 	return commitPayrollMutation(ctx, tx)
 }

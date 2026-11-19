@@ -103,19 +103,29 @@ func (r *AuthRepository) TouchSession(ctx context.Context, hash string) error {
 }
 
 func (r *AuthRepository) FindSessionByTokenHash(ctx context.Context, hash string) (AuthSession, error) {
+	return r.findSession(ctx, hash, true)
+}
+
+// Dispatch requests check the same live session, role and individual grants.
+// Only expense screens need the full expense-category matrix.
+func (r *AuthRepository) FindBoardSessionByTokenHash(ctx context.Context, hash string) (AuthSession, error) {
+	return r.findSession(ctx, hash, false)
+}
+
+func (r *AuthRepository) findSession(ctx context.Context, hash string, expenseCategories bool) (AuthSession, error) {
 	var s AuthSession
 	var system bool
 	var overrides PermissionOverrides
 	var categoryOverrides ExpenseCategoryOverrides
 	err := r.pool.QueryRow(ctx, `SELECT u.id::text,u.username,coalesce(u.email,''),u.role_id::text,r.system_role,r.permissions,s.csrf_token,s.expires_at,u.theme,r.name,u.version::text || ':' || r.version::text,u.permission_overrides,u.expense_category_overrides,
- COALESCE((SELECT json_agg(json_build_object(
+ CASE WHEN $2 THEN COALESCE((SELECT json_agg(json_build_object(
    'categoryId',c.id, 'canView',r.system_role OR coalesce(a.can_view,false),
    'canCreate',r.system_role OR coalesce(a.can_create,false), 'canEdit',r.system_role OR coalesce(a.can_edit,false),
    'canDelete',r.system_role OR coalesce(a.can_delete,false),
    'accessorials',c.active AND coalesce((to_jsonb(c)->>'accessorials')::boolean,false)
  ) ORDER BY c.id) FROM expense_settings c LEFT JOIN role_expense_category_access a
-   ON a.category_id=c.id AND a.role_id=r.id WHERE c.kind='category'),'[]'::json)
- FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme, &s.User.RoleName, &s.User.AccessRevision, &overrides, &categoryOverrides, &s.User.ExpenseCategoryAccess)
+   ON a.category_id=c.id AND a.role_id=r.id WHERE c.kind='category'),'[]'::json) ELSE '[]'::json END
+ FROM auth_sessions s JOIN app_users u ON u.id=s.user_id JOIN app_roles r ON r.id=u.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active`, hash, expenseCategories).Scan(&s.User.ID, &s.User.Username, &s.User.Email, &s.User.RoleID, &system, &s.User.Permissions, &s.CSRFToken, &s.ExpiresAt, &s.User.Theme, &s.User.RoleName, &s.User.AccessRevision, &overrides, &categoryOverrides, &s.User.ExpenseCategoryAccess)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return AuthSession{}, ErrAuthRecordNotFound
 	}

@@ -3154,6 +3154,8 @@ cookies, CSRF tokens, password hashes, or plaintext credentials in handoff text.
 
 ## Status Board operational saves (188)
 
+The minute fleet-status worker checks truck conditions and queue-driven dispatch statuses in a read-only snapshot. An idle pass takes no payroll or fleet advisory lock. A positive pass rechecks the current state inside the guarded write transaction. Native dispatch edits use the same queue membership rules and fetch status candidates in one query. `TestFleetStatusDatabase` covers idle lock contention and actual queue repairs.
+
 - Status Board save/load-action/undo commits never calculate payroll. Migration 188
   classifies board rows, load state and operational audits as unrelated, and excludes
   driver dispatch history from financial capture/revisions. Actual profile and

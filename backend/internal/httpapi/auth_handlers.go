@@ -29,6 +29,7 @@ type authStore interface {
 	CreatePasswordSession(context.Context, repository.AuthUser, string, string, time.Time) error
 	ChangePassword(context.Context, string, string, string) error
 	FindSessionByTokenHash(context.Context, string) (repository.AuthSession, error)
+	FindBoardSessionByTokenHash(context.Context, string) (repository.AuthSession, error)
 	DeleteSessionByTokenHash(context.Context, string) error
 }
 
@@ -267,7 +268,7 @@ func (h *authHandler) requireSession(next http.Handler) http.Handler {
 			writeAPIError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		session, err := h.store.FindSessionByTokenHash(r.Context(), hashToken(cookie.Value))
+		session, err := h.requestSession(r.Context(), r.URL.Path, hashToken(cookie.Value))
 		if errors.Is(err, repository.ErrAuthRecordNotFound) {
 			h.clearSessionCookie(w)
 			writeAPIError(w, http.StatusUnauthorized, "authentication required")
@@ -281,6 +282,19 @@ func (h *authHandler) requireSession(next http.Handler) http.Handler {
 		ctx := repository.WithTaskViewer(r.Context(), session.User.ID, session.User.Administrator)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authContextKey{}, session)))
 	})
+}
+
+// These dispatch routes do not read or authorize any expense-category data.
+func (h *authHandler) requestSession(ctx context.Context, path, hash string) (repository.AuthSession, error) {
+	root, suffix, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	if root == "driver-board" || root == "gross-board" {
+		group, _, _ := strings.Cut(suffix, "/")
+		switch group {
+		case "", "events", "loads", "presence", "history", "planning-entries", "order", "auto-order":
+			return h.store.FindBoardSessionByTokenHash(ctx, hash)
+		}
+	}
+	return h.store.FindSessionByTokenHash(ctx, hash)
 }
 
 func (h *authHandler) requireCSRF(next http.Handler) http.Handler {
