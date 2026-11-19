@@ -211,8 +211,16 @@ export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) 
   await boardReadiness.wait("status");
   return apiRequest<DriverBoard | import("./types").CompactDriverBoard>(withQuery("/driver-board", { weekStart, overview: "1", compact: "1" }), { signal }).then(expandBoard);
 };
-export const saveDriverBoard = (entries: DriverBoardEntry[], textBase?: Record<string, DriverBoardEntry>) =>
-  apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body: JSON.stringify({ entries, textBase }, (key, value) => key === "fleetStatus" ? undefined : value) });
+export function saveDriverBoard(entries: DriverBoardEntry[], textBase: Record<string, DriverBoardEntry> = {}) {
+  const omitReceipt = (key: string, value: unknown) => key === "fleetStatus" ? undefined : value;
+  let body = JSON.stringify({ entries, textBase }, omitReceipt);
+  // Preserve atomic full-row saves that already fit the API's 1 MiB limit.
+  const limit = 1 << 20;
+  if (body.length * 3 > limit && new TextEncoder().encode(body).length > limit) {
+    body = JSON.stringify({ entries }, omitReceipt);
+  }
+  return apiRequest<DriverBoardEntry[]>("/driver-board", { method: "PUT", body });
+}
 export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAction) =>
   apiRequest<import("./types").DriverBoardOrder>("/driver-board/order", { method: "POST", body: JSON.stringify(action) });
 export const updateBoardAutoOrder = (dispatcherId: string, enabled: boolean) =>

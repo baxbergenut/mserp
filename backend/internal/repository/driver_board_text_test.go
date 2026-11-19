@@ -29,6 +29,10 @@ func testConcurrentBoardText(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if _, err = lock.Exec(ctx, `SELECT fleet_status_lock(),pg_advisory_xact_lock(736281940)`); err != nil {
 		t.Fatal(err)
 	}
+	// A concurrent foreign-key check can continue referencing this driver.
+	if _, err = lock.Exec(ctx, `SELECT id FROM drivers WHERE id=$1 FOR KEY SHARE`, driver.ID); err != nil {
+		t.Fatal(err)
+	}
 	work, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	save := func(e DriverBoardEntry) (DriverBoardEntry, error) {
@@ -65,6 +69,17 @@ func testConcurrentBoardText(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if _, err = save(trailer); !errors.Is(err, ErrDriverBoardConflict) {
 		t.Fatal("crossed trailer identities", err)
 	}
+	// An already-open client can save ordinary text under the same held locks.
+	oldTab := second
+	oldTab.Notes = "Legacy tab edit"
+	legacy, err := repo.SaveWithTextBase(work, []DriverBoardEntry{oldTab}, nil, "")
+	if err != nil || legacy[0].TrailerNumber != second.TrailerNumber || legacy[0].Notes != oldTab.Notes || legacy[0].UndoID == 0 {
+		t.Fatal("legacy tab", err)
+	}
+	if _, err = repo.SaveWithTextBase(work, []DriverBoardEntry{oldTab}, nil, ""); !errors.Is(err, ErrDriverBoardConflict) {
+		t.Fatal("legacy stale version", err)
+	}
+	second = legacy[0]
 	// A dispatch change must still wait behind the held fleet lock.
 	mixed := second
 	mixed.Status = "ENROUTE"
