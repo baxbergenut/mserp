@@ -188,9 +188,12 @@ func changedPTIRows(ctx context.Context, q interface {
  SELECT m.truck_id,jsonb_agg(jsonb_build_object('id',d.id,'name',d.full_name,'availability',d.availability_status,
  'employment',CASE WHEN d.active THEN 'active' ELSE 'terminated' END) ORDER BY d.full_name,d.id) AS crew
  FROM members m JOIN drivers d ON d.id=m.driver_id GROUP BY m.truck_id
+ ), operators AS MATERIALIZED (
+ SELECT DISTINCT fleet_status_driver_truck(id) AS truck FROM drivers WHERE active
  ), current_rows AS MATERIALIZED (
- SELECT t.id,t.unit_number,t.active,fleet_truck_operating_status(t.id) AS condition,coalesce(c.crew,'[]'::jsonb) AS crew,p.data
- FROM trucks t LEFT JOIN crews c ON c.truck_id=t.id LEFT JOIN weekly_pti_rows p ON p.week_start=$1 AND p.truck_id=t.id
+ SELECT t.id,t.unit_number,t.active,`+boardTruckConditionSQL+`
+ WHEN o.truck IS NOT NULL THEN 'in_use' ELSE 'ready' END AS condition,coalesce(c.crew,'[]'::jsonb) AS crew,p.data
+ FROM trucks t LEFT JOIN operators o ON o.truck=t.id LEFT JOIN crews c ON c.truck_id=t.id LEFT JOIN weekly_pti_rows p ON p.week_start=$1 AND p.truck_id=t.id
  WHERE t.created_at<=$2 OR p.truck_id IS NOT NULL
  )
  SELECT id::text,unit_number,active,condition,crew,
