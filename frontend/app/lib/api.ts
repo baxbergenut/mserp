@@ -331,7 +331,7 @@ let accessGeneration = 0;
 let accessFingerprint = "";
 let currentPermissions: string[] = [];
 export class APIError extends Error {
-  constructor(message: string, public status: number, public code: string, public review?: DriverPayWeek) { super(message); this.name = "APIError"; }
+  constructor(message: string, public status: number, public code: string, public review?: DriverPayWeek, public currentEntries?: DriverBoardEntry[]) { super(message); this.name = "APIError"; }
 }
 export function resetAccessRequests() { accessGeneration++; reads.clear(true); }
 function acceptSession(session: AuthSession) {
@@ -401,6 +401,7 @@ async function performRequest<T>(path: string, init?: RequestInit, readBody?: (r
       body?.error ??
         `Request failed (${response.status} ${response.statusText})`,
       response.status, body?.code ?? "request_failed", body?.code === "finalization_blocked" ? body?.review : undefined,
+      body?.code === "board_row_changed" && Array.isArray(body.currentEntries) ? body.currentEntries : undefined,
     );
   }
 

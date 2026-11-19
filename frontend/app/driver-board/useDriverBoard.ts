@@ -243,8 +243,8 @@ export function useDriverBoard(lockedDriverId?: string) {
         committed = await saveDriverBoard(drafts, textBase);
       } catch (err) {
         if (!(err instanceof APIError) || err.code !== "board_row_changed") throw err;
-        const current = await fetchDriverBoard(currentChargeWeek());
-        const latestById = new Map(current.entries.map(entry => [entry.driverId, entry]));
+        const latestEntries = err.currentEntries ?? (await fetchDriverBoard(currentChargeWeek())).entries;
+        const latestById = new Map(latestEntries.map(entry => [entry.driverId, entry]));
         const retry = [];
         const review = [];
         for (const draft of Object.values(snapshot)) {
@@ -252,7 +252,7 @@ export function useDriverBoard(lockedDriverId?: string) {
           if (!latest || !base || base.version !== draft.version) throw err;
           const { entry, conflicts } = rebaseBoardDraft(base, draft, latest);
           if (conflicts.length) {
-            const name = current.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
+            const name = board?.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
             const fields = conflicts.map(key => key + " is now " + (typeof latest[key] === "object" ? JSON.stringify(latest[key]) : latest[key] || "(empty)"));
             review.push({ latest, message: name + " · " + fields.join(", ") });
           }
@@ -291,7 +291,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       if (loadIds.length) void refreshLoads(loadIds);
     } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
     finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); }
-  }, [canEdit, loading, refreshLoads]);
+  }, [canEdit, loading, refreshLoads, board?.drivers]);
 
   function resolveConflict(latest: DriverBoardEntry, keepDraft: boolean) {
     if (savingRef.current) return;
