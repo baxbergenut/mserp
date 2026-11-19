@@ -1338,10 +1338,7 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	result.Entry.Status = boardProgressStatus(result.Entry.Status, result.Loads.Next)
-	if err = attachBoardUndoID(ctx, tx, &result.Entry); err != nil {
-		return result, err
-	}
-	if err = attachBoardFleetStatus(ctx, tx, &result.Entry); err != nil {
+	if err = attachBoardSaveReceipt(ctx, tx, &result.Entry); err != nil {
 		return result, err
 	}
 	return result, tx.Commit(ctx)

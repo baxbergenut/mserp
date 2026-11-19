@@ -116,12 +116,9 @@ func (h *taskEvents) publish() {
 	}
 }
 
-// Share a committed snapshot among subscribers to the same notification. The
-// session is checked separately for each subscriber before any frame is sent.
-func (h *taskEvents) frame(ctx context.Context, fallback string) string {
-	if h.snapshot == nil {
-		return "event: " + fallback + "\ndata: {}\n\n"
-	}
+// The shared bytes are immutable. Viewer permissions, decoding and projection
+// run outside this lock so a slow subscriber cannot block every other viewer.
+func (h *taskEvents) rawSnapshot(ctx context.Context) []byte {
 	h.snapshotMu.Lock()
 	defer h.snapshotMu.Unlock()
 	h.mu.Lock()
@@ -139,7 +136,7 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 		stop()
 		cancel()
 		if err != nil {
-			return "event: " + fallback + "\ndata: {}\n\n"
+			return nil
 		}
 		if h.snapshots == nil || (len(h.snapshots) >= 16 && cached.body == nil) {
 			h.snapshots = map[string]eventSnapshot{}
@@ -147,7 +144,19 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 		cached = eventSnapshot{revision, body, time.Now()}
 		h.snapshots[key] = cached
 	}
-	body := cached.body
+	return cached.body
+}
+
+// Share a committed snapshot among subscribers to the same notification. The
+// session is checked separately for each subscriber before any frame is sent.
+func (h *taskEvents) frame(ctx context.Context, fallback string) string {
+	if h.snapshot == nil {
+		return "event: " + fallback + "\ndata: {}\n\n"
+	}
+	body := h.rawSnapshot(ctx)
+	if body == nil {
+		return "event: " + fallback + "\ndata: {}\n\n"
+	}
 	if h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard" {
 		// Project per subscriber, never cache a user's projected response.
 		var value any

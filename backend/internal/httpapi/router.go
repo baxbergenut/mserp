@@ -221,6 +221,10 @@ func NewRouter(
 		return json.Marshal(value)
 	}
 	boardEvents.projectSnapshot = func(ctx context.Context, value map[string]any) error {
+		if names, ok := value["pendingDrivers"].([]any); !ok || len(names) == 0 {
+			value["pendingDrivers"] = []any{}
+			return nil
+		}
 		session, _ := authSessionFromContext(ctx)
 		visible, err := boardRepo.CanViewPendingDrivers(repository.WithTaskViewer(ctx, session.User.ID, session.User.Administrator))
 		if err != nil {
