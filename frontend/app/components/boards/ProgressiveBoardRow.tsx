@@ -19,7 +19,11 @@ function schedule() {
 }
 
 function finishSelection(event: Event) {
-  if (event instanceof KeyboardEvent && !(event.ctrlKey || event.metaKey || event.shiftKey || /^(Arrow|Page|Home|End|Tab)/.test(event.key))) return;
+  if (event instanceof KeyboardEvent) {
+    if (["Shift", "Control", "Alt", "Meta", "AltGraph"].includes(event.key)) return;
+    const navigation = /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|PageUp|PageDown|Home|End|Tab|F3)$/.test(event.key);
+    if (!navigation && !event.ctrlKey && !event.metaKey) return;
+  }
   if (event instanceof PointerEvent && !event.shiftKey) return;
   const table = event.target instanceof Element ? event.target.closest("table") : null;
   if (!table) return;
