@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -202,6 +203,48 @@ func TestInvestorFrozenLateExpenseDatabase(t *testing.T) {
 		rows := open.Drivers[0].Edits.ExpenseDeductions
 		if len(rows) != 1 || rows[0].ExpenseID != expense || rows[0].Saved || rows[0].Amount != "102.67" {
 			t.Fatalf("reopened draft expenses: %+v", rows)
+		}
+		next := week.AddDate(0, 0, 7)
+		if err = repo.RequestPayrollPreparation(ctx, next, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = repo.PrepareNextPayrollWeek(ctx); err != nil {
+			t.Fatal(err)
+		}
+		nextPage, err := repo.PreparedPayroll(ctx, "investor", next, PayPageQuery{ID: projectionTruck}, false)
+		if err != nil || len(nextPage.Drivers) != 1 || len(nextPage.Drivers[0].Edits.ExpenseDeductions) != 1 {
+			t.Fatal("unpaid expense missing from second open week", err)
+		}
+		finalize := func(page DriverPayWeek, requestID string) error {
+			t.Helper()
+			w, err := chargeWeek(page.WeekStart)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = repo.SettleInvestor(WithPayrollReceipt(ctx), w, projectionTruck, page.Revision, actor, "", false, true, PayrollSettlementCommand{RequestID: requestID, ExpectedStatementRevision: page.Drivers[0].StatementRevision})
+			return err
+		}
+		if err = finalize(open, "18200000-0000-0000-0000-000000008192"); err != nil {
+			t.Fatal("collect expense in first week", err)
+		}
+		if err = finalize(nextPage, "18200000-0000-0000-0000-000000008193"); !errors.Is(err, ErrDriverPayConflict) {
+			t.Fatal("stale second-week finalization should conflict", err)
+		}
+		nextPage, err = repo.PreparedPayroll(ctx, "investor", next, PayPageQuery{ID: projectionTruck}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range nextPage.Drivers {
+			for _, row := range d.Edits.ExpenseDeductions {
+				if row.ExpenseID == expense {
+					t.Fatal("collected expense is still deductible in second week")
+				}
+			}
+		}
+		var payments int
+		var paid string
+		if err = pool.QueryRow(ctx, `SELECT count(*),sum(amount)::text FROM expense_payments WHERE expense_id=$1`, expense).Scan(&payments, &paid); err != nil || payments != 1 || paid != "102.67" {
+			t.Fatal("expected one full collection", payments, paid, err)
 		}
 	})
 }
