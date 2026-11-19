@@ -6,7 +6,7 @@ import { useBoardNavigation } from "@/app/lib/useBoardNavigation";
 import { APIError, fetchDriverBoard, saveDriverBoard, reorderBoardDrivers, updateBoardAutoOrder, undoDriverBoardEvent, fetchBoardLoads, changeBoardLoads, syncFiveELD } from "@/app/lib/api";
 import type { DriverBoard, DriverBoardEntry, BoardLoads, BoardLoadAction } from "@/app/lib/types";
 import { currentChargeWeek } from "@/app/accounting/driver-charges/charges";
-import { applyCommittedFleetStatus, progressStatus, isBoardTextEdit, rebaseBoardDraft, reconcileDriverBoard } from "./board";
+import { applyCommittedFleetStatus, progressStatus, boardConflictGroupFields, isBoardTextEdit, rebaseBoardDraft, reconcileDriverBoard } from "./board";
 import { usePermissions } from "@/app/lib/access";
 import { useBoardLive } from "./useBoardLive";
 import { selectedBoardCell } from "./boardCells";
@@ -253,11 +253,11 @@ export function useDriverBoard(lockedDriverId?: string) {
         for (const draft of Object.values(snapshot)) {
           const latest = latestById.get(draft.driverId), base = baselines[draft.driverId];
           if (!latest || !base || base.version !== draft.version) throw err;
-          const { entry, conflicts, conflictingFields } = rebaseBoardDraft(base, draft, latest);
+          const { entry, conflicts } = rebaseBoardDraft(base, draft, latest);
           if (conflicts.length) {
             const name = board?.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
             const fields = conflicts.map(key => key + " is now " + (typeof latest[key] === "object" ? JSON.stringify(latest[key]) : latest[key] || "(empty)"));
-            review.push({ latest, fields: conflictingFields, message: name + " · " + fields.join(", ") });
+            review.push({ latest, fields: boardConflictGroupFields(conflicts), message: name + " · " + fields.join(", ") });
           }
           retry.push(entry);
         }
