@@ -33,7 +33,7 @@ try {
     const snapshot = () => ({ weekStart:week, revision:'inputs:fixture', drivers:structuredClone(rows), preparation:{ state:preparationState, generation:'generation-1' } });
     await page.route('**/api/**', async route => {
       const req=route.request(), url=new URL(req.url()), path=url.pathname.slice(4);
-      if (path === '/auth/session') return route.fulfill({json:{ user:{id:'user',username:'Test',permissions:[`${kind}_pay.read`,`${kind}_pay.edit`,`${kind}_pay.finalize`,`${kind}_pay.reopen`],theme:'default'},csrfToken:'fixture'}});
+      if (path === '/auth/session') return route.fulfill({json:{ user:{id:'user',username:'Test',permissions:[`${kind}_pay.read`,`${kind}_pay.edit`,`${kind}_pay.finalize`,`${kind}_pay.reopen`,...(kind==='investor'?['investors.read']:[])],theme:'default'},csrfToken:'fixture'}});
       if (path.endsWith('/availability')) return route.fulfill({json:{firstWeek:week,currentWeek:week}});
       if (path === `/${kind}-pay` && req.method() === 'PUT') {
         const input=req.postDataJSON(), row=rows.find(row=>row.id===input.driverId);
@@ -114,6 +114,19 @@ try {
     await page.getByRole('button',{name:'Save comment',exact:true}).click();
     await expect.poll(()=>savedComment).toBe('Independent edit while another payroll updates');
     await expect(alpha).toBeDisabled();
+    if (kind === 'investor') {
+      rows[2].edits.expenseDeductions = [{ expenseId:'18200000-0000-4000-8000-000000009999',
+        source:'escrow', name:'Escrow', total:'2500.00', available:'2500.00', amount:'2500.00', version:1, saved:false }];
+      await page.reload();
+      await expect(charlie).toBeVisible();
+      if (await charlie.getAttribute('aria-expanded') === 'false') await charlie.click();
+      await page.getByLabel('Charlie, adjustment 1, name', {exact:true}).fill('Adjustment w35');
+      await page.getByLabel('Charlie, adjustment 1, amount', {exact:true}).fill('2500');
+      await page.getByLabel('Charlie, adjustment 1, amount', {exact:true}).press('Tab');
+      await expect.poll(()=>rows[2].edits.adjustments[0]?.amount).toBe('2500');
+      expect(rows[2].edits.expenseDeductions[0].apply).toBeFalsy();
+      await expect(alpha).toBeDisabled();
+    }
     if (kind === 'driver') {
       rows[0].loads=[{ date:week, slot:0, loadNumber:'FROZEN-LOAD', loadRecordId:1, commentKey:'frozen', boardVersion:1,
         originalRate:'400.00', systemOriginalRate:'401.00', driverGross:'350.00', systemDriverGross:'330.00',

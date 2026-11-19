@@ -66,7 +66,12 @@ func publishPayrollTextSave(ctx context.Context, tx pgx.Tx, c *payrollCommand, k
 	if err = payrollProjectionCoverage(ctx, tx); err != nil {
 		return nil, false, err
 	}
-	rows, err := tx.Query(ctx, `SELECT table_name,revision FROM payroll_cache_revisions WHERE NOT table_name=ANY($1::text[]) ORDER BY table_name FOR SHARE`, payrollUnrelatedTables)
+	revisions := `SELECT table_name,revision FROM payroll_cache_revisions WHERE NOT table_name=ANY($1::text[]) ORDER BY table_name`
+	// Resource transactions hold the shared source gate through commit.
+	if !payrollConcurrent(tx) {
+		revisions += " FOR SHARE"
+	}
+	rows, err := tx.Query(ctx, revisions, payrollUnrelatedTables)
 	if err != nil {
 		return nil, false, err
 	}

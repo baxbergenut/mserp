@@ -311,7 +311,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
         if (!payStatementReady(report, report?.drivers.find(row => row.id === id))) continue;
         const submitted = pendingSaves.current[id]?.submitted ?? changesRef.current[id];
         if (!submitted || !validAdjustments(submitted, report?.drivers.find(row => row.id === id))) continue;
-        const pending = pendingSaves.current[id] ?? { submitted, payload: { ...normalizedPayEdits(submitted), requestId: crypto.randomUUID() } };
+        const pending = pendingSaves.current[id] ?? { submitted, payload: { ...normalizedPayEdits(submitted, investor ? savedRef.current[id] : undefined), requestId: crypto.randomUUID() } };
         pendingSaves.current[id] = pending;
         const saved = await savePay(pending.payload);
         delete pendingSaves.current[id];
@@ -326,7 +326,7 @@ export function WeeklyPayPage({ investor = false }: { investor?: boolean }) {
       if (Object.keys(changesRef.current).length === 0) setMessage("Saved");
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to save; your edits are still here."); }
     finally { savingRef.current = false; setSaving(false); }
-  }, [canEdit, dirty, invalid, loading, refreshing, report, savePay]);
+  }, [canEdit, dirty, invalid, investor, loading, refreshing, report, savePay]);
   useEffect(() => {
     if (!dirty || invalid || saving || loading || refreshing || error) return;
     const frame = requestAnimationFrame(() => { void save(); });

@@ -379,8 +379,8 @@ func main() {
 		cfg.FleetScope,
 	)
 	router.(interface {
-		ConfigureBoardWritePriority(*repository.PayrollWorkPriority)
-	}).ConfigureBoardWritePriority(payrollPriority)
+		ConfigureWritePriority(*repository.PayrollWorkPriority)
+	}).ConfigureWritePriority(payrollPriority)
 	router.(interface{ ConfigurePreparedPayroll(bool) }).ConfigurePreparedPayroll(cfg.PayrollPreparedReads)
 	if err = router.(interface {
 		ConfigurePreparedFinancial(context.Context, bool, bool, bool) error

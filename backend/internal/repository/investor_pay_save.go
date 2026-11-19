@@ -6,11 +6,15 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"mserp/internal/db"
+	"slices"
 	"strings"
 	"time"
 )
 
 func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverPayEdits, actor string) (DriverPayEdits, error) {
+	if payrollReceiptRequested(ctx) {
+		defer r.workPriority.interactive()()
+	}
 	edits.InputRevision = ""
 	tx, closeWrite, err := r.beginPreparedPayrollWrite(ctx, actor, edits.RequestID, edits.ExpectedStatementRevision, "truck:"+edits.DriverID)
 	if err != nil {
@@ -26,7 +30,9 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 		err = json.Unmarshal(replay, &saved)
 		return saved, err
 	}
-	if err = validatePreparedPayrollCommand(ctx, tx, "investor", edits.DriverID, edits.WeekStart, edits.ExpectedStatementRevision); err != nil {
+	validationCtx := payrollValidationContext(ctx, tx)
+	sourceSnapshot, err := validatePreparedPayrollStatement(validationCtx, tx, "investor", edits.DriverID, edits.WeekStart, edits.ExpectedStatementRevision)
+	if err != nil {
 		return edits, err
 	}
 	stripPayCommandMetadata(&edits)
@@ -75,9 +81,21 @@ func (r *DriverPayRepository) SaveInvestorPay(ctx context.Context, edits DriverP
 	if edits.Version != card.Edits.Version {
 		return edits, ErrDriverPayConflict
 	}
-	edits.GeneratedCharges, err = saveGeneratedCharges(ctx, tx, card.ID, edits.WeekStart, actor, edits.GeneratedCharges, card.InvestorID)
-	if err != nil {
-		return edits, err
+	localAdjustment := command != nil && command.before != nil &&
+		!slices.Equal(card.Edits.Adjustments, edits.Adjustments) && payrollStatementLocalSave(card.Edits, edits)
+	if localAdjustment {
+		// The locked, reviewed statement already includes its generated charges.
+		edits.GeneratedCharges = card.Edits.GeneratedCharges
+	} else {
+		if sourceSnapshot != "" {
+			if err = retainPayrollPeriodSourceProofs(validationCtx, tx, sourceSnapshot); err != nil {
+				return edits, err
+			}
+		}
+		edits.GeneratedCharges, err = saveGeneratedCharges(ctx, tx, card.ID, edits.WeekStart, actor, edits.GeneratedCharges, card.InvestorID)
+		if err != nil {
+			return edits, err
+		}
 	}
 	edits.ScaleDeductions, err = reviewScaleDeductions(*card, edits.ScaleDeductions)
 	if err != nil {

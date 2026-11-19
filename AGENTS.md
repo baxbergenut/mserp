@@ -111,6 +111,13 @@ Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisi
 
 ## Pay-page actions
 
+Investor Pay adjustment edits leave suggested escrow and reimbursement rows for
+finalization unless explicitly edited. A prepared statement-local adjustment
+reuses the locked truck's generated charges and publishes its own receipt even
+while unrelated weeks await preparation. Interactive Investor Pay saves can
+interrupt disposable payroll preparation. Check TestInvestorAdjustmentSaveDatabase
+and frontend/scripts/test-driver-pay.mjs.
+
 Investor Pay offers Keep money and finalize on positive payables. It freezes the
 full net as retainedPay, making cash payable zero; the latest finalized truck
 statement carries that amount as investorCarry to later open weeks. A normal

@@ -90,6 +90,13 @@ const normalSave = normalizedPayEdits({ ...auto, notes: "Regular payroll edit", 
 assert.equal(normalSave.expenseDeductions[0].apply, false, "notes must not turn an ordinary expense suggestion into a fixed choice");
 assert.equal(normalSave.expenseDeductions[1].apply, false);
 assert.equal(suggestedExpense.apply, false, "normalizing a save must not mutate the fetched report");
+const escrowSuggestion = { ...suggestedExpense, source: "escrow" };
+const investorBaseline = { ...auto, adjustments: [], expenseDeductions: [escrowSuggestion] };
+const investorAdjustment = { ...investorBaseline, adjustments: [{ id: "credit", kind: "addition", name: "Adjustment", amount: "2500" }] };
+assert.equal(normalizedPayEdits(investorAdjustment, investorBaseline).expenseDeductions[0].apply, false);
+assert.equal(normalizedPayEdits(investorBaseline, investorAdjustment).expenseDeductions[0].apply, false, "removing an adjustment must also stay local");
+assert.equal(normalizedPayEdits({ ...investorAdjustment, expenseDeductions: [{ ...escrowSuggestion, apply: true, amount: "15" }] }, investorBaseline).expenseDeductions[0].apply, true);
+assert.equal(normalizedPayEdits(investorAdjustment).expenseDeductions[0].apply, true, "driver save behavior");
 assert.equal(driverTotals({ loads: [] }, expenseEdits).payable, -3010n);
 assert.equal(validAdjustments(expenseEdits), true);
 for (const amount of ["", "-1", "100.26", "1.001"]) assert.equal(validAdjustments({ ...expenseEdits, expenseDeductions: [{ ...expenseRow, amount }] }), false);

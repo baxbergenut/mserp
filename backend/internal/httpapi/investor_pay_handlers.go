@@ -24,6 +24,8 @@ func registerInvestorPayRoutes(r chi.Router, logger *slog.Logger, pay *repositor
 			writeJSON(w, 400, map[string]any{"error": err.Error(), "code": "finalization_blocked", "review": blocked.Review})
 		case errors.As(err, &invalid):
 			writeAPIError(w, 400, err.Error())
+		case err == repository.ErrDriverPayConflict:
+			writeAPIError(w, 409, "The investor statement or its payroll inputs changed. Reload the saved version and review your edits.")
 		case errors.Is(err, repository.ErrDriverPayConflict) || errors.Is(err, repository.ErrChargeConflict):
 			writeAPIError(w, 409, err.Error())
 		case errors.Is(err, pgx.ErrNoRows):
