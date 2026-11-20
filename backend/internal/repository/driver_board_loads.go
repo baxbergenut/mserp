@@ -623,13 +623,19 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 	}
 	readPlans := func() (map[string][]BoardLoad, error) {
 		plans := map[string][]BoardLoad{}
-		rows, err := tx.Query(ctx, boardPlanSourceSelect+`
- LEFT JOIN driver_board_load_state current_state ON current_state.driver_id=e.driver_id
+		// Read each driver's queue keys once. Historical plans for the same
+		// driver would otherwise repeatedly unpack the full dispatch payload.
+		rows, err := tx.Query(ctx, `WITH dispatch_state AS MATERIALIZED (
+ SELECT driver_id,payload->'current'->>'loadId' AS load_id,
+ payload->'order' AS plan_order,payload->'cancelled' AS cancelled
+ FROM driver_board_load_state WHERE driver_id=ANY($1::uuid[])
+ ) `+boardPlanSourceSelect+`
+ LEFT JOIN dispatch_state current_state ON current_state.driver_id=e.driver_id
  WHERE e.driver_id=ANY($1::uuid[]) AND NOT e.deleted AND e.day_status='' AND btrim(e.load_number)<>''
- AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.payload->'current'->>'loadId'
+ AND (e.service_date >= $2::date OR e.plan_id=ANY($3::uuid[]) OR l.id::text=current_state.load_id
  OR lower(btrim(coalesce(l.status,''))) NOT IN ('delivered','completed','invoiced','cancelled','canceled')
- OR current_state.payload->'order' ? e.plan_id::text
- OR current_state.payload->'cancelled' ?| ARRAY['plan:' || e.plan_id::text, 'load:' || l.id::text])
+ OR current_state.plan_order ? e.plan_id::text
+ OR current_state.cancelled ?| ARRAY['plan:' || e.plan_id::text, 'load:' || l.id::text])
  ORDER BY e.driver_id,e.service_date,e.slot`, ids, week, selected)
 		if err != nil {
 			return nil, err
