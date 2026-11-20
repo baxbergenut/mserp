@@ -59,6 +59,70 @@ export async function runBoardShift({ page, base, sql, schema, password }) {
     console.table(results);
     for (const result of results) expect(result.prefetch).toBe(0);
 
+    await Promise.all([clients[0], clients[1]].map(async ({ tab, path, input }) => {
+      const network = await tab.context().newCDPSession(tab);
+      await network.send('Network.enable');
+      const priorities = new Set();
+      network.on('Network.requestWillBeSent', ({request}) => {
+        if (request.method === 'PUT' && new URL(request.url).pathname === '/api/'+path+'/presence') {
+          priorities.add(request.initialPriority);
+        }
+      });
+      await tab.clock.install();
+      await tab.addInitScript(path => {
+        const fetchRequest = window.fetch.bind(window);
+        window.cursorRenewals = [];
+        window.cursorRequests = new Set();
+        window.fetch = (url, options) => {
+          const request = fetchRequest(url, options);
+          if (options?.method === 'PUT' && new URL(url, location.href).pathname === '/api/'+path+'/presence') {
+            const renewal = { start: performance.now(), status: 0, clientId: JSON.parse(options.body).clientId };
+            window.cursorRenewals.push(renewal);
+            const receipt = request.then(r => { renewal.status = r.status; });
+            window.cursorRequests.add(receipt);
+            void receipt.finally(() => window.cursorRequests.delete(receipt));
+          }
+          return request;
+        };
+      }, path);
+      await tab.reload();
+      await expect(input).toBeVisible();
+      await input.focus();
+      await expect.poll(() => tab.evaluate(() => window.cursorRenewals[0]?.status)).toBe(204);
+      for (let i = 0; i < 10; i++) {
+        await tab.clock.fastForward(6000);
+        await tab.evaluate(() => Promise.all([...window.cursorRequests]));
+      }
+      const renewals = await tab.evaluate(() => window.cursorRenewals);
+      expect(renewals.every(r => r.status === 204)).toBe(true);
+      expect(renewals.length).toBeGreaterThanOrEqual(3);
+      expect(renewals.length).toBeLessThanOrEqual(4);
+      for (let i = 1; i < renewals.length; i++) {
+        expect(renewals[i].start-renewals[i-1].start).toBeLessThan(25_000);
+      }
+      console.log(path, 'stationary cursor PUTs in 60 seconds including initial selection', renewals.length);
+      const peersPath = '/api/'+path+'/presence' + (path === 'gross-board' ? '?weekStart='+week : '');
+      const visibleToPeer = async () => {
+        const peers = await (await clients[4].tab.request.get(peersPath)).json();
+        return peers.some(peer => peer.clientId === renewals[0].clientId);
+      };
+      await expect.poll(visibleToPeer).toBe(true);
+      await tab.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+      await expect.poll(visibleToPeer).toBe(false);
+      const restore = '**/api/'+path+'/presence';
+      await tab.route(restore, async route => {
+        if (route.request().method() === 'PUT') await route.fulfill({status:503,body:'{}'});
+        else await route.continue();
+      });
+      await tab.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await expect.poll(() => tab.evaluate(() => window.cursorRenewals.at(-1).status)).toBe(503);
+      await tab.unroute(restore);
+      await tab.clock.fastForward(6000);
+      await expect.poll(visibleToPeer).toBe(true);
+      expect([...priorities]).toEqual(['Low']);
+      await network.detach();
+    }));
+
     // Keyboard navigation still warms the chosen route and opens it normally.
     const first = clients[0].tab;
     const destination = first.getByRole('link', { name: 'Gross Board', exact: true });

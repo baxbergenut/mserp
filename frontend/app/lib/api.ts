@@ -199,8 +199,8 @@ export const fetchGrossBoard = (weekStart: string) =>
   readBoardSnapshot<GrossBoard>(`gross:${weekStart}`, "/gross-board", { weekStart });
 export const setGrossBoardWeekLock = (weekStart: string, locked: boolean) =>
   apiRequest<GrossBoardWeekLock>("/gross-board/week-lock", { method: "PUT", body: JSON.stringify({ weekStart, locked }) });
-export const fetchGrossPresence = (weekStart: string) => apiRequest<import("./types").GrossBoardPresence[]>(withQuery("/gross-board/presence", { weekStart }));
-export const updateGrossPresence = (clientId: string, cell: import("./types").GrossBoardCell) => performRequest<void>("/gross-board/presence", { method: "PUT", body: JSON.stringify({ clientId, ...cell }) });
+export const fetchGrossPresence = (weekStart: string) => apiRequest<import("./types").GrossBoardPresence[]>(withQuery("/gross-board/presence", { weekStart }), { priority: "low" });
+export const updateGrossPresence = (clientId: string, cell: import("./types").GrossBoardCell) => performRequest<void>("/gross-board/presence", { priority: "low", method: "PUT", body: JSON.stringify({ clientId, ...cell }) });
 export const clearGrossPresence = (clientId: string) => performRequest<void>(`/gross-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossBoard) => void, presence: (peers?: import("./types").GrossBoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const ready = boardReadiness.subscribe(`gross:${weekStart}`, () => changed());
@@ -223,9 +223,9 @@ export const reorderBoardDrivers = (action: import("./types").DriverBoardOrderAc
   apiRequest<import("./types").DriverBoardOrder>("/driver-board/order", { method: "POST", body: JSON.stringify(action) });
 export const updateBoardAutoOrder = (dispatcherId: string, enabled: boolean) =>
   performRequest<void>("/driver-board/auto-order", { method: "PUT", body: JSON.stringify({ dispatcherId, enabled }) });
-export const fetchBoardPresence = () => apiRequest<import("./types").BoardPresence[]>("/driver-board/presence");
+export const fetchBoardPresence = () => apiRequest<import("./types").BoardPresence[]>("/driver-board/presence", { priority: "low" });
 export const updateBoardPresence = (clientId: string, driverId: string, column: string) =>
-  performRequest<void>("/driver-board/presence", { method: "PUT", body: JSON.stringify({ clientId, driverId, column }) });
+  performRequest<void>("/driver-board/presence", { priority: "low", method: "PUT", body: JSON.stringify({ clientId, driverId, column }) });
 export const clearBoardPresence = (clientId: string) =>
   performRequest<void>(`/driver-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeBoardEvents(changed: (board?: DriverBoard) => void, presence: (peers?: import("./types").BoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {

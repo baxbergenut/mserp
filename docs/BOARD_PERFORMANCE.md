@@ -149,7 +149,7 @@ from 1,009 SQL calls to 15. The 253-observation existing-only refresh went from
 1,021 to 16. Both database layouts also forced a dispatcher save during a
 blocked repair publication and checked the posted result after the repair resumed.
 
-Live cursor frames update the presence overlay independently of both editable grids.
+Live cursor frames update the presence overlay independently of both editable grids. Each tab renews a stationary cursor 18 seconds after starting its last successful write, within the 30-second database lease. Rapid moves publish the latest cell, and a returning tab waits for its previous cursor cleanup.
 The Gross Board computes visible row totals and carried balances once for each
 data or filter change. Autosave credits time already spent rendering a typing
 burst. Browser timing logs include pre-request, request-through-decoding and
