@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "@/app/components/IntentLink";
 import { ChevronDown } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { assignDriverTruckToday, fetchDriverTruckAssignment } from "@/app/lib/api";
