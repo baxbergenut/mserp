@@ -1,9 +1,16 @@
 # Board opening performance
 
-The target is a usable visible board within 400 ms where practical. API response
+The current target is under 300 ms for both visible boards and confirmed edits. API response
 time, cold document loading, viewport readiness and off-screen editor mounting
 are separate measurements. Do not present a fast query or skeleton as a complete
 page-load measurement.
+
+HTTP and stream reads for each board share a queue keyed by week. Joining is
+allowed until the database read starts. Later callers get a fresh snapshot.
+Status Board projects pending hires against the active assignees captured in
+that snapshot. Live frames also recheck current viewer access. The two-build
+limit applies before acquiring database connections. `board_read_joined` and
+`board_read_started` record queued joins and actual builds.
 
 ## November 12, 2026 measurements
 

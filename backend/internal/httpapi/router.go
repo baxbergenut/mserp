@@ -211,17 +211,18 @@ func NewRouter(
 	boardEvents.idleGrace = boardListenerIdleGrace
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
 	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
+	statusRead := shareBoardReads(boardRepo.GetShared)
+	grossRead := shareBoardReads(grossBoardRepo.Get)
 	boardEvents.snapshotEvent = "board"
 	boardEvents.snapshot = func(ctx context.Context) ([]byte, error) {
 		// Calculate the full board once per committed revision. Its private
 		// fields and onboarding names are projected per subscriber below.
-		ctx = repository.WithTaskViewer(ctx, "", true)
 		week, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
-		value, err := boardRepo.Get(ctx, week)
+		value, err := statusRead(ctx, week)
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(value)
+		return json.Marshal(value.ForViewer("", true))
 	}
 	boardEvents.projectSnapshot = func(ctx context.Context, value map[string]any) error {
 		if names, ok := value["pendingDrivers"].([]any); !ok || len(names) == 0 {
@@ -247,9 +248,9 @@ func NewRouter(
 		return json.Marshal(value)
 	}
 	protected.Get("/driver-board/events", boardEvents.serve(auth, boardPresence))
-	registerGrossBoardRoutes(protected, logger, grossBoardRepo, openings)
-	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo, openings)
-	registerDriverBoardRoutes(protected, logger, boardRepo, openings)
+	registerGrossBoardRoutes(protected, logger, grossBoardRepo, openings, grossRead)
+	closeGrossLive := registerGrossBoardLive(protected, pool, logger, auth, grossBoardRepo, openings, grossRead)
+	registerDriverBoardRoutes(protected, logger, boardRepo, openings, statusRead)
 	registerBoardMapHistory(protected, logger, boardRepo, fiveELDHistory)
 	registerDriverPayRoutes(protected, logger, payRepo, job)
 	closePayrollLive := registerPayrollLive(protected, pool, logger, auth, payRepo)

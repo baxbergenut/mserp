@@ -239,7 +239,7 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *pgxpool.Conn, routes *boardroutes.Client, eld *fiveeld.Client, usdot, onlyDriver, onlyContext string) error {
 	now := r.now().UTC()
 	week, _ := time.Parse(time.DateOnly, boardLoadToday(now))
-	board, err := r.get(ctx, week, false)
+	board, err := r.get(ctx, week, false, nil)
 	if err != nil {
 		return err
 	}

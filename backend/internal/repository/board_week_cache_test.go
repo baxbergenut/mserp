@@ -33,6 +33,53 @@ func TestBoardPlanCacheKeepsStopEvidence(t *testing.T) {
 	}
 }
 
+func TestSharedBoardPendingViewerDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		_, err := pool.Exec(ctx, `INSERT INTO app_roles(name,permissions) VALUES ('shared-board-direct','{}'),('shared-board-role','{}');
+ INSERT INTO app_users(username,email,password_hash,role_id,active)
+ SELECT n,n||'@example.test',crypt('fixture',gen_salt('bf')),r.id,n<>'inactive' FROM (VALUES ('direct'),('member'),('other'),('inactive')) v(n)
+ JOIN app_roles r ON r.name=CASE WHEN n IN ('member','inactive') THEN 'shared-board-role' ELSE 'shared-board-direct' END;
+ INSERT INTO fleetscope_driver_intake(company_id,fleetscope_driver_id,driver_data,normalized_name,occurred_at)
+ VALUES(gen_random_uuid(),gen_random_uuid(),'{"fullName":"Pending fixture"}','pending fixture',now());
+ UPDATE system_task_assignments SET assignee_ids=ARRAY[(SELECT id FROM app_users WHERE username='direct')],
+ assignee_role_ids=ARRAY[(SELECT id FROM app_roles WHERE name='shared-board-role')] WHERE kind='driver_onboarding'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		week, _ := time.Parse(time.DateOnly, "2026-11-16")
+		repo := NewDriverBoardRepository(pool)
+		shared, err := repo.GetShared(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check := func(name string, admin bool, want bool) {
+			t.Helper()
+			var id string
+			if err := pool.QueryRow(ctx, `SELECT id FROM app_users WHERE username=$1`, name).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			pending := shared.ForViewer(id, admin).PendingDrivers
+			if (len(pending) == 1) != want || (want && pending[0].FullName != "Pending fixture") || (!want && len(pending) != 0) {
+				t.Fatalf("viewer %s admin %t: %d pending", name, admin, len(pending))
+			}
+		}
+		check("other", false, false)
+		check("direct", false, true)
+		check("member", false, true)
+		check("inactive", false, false)
+		check("other", true, true)
+		if _, err = pool.Exec(ctx, `UPDATE system_task_assignments SET assignee_ids='{}',assignee_role_ids='{}',assignee_id=NULL WHERE kind='driver_onboarding'`); err != nil {
+			t.Fatal(err)
+		}
+		shared, err = repo.GetShared(ctx, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check("direct", false, false)
+		check("member", false, false)
+	})
+}
+
 func TestBoardManualSourcesDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
 		var caches boardLoadSourceCaches

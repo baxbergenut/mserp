@@ -77,7 +77,7 @@ func (r *DriverBoardRepository) ReconcileStopCities(ctx context.Context, routes 
 		return nil
 	}
 	week, _ := time.Parse(time.DateOnly, boardLoadToday(r.now()))
-	board, err := r.get(ctx, week, false)
+	board, err := r.get(ctx, week, false, nil)
 	if err != nil {
 		return err
 	}

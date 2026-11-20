@@ -160,7 +160,7 @@ try {
       await expect(viewer.getByRole('heading',{name:'Status Board',exact:true})).toBeVisible();
       const today = new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       const date = new Date(`${today}T12:00:00Z`); date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);
-      await runStatusBoardOrderE2E({page,viewer,base,sql,schema,headers,temp,week:date.toISOString().slice(0,10)});
+      await runStatusBoardOrderE2E({page,viewer,base,sql,schema,headers,temp,password,week:date.toISOString().slice(0,10)});
     } finally { await context.close(); }
   } else if (process.argv.includes('--board-only') || process.argv.includes('--board-progress-only')) {
     await runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency });

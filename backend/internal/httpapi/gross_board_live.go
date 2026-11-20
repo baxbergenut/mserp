@@ -14,7 +14,7 @@ import (
 
 type grossWeekContext struct{}
 
-func registerGrossBoardLive(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, auth *authHandler, repo *repository.GrossBoardRepository, openings *boardOpenings) func() {
+func registerGrossBoardLive(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, auth *authHandler, repo *repository.GrossBoardRepository, openings *boardOpenings, read boardWeekReader[repository.GrossBoard]) func() {
 	events := newDatabaseEvents(pool, logger, "mserp_gross_board", "board.read")
 	events.openings = openings
 	events.idleGrace = boardListenerIdleGrace
@@ -27,7 +27,7 @@ func registerGrossBoardLive(r chi.Router, pool *pgxpool.Pool, logger *slog.Logge
 	events.snapshotEvent = "grossBoard"
 	peers.snapshotEvent = "peers"
 	events.snapshot = func(ctx context.Context) ([]byte, error) {
-		value, err := repo.Get(ctx, ctx.Value(grossWeekContext{}).(time.Time))
+		value, err := read(ctx, ctx.Value(grossWeekContext{}).(time.Time))
 		if err != nil {
 			return nil, err
 		}

@@ -30,7 +30,10 @@ merge board cursors by board/client, and scope provider completion days by provi
 environment and date. Keep historical payroll captures and revision rows. Empty
 Relay/PrePass days can record completion directly. Canonical transactions still
 use their existing locks. Board GETs share only snapshots started after arrival.
-Status Board reads also key by viewer and administrator status for pending hires.
+Grid and stream readers can join a build of the same board and week before its
+SQL begins. For Status Board, the transaction snapshots pending hires and their
+active task assignees together. Project those names for each authenticated viewer;
+stream frames also recheck current task access.
 Install the schema-compatible deploy helper before a future writer-quiesced rollout.
 See [the implementation plan](docs/DATABASE_SIMPLIFICATION_PLAN.md) and
 [the table inventory](docs/DATABASE_TABLE_INVENTORY.md).

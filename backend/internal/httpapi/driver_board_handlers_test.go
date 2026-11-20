@@ -15,7 +15,7 @@ import (
 func TestSharedDispatcherOrderRetired(t *testing.T) {
 	router := chi.NewRouter()
 	// No repository is needed: old clients can never reach a shared database write.
-	registerDriverBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	registerDriverBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/driver-board/dispatcher-order", strings.NewReader(`{}`)))
 	if response.Code != http.StatusGone {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"mserp/internal/boardroutes"
 	"mserp/internal/fiveeld"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -141,10 +142,32 @@ const boardTruckConditionSQL = `CASE WHEN t.id IS NULL THEN '' WHEN t.status='te
  WHEN t.status='maintenance' OR EXISTS(SELECT 1 FROM maintenance_records m WHERE m.truck_id=t.id AND m.dispatch_status='shop') THEN 'shop'`
 
 func (r *DriverBoardRepository) Get(ctx context.Context, week time.Time) (DriverBoard, error) {
-	return r.get(ctx, week, true)
+	return r.get(ctx, week, true, nil)
 }
 
-func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, displayBoard bool) (DriverBoard, error) {
+// SharedDriverBoard contains a fleet snapshot and its onboarding audience from
+// the same repeatable-read transaction. Only the viewer projection is serializable.
+type SharedDriverBoard struct {
+	board          DriverBoard
+	pendingViewers []string
+}
+
+func (s SharedDriverBoard) ForViewer(id string, administrator bool) DriverBoard {
+	board := s.board
+	if !administrator && !slices.Contains(s.pendingViewers, id) {
+		board.PendingDrivers = []BoardPendingDriver{}
+	}
+	return board
+}
+
+func (r *DriverBoardRepository) GetShared(ctx context.Context, week time.Time) (SharedDriverBoard, error) {
+	var snapshot SharedDriverBoard
+	board, err := r.get(WithTaskViewer(ctx, "", true), week, true, &snapshot.pendingViewers)
+	snapshot.board = board
+	return snapshot, err
+}
+
+func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, displayBoard bool, pendingViewers *[]string) (DriverBoard, error) {
 	result := DriverBoard{WeekStart: week.Format("2006-01-02"), Drivers: []DriverBoardDriver{}, Entries: []DriverBoardEntry{}, GrossEntries: []GrossBoardEntry{}}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -293,6 +316,17 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		result.PendingDrivers, err = readBoardPendingDrivers(ctx, tx)
 		if err != nil {
 			return result, err
+		}
+		if pendingViewers != nil && len(result.PendingDrivers) != 0 {
+			rows, err := tx.Query(ctx, `SELECT u.id FROM system_task_assignments a JOIN app_users u ON `+systemTaskAssigneePredicate+`
+ WHERE a.kind='driver_onboarding'`)
+			if err != nil {
+				return result, err
+			}
+			*pendingViewers, err = pgx.CollectRows(rows, pgx.RowTo[string])
+			if err != nil {
+				return result, err
+			}
 		}
 	}
 	return result, tx.Commit(ctx)
