@@ -144,6 +144,7 @@ func lateBoardStop(s boardLoadState, current BoardLoad, status, destination stri
 }
 
 type BoardLoads struct {
+	entryStatus       string           // Canonical status read in the same snapshot as EntryVersion.
 	EntryVersion      *int             `json:"entryVersion,omitempty"`
 	CompletedStopKeys []string         `json:"completedStopKeys,omitempty"`
 	DetailsOmitted    bool             `json:"detailsOmitted,omitempty"`
@@ -563,6 +564,8 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 type boardLoadViewOptions struct {
 	includeRoute      bool
 	queuePresenceOnly bool
+	jitDisabled       bool // The enclosing board transaction already set jit=off.
+	plansOnly         bool // Command validation needs plans and stops, without GPS or ETA.
 	// A guarded command hashes the current plans against the version its dispatcher saw.
 	commandBaseVersion *int
 }
@@ -573,8 +576,10 @@ type boardLoadSourceCaches struct {
 }
 
 func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from string, now time.Time, options boardLoadViewOptions, cache *boardLoadSourceCaches, sourceKey string) (map[string]BoardLoads, error) {
-	if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
-		return nil, err
+	if !options.jitDisabled {
+		if _, err := tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
+			return nil, err
+		}
 	}
 	day, _ := time.Parse(time.DateOnly, from)
 	week := boardLoadWeekStart(from)
@@ -887,12 +892,13 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		}
 		view.Revision = boardLoadsRevision(view, states[id], revisionVersion)
 		view.EntryVersion = &version
+		view.entryStatus = entries[id].Status
 		for i := range view.Next {
 			view.Next[i] = boardStopTimes(view.Next[i], s.ManualStopTimes)
 		}
 		result[id] = view
 	}
-	if options.queuePresenceOnly {
+	if options.queuePresenceOnly || options.plansOnly {
 		return result, nil
 	}
 	if err := enrichBoardAutomation(ctx, tx, result, states, entries, options.includeRoute); err != nil {
@@ -920,9 +926,6 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 		return BoardLoads{}, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SET LOCAL jit=off`); err != nil {
-		return BoardLoads{}, err
-	}
 	views, err := readBoardLoadViews(ctx, tx, []string{id}, from, r.now(), includeRoute)
 	if err != nil {
 		return BoardLoads{}, err
@@ -985,7 +988,14 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, ErrBoardLoadRowChanged
 	}
 	a.FromDate = r.loadStartDate(a.FromDate)
-	views, err := readBoardLoadViewsCached(ctx, tx, []string{a.DriverID}, a.FromDate, r.now(), boardLoadViewOptions{commandBaseVersion: &a.Version}, nil, "")
+	// The current stop-time editor checks the automation target, and manual mode
+	// hydrates its displayed destination. Other commands select from the plans.
+	needAutomation := a.Action == "manual" || (a.Action == "stop_time" && a.PlanID == "")
+	before := db.Phase(ctx, "board_load_validation")
+	views, err := readBoardLoadViewsCached(ctx, tx, []string{a.DriverID}, a.FromDate, r.now(), boardLoadViewOptions{
+		commandBaseVersion: &a.Version, jitDisabled: true, plansOnly: !needAutomation,
+	}, nil, "")
+	before()
 	if err != nil {
 		return result, err
 	}
@@ -1363,20 +1373,17 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	if err = saveLoadState(ctx, tx, a.DriverID, s); err != nil {
 		return result, err
 	}
-	if err = syncFleetStatusProgress(ctx, tx, []string{a.DriverID}); err != nil {
-		return result, err
-	}
-	if err = tx.QueryRow(ctx, `SELECT status,version FROM driver_board WHERE driver_id=$1`, a.DriverID).Scan(&saved[0].Status, &saved[0].Version); err != nil {
-		return result, err
-	}
-	views, err = readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate, r.now())
+	view, err = r.loadActionReceiptView(ctx, tx, a.DriverID, a.FromDate)
 	if err != nil {
 		return result, err
 	}
+	views[a.DriverID] = view
 	if err := applyBoardStopCities(ctx, tx, views); err != nil {
 		return result, err
 	}
 	result = BoardLoadResult{Entry: saved[0], Loads: views[a.DriverID]}
+	result.Entry.Status = view.entryStatus
+	result.Entry.Version = *view.EntryVersion
 	if err = annotateBoardLoadHistory(ctx, tx, a.DriverID, result.Loads.Unavailable); err != nil {
 		return result, err
 	}
@@ -1389,4 +1396,44 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		db.Event(ctx, "board_load_after_text")
 	}
 	return result, err
+}
+
+// Current-day commands already need the complete queue for their receipt. Use
+// that same queue to settle ENROUTE/RESERVED, then rebuild the revision only if
+// the persisted status changes. A different requested day keeps the native
+// current-day synchronization independent from the receipt's queue.
+func (r *DriverBoardRepository) loadActionReceiptView(ctx context.Context, tx pgx.Tx, id, from string) (BoardLoads, error) {
+	defer db.Phase(ctx, "board_load_receipt_view")()
+	ids := []string{id}
+	sameDay := from == boardLoadToday(time.Now())
+	if !sameDay {
+		if err := syncFleetStatusProgress(ctx, tx, ids); err != nil {
+			return BoardLoads{}, err
+		}
+	}
+	read := func() (BoardLoads, error) {
+		views, err := readBoardLoadViewsCached(ctx, tx, ids, from, r.now(), boardLoadViewOptions{jitDisabled: true}, nil, "")
+		if err != nil {
+			return BoardLoads{}, err
+		}
+		view := views[id]
+		if view.EntryVersion == nil || *view.EntryVersion == 0 {
+			return BoardLoads{}, ErrDriverBoardConflict
+		}
+		return view, nil
+	}
+	view, err := read()
+	if err != nil || !sameDay {
+		return view, err
+	}
+	status := boardProgressStatus(view.entryStatus, view.Next)
+	if status == view.entryStatus {
+		return view, nil
+	}
+	tag, err := tx.Exec(ctx, `UPDATE driver_board SET status=$2,version=version+1,updated_at=now()
+ WHERE driver_id=$1 AND status=$3 AND version=$4 AND fleet_status_enabled()`, id, status, view.entryStatus, *view.EntryVersion)
+	if err != nil || tag.RowsAffected() == 0 {
+		return view, err
+	}
+	return read()
 }

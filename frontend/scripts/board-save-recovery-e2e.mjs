@@ -78,13 +78,41 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await page.route('**'+loadPath, interveningNote);
     const receipt = page.waitForResponse(r => new URL(r.url()).pathname === loadPath && r.request().method() === 'POST');
     await drawer.getByLabel('Add next load').press('Enter');
-    expect((await receipt).status()).toBe(200);
+    const savedLoad = await receipt;
+    expect(savedLoad.status()).toBe(200);
+    console.log('Load POST across a concurrent Notes edit', savedLoad.headers()['server-timing']);
     await expect(drawer.getByText('TEXT-RACE-52', {exact: true}).first()).toBeVisible();
     await page.unroute('**'+loadPath, interveningNote);
     expect(posts).toBe(1);
     const persisted = await (await other.request.get(loadPath)).json();
     expect(persisted.next.filter(p => p.number === 'TEXT-RACE-52')).toHaveLength(1);
     expect((await read()).notes).toBe('Other dispatcher updated notes while adding load');
+    const canonicalStatus = () => sql(`SET search_path TO ${schema},public; SELECT status FROM driver_board WHERE driver_id='${id}';`);
+    const setStatus = status => sql(`SET search_path TO ${schema},public;
+      UPDATE driver_board SET status='${status}', version=version+1 WHERE driver_id='${id}';`);
+    sql(`SET search_path TO ${schema},public; UPDATE fleet_status_control SET enabled=true WHERE singleton;`);
+    const changeQueue = async (action, expectedStatus) => {
+      const before = await (await other.request.get(loadPath)).json();
+      const response = await other.request.post(loadPath, {
+        headers: {'X-CSRF-Token': session.csrfToken},
+        data: {...action, fromDate: before.fromDate, revision: before.revision, version: before.entryVersion},
+      });
+      expect(response.status()).toBe(200);
+      const {entry, loads} = await response.json();
+      expect(entry.status).toBe(expectedStatus);
+      expect(canonicalStatus()).toContain(expectedStatus);
+      expect(entry.version).toBe(loads.entryVersion);
+      const after = await (await other.request.get(loadPath)).json();
+      expect(after.revision).toBe(loads.revision);
+      expect(after.entryVersion).toBe(entry.version);
+    };
+    setStatus('ENROUTE');
+    expect(canonicalStatus()).toContain('ENROUTE');
+    await changeQueue({action:'reset_order'}, 'RESERVED');
+    await changeQueue({action:'hide', planId:persisted.next.find(p => p.number === 'TEXT-RACE-52').planId}, 'ENROUTE');
+    setStatus('RESERVED');
+    expect(canonicalStatus()).toContain('RESERVED');
+    await changeQueue({action:'reset_order'}, 'ENROUTE');
     console.log('Two-user Status Board save recovery passed for load edits, unrelated notes, overlapping edits, review, discard and reload.');
   } finally {await other.close();}
 }

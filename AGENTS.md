@@ -127,6 +127,8 @@ Migration 228 records the last dispatch-changing version on each board row.
 A load action may cross verified notes and trailer edits if its original plan
 revision still matches. A dispatch change followed by a reversal still requires
 review. Existing rows use their current version until the next write.
+Current-day load saves use the committed transaction's queue to settle ENROUTE or
+RESERVED. A save for another date still checks today's queue separately.
 
 ## Reports
 
