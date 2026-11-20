@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -35,13 +34,8 @@ func (r *GrossBoardRepository) SaveChanges(ctx context.Context, entries []GrossB
 }
 
 func mergeGrossBoardPatch(ctx context.Context, tx pgx.Tx, patch GrossBoardEntry) (GrossBoardEntry, bool, error) {
-	date, err := time.Parse(time.DateOnly, patch.Date)
-	if err != nil {
-		return GrossBoardEntry{}, false, err
-	}
 	current := GrossBoardEntry{DriverID: patch.DriverID, Date: patch.Date, Slot: patch.Slot}
-	err = scanGrossBoardEntry(tx.QueryRow(ctx, grossBoardEffectiveForDriver()+"SELECT "+grossBoardEntryColumns+
-		" FROM effective WHERE driver_id=$2 AND service_date=$3::date AND slot=$4", date, patch.DriverID, patch.Date, patch.Slot), &current)
+	err := readGrossBoardSlot(ctx, tx, &current)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return current, false, err
 	}
