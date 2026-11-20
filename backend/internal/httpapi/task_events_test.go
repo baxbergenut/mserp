@@ -312,9 +312,9 @@ func TestTaskEventsDatabase(t *testing.T) {
 	defer pool.Close()
 	for _, channel := range []string{"mserp_tasks", "mserp_driver_board", "mserp_board_presence", "mserp_gross_board", "mserp_gross_presence"} {
 		h := newDatabaseEvents(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), channel, "driver_board.read")
-		a, unsubscribe := h.subscribe()
+		a, _, unsubscribe := h.subscribe()
 		defer unsubscribe()
-		b, unsubscribeB := h.subscribe()
+		b, _, unsubscribeB := h.subscribe()
 		defer unsubscribeB()
 		receive := func(ch chan struct{}) {
 			t.Helper()

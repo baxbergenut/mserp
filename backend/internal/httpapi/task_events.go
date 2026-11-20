@@ -24,6 +24,7 @@ import (
 type taskEvents struct {
 	mu              sync.Mutex
 	clients         map[chan struct{}]struct{}
+	listening       bool
 	cancel          context.CancelFunc
 	config          *pgx.ConnConfig
 	logger          *slog.Logger
@@ -77,13 +78,13 @@ func (h *taskEvents) shutdown() {
 	h.stopSnapshots()
 }
 
-func (h *taskEvents) subscribe() (chan struct{}, func()) {
+func (h *taskEvents) subscribe() (chan struct{}, bool, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ch := make(chan struct{}, 1)
 	select {
 	case <-h.stopped:
-		return ch, func() {}
+		return ch, false, func() {}
 	default:
 	}
 	h.clients[ch] = struct{}{}
@@ -92,7 +93,7 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 		h.cancel = cancel
 		go h.listen(ctx)
 	}
-	return ch, func() {
+	return ch, h.listening, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		if _, exists := h.clients[ch]; !exists {
@@ -102,12 +103,17 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 		if len(h.clients) == 0 {
 			h.cancel()
 			h.cancel = nil
+			h.listening = false
 		}
 	}
 }
 func (h *taskEvents) publish() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.publishLocked()
+}
+
+func (h *taskEvents) publishLocked() {
 	h.revision++
 	for ch := range h.clients {
 		select {
@@ -249,8 +255,13 @@ func (h *taskEvents) receive(ctx context.Context) error {
 	if _, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{h.channel}.Sanitize()); err != nil {
 		return err
 	}
-	// Reconcile anything missed during a connection interruption.
-	h.publish()
+	// Publish readiness and the recovery notification atomically with subscribe.
+	h.mu.Lock()
+	if ctx.Err() == nil {
+		h.listening = true
+		h.publishLocked()
+	}
+	h.mu.Unlock()
 	for {
 		if _, err = conn.WaitForNotification(ctx); err != nil {
 			return err
@@ -268,17 +279,30 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 		if err != nil {
 			return
 		}
-		changes, unsubscribe := h.subscribe()
+		changes, listening, unsubscribe := h.subscribe()
 		defer unsubscribe()
 		if h.openings != nil {
 			if key, ok := boardOpeningScope(r); ok {
+				if !listening && r.URL.Query().Get("initial") == "none" {
+					// The first LISTEN publishes a catch-up notification. A paired
+					// GET starts after registration below, so it covers this signal.
+					// On a slow connection leave the eventual catch-up enabled.
+					select {
+					case <-changes:
+					case <-time.After(75 * time.Millisecond):
+					case <-r.Context().Done():
+						return
+					case <-h.stopped:
+						return
+					}
+				}
 				defer h.openings.register(key)()
 			}
 		}
 		var presenceChanges chan struct{}
 		if len(presence) > 0 {
 			var closePresence func()
-			presenceChanges, closePresence = presence[0].subscribe()
+			presenceChanges, _, closePresence = presence[0].subscribe()
 			defer closePresence()
 		}
 		w.Header().Set("Content-Type", "text/event-stream")

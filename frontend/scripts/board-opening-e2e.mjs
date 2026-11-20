@@ -11,6 +11,20 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
     await route.fulfill({ response, json: { ...session, parallelBoardOpening: parallel } });
   });
   setNetworkLatency(178);
+  await page.addInitScript(() => {
+    window.openingFrames = [];
+    const NativeEventSource = window.EventSource;
+    window.EventSource = class extends NativeEventSource {
+      constructor(url, options) {
+        super(url, options);
+        if (new URL(url, location.href).searchParams.has('opening')) {
+          for (const type of ['board', 'grossBoard']) {
+            this.addEventListener(type, () => window.openingFrames.push(type));
+          }
+        }
+      }
+    };
+  });
   const results = [];
   const measuredBoards = new Set();
   const checkTiming = req => {
@@ -66,6 +80,10 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
     }
   }
   console.log('Actual browser/API/PostgreSQL opening at 178 ms RTT', JSON.stringify(results));
+  // The fixture has no board writers while opening. Let any unintended
+  // startup snapshot make the full round trip through the delayed SSE proxy.
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => window.openingFrames)).toEqual([]);
   page.off('request', checkTiming);
   expect([...measuredBoards].sort()).toEqual(['gross', 'status']);
   setNetworkLatency(0);
