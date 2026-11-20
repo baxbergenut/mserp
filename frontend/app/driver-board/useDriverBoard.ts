@@ -47,7 +47,7 @@ export function useDriverBoard(lockedDriverId?: string) {
   const lastTextEdit = useRef(-Infinity);
   const response = useRef({ open: 0, load: 0 });
   const editTimes = useRef(new Map<string, number>());
-  const confirmedSaves = useRef<{ start: number; sent: number; received: number }[]>([]);
+  const confirmedSaves = useRef<{ start: number; sent: number; received: number; completed: boolean }[]>([]);
   const openStarted = useRef(0), confirmedLoad = useRef(0);
   const editSession = useRef<{ id: string; field: keyof DriverBoardEntry; group: number } | null>(null);
   const editSequence = useRef(0);
@@ -147,8 +147,8 @@ export function useDriverBoard(lockedDriverId?: string) {
       recordBoardPaint("status", "load", confirmedLoad.current, confirmedLoad.current, response.current.load);
       confirmedLoad.current = 0;
     }
-    for (const { start, sent, received } of confirmedSaves.current.splice(0)) {
-      recordBoardPaint("status", "save", start, sent, received);
+    for (const { start, sent, received, completed } of confirmedSaves.current.splice(0)) {
+      recordBoardPaint("status", "save", start, sent, received, completed);
     }
   }, [actionBusy, board, dirty, loading, saving]);
 
@@ -217,7 +217,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     } catch { setRefreshError("Load details could not be refreshed. Retry to review the saved plans."); }
   }, []);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (completed = false) => {
     if (!canEdit || orderSavingRef.current || loading) return;
     const snapshot = Object.fromEntries(Object.entries(changesRef.current).filter(([id]) =>
       !inlineRows.current.has(id) && actionRow.current !== id));
@@ -242,7 +242,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       // keystroke can arrive before React renders this response.
       committed.forEach(e => { savedRef.current[e.driverId] = e; });
       const remaining = reconcileDriverBoard(changesRef.current, snapshot, committed);
-      if (ids.every(id => !remaining[id])) confirmedSaves.current.push({ start, sent, received });
+      if (ids.every(id => !remaining[id])) confirmedSaves.current.push({ start, sent, received, completed });
       changesRef.current = remaining;
       setChanges(remaining);
       const editOrder = draftActions.map(a => a.id);
@@ -291,7 +291,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     setChanges(result);
     // The completed value is already in changesRef. Start its request in the
     // input event so rendering the grid can overlap the round trip.
-    if (!typing && !error) void save();
+    if (!typing && !error) void save(true);
   }, [canEdit, error, save]);
 
   const editText = useCallback((id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => {

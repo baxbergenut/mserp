@@ -28,9 +28,9 @@ func TestPerformancePreservesStreaming(t *testing.T) {
 func TestBoardBrowserTimingPhases(t *testing.T) {
 	var output strings.Builder
 	logger := slog.New(slog.NewTextHandler(&output, nil))
-	logBoardClientTimings(logger, "gross-save=250/50/210/224/230,status-load=10/2/5/11/7,status-save=240/60/210,gross-open=190,status-load=30/40/90,unknown=2,status-open=180/bad/150")
+	logBoardClientTimings(logger, "gross-save=250/50/210/224/230~complete,status-load=10/2/5/11/7,status-save=240/60/210,gross-open=190,status-load=30/40/90,unknown=2,status-open=180/bad/150")
 	log := output.String()
-	if strings.Count(log, "board browser timing") != 3 || !strings.Contains(log, "response_to_commit_ms=14 commit_to_frame_ms=6 frame_interval_ms=20") || !strings.Contains(log, "operation=status-save duration_ms=240 before_request_ms=60 request_ms=150 response_to_paint_ms=30") ||
+	if strings.Count(log, "board browser timing") != 3 || strings.Count(log, "completed_edit=true") != 1 || !strings.Contains(log, "response_to_commit_ms=14 commit_to_frame_ms=6 frame_interval_ms=20") || !strings.Contains(log, "operation=status-save duration_ms=240 before_request_ms=60 request_ms=150 response_to_paint_ms=30") ||
 		!strings.Contains(log, "operation=gross-open duration_ms=190") {
 		t.Fatal(log)
 	}

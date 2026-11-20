@@ -96,6 +96,8 @@ func logBoardClientTimings(logger *slog.Logger, raw string) {
 		}
 		if name == "status-open" || name == "gross-open" {
 			fields = appendOpeningNetwork(fields, network, points[1])
+		} else if (name == "gross-save" || name == "status-save") && network == "complete" {
+			fields = append(fields, "completed_edit", true)
 		}
 		logger.Info("board browser timing", fields...)
 	}
