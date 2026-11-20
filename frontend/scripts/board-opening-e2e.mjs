@@ -97,6 +97,59 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
   await page.unrouteAll({behavior: 'wait'});
   await checkTruckProfileRequests(page, base, sql, schema);
   await checkFleetReturnPayloads(page, base, sql, schema);
+  await checkMapLiveReads(page, base, sql, schema);
+}
+
+async function checkMapLiveReads(page, base, sql, schema) {
+  const vin = '1XKADP9X0CJ000001';
+  sql(`SET search_path TO ${schema},public; UPDATE trucks SET vin='${vin}' WHERE unit_number='PREFETCH-1';`);
+  const boardPath = '**/api/driver-board?**';
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let held = false, reads = 0;
+  try {
+    await page.route('https://tile.openstreetmap.org/**', route => route.abort());
+    await page.clock.install();
+    await page.route(boardPath, async route => {
+      reads++;
+      const response = await route.fetch();
+      if (!held && response.status() === 200) {
+        held = true;
+        await gate;
+      }
+      await route.fulfill({response});
+    });
+    await page.goto(base + '/map');
+    await expect.poll(() => held).toBe(true);
+    const initialReads = reads;
+    // Deliver an actual committed GPS update while the opening response is held.
+    sql(`SET search_path TO ${schema},public;
+      INSERT INTO five_eld_locations(vin,provider_truck_number,latitude,longitude,reported_at,fetched_at)
+      VALUES('${vin}','PREFETCH-1',41.88,-87.62,now(),now());
+      SELECT pg_notify('mserp_driver_board','');`);
+    const pin = page.locator('.fleet-map-pin[aria-label*="Truck PREFETCH-1 ·"]');
+    await expect(pin).toBeVisible();
+    const opening = page.waitForResponse(r => r.request().method()==='GET' && new URL(r.url()).pathname==='/api/driver-board' && r.status()===200);
+    release();
+    await opening;
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.clock.fastForward(31000);
+    await expect(pin).toBeVisible();
+    expect(reads).toBe(initialReads);
+
+    await page.route('**/api/driver-board/events?**', route => route.abort());
+    await page.reload();
+    await expect(pin).toBeVisible();
+    const beforeRecovery = reads;
+    sql(`SET search_path TO ${schema},public; DELETE FROM five_eld_locations WHERE vin='${vin}';`);
+    await page.clock.fastForward(31000);
+    await expect(pin).toHaveCount(0);
+    expect(reads).toBeGreaterThan(beforeRecovery);
+    console.log('Map displayed committed GPS with no follow-up board GET, discarded an older opening response, and recovered positions with the stream disconnected.');
+  } finally {
+    release();
+    await page.unrouteAll({behavior:"wait"});
+  }
 }
 
 async function checkTruckProfileRequests(page, base, sql, schema) {

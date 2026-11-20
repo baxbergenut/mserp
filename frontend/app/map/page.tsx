@@ -42,38 +42,71 @@ export default function FleetMapPage() {
     const controller = new AbortController();
     let pending = false;
     let refreshing = false;
+    let connected = false;
+    let revision = 0;
+    let week = "";
+    let needsRead = true;
+    let hiddenSnapshot: DriverBoard | undefined;
+
     const accept = (value: DriverBoard) => {
+      week = value.weekStart;
+      needsRead = false;
+      if (document.hidden) {
+        hiddenSnapshot = value;
+        return;
+      }
+      hiddenSnapshot = undefined;
       setBoard(value);
       setNow(Date.now());
       setError("");
     };
     const refresh = async () => {
+      needsRead = true;
       if (controller.signal.aborted || document.hidden) return;
       if (refreshing) { pending = true; return; }
       refreshing = true;
+      const started = revision;
       try {
         const value = await fetchDriverBoard(currentChargeWeek(), controller.signal);
-        if (!controller.signal.aborted) accept(value);
+        if (!controller.signal.aborted && started === revision && value.weekStart === currentChargeWeek()) accept(value);
       } catch {
-        if (!controller.signal.aborted) setError("Unable to refresh truck locations.");
+        if (!controller.signal.aborted && started === revision) setError("Unable to refresh truck locations.");
       } finally {
         refreshing = false;
         if (pending) { pending = false; void refresh(); }
       }
     };
+    const close = subscribeBoardEvents(value => {
+      revision++;
+      if (!value || value.weekStart !== currentChargeWeek()) {
+        hiddenSnapshot = undefined;
+        void refresh();
+        return;
+      }
+      pending = false;
+      accept(value);
+    }, () => {}, live => { connected = live; }, () => {
+      revision++;
+      hiddenSnapshot = undefined;
+      setBoard(null);
+      void refresh();
+    });
     void refresh();
-    const close = subscribeBoardEvents(() => void refresh(), () => {}, connected => {
-      if (connected) void refresh();
-    }, () => void refresh());
-    const timer = setInterval(refresh, 30_000);
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("focus", refresh);
+    const resume = () => {
+      if (document.hidden) return;
+      setNow(Date.now());
+      if (hiddenSnapshot && hiddenSnapshot.weekStart === currentChargeWeek() && !needsRead) accept(hiddenSnapshot);
+      if (!connected || needsRead || week !== currentChargeWeek()) void refresh();
+    };
+    const timer = setInterval(resume, 30_000);
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("focus", resume);
     return () => {
       controller.abort();
       close();
       clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("focus", resume);
     };
   }, [attempt]);
 

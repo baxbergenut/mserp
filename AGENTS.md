@@ -33,7 +33,9 @@ use their existing locks. Board GETs share only snapshots started after arrival.
 Grid and stream readers can join a build of the same board and week before its
 SQL begins. For Status Board, the transaction snapshots pending hires and their
 active task assignees together. Project those names for each authenticated viewer;
-stream frames also recheck current task access.
+stream frames also recheck current task access. Map consumes authorized board
+frames directly for dispatch GPS. Its 30-second timer updates displayed ages
+and recovers a disconnected feed, a failed read or a New York week change.
 Install the schema-compatible deploy helper before a future writer-quiesced rollout.
 See [the implementation plan](docs/DATABASE_SIMPLIFICATION_PLAN.md) and
 [the table inventory](docs/DATABASE_TABLE_INVENTORY.md).
