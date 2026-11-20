@@ -475,9 +475,13 @@ func defaultBoardStop(stops []BoardStop) *BoardStop {
 // Source sync timestamps are freshness metadata. A routine refresh must not
 // invalidate an open editor when the actual load plans/stops are unchanged.
 // Copy the view to preserve those timestamps in API responses and saved details.
-func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) string {
-	withoutSync := func(load BoardLoad) BoardLoad {
+func boardLoadsRevision(view BoardLoads, state boardLoadState, version int, legacyOverdue bool) string {
+	stableLoad := func(load BoardLoad) BoardLoad {
 		load.SyncedAt = ""
+		if !legacyOverdue {
+			// Passing a pickup deadline changes its display, never its queue identity.
+			load.Overdue = false
+		}
 		return load
 	}
 	list := func(loads []BoardLoad) []BoardLoad {
@@ -486,12 +490,12 @@ func boardLoadsRevision(view BoardLoads, state boardLoadState, version int) stri
 		}
 		out := make([]BoardLoad, len(loads))
 		for i, load := range loads {
-			out[i] = withoutSync(load)
+			out[i] = stableLoad(load)
 		}
 		return out
 	}
 	if view.Current != nil {
-		current := withoutSync(*view.Current)
+		current := stableLoad(*view.Current)
 		view.Current = &current
 	}
 	view.Week, view.Next, view.Earlier = list(view.Week), list(view.Next), list(view.Earlier)
@@ -566,8 +570,14 @@ type boardLoadViewOptions struct {
 	queuePresenceOnly bool
 	jitDisabled       bool // The enclosing board transaction already set jit=off.
 	plansOnly         bool // Command validation needs plans and stops, without GPS or ETA.
-	// A guarded command hashes the current plans against the version its dispatcher saw.
-	commandBaseVersion *int
+	command           *boardLoadValidation
+}
+
+// A load action edits the same queue state it has just validated under its driver lock.
+type boardLoadValidation struct {
+	version   int
+	revision  string
+	stateJSON []byte
 }
 
 type boardLoadSourceCaches struct {
@@ -586,6 +596,7 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 	weekEnd := day.AddDate(0, 0, 7-(int(day.Weekday())+6)%7).Format(time.DateOnly)
 	result := map[string]BoardLoads{}
 	states := map[string]boardLoadState{}
+	missingIDs := map[int]bool{}
 	manualMismatch := map[string]bool{}
 	entries := map[string]DriverBoardEntry{}
 	selected := []string{}
@@ -593,18 +604,33 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		states[id] = boardLoadState{}
 		result[id] = BoardLoads{Week: []BoardLoad{}, Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
 	}
-	rows, err := tx.Query(ctx, `SELECT b.driver_id,coalesce(s.payload,'{}'::jsonb),coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,''),b.version FROM driver_board b LEFT JOIN driver_board_load_state s ON b.driver_id=s.driver_id WHERE b.driver_id=ANY($1::uuid[])`, ids)
+	rows, err := tx.Query(ctx, `SELECT b.driver_id,coalesce(s.payload,'{}'::jsonb),coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,''),b.version,unavailable.load_id
+ FROM driver_board b LEFT JOIN driver_board_load_state s ON b.driver_id=s.driver_id
+ LEFT JOIN load_source_availability unavailable ON unavailable.load_id=(s.payload->'current'->>'loadId')::int AND NOT unavailable.present
+ WHERE b.driver_id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var id string
 		var s boardLoadState
+		var raw []byte
+		var missingID *int
 		var currentText string
 		var entry DriverBoardEntry
-		if err = rows.Scan(&id, &s, &currentText, &entry.Status, &entry.Destination, &entry.Version); err != nil {
+		if err = rows.Scan(&id, &raw, &currentText, &entry.Status, &entry.Destination, &entry.Version, &missingID); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if err := json.Unmarshal(raw, &s); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if missingID != nil {
+			missingIDs[*missingID] = true
+		}
+		if options.command != nil {
+			options.command.stateJSON = raw
 		}
 		states[id] = s
 		entry.CurrentLoad = currentText
@@ -682,23 +708,20 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 	if err != nil {
 		return nil, err
 	}
-	// A saved selection may outlive its plan. Recheck its exact source ID;
-	// never silently switch a pinned selection to a recreated order.
-	missingIDs := map[int]bool{}
-	missingRows, err := tx.Query(ctx, `SELECT load_id FROM load_source_availability WHERE NOT present`)
-	if err != nil {
-		return nil, err
-	}
-	for missingRows.Next() {
-		var id int
-		if err := missingRows.Scan(&id); err != nil {
-			missingRows.Close()
-			return nil, err
+	// Resolve all unplanned current numbers together; a free-text current load
+	// must stay distinct from both a manual queue entry and a Gross Board plan.
+	unplanned := make(map[string]string)
+	var numbers []string
+	for _, id := range ids {
+		current := states[id].Current
+		number := entries[id].CurrentLoad
+		if strings.TrimSpace(number) != "" && (current == nil || current.PlanID == "") &&
+			!hasBoardNumber(plans[id], number) && !hasBoardNumber(manualPlans[id], number) {
+			unplanned[id] = number
+			numbers = append(numbers, number)
 		}
-		missingIDs[id] = true
 	}
-	err = missingRows.Err()
-	missingRows.Close()
+	imported, err := importedBoardLoads(ctx, tx, numbers)
 	if err != nil {
 		return nil, err
 	}
@@ -709,12 +732,8 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		// Keep the real Gross Board plans in Week, but show each source once in the queue.
 		plans[id] = append(manualPlans[id], plans[id]...)
 		// Unplanned current loads are source lookups, never synthetic plans.
-		if strings.TrimSpace(entries[id].CurrentLoad) != "" && (s.Current == nil || s.Current.PlanID == "") && !hasBoardNumber(plans[id], entries[id].CurrentLoad) {
-			p, e := importedBoardLoad(ctx, tx, entries[id].CurrentLoad)
-			if e != nil {
-				return nil, e
-			}
-			if p != nil {
+		if number, ok := unplanned[id]; ok {
+			if p := imported[number]; p != nil {
 				if s.Current == nil {
 					s.Current = p
 				}
@@ -732,6 +751,11 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 			}
 		}
 		for _, p := range plans[id] {
+			// Pinned plans carry availability from their own source join. A saved
+			// selection without a plan was checked in the state read above.
+			if p.SourceMissing && p.LoadID != nil {
+				missingIDs[*p.LoadID] = true
+			}
 			if !p.Manual && p.PlanID != "" && p.Date >= week && p.Date < weekEnd {
 				p.Completed = !p.SourceMissing && providerCompletedLoad(p.SourceStatus)
 				view.Week = append(view.Week, p)
@@ -893,10 +917,14 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		})
 		version := entries[id].Version
 		revisionVersion := version
-		if options.commandBaseVersion != nil {
-			revisionVersion = *options.commandBaseVersion
+		if options.command != nil {
+			revisionVersion = options.command.version
 		}
-		view.Revision = boardLoadsRevision(view, states[id], revisionVersion)
+		view.Revision = boardLoadsRevision(view, states[id], revisionVersion, false)
+		// An already-open tab may have received the old digest before deployment.
+		if cmd := options.command; cmd != nil && cmd.revision != view.Revision && cmd.revision == boardLoadsRevision(view, states[id], revisionVersion, true) {
+			view.Revision = cmd.revision
+		}
 		view.EntryVersion = &version
 		view.entryStatus = entries[id].Status
 		for i := range view.Next {
@@ -997,9 +1025,10 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	// The current stop-time editor checks the automation target, and manual mode
 	// hydrates its displayed destination. Other commands select from the plans.
 	needAutomation := a.Action == "manual" || (a.Action == "stop_time" && a.PlanID == "")
+	validation := boardLoadValidation{version: a.Version, revision: a.Revision}
 	before := db.Phase(ctx, "board_load_validation")
 	views, err := readBoardLoadViewsCached(ctx, tx, []string{a.DriverID}, a.FromDate, r.now(), boardLoadViewOptions{
-		commandBaseVersion: &a.Version, jitDisabled: true, plansOnly: !needAutomation,
+		command: &validation, jitDisabled: true, plansOnly: !needAutomation,
 	}, nil, "")
 	before()
 	if err != nil {
@@ -1009,7 +1038,13 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	if view.Revision != a.Revision {
 		return result, ErrBoardLoadPlansChanged
 	}
-	s, _, err := loadState(ctx, tx, a.DriverID)
+	var s boardLoadState
+	if validation.stateJSON != nil {
+		err = json.Unmarshal(validation.stateJSON, &s)
+	} else {
+		// A driver may have queue state before the first board row is saved.
+		s, _, err = loadState(ctx, tx, a.DriverID)
+	}
 	if err != nil {
 		return result, err
 	}

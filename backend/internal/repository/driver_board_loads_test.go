@@ -64,6 +64,26 @@ func testDriverBoardLoads(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,total_miles,raw_payload) VALUES
  (88001,'QUEUE-A','Dispatched',1000,1000,500,'{"pickup_appointment_time":"2026-09-28T12:00:00Z","delivery_appointment_time":"2026-10-01T17:00:00Z","stops":[{"ordering":3,"stop_type":"delivery","location":{"city":"Boston","state":"MA"}},{"ordering":1,"stop_type":"pickup","location":{"city":"Atlanta","state":"GA"}},{"ordering":2,"stop_type":"delivery","location":{"city":"Richmond","state":"VA"}}]}'),
  (88002,'DUP','Dispatched',2000,2000,600,'{}'),(88003,'DUP','Dispatched',3000,3000,700,'{}')`)
+	t.Run("unplanned numbers resolve independently in a batch", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		matches, err := importedBoardLoads(ctx, tx, []string{" queue-a ", "QUEUE-A", "QUEUE-A", "DUP", "NO-RECORD"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, spelling := range []string{" queue-a ", "QUEUE-A"} {
+			p := matches[spelling]
+			if p == nil || p.LoadID == nil || *p.LoadID != 88001 || len(p.Stops) != 3 || p.Stops[0].Appointment == "" {
+				t.Fatal("unique source did not retain its stops and pickup appointment", spelling, p)
+			}
+		}
+		if matches["DUP"] != nil || matches["NO-RECORD"] != nil {
+			t.Fatal("selected an ambiguous or absent unplanned source")
+		}
+	})
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,original_rate,driver_rate,miles) VALUES
  ($1,'2026-09-28','QUEUE-A',88001,1000,900,500),($1,'2026-10-05','QUEUE-A',88001,1000,900,500),
  ($1,'2026-10-06','PLAN-B',NULL,2000,1800,700),($1,'2026-10-07','DUP',88002,2000,1800,600),($1,'2026-10-08','DUP',88003,3000,2800,700)`, d.ID)
