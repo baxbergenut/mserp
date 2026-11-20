@@ -161,7 +161,7 @@ try {
       const date = new Date(`${today}T12:00:00Z`); date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);
       await runStatusBoardOrderE2E({page,viewer,base,sql,schema,headers,temp,week:date.toISOString().slice(0,10)});
     } finally { await context.close(); }
-  } else if (process.argv.includes('--board-only')) {
+  } else if (process.argv.includes('--board-only') || process.argv.includes('--board-progress-only')) {
     await runDriverBoardE2E({ page, base, sql, schema, temp, setNetworkLatency });
   } else if (process.argv.includes('--teams-only')) {
     await runDriverTeamsE2E({ page, base, sql, schema, temp });

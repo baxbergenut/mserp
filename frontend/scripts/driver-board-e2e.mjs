@@ -11,6 +11,7 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const date = new Date(`${today}T12:00:00Z`); date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
   const week = date.toISOString().slice(0, 10);
+  if (process.argv.includes('--board-progress-only')) return runStatusBoardProgressE2E({ page, base, sql, schema, week });
   sql(`SET search_path TO ${schema},public;
     INSERT INTO dispatchers(id,full_name,normalized_name) VALUES('e4500000-0000-0000-0000-000000000001','Board Dispatcher','board dispatcher');
     INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,phone,dispatcher_id,city,state) VALUES

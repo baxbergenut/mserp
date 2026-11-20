@@ -375,7 +375,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }
 
-  async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction) {
+  async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction, onStale?: (message: string) => void) {
     const started = performance.now();
     if (!canEdit) return view;
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
@@ -392,6 +392,18 @@ export function useDriverBoard(lockedDriverId?: string) {
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), drivers: applyCommittedFleetStatus(current.drivers, [result.entry]), loads: { ...current.loads, [driverId]: result.loads } } : current);
       confirmedLoad.current = started;
       return result.loads;
+    } catch (err) {
+      if (!onStale || !(err instanceof APIError) || (err.code !== "board_load_plans_changed" && err.code !== "board_load_row_changed")) throw err;
+      let message = "This driver's loads changed. Review the updated row before choosing the next action.";
+      try {
+        // Inline progress depends on both the dispatch status and the queue. Read
+        // them in one snapshot and retain unrelated drafts through the live merger.
+        refreshWanted.current(await fetchDriverBoard(currentChargeWeek()));
+      } catch {
+        message = "This driver's loads changed. Reload the board to see the current row.";
+      }
+      onStale(message);
+      throw new Error(message);
     } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
   }
 
