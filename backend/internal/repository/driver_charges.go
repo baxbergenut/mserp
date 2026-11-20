@@ -232,6 +232,12 @@ func projectCharges(s ChargeSchedule, through string, loads map[string]bool, for
 				o.BaseAmount = base
 				o.CarryForward = chargeMoney(carry)
 				o.ScheduledAmount = chargeMoney(n - carry)
+				if s.Kind == "installment" && o.WaiveRemainder {
+					// A skipped paycheck consumes neither a payment slot nor
+					// any shortfall carried from an earlier partial payment.
+					out = append(out, o)
+					continue
+				}
 				paid, _ := chargeCents(o.Amount)
 				carry = max(0, carry-n+paid)
 				if o.WaiveRemainder {

@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyExpenseSettings } from './expense-settings-e2e.mjs';
+import { verifyInstallmentSkip } from './investor-accounts-e2e.mjs';
 
 const frontend = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const backend = resolve(frontend, '../backend');
@@ -103,6 +104,7 @@ try {
     const driver = page.getByRole('button', { name: 'E2e Driver', exact: true });
     if (await driver.getAttribute('aria-expanded') !== 'true') await driver.click();
     await expect(page.getByLabel('E2e Driver, Prior-week advance, charge amount', { exact: true })).toHaveValue('-100.00');
+    await verifyInstallmentSkip(page, base, 'Prior-week advance', ['-100.00', '-100.00']);
   } else if (process.argv.includes("--payer-corrections-only")) { await runPayerCorrectionsE2E({page,base,temp,sql,schema}); }
   else if (process.argv.includes("--pay-source-only")) { await runPaySourceE2E({page,base,temp,sql,schema}); } else { await runTruckRecurringE2E({page,base,temp}); }
   if (!process.argv.includes("--investor-accounts-only") && !priorWeekOnly && !process.argv.includes("--truck-recurring-only") && !process.argv.includes("--pay-source-only") && !process.argv.includes("--payer-corrections-only")) {
@@ -145,8 +147,8 @@ try {
   if (await page.getByRole('button', { name: 'E2e Driver', exact: true }).getAttribute('aria-expanded') !== 'true') await page.getByRole('button', { name: 'E2e Driver', exact: true }).click();
   await expect(installment).toHaveValue('0.00');
   let preview = await (await page.request.get(`${base}/api/driver-charges/schedules/${plan.id}/preview`)).json();
-  expect(preview).toHaveLength(7);
-  expect(preview[1].amount).toBe("-200.00");
+  expect(preview).toHaveLength(8);
+  expect(preview[1].amount).toBe("-100.00");
   await page.getByRole('button', { name: 'Advance, reset to scheduled amount', exact: true }).click();
   await expect(page.getByText('All changes saved', { exact: true })).toBeVisible({ timeout: 12000 });
   await expect(installment).toHaveValue('-100.00');

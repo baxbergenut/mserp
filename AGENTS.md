@@ -179,6 +179,12 @@ Migration 220 makes Investors View (`investors.read`) sensitive and a prerequisi
 
 ## Pay-page actions
 
+The skip icon beside a Driver Pay or Investor Pay installment records a zero
+occurrence with waive_remainder. It preserves principal, earlier partial-payment
+carry and the payment count used for final-cent rounding. The next eligible
+paycheck resumes the schedule. An ordinary reduced amount, including a manually
+entered zero, carries the shortfall. Reset restores the scheduled deduction.
+
 New Bonuses expenses pay the linked driver through Driver Pay. Moving a Reimburse expense to Bonuses preserves its open payout weeks and amounts. Bonus credits count as earnings in the Driver Pay export. Previously saved non-payroll Bonuses keep their recorded route. Migration 226 allows this category correction on owner-linked reimbursements with open driver reservations. See `docs/PAYROLL_EXPENSE_FINALIZATION.md`.
 
 Restore finalized investor cards from a freshly decoded saved report. Omitted

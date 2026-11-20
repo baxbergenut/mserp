@@ -35,6 +35,8 @@ func TestPriorWeekInstallmentDatabase(t *testing.T) {
 		if err != nil || len(rows) != 2 || rows[0].WeekStart != input.StartWeek || rows[0].Amount != "-100.00" {
 			t.Fatalf("load-only preview should include the prior week with a load: %+v, %v", rows, err)
 		}
+		finalWeek := current.Format(time.DateOnly)
+		input.EndWeek = &finalWeek
 		ids, err := repo.Create(ctx, input, actor)
 		if err != nil {
 			t.Fatal(err)
@@ -46,6 +48,25 @@ func TestPriorWeekInstallmentDatabase(t *testing.T) {
 		charges := report.Drivers[0].Edits.GeneratedCharges
 		if len(charges) != 1 || charges[0].ScheduleID != ids[0] || charges[0].Amount != "-100.00" || charges[0].ConfirmedAt != nil {
 			t.Fatalf("expected one unconfirmed prior-week installment: %+v", charges)
+		}
+		edits := report.Drivers[0].Edits
+		edits.GeneratedCharges[0].Amount = "0.00"
+		edits.GeneratedCharges[0].WaiveRemainder = true
+		saved, err := pay.Save(ctx, edits, actor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, err = repo.Preview(ctx, ids[0])
+		if err != nil || len(rows) != 3 || rows[0].Amount != "0.00" || rows[1].Amount != "-100.00" || rows[2].WeekStart != current.AddDate(0, 0, 7).Format(time.DateOnly) {
+			t.Fatalf("skip should extend the final week: %+v, %v", rows, err)
+		}
+		saved.GeneratedCharges[0].Reset = true
+		if _, err = pay.Save(ctx, saved, actor); err != nil {
+			t.Fatal(err)
+		}
+		rows, err = repo.Preview(ctx, ids[0])
+		if err != nil || len(rows) != 2 || rows[1].WeekStart != finalWeek {
+			t.Fatalf("reset should restore the final week: %+v, %v", rows, err)
 		}
 		if _, err = pool.Exec(ctx, `INSERT INTO payroll_settlements(driver_id,week_start,report)
  VALUES($1,$2::date,'{}')`, driver, input.StartWeek); err != nil {

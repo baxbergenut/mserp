@@ -1,6 +1,19 @@
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
 
+export async function verifyInstallmentSkip(page, base, name, payments) {
+  const charges = await (await page.request.get(base + '/api/driver-charges')).json();
+  const plan = charges.schedules.find(schedule => schedule.name === name);
+  const amounts = async () => {
+    const response = await page.request.get(`${base}/api/driver-charges/schedules/${plan.id}/preview`);
+    return (await response.json()).map(row => row.amount);
+  };
+  await page.getByRole('button', { name: `${name}, skip this week`, exact: true }).click();
+  await expect.poll(amounts).toEqual(['0.00', ...payments]);
+  await page.getByRole('button', { name: `${name}, reset to scheduled amount`, exact: true }).click();
+  await expect.poll(amounts).toEqual(payments);
+}
+
 export async function runInvestorAccountsE2E({page,base,temp,sql,schema}) {
   const {currentWeek}=await (await page.request.get(base+'/api/driver-charges')).json();
   const prior=new Date(Date.parse(currentWeek)-7*86400000).toISOString().slice(0,10);
@@ -54,5 +67,6 @@ export async function runInvestorAccountsE2E({page,base,temp,sql,schema}) {
   await page.reload();
   if(await expand.getAttribute('aria-expanded')!=='true')await expand.click();
   await expect(amount).toHaveValue('-25.00');
+  await verifyInstallmentSkip(page, base, 'Truck repair', ['-100.00', '-100.00', '-100.00']);
   await page.screenshot({path:join(temp,'investor-installment-pay.png'),fullPage:true});
 }
