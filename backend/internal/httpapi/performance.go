@@ -59,7 +59,7 @@ func logBoardClientTimings(logger *slog.Logger, raw string) {
 			continue
 		}
 		switch name {
-		case "status-open", "status-save", "status-load", "gross-open", "gross-save":
+		case "status-open", "status-save", "status-load", "gross-open", "gross-save", "status-document-open", "gross-document-open":
 		default:
 			continue
 		}

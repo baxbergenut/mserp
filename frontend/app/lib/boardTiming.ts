@@ -1,6 +1,29 @@
 type Board = "status" | "gross";
 type Operation = "open" | "save" | "load";
 const samples: string[] = [];
+let firstRoute = true;
+let directBoard: Board | undefined;
+
+// Measure a direct visit from the document's time origin. A route change,
+// background tab or restored document must never inherit that start time.
+export function trackBoardDocument(path: string) {
+  if (!firstRoute) return;
+  firstRoute = false;
+  const board = path === "/driver-board" ? "status" : path === "/gross-board" ? "gross" : undefined;
+  if (!board || document.hidden) return;
+  const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+  if (!navigation || navigation.name !== location.href ||
+      (navigation.type !== "navigate" && navigation.type !== "reload")) return;
+  directBoard = board;
+  const clear = () => { directBoard = undefined; };
+  document.addEventListener("visibilitychange", clear, { once: true });
+  window.addEventListener("pagehide", clear, { once: true });
+  return () => {
+    clear();
+    document.removeEventListener("visibilitychange", clear);
+    window.removeEventListener("pagehide", clear);
+  };
+}
 
 // Only pair an opening with a single completed snapshot fetch inside its window.
 function openingNetworkTiming(board: Board, start: number, received: number) {
@@ -32,7 +55,12 @@ export function recordBoardPaint(board: Board, operation: Operation, start: numb
       const phases = before >= 0 && before <= response && response <= commit ? `/${before}/${response}/${commit}/${frame}` : "";
       const network = phases && operation === "open" ? openingNetworkTiming(board, start, received) : "";
       samples.push(`${board}-${operation}=${ms}${phases}${network}`);
-      if (samples.length > 12) samples.shift();
+      if (operation === "open" && directBoard === board) {
+        const documentMS = Math.round(performance.now());
+        directBoard = undefined;
+        if (documentMS <= 120000) samples.push(`${board}-document-open=${documentMS}`);
+      }
+      if (samples.length > 12) samples.splice(0, samples.length - 12);
     });
   });
 }

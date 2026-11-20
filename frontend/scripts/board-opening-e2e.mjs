@@ -16,6 +16,7 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
   const measuredBoards = new Set();
   const checkTiming = req => {
     const samples = req.headers()['x-clustie-board-timing'] || '';
+    expect(samples).not.toContain('-document-open=');
     for (const sample of samples.split(',')) {
       const paired = /^(status|gross)-open=\d+(?:\/\d+){4}~(\d+)\/(\d+)\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/.exec(sample);
       if (paired && Number(paired[4]) > Number(paired[3]) && Number(paired[7]) > 0) measuredBoards.add(paired[1]);
@@ -95,9 +96,45 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
   expect([...measuredBoards].sort()).toEqual(['gross', 'status']);
   setNetworkLatency(0);
   await page.unrouteAll({behavior: 'wait'});
+  await checkDirectBoardSessions(page, base);
   await checkTruckProfileRequests(page, base, sql, schema);
   await checkFleetReturnPayloads(page, base, sql, schema);
   await checkMapLiveReads(page, base, sql, schema);
+}
+
+async function checkDirectBoardSessions(page, base) {
+  // Use a separate cookie jar so clearing it exercises a real unauthorized
+  // recheck without logging the rest of the fixture out.
+  const context = await page.context().browser().newContext({ storageState: await page.context().storageState() });
+  try {
+    const tab = await context.newPage();
+    const sessions = [];
+    const isSession = response => new URL(response.url()).pathname === '/api/auth/session';
+    tab.on('response', response => { if (isSession(response)) sessions.push(response.status()); });
+    for (const [route, grid] of [['driver-board','tr[data-driver-id]'], ['gross-board','td[data-gross-driver]']]) {
+      sessions.length = 0;
+      await tab.goto(base + '/' + route);
+      await expect(tab.locator(grid).first()).toBeVisible();
+      await expect(tab.locator('link[rel="preload"][as="fetch"][href="/api/auth/session"]')).toHaveAttribute('crossorigin','use-credentials');
+      expect(sessions).toEqual([200]);
+      await tab.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const board = route === 'driver-board' ? 'status' : 'gross';
+      const sample = tab.waitForRequest(req => (req.headers()['x-clustie-board-timing'] || '').includes(board + '-document-open='));
+      const rechecked = tab.waitForResponse(isSession);
+      await tab.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await sample;
+      await rechecked;
+    }
+    await context.clearCookies();
+    const denied = tab.waitForResponse(isSession);
+    await tab.evaluate(() => window.dispatchEvent(new Event('focus')));
+    expect((await denied).status()).toBe(401);
+    await expect(tab).toHaveURL(/\/login\?next=/);
+    await tab.reload();
+    await expect(tab.locator('link[rel="preload"][href="/api/auth/session"]')).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
 }
 
 async function checkMapLiveReads(page, base, sql, schema) {
