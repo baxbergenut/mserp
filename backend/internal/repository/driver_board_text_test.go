@@ -108,4 +108,59 @@ func testConcurrentBoardText(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if err != nil || result[0].Version != second.Version+1 {
 		t.Fatal("membership write fallback", err)
 	}
+	if err := team.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	testLoadActionAcrossTextEdits(t, ctx, repo, result[0])
+}
+
+func testLoadActionAcrossTextEdits(t *testing.T, ctx context.Context, repo *DriverBoardRepository, base DriverBoardEntry) {
+	t.Helper()
+	view, err := repo.Loads(ctx, base.DriverID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := BoardLoadAction{DriverID: base.DriverID, Version: base.Version, FromDate: view.FromDate, Revision: view.Revision, Action: "add", Number: "DISPATCH-TEXT-RACE"}
+	save := func(before, after DriverBoardEntry) DriverBoardEntry {
+		t.Helper()
+		rows, err := repo.SaveWithTextBase(ctx, []DriverBoardEntry{after}, map[string]DriverBoardEntry{before.DriverID: before}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows[0]
+	}
+	change := base
+	change.Notes = "Changed while drawer open"
+	current := save(base, change)
+	change = current
+	change.TrailerNote = "Second text save"
+	current = save(current, change)
+
+	invalid := add
+	invalid.Revision = "outdated plan"
+	if _, err := repo.ChangeLoads(ctx, invalid, ""); !errors.Is(err, ErrBoardLoadPlansChanged) {
+		t.Fatal("stale plans crossed text edits", err)
+	}
+	added, err := repo.ChangeLoads(ctx, add, "")
+	if err != nil || added.Entry.Notes != current.Notes || added.Entry.TrailerNote != current.TrailerNote ||
+		added.Entry.Version <= current.Version || added.Entry.UndoID == 0 {
+		t.Fatal("load action lost an intervening text edit or receipt", err, added.Entry)
+	}
+	if _, err := repo.ChangeLoads(ctx, add, ""); !errors.Is(err, ErrBoardLoadRowChanged) {
+		t.Fatal("second application of the command", err)
+	}
+	// Changing a dispatch field away and back still invalidates the old command.
+	stale := BoardLoadAction{DriverID: base.DriverID, Version: added.Entry.Version, FromDate: added.Loads.FromDate, Revision: added.Loads.Revision, Action: "add", Number: "STALE-DISPATCH"}
+	change = added.Entry
+	change.Destination = "Other destination"
+	current = save(added.Entry, change)
+	change = current
+	change.Destination = added.Entry.Destination
+	current = save(current, change)
+	change = current
+	change.Notes = "After dispatch change"
+	save(current, change)
+	if _, err := repo.ChangeLoads(ctx, stale, ""); !errors.Is(err, ErrBoardLoadRowChanged) {
+		t.Fatal("dispatch field changed away and back", err)
+	}
 }

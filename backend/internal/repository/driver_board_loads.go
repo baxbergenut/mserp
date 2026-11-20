@@ -17,6 +17,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"mserp/internal/datatruck"
+	"mserp/internal/db"
 )
 
 var ErrBoardLoadSelection = errors.New("load plans changed or the selection is unavailable; refresh Loads and review the current plans")
@@ -562,6 +563,8 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 type boardLoadViewOptions struct {
 	includeRoute      bool
 	queuePresenceOnly bool
+	// A guarded command hashes the current plans against the version its dispatcher saw.
+	commandBaseVersion *int
 }
 
 type boardLoadSourceCaches struct {
@@ -878,7 +881,11 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 			return a < b
 		})
 		version := entries[id].Version
-		view.Revision = boardLoadsRevision(view, states[id], version)
+		revisionVersion := version
+		if options.commandBaseVersion != nil {
+			revisionVersion = *options.commandBaseVersion
+		}
+		view.Revision = boardLoadsRevision(view, states[id], revisionVersion)
 		view.EntryVersion = &version
 		for i := range view.Next {
 			view.Next[i] = boardStopTimes(view.Next[i], s.ManualStopTimes)
@@ -931,7 +938,7 @@ func (r *DriverBoardRepository) loadView(ctx context.Context, id, from string, i
 	return views[id], tx.Commit(ctx)
 }
 
-const boardEntryQuery = `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb)
+const boardEntryQuery = `SELECT d.id,coalesce(b.current_load,''),coalesce(b.trailer_number,''),coalesce(b.trailer_note,''),coalesce(b.status,''),coalesce(b.destination,''),coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb),coalesce(b.load_action_version,b.version,0)
  FROM drivers d LEFT JOIN driver_board b ON b.driver_id=d.id WHERE d.id=$1`
 
 func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, error) {
@@ -940,7 +947,7 @@ func boardEntry(ctx context.Context, tx pgx.Tx, id string) (DriverBoardEntry, er
 
 func scanBoardEntry(row pgx.Row) (DriverBoardEntry, error) {
 	var e DriverBoardEntry
-	err := row.Scan(&e.DriverID, &e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan)
+	err := row.Scan(&e.DriverID, &e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan, &e.loadActionVersion)
 	return e, err
 }
 func (r *DriverBoardRepository) ChangeLoads(ctx context.Context, a BoardLoadAction, actor string) (BoardLoadResult, error) {
@@ -954,24 +961,31 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	var active bool
-	if err = tx.QueryRow(ctx, `SELECT active FROM drivers WHERE id=$1 FOR UPDATE`, a.DriverID).Scan(&active); errors.Is(err, pgx.ErrNoRows) {
+	var planID string
+	var e DriverBoardEntry
+	var batch pgx.Batch
+	// Use a separate statement snapshot for the board row after acquiring the
+	// driver lock. Both statements travel to PostgreSQL in one round trip.
+	batch.Queue(`SELECT CASE WHEN $2 THEN gen_random_uuid()::text ELSE '' END
+ FROM drivers WHERE id=$1 AND active FOR UPDATE`, a.DriverID, a.Action == "add").QueryRow(func(row pgx.Row) error {
+		return row.Scan(&planID)
+	})
+	batch.Queue(boardEntryQuery, a.DriverID).QueryRow(func(row pgx.Row) error {
+		var readErr error
+		e, readErr = scanBoardEntry(row)
+		return readErr
+	})
+	if err = tx.SendBatch(ctx, &batch).Close(); errors.Is(err, pgx.ErrNoRows) {
 		return result, ErrDriverBoardConflict
 	} else if err != nil {
 		return result, err
 	}
-	e, err := boardEntry(ctx, tx, a.DriverID)
-	if err != nil {
-		return result, err
-	}
-	if !active {
-		return result, ErrDriverBoardConflict
-	}
-	if e.Version != a.Version {
+	crossedTextEdit := a.Version < e.Version
+	if a.Version < e.loadActionVersion || a.Version > e.Version {
 		return result, ErrBoardLoadRowChanged
 	}
 	a.FromDate = r.loadStartDate(a.FromDate)
-	views, err := readBoardLoads(ctx, tx, []string{a.DriverID}, a.FromDate, r.now())
+	views, err := readBoardLoadViewsCached(ctx, tx, []string{a.DriverID}, a.FromDate, r.now(), boardLoadViewOptions{commandBaseVersion: &a.Version}, nil, "")
 	if err != nil {
 		return result, err
 	}
@@ -1002,10 +1016,6 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 		}
 		if strings.EqualFold(strings.TrimSpace(e.CurrentLoad), number) || (view.Current != nil && strings.EqualFold(strings.TrimSpace(view.Current.Number), number)) {
 			return result, ErrBoardLoadSelection
-		}
-		var planID string
-		if err = tx.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&planID); err != nil {
-			return result, err
 		}
 		s.Manual = append(s.Manual, BoardLoad{Manual: true, PlanID: planID, Number: number, Stops: []BoardStop{}})
 		// Preserve the visible queue and append the entered load at its end.
@@ -1374,5 +1384,9 @@ func (r *DriverBoardRepository) changeLoads(ctx context.Context, a BoardLoadActi
 	if err = attachBoardSaveReceipt(ctx, tx, &result.Entry); err != nil {
 		return result, err
 	}
-	return result, tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	if err == nil && crossedTextEdit {
+		db.Event(ctx, "board_load_after_text")
+	}
+	return result, err
 }

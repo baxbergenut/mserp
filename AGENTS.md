@@ -123,6 +123,10 @@ serialization, the team-membership check, atomic history and undo. Mixed edits,
 first board rows and home-time cleanup use the ordinary versioned command.
 A concurrent team configuration write retries through that command. Older open tabs
 can use the narrow save when their full row version matches the stored baseline.
+Migration 228 records the last dispatch-changing version on each board row.
+A load action may cross verified notes and trailer edits if its original plan
+revision still matches. A dispatch change followed by a reversal still requires
+review. Existing rows use their current version until the next write.
 
 ## Reports
 
