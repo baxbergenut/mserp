@@ -351,7 +351,7 @@ export default function DriverBoardPage() {
 
     </PinnablePageHeader>
 
-    {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{state.conflictingRows.length ? state.conflictingRows.map(row => <div key={row.latest.driverId} className="flex flex-wrap items-center gap-2"><span>{row.message}</span><button className={buttonClass} disabled={saving} onClick={() => state.resolveConflict(row.latest)}>Apply my edits</button><button className={buttonClass} disabled={saving} onClick={() => state.resolveConflict(row.latest, row.fields)}>Use saved values</button></div>) : dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
+    {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><span>{error}{dirty && " Your unsaved edits are retained."}</span>{dirty ? <button className={buttonClass} disabled={saving} onClick={() => void save()}>Retry save</button> : <button className={buttonClass} disabled={loading} onClick={reload}>Retry</button>}</div>}
     {leaving && (dirty || saving) && <BoardNavigationNotice
       message={error && !saving ? "Your edits could not be saved." : "Saving changes before leaving…"}
       onStay={state.cancelNavigation}
