@@ -65,3 +65,54 @@ func TestBoardStreamProjectsAndReplacesChangedRows(t *testing.T) {
 		t.Fatal("root change requires a new full board", got)
 	}
 }
+
+func TestStatusStreamGridSharesRevisionWithLegacy(t *testing.T) {
+	h := newDatabaseEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "test", "driver_board.read")
+	defer h.shutdown()
+	h.snapshotEvent = "board"
+	load := repository.BoardLoad{Number: "completed plan", Completed: true, Stops: []repository.BoardStop{{Key: "saved stop"}}}
+	note := "gross-only note"
+	board := repository.DriverBoard{
+		PendingDrivers: []repository.BoardPendingDriver{{FullName: "Private hire"}},
+		GrossEntries:   []repository.GrossBoardEntry{{LoadNumber: "weekly number", Note: &note}},
+		Loads:          map[string]repository.BoardLoads{"driver": {Week: []repository.BoardLoad{load}, Current: &load, Earlier: []repository.BoardLoad{{Number: "historical plan"}}}},
+	}
+	reads := 0
+	h.statusSnapshot = func(context.Context) (repository.DriverBoard, error) {
+		reads++
+		return board, nil
+	}
+	h.projectSnapshot = func(ctx context.Context, value map[string]any) error {
+		session, _ := authSessionFromContext(ctx)
+		if !session.User.Administrator {
+			value["pendingDrivers"] = []any{}
+		}
+		return nil
+	}
+	admin := context.WithValue(context.Background(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Administrator: true}})
+	grid := context.WithValue(context.Background(), boardGridContext{}, true)
+	frames := func(legacyFirst bool) {
+		t.Helper()
+		before := reads
+		var full, compact string
+		if legacyFirst {
+			full = h.frame(admin, "changed")
+		}
+		compact = h.frame(grid, "changed")
+		if !legacyFirst {
+			full = h.frame(admin, "changed")
+		}
+		if h.frame(grid, "changed") != compact || h.frame(admin, "changed") != full || reads != before+1 || !strings.Contains(full, "Private hire") || !strings.Contains(full, "gross-only note") ||
+			!strings.Contains(full, "historical plan") || strings.Count(full, "saved stop") != 2 {
+			t.Fatal("legacy frame lost detail or formats performed independent reads")
+		}
+		if !strings.Contains(compact, "weekly number") || !strings.Contains(compact, "completed plan") ||
+			strings.Count(compact, "saved stop") != 1 || strings.Contains(compact, "Private hire") ||
+			strings.Contains(compact, "gross-only note") || strings.Contains(compact, "historical plan") {
+			t.Fatal("grid view or viewer projection differs from the opening contract")
+		}
+	}
+	frames(false)
+	h.publish()
+	frames(true)
+}

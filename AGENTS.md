@@ -25,7 +25,7 @@ snapshot. Matching includes the viewer, tab ID, board and Gross Board week.
 Keep the blocked-stream fallback and reconnect recovery when changing these
 routes. Board streams with `rowUpdates=1` keep a per-connection sequence and
 send changes against the preceding permission-projected frame. Recover a missing
-base with an authorized read and full frames. The API shares weekly source rows between boards after checking their
+base with an authorized read and full frames. Status Board grid streams use the same weekly preview and gross fields as the opening grid, with inline plans for independent row patches. Legacy and grid subscribers share the source snapshot. The API shares weekly source rows between boards after checking their
 revision in each read transaction. Rate resets also fence Gross Board opening
 balances. See `docs/BOARD_PERFORMANCE.md`.
 

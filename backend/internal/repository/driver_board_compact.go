@@ -43,9 +43,23 @@ type DriverBoardGrid struct {
 }
 
 func CompactBoardGrid(board DriverBoard) DriverBoardGrid {
-	grid := DriverBoardGrid{CompactDriverBoard: CompactBoard(board), GrossEntries: make([]BoardGrossEntry, len(board.GrossEntries))}
-	for i, e := range board.GrossEntries {
-		grid.GrossEntries[i] = BoardGrossEntry{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot, LoadNumber: e.LoadNumber,
+	return DriverBoardGrid{CompactDriverBoard: CompactBoard(board), GrossEntries: gridGrossEntries(board.GrossEntries)}
+}
+
+// Keep plans inline so each live row can be replaced independently of other drivers.
+type DriverBoardStreamGrid struct {
+	DriverBoard
+	GrossEntries []BoardGrossEntry `json:"grossEntries"`
+}
+
+func BoardStreamGrid(board DriverBoard) DriverBoardStreamGrid {
+	return DriverBoardStreamGrid{DriverBoard: BoardGridOverview(board), GrossEntries: gridGrossEntries(board.GrossEntries)}
+}
+
+func gridGrossEntries(entries []GrossBoardEntry) []BoardGrossEntry {
+	grid := make([]BoardGrossEntry, len(entries))
+	for i, e := range entries {
+		grid[i] = BoardGrossEntry{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot, LoadNumber: e.LoadNumber,
 			DayStatus: e.DayStatus, OriginalRate: e.OriginalRate, DriverRate: e.DriverRate, Miles: e.Miles,
 			Duplicate: e.Duplicate, Deleted: e.Deleted, TripReview: e.TripReview}
 	}

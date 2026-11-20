@@ -217,15 +217,15 @@ func NewRouter(
 	statusRead := shareBoardReads(boardRepo.GetShared)
 	grossRead := shareBoardReads(grossBoardRepo.Get)
 	boardEvents.snapshotEvent = "board"
-	boardEvents.snapshot = func(ctx context.Context) ([]byte, error) {
+	boardEvents.statusSnapshot = func(ctx context.Context) (repository.DriverBoard, error) {
 		// Calculate the full board once per committed revision. Its private
 		// fields and onboarding names are projected per subscriber below.
 		week, _ := time.Parse(time.DateOnly, repository.ChargeCurrentWeek())
 		value, err := statusRead(ctx, week)
 		if err != nil {
-			return nil, err
+			return repository.DriverBoard{}, err
 		}
-		return json.Marshal(value.ForViewer("", true))
+		return value.ForViewer("", true), nil
 	}
 	boardEvents.projectSnapshot = func(ctx context.Context, value map[string]any) error {
 		if names, ok := value["pendingDrivers"].([]any); !ok || len(names) == 0 {

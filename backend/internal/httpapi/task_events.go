@@ -35,20 +35,24 @@ type taskEvents struct {
 	permission      string
 	revision        uint64
 	snapshot        func(context.Context) ([]byte, error)
+	statusSnapshot  func(context.Context) (repository.DriverBoard, error)
 	snapshotEvent   string
 	snapshotKey     func(context.Context) string
 	projectSnapshot func(context.Context, map[string]any) error
 	snapshotMu      sync.Mutex
-	snapshots       map[string]eventSnapshot
+	snapshots       map[string]*eventSnapshot
 	shutdownContext context.Context
 	stopSnapshots   context.CancelFunc
 }
 
 type boardOverviewContext struct{}
+type boardGridContext struct{}
 
 type eventSnapshot struct {
 	revision uint64
 	body     []byte
+	grid     []byte
+	status   *repository.DriverBoard
 	at       time.Time
 }
 
@@ -157,22 +161,61 @@ func (h *taskEvents) rawSnapshot(ctx context.Context) []byte {
 		key = h.snapshotKey(ctx)
 	}
 	cached := h.snapshots[key]
-	if cached.body == nil || cached.revision != revision || time.Since(cached.at) > time.Second {
+	if cached == nil || cached.revision != revision || time.Since(cached.at) > time.Second {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		stop := context.AfterFunc(h.shutdownContext, cancel)
-		body, err := h.snapshot(ctx)
+		fresh := &eventSnapshot{revision: revision}
+		var err error
+		if h.statusSnapshot != nil {
+			var board repository.DriverBoard
+			board, err = h.statusSnapshot(ctx)
+			fresh.status = &board
+		} else {
+			fresh.body, err = h.snapshot(ctx)
+		}
 		stop()
 		cancel()
 		if err != nil {
 			return nil
 		}
-		if h.snapshots == nil || (len(h.snapshots) >= 16 && cached.body == nil) {
-			h.snapshots = map[string]eventSnapshot{}
+		if h.snapshots == nil || (len(h.snapshots) >= 16 && cached == nil) {
+			h.snapshots = map[string]*eventSnapshot{}
 		}
-		cached = eventSnapshot{revision, body, time.Now()}
+		fresh.at = time.Now()
+		cached = fresh
 		h.snapshots[key] = cached
 	}
-	return cached.body
+	return cached.bytes(ctx.Value(boardGridContext{}) == true)
+}
+
+func (cached *eventSnapshot) bytes(grid bool) []byte {
+	if grid && cached.grid != nil {
+		return cached.grid
+	}
+	if cached.status == nil {
+		return cached.body
+	}
+	// Legacy and grid subscribers share one database read for the revision.
+	// Encode each requested format once, before per-viewer authorization.
+	body := &cached.body
+	if grid {
+		body = &cached.grid
+	}
+	if *body == nil {
+		var value any = cached.status
+		if grid {
+			value = repository.BoardStreamGrid(*cached.status)
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil
+		}
+		*body = encoded
+		if cached.body != nil && cached.grid != nil {
+			cached.status = nil
+		}
+	}
+	return *body
 }
 
 // Share a committed snapshot among subscribers to the same notification. The
@@ -182,7 +225,7 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 }
 
 func (h *taskEvents) viewerFrame(ctx context.Context, fallback string, updates *boardStreamEncoder) string {
-	if h.snapshot == nil {
+	if h.snapshot == nil && h.statusSnapshot == nil {
 		return "event: " + fallback + "\ndata: {}\n\n"
 	}
 	body := h.rawSnapshot(ctx)
@@ -237,11 +280,8 @@ func (h *taskEvents) viewerFrame(ctx context.Context, fallback string, updates *
 				frame, err := updates.frame(h.snapshotEvent, board)
 				if err == nil {
 					if updates.sequence == 2 && strings.Contains(frame, "\nevent: boardPatch\n") {
-						// Compare one update with its full projection before proxy compression.
-						full, err := json.Marshal(board)
-						if err == nil {
-							h.logger.Info("board stream row update", "board", h.snapshotEvent, "full_json_bytes", len(full), "update_frame_bytes", len(frame))
-						}
+						h.logger.Info("board stream row update", "board", h.snapshotEvent, "grid_preview", ctx.Value(boardGridContext{}) == true,
+							"baseline_json_bytes", updates.baselineBytes, "update_frame_bytes", len(frame))
 					}
 					return frame
 				}
@@ -297,7 +337,9 @@ func (h *taskEvents) receive(ctx context.Context) error {
 
 func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("overview") == "1" {
+		if h.statusSnapshot != nil && r.URL.Query().Get("overview") == "1" && r.URL.Query().Get("compact") == "grid" {
+			r = r.WithContext(context.WithValue(r.Context(), boardGridContext{}, true))
+		} else if r.URL.Query().Get("overview") == "1" {
 			r = r.WithContext(context.WithValue(r.Context(), boardOverviewContext{}, true))
 		}
 		cookie, err := r.Cookie(sessionCookieName)
@@ -423,7 +465,7 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 			if changed {
 				frame := h.viewerFrame(context.WithValue(r.Context(), authContextKey{}, session), "changed", updates)
 				// Invalidation-only events must always reach clients; snapshots may be identical.
-				if frame != "" && (updates != nil || h.snapshot == nil || frame != lastFrame || strings.HasPrefix(frame, "event: changed\n")) {
+				if frame != "" && (updates != nil || (h.snapshot == nil && h.statusSnapshot == nil) || frame != lastFrame || strings.HasPrefix(frame, "event: changed\n")) {
 					if !send(frame) {
 						return
 					}

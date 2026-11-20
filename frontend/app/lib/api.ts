@@ -230,7 +230,7 @@ export const clearBoardPresence = (clientId: string) =>
   performRequest<void>(`/driver-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeBoardEvents(changed: (board?: DriverBoard) => void, presence: (peers?: import("./types").BoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const ready = boardReadiness.subscribe("status", () => changed());
-  return subscribeBoardStream(patches => `${API_BASE}${withQuery("/driver-board/events", { overview: "1", initial: "none", opening: ready.opening, rowUpdates: patches ? "1" : undefined })}`, "board", ready, changed, presence, connection, unauthorized);
+  return subscribeBoardStream(patches => `${API_BASE}${withQuery("/driver-board/events", { overview: "1", compact: "grid", initial: "none", opening: ready.opening, rowUpdates: patches ? "1" : undefined })}`, "board", ready, changed, presence, connection, unauthorized);
 }
 export const fetchDriverBoardHistory = (driverIds: string[], before = 0, field = "") =>
   apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before, field }));
