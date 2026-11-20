@@ -10,8 +10,9 @@ import (
 // carry the whole projected board. Subsequent frames replace changed rows in
 // the exact preceding frame, independently of edits in the dispatcher's UI.
 type boardStreamEncoder struct {
-	sequence int
-	last     map[string]boardSectionDigest
+	sequence      int
+	baselineBytes int
+	last          map[string]boardSectionDigest
 }
 
 type boardSectionDigest struct {
@@ -108,6 +109,9 @@ func (s *boardStreamEncoder) frame(event string, board map[string]any) (string, 
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
+	}
+	if full {
+		s.baselineBytes = len(body)
 	}
 	s.last = next
 	s.sequence++

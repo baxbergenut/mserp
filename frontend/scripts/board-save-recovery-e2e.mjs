@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 import { expect } from '@playwright/test';
 
 export async function runBoardSaveRecovery({ page, base, password, sql, schema }) {
@@ -10,6 +11,9 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     INSERT INTO trucks(id,unit_number,status) VALUES('e5070000-0000-0000-0000-000000000002','SAVE-1','assigned');
     INSERT INTO truck_driver_assignments(truck_id,driver_id) VALUES('e5070000-0000-0000-0000-000000000002','${id}');
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(987652,'SAVE-52','Dispatched',500,500,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Dallas","state":"TX"}}]}');
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number,original_rate,driver_rate,miles,note)
+    SELECT id,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date,'WIRE-'||full_name,500,400,100,'Gross Board detail for '||full_name
+    FROM drivers WHERE normalized_name LIKE 'wire test driver %';
     INSERT INTO app_users(username,email,password_hash,role_id) SELECT 'Save second','save-second@example.test',password_hash,role_id FROM app_users WHERE email='investor-e2e@example.com';`);
   const other = await page.context().browser().newContext({baseURL:base});
   try {
@@ -20,7 +24,7 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await wire.send('Network.enable');
     const frames = [];
     wire.on('Network.eventSourceMessageReceived', e => {
-      if (e.eventName === 'board' || e.eventName === 'boardPatch') frames.push({name:e.eventName,bytes:Buffer.byteLength(e.data)});
+      if (e.eventName === 'board' || e.eventName === 'boardPatch') frames.push({name:e.eventName,bytes:Buffer.byteLength(e.data),data:e.data});
     });
     const opening = page.waitForResponse(response => new URL(response.url()).pathname === '/api/driver-board' && response.status() === 200);
     await page.goto(base+'/driver-board');
@@ -44,7 +48,16 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     const fullBytes = frames.filter(f => f.name === 'board').at(-1).bytes;
     const patchBytes = frames.filter(f => f.name === 'boardPatch').at(-1).bytes;
     expect(patchBytes).toBeLessThan(fullBytes / 10);
-    console.log('Status Board peer edit SSE bytes', {fullBytes,patchBytes});
+    const gridFrame = frames.findLast(f => f.name === 'board').data;
+    const legacy = await (await other.request.get('/api/driver-board?weekStart='+week+'&overview=1')).json();
+    expect(legacy.grossEntries.some(entry => entry.note?.startsWith('Gross Board detail for'))).toBe(true);
+    const grid = JSON.parse(gridFrame);
+    expect(grid.grossEntries).toHaveLength(legacy.grossEntries.length);
+    expect(grid.grossEntries.some(entry => Object.hasOwn(entry,'note'))).toBe(false);
+    const legacyGzip = gzipSync(JSON.stringify(legacy),{level:1}).length;
+    const gridGzip = gzipSync(gridFrame,{level:1}).length;
+    expect(gridGzip).toBeLessThan(legacyGzip);
+    console.log('Status Board peer edit SSE bytes', {fullBytes,patchBytes,legacyGzip,gridGzip});
     await wire.detach();
     // Compare real keyboard and clipboard input in the focused cell. Record
     // input-to-PUT separately from PostgreSQL and the receipt's round trip.
