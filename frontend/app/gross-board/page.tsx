@@ -366,9 +366,15 @@ export default function GrossBoardPage() {
     finally { busyKeys.current = []; savingRef.current = false; setSaving(false); }
   }, [canEdit, invalid, loading, week, setDrafts]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
     const delay = pendingWeek || pendingLink ? 0 : Math.max(0, saveAfter.current - performance.now());
+    // All slots from this interaction are staged together at commit. Let the
+    // finished command travel while the browser paints the optimistic values.
+    if (delay === 0) {
+      void save();
+      return;
+    }
     const timer = setTimeout(() => { void save(); }, delay);
     return () => clearTimeout(timer);
   }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);

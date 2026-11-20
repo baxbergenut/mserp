@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DriverBoardEntry } from "@/app/lib/types";
 
-export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
-  entry: DriverBoardEntry; name: string; disabled: boolean;
+export const TrailerCell = memo(function TrailerCell({ driverId, trailerNumber, trailerNote, name, disabled, edit, onHistory }: {
+  driverId: string; trailerNumber: string; trailerNote: string; name: string; disabled: boolean;
   edit: (id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => void;
-  onHistory: () => void;
+  onHistory: (driverId: string, name: string) => void;
 }) {
   // Driver Board spreadsheet, TODAY trailer column (effective displayed colors).
-  const trailer = entry.trailerNumber.trimStart().toUpperCase();
+  const trailer = trailerNumber.trimStart().toUpperCase();
   const trailerColor = trailer.startsWith("HMKD") ? "bg-[#d9ead3] text-black"
     : trailer.startsWith("JBHZ") ? "bg-[#fff2cc] text-black"
     : trailer.startsWith("TA") ? "bg-[#ff9900] text-black" : "";
@@ -47,12 +47,12 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
   return <td ref={cell} data-board-column="trailerNumber" className={`relative overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-zinc-800/80 ${trailerColor}`}
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); show("menu", true); }}
     onKeyDown={event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); event.stopPropagation(); show("menu", true); } }}
-    onMouseEnter={() => { cancel(); if (!open && entry.trailerNote?.trim() && entry.trailerNumber.trim()) show("note"); }} onMouseLeave={leave}>
-    <input type="text" aria-label={`${name} · Trailer`} title={entry.trailerNumber} maxLength={100} readOnly={disabled} value={entry.trailerNumber}
-      onChange={event => edit(entry.driverId, "trailerNumber", event.target.value, event.nativeEvent)}
+    onMouseEnter={() => { cancel(); if (!open && trailerNote?.trim() && trailerNumber.trim()) show("note"); }} onMouseLeave={leave}>
+    <input type="text" aria-label={`${name} · Trailer`} title={trailerNumber} maxLength={100} readOnly={disabled} value={trailerNumber}
+      onChange={event => edit(driverId, "trailerNumber", event.target.value, event.nativeEvent)}
       className={`block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 ${trailerColor ? "text-inherit focus:bg-black/10" : "text-zinc-200 focus:bg-zinc-800"}`} />
-    {entry.trailerNumber.trim() && entry.trailerNote?.trim() && <span role="img" aria-label="Has trailer note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" />}
-    {open && createPortal(<div ref={popup} data-grid-ignore data-board-undo data-board-driver={entry.driverId} role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Trailer actions" : "Trailer note"}
+    {trailerNumber.trim() && trailerNote?.trim() && <span role="img" aria-label="Has trailer note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" />}
+    {open && createPortal(<div ref={popup} data-grid-ignore data-board-undo data-board-driver={driverId} role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Trailer actions" : "Trailer note"}
       style={{ left: open.left, top: open.top, width: "min(300px, calc(100vw - 16px))" }}
       className={`mserp-ui fixed z-[100] text-left text-sm text-zinc-200 ${open.kind === "menu" ? "rounded-lg border border-zinc-700 bg-zinc-900 p-2 ui-popover" : ""}`}
       onMouseEnter={cancel} onMouseLeave={leave} onBlur={leave} onContextMenu={event => event.stopPropagation()}
@@ -67,11 +67,11 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
         }
       }}>
       {open.kind === "menu" ? <>
-        {!disabled && entry.trailerNumber.trim() && <button role="menuitem" className={menuButton} onClick={() => show("note", true)}>{entry.trailerNote?.trim() ? "Edit note" : "Add note"}</button>}
-        {!disabled && entry.trailerNote?.trim() && <button role="menuitem" className={`${menuButton} text-red-300`} onClick={() => { edit(entry.driverId, "trailerNote", ""); setOpen(null); }}>Delete note</button>}
-        <button role="menuitem" className={menuButton} onClick={() => { setOpen(null); onHistory(); }}>View trailer history</button>
-      </> : <textarea aria-label={`Note for trailer ${entry.trailerNumber}`} readOnly={disabled} maxLength={5000} rows={4} value={entry.trailerNote ?? ""} placeholder="Add a note…"
-        onChange={event => edit(entry.driverId, "trailerNote", event.target.value, event.nativeEvent)} className="block w-full resize-y rounded border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-200 outline-none focus:border-blue-500" />}
+        {!disabled && trailerNumber.trim() && <button role="menuitem" className={menuButton} onClick={() => show("note", true)}>{trailerNote?.trim() ? "Edit note" : "Add note"}</button>}
+        {!disabled && trailerNote?.trim() && <button role="menuitem" className={`${menuButton} text-red-300`} onClick={() => { edit(driverId, "trailerNote", ""); setOpen(null); }}>Delete note</button>}
+        <button role="menuitem" className={menuButton} onClick={() => { setOpen(null); onHistory(driverId, name); }}>View trailer history</button>
+      </> : <textarea aria-label={`Note for trailer ${trailerNumber}`} readOnly={disabled} maxLength={5000} rows={4} value={trailerNote ?? ""} placeholder="Add a note…"
+        onChange={event => edit(driverId, "trailerNote", event.target.value, event.nativeEvent)} className="block w-full resize-y rounded border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-200 outline-none focus:border-blue-500" />}
     </div>, document.body)}
   </td>;
-}
+});

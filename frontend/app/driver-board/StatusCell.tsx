@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { statuses, statusLabel } from "./board";
 
@@ -8,6 +9,7 @@ export function StatusCell({ name, value, disabled, canAdvance, onChange, onAdva
   onChange: (value: string) => void; onAdvance: () => void; choices?:string[];
 }) {
   const label = statusLabel(value);
+  const options = useMemo(() => choices.map(status => <option key={status} value={status} className="bg-zinc-900 text-zinc-200">{statusLabel(status)}</option>), [choices]);
   return <div className="flex h-8 items-center">
     <button type="button" data-grid-display aria-label={`${name} · Advance load`} title={label || "No status"} disabled={disabled || !canAdvance}
       onClick={event => { if (event.detail < 2) onAdvance(); }}
@@ -18,7 +20,7 @@ export function StatusCell({ name, value, disabled, canAdvance, onChange, onAdva
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
         <option value="" className="bg-zinc-900 text-zinc-200">—</option>
         {value && !choices.includes(value) && <option value={value} className="bg-zinc-900 text-zinc-200" disabled>{statusLabel(value)} (previous)</option>}
-        {choices.map(status => <option key={status} value={status} className="bg-zinc-900 text-zinc-200">{statusLabel(status)}</option>)}
+        {options}
       </select>
     </span>
   </div>;

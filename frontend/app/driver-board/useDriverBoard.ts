@@ -152,35 +152,6 @@ export function useDriverBoard(lockedDriverId?: string) {
     }
   }, [actionBusy, board, dirty, loading, saving]);
 
-  const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string, patch?: Partial<DriverBoardEntry>) => {
-    if (!canEdit || orderSavingRef.current || actionRow.current === id) return;
-    editTimes.current.set(id, performance.now());
-    lastTextEdit.current = -Infinity;
-    activity.current += 1;
-    if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
-    const last = draftUndo.current.at(-1);
-    if (!last || last.group !== editSession.current.group) draftUndo.current.push({ id, field, before: changesRef.current[id], group: editSession.current.group });
-    const current = changesRef.current;
-    const baseline = savedRef.current[id];
-    const next = { ...(current[id] ?? baseline), [field]: value, ...patch };
-    if (field === "trailerNumber" && value !== (current[id] ?? baseline).trailerNumber) next.trailerNote = "";
-    if (field === "currentLoad") { next.destination = ""; next.eta = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : "READY"; }
-    if (field === "status") next.statusEdited = true;
-    const result = { ...current, [id]: next };
-    // While saving, a revert must still be sent after the first write finishes.
-    if (!inlineRows.current.has(id) && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
-    changesRef.current = result;
-    setChanges(result);
-  }, [canEdit]);
-
-  const editText = useCallback((id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => {
-    edit(id, field, value);
-    // A paste, drop or explicit selection already contains the finished value.
-    if (event && !(event instanceof InputEvent && ["insertFromPaste", "insertFromDrop"].includes(event.inputType))) {
-      lastTextEdit.current = performance.now();
-    }
-  }, [edit]);
-
   async function setAutoOrder(dispatcherId: string, enabled: boolean) {
     if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) throw new Error("Finish the current save before changing Auto-order.");
     orderSavingRef.current = true;
@@ -297,6 +268,35 @@ export function useDriverBoard(lockedDriverId?: string) {
       syncSaving();
     }
   }, [canEdit, loading, refreshLoads, syncSaving]);
+
+  const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string, patch?: Partial<DriverBoardEntry>, event?: Event) => {
+    if (!canEdit || orderSavingRef.current || actionRow.current === id) return;
+    editTimes.current.set(id, performance.now());
+    const typing = !!event && !(event instanceof InputEvent && ["insertFromPaste", "insertFromDrop"].includes(event.inputType));
+    lastTextEdit.current = typing ? performance.now() : -Infinity;
+    activity.current += 1;
+    if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
+    const last = draftUndo.current.at(-1);
+    if (!last || last.group !== editSession.current.group) draftUndo.current.push({ id, field, before: changesRef.current[id], group: editSession.current.group });
+    const current = changesRef.current;
+    const baseline = savedRef.current[id];
+    const next = { ...(current[id] ?? baseline), [field]: value, ...patch };
+    if (field === "trailerNumber" && value !== (current[id] ?? baseline).trailerNumber) next.trailerNote = "";
+    if (field === "currentLoad") { next.destination = ""; next.eta = ""; next.resolveCurrentLoad = true; next.statusEdited = false; next.status = value.trim() ? "DISPATCHED" : "READY"; }
+    if (field === "status") next.statusEdited = true;
+    const result = { ...current, [id]: next };
+    // While saving, a revert must still be sent after the first write finishes.
+    if (!inlineRows.current.has(id) && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
+    changesRef.current = result;
+    setChanges(result);
+    // The completed value is already in changesRef. Start its request in the
+    // input event so rendering the grid can overlap the round trip.
+    if (!typing && !error) void save();
+  }, [canEdit, error, save]);
+
+  const editText = useCallback((id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => {
+    edit(id, field, value, undefined, event);
+  }, [edit]);
 
   useEffect(() => {
     if (!dirty || error || loading || orderSaving) return;
