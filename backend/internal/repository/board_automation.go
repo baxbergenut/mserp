@@ -217,29 +217,43 @@ func boardAutomationContext(load *BoardLoad, stop *BoardStop, truck string) stri
 
 // Resolve a unique imported load without manufacturing a Gross Board plan.
 func importedBoardLoad(ctx context.Context, tx pgx.Tx, number string) (*BoardLoad, error) {
-	// SourceDriver is unused here: operational selection belongs to Clustie.
-	// Avoid rebuilding the fleet-wide financial assignment view for each driver.
-	rows, err := tx.Query(ctx, `SELECT id,load_id,status,synced_at::text,raw_payload FROM loads l WHERE lower(btrim(load_id))=lower(btrim($1)) AND `+boardAvailableSourceSQL+` ORDER BY id LIMIT 2`, number)
+	found, err := importedBoardLoads(ctx, tx, []string{number})
+	return found[number], err
+}
+
+// Use the database's exact number matching for each requested spelling. A second
+// available record makes that number ambiguous even if its stops are identical.
+func importedBoardLoads(ctx context.Context, tx pgx.Tx, numbers []string) (map[string]*BoardLoad, error) {
+	if len(numbers) == 0 {
+		return nil, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT n.number,l.id,l.load_id,l.status,l.synced_at::text,`+boardStopSourceSQL+`
+ FROM (SELECT DISTINCT unnest($1::text[]) number) n CROSS JOIN LATERAL (
+ SELECT id,load_id,status,synced_at,raw_payload FROM loads l
+ WHERE lower(btrim(load_id))=lower(btrim(n.number)) AND `+boardAvailableSourceSQL+`
+ ORDER BY id LIMIT 2) l`, numbers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var chosen *BoardLoad
+	found := make(map[string]*BoardLoad)
 	for rows.Next() {
+		var number string
 		var p BoardLoad
 		var id int
 		var raw []byte
-		if err = rows.Scan(&id, &p.Number, &p.SourceStatus, &p.SyncedAt, &raw); err != nil {
+		if err = rows.Scan(&number, &id, &p.Number, &p.SourceStatus, &p.SyncedAt, &raw); err != nil {
 			return nil, err
 		}
-		if chosen != nil {
-			return nil, nil
+		if _, seen := found[number]; seen {
+			found[number] = nil
+			continue
 		}
 		p.LoadID = &id
 		p.Stops = boardStops(raw)
-		chosen = &p
+		found[number] = &p
 	}
-	return chosen, rows.Err()
+	return found, rows.Err()
 }
 
 // Read cached evidence only; displaying the board never advances the detector.

@@ -90,23 +90,27 @@ func TestBoardLoadsRevisionFreshness(t *testing.T) {
 	view := BoardLoads{Current: &load, Week: []BoardLoad{load}, Next: []BoardLoad{load}, Earlier: []BoardLoad{load}, Hidden: []BoardLoad{load}, Unavailable: []BoardLoad{load}}
 	state := boardLoadState{ManualStopTimes: map[string]string{"load:99116/pickup": "03:00 FRI"}}
 	before, _ := json.Marshal(view)
-	revision := boardLoadsRevision(view, state, 1)
+	revision := boardLoadsRevision(view, state, 1, false)
 	after, _ := json.Marshal(view)
 	if string(before) != string(after) {
 		t.Fatal("revision stripped freshness from response")
+	}
+	view.Next[0].Overdue = true
+	if boardLoadsRevision(view, state, 1, true) == revision {
+		t.Fatal("legacy digest should include the overdue display flag")
 	}
 	view.Current.SyncedAt = "new"
 	for _, list := range [][]BoardLoad{view.Week, view.Next, view.Earlier, view.Hidden, view.Unavailable} {
 		list[0].SyncedAt = "new"
 	}
-	if boardLoadsRevision(view, state, 1) != revision {
+	if boardLoadsRevision(view, state, 1, false) != revision {
 		t.Fatal("freshness-only update invalidated load revision")
 	}
-	if boardLoadsRevision(view, state, 2) == revision {
+	if boardLoadsRevision(view, state, 2, false) == revision {
 		t.Fatal("board version change was not fenced")
 	}
 	view.Next[0].Stops[0].Schedule.Label = "PU 04:00 FRI"
-	if boardLoadsRevision(view, state, 1) == revision {
+	if boardLoadsRevision(view, state, 1, false) == revision {
 		t.Fatal("changed stop schedule was not fenced")
 	}
 }

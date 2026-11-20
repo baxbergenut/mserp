@@ -30,7 +30,8 @@ func testBoardInTransitQueue(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	}()
 	exec(`INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES
  (88961,'TRANSIT-PAST','in_transit',0,0,'{}'),(88962,'TRANSIT-FUTURE',' In Transit ',0,0,'{}'),
- (88963,'TRANSIT-MANUAL','IN-TRANSIT',0,0,'{}'),(88964,'TRANSIT-PENDING','Dispatched',0,0,'{}')`)
+ (88963,'TRANSIT-MANUAL','IN-TRANSIT',0,0,'{}'),(88964,'TRANSIT-PENDING','Dispatched',0,0,
+ '{"stops":[{"ordering":1,"stop_type":"pickup","schedule_type":"window","scheduled_end_at":"2026-11-09T12:01:00Z"}]}')`)
 	exec(`INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id) VALUES
  ($1,'2026-10-01','TRANSIT-PAST',88961),($1,'2026-11-20','TRANSIT-FUTURE',88962),
  ($1,'2026-11-08','TRANSIT-PENDING',88964),($1,'2026-11-09','TRANSIT-UNMATCHED',NULL)`, d.ID)
@@ -78,6 +79,20 @@ func testBoardInTransitQueue(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if view().Revision != v.Revision {
 		t.Fatal("rejected add mutated the board")
 	}
+	// The real pickup deadline passes between the dispatcher's read and action.
+	repo.now = func() time.Time { return time.Date(2026, 11, 9, 12, 2, 0, 0, time.UTC) }
+	if p := find(view().Next, "TRANSIT-PENDING"); p == nil || !p.Overdue {
+		t.Fatal("pickup deadline did not change the displayed queue")
+	}
+	order := make([]string, 0, len(v.Next))
+	for _, plan := range v.Next {
+		order = append(order, plan.PlanID)
+	}
+	ordered, err := repo.ChangeLoads(ctx, BoardLoadAction{DriverID: d.ID, Version: version, FromDate: v.FromDate, Revision: v.Revision, Action: "order", Order: order}, "")
+	if err != nil {
+		t.Fatal("displayed deadline rejected an otherwise current load action", err)
+	}
+	v = ordered.Loads
 	// A status change returns an old plan to the ordinary date window.
 	exec(`UPDATE loads SET status='Dispatched' WHERE id=88961`)
 	changed := view()
