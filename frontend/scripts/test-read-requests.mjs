@@ -123,3 +123,44 @@ try {
   stop();
   assert.equal(sockets[1].closed,true);
 } finally { globalThis.EventSource = previousEventSource; }
+
+
+// Cursor announcements on a slow connection are independent of board saves.
+// Only the latest cell is retained, and an older DELETE cannot erase a resumed cursor.
+{
+  const { createBoardCursorPublisher } = await import(compile("../app/components/boards/boardCursorPublisher.ts"));
+  const calls = [];
+  const writes = [], deletes = [];
+  const cursor = createBoardCursorPublisher(() => true,
+    cell => { calls.push(cell); return new Promise(resolve => writes.push(resolve)); },
+    () => { calls.push('clear'); return new Promise(resolve => deletes.push(resolve)); });
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  cursor.select('first');
+  cursor.select('intermediate');
+  cursor.select('latest');
+  cursor.resume();
+  await new Promise(resolve => setTimeout(resolve, 85));
+  assert.deepEqual(calls, ['first']);
+  writes.shift()();
+  await tick();
+  assert.deepEqual(calls, ['first','latest']);
+  cursor.leave();
+  cursor.resume();
+  cursor.select('returned');
+  assert.deepEqual(calls, ['first','latest','clear']);
+  writes.shift()();
+  await tick();
+  deletes.shift()();
+  await tick();
+  assert.deepEqual(calls, ['first','latest','clear','clear']);
+  deletes.shift()();
+  await tick();
+  assert.equal(calls.at(-1), 'returned');
+  writes.shift()();
+  await tick();
+  cursor.resume();
+  assert.equal(calls.length, 5);
+  cursor.leave();
+  deletes.shift()();
+  await tick();
+}

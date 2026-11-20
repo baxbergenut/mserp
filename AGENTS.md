@@ -1187,7 +1187,7 @@ status while background source evidence refreshes.
   projection and session checks remain per subscriber. Presence read/write/delete
   require board.read and never grant board.write. Cursors identify driver, date,
   load slot and field (including Daily loads and notes), expire after 30 seconds,
-  heartbeat every 10 seconds and clear on leave. Both boards share
+  renew after 18 seconds and clear on leave. Cursor requests use low browser priority. Both boards share
   `components/boards/useLiveBoard.ts` for stream/presence lifecycle.
   `liveMerge.ts` retains dirty/saving slots and active day-dialog baselines while
   other slots refresh immediately. Daily loads sends only fields edited since
