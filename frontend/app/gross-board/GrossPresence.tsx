@@ -9,17 +9,26 @@ type Cursor = { key: string; names: string; label: string; color: string; left: 
 export function GrossPresence({ presence, week }: { presence: BoardPresenceStore<GrossBoardPresence>; week: string }) {
   const snapshot = useBoardPeers(presence);
   const peers = useMemo(() => snapshot.filter(p => p.weekStart === week), [snapshot, week]);
+  return peers.length ? <GrossCursorOverlay peers={peers} /> : null;
+}
+
+function GrossCursorOverlay({ peers }: { peers: GrossBoardPresence[] }) {
   const [cursors,setCursors] = useState<Cursor[]>([]);
   useLayoutEffect(() => {
     let frame=0;
+    const cellsByDriver = new Map<string, HTMLElement[]>();
     const update=()=>{
       frame=0;
       const groups = new Map<string,{ cell: HTMLElement; people: GrossBoardPresence[] }>();
-      const roots = Array.from(document.querySelectorAll<HTMLElement>('[data-gross-driver]'));
       const dialog = document.querySelector('[data-gross-editor-day]');
       for(const p of peers){
         const field=p.column==="note"?"loadNumber":p.column;
-        const matches=roots.filter(e=>e.dataset.grossDriver===p.driverId&&(e.dataset.grossDate??"")===p.date&&(e.dataset.grossField===field||e.querySelector(`[data-gross-field="${field}"]`)));
+        let cells = cellsByDriver.get(p.driverId);
+        if (!cells) {
+          cells = Array.from(document.querySelectorAll<HTMLElement>(`[data-gross-driver="${CSS.escape(p.driverId)}"]`));
+          cellsByDriver.set(p.driverId, cells);
+        }
+        const matches=cells.filter(e=>(e.dataset.grossDate??"")===p.date&&(e.dataset.grossField===field||e.querySelector(`[data-gross-field="${field}"]`)));
         const inDialog=matches.filter(e=>e.closest('[data-gross-editor-day]')&&Number(e.dataset.grossSlot)===p.slot);
         const root=dialog ? inDialog[0] : matches.find(e=>Number(e.dataset.grossSlot??0)===p.slot) ?? matches.find(e=>e.dataset.grossSlot==="-1");
         if(!root)continue;
@@ -50,8 +59,12 @@ export function GrossPresence({ presence, week }: { presence: BoardPresenceStore
       setCursors(result);
     };
     const schedule=()=>{if(!frame)frame=requestAnimationFrame(update)};
-    const observer=new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element&&r.target.closest('[data-gross-cursor-layer]'))))schedule()});
-    observer.observe(document.body,{childList:true,subtree:true});
+    const observer = new MutationObserver(records => {
+      if (records.every(r => r.target instanceof Element && r.target.closest('[data-gross-cursor-layer]'))) return;
+      cellsByDriver.clear();
+      schedule();
+    });
+    observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["data-gross-driver","data-gross-date","data-gross-slot","data-gross-field"]});
     document.addEventListener('scroll',schedule,true);window.addEventListener('resize',schedule);schedule();
     return()=>{cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('scroll',schedule,true);window.removeEventListener('resize',schedule)};
   },[peers]);

@@ -35,6 +35,13 @@ try {
   await page.clock.setFixedTime(new Date('2026-11-12T14:00:00Z'));
   await page.addInitScript(() => {
     window.EventSource = class extends EventTarget { constructor() { super(); setTimeout(() => this.dispatchEvent(new Event('open')), 0); } close() {} };
+    let fleetScans = 0;
+    const queryAll = document.querySelectorAll.bind(document);
+    document.querySelectorAll = selector => {
+      if (selector === '[data-gross-driver]') fleetScans++;
+      return queryAll(selector);
+    };
+    window.readFleetScans = () => fleetScans;
     window.openingTimes = []; window.longTasks = [];
     new PerformanceObserver(list => window.longTasks.push(...list.getEntries().map(e => ({ start: e.startTime, duration: e.duration })))).observe({ type: 'longtask', buffered: true });
     window.measureBoard = (path, start = performance.now()) => {
@@ -88,6 +95,8 @@ try {
       && document.querySelectorAll('td[data-gross-field=truck]').length === 160;
   });
   if (!selectionPreserved) throw new Error('Spreadsheet navigation must mount every row without replacing an existing editor');
+  const fleetScans = await page.evaluate(() => window.readFleetScans());
+  if (fleetScans) throw new Error(`Gross Board performed ${fleetScans} full driver-cell scans with no peers`);
   cpu.push(await cdp.send('Performance.getMetrics'));
   console.log(JSON.stringify({ cpu: cpu.map(v => v.metrics.filter(m => ['ScriptDuration','LayoutDuration','RecalcStyleDuration','TaskDuration','Nodes'].includes(m.name))), rowHeight: await page.locator('td[data-gross-driver]').first().evaluate(el => el.closest('tr').getBoundingClientRect().height), drivers: 160, entries: entries.length, apiDelayMS: delay, measurements: await page.evaluate(() => window.openingTimes), errors }, null, 2));
   if (errors.length) process.exitCode = 1;
