@@ -161,6 +161,45 @@ func TestGrossBoardDatabase(t *testing.T) {
 	if _, err = pool.Exec(ctx, string(cancelledMigration)); err != nil {
 		t.Fatal(err)
 	}
+	t.Run("source protection follows active transfers and the original slot", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		exec := func(sql string) {
+			t.Helper()
+			if _, err := tx.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+		const driver = "00000000-0000-0000-0000-000000000009"
+		input := PaySourceAcceptance{DriverID: driver, Date: "2026-09-20", Slot: 1}
+		check := func(want string) {
+			t.Helper()
+			err := assertPaySourceOpen(ctx, tx, input)
+			if (want == "" && err != nil) || (want != "" && (err == nil || !strings.Contains(err.Error(), want))) {
+				t.Fatalf("expected %q, got %v", want, err)
+			}
+		}
+		exec(`CREATE TEMP TABLE payroll_settlements(driver_id uuid, week_start date, finalized boolean);
+ CREATE TEMP TABLE investor_pay_weeks(week_start date, finalized boolean, report jsonb);
+ INSERT INTO pg_temp.gross_board_transfers(driver_id,source_date,source_slot,settlement_date,active)
+ VALUES ('` + driver + `','2026-09-20',1,'2026-09-21',false);
+ INSERT INTO pg_temp.payroll_settlements VALUES ('` + driver + `','2026-09-14',true);
+ INSERT INTO pg_temp.investor_pay_weeks VALUES ('2026-09-21',true,
+ '{"loads":[{"sourceDriverId":"` + driver + `","date":"2026-09-20","slot":1}]}')`)
+		check("Reopen this driver settlement")
+		exec("UPDATE pg_temp.gross_board_transfers SET active=true")
+		check("Reopen the related investor settlement")
+		exec(`UPDATE pg_temp.investor_pay_weeks SET report = '{"loads":[{"sourceDriverId":"` + driver + `",
+ "sourceDate":"2026-09-20","sourceSlot":2,"date":"2026-09-20","slot":1}]}'`)
+		check("")
+		exec(`UPDATE pg_temp.investor_pay_weeks SET report=jsonb_set(report,'{loads,0,sourceSlot}','1')`)
+		check("Reopen the related investor settlement")
+		exec(`UPDATE pg_temp.payroll_settlements SET week_start='2026-09-21'`)
+		check("Reopen this driver settlement")
+	})
 	t.Run("inactive roster uses selected week", func(t *testing.T) {
 		const inactiveDriver = "00000000-0000-0000-0000-000000000002"
 		for _, tc := range []struct {

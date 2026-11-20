@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -615,9 +616,14 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 		if enteredMiles == "" {
 			enteredMiles = e.Miles
 		}
+		// The financial locks cover this entire slot edit. Each validation uses
+		// the same source location before the first canonical write.
+		checkPaySource := sync.OnceValue(func() error {
+			return assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot})
+		})
 		// Preserve an existing selection for older clients that omit the field.
 		if oldTrip != nil {
-			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
+			if err = checkPaySource(); err != nil {
 				return nil, err
 			}
 		}
@@ -649,7 +655,7 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 				}
 				return nil, ErrGrossBoardTrip
 			}
-			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
+			if err = checkPaySource(); err != nil {
 				return nil, err
 			}
 			var occupied bool
@@ -713,7 +719,7 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 			if parseErr != nil || inputErr != nil || actual != requested {
 				return nil, grossBoardRejection{cause: grossBoardReviewError(e, "DataTruck driver gross changed"), code: "source_values_changed", fields: []string{"driverRate"}, source: map[string]string{"driverRate": driverGross}}
 			}
-			if err = assertPaySourceOpen(ctx, tx, PaySourceAcceptance{DriverID: e.DriverID, Date: e.Date, Slot: e.Slot}); err != nil {
+			if err = checkPaySource(); err != nil {
 				return nil, err
 			}
 		}
