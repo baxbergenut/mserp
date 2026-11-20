@@ -278,7 +278,7 @@ export default function DriverBoardPage() {
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Dispatcher order could not be saved. Try again."); return false; }
   }
   function textCell(entry: DriverBoardEntry, name: string, field: Parameters<typeof TextCell>[0]["field"], label: string, limit: number) {
-    return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={disabled || !!board?.drivers.find(d => d.id === entry.driverId)?.departed} edit={editText} />;
+    return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={!canEdit || loading || leaving || state.orderSaving || state.actionDriver === entry.driverId || !!board?.drivers.find(d => d.id === entry.driverId)?.departed} edit={editText} />;
   }
 
   function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
@@ -414,7 +414,7 @@ export default function DriverBoardPage() {
             })}
           </tr>) : []),
               ...members.map(d => <ProgressiveBoardRow key={d.id} immediate={renderedDrivers.indexOf(d) < 24 || rowDrag.active} columns={columns.length} height={33} label={d.fullName}>{() => {
-            const disabled = !canEdit || loading || leaving || state.actionBusy || !!d.departed;
+            const disabled = !canEdit || loading || leaving || state.orderSaving || state.actionDriver === d.id || !!d.departed;
             const orderDisabled = disabled || saving || dirty;
             const i = renderedDrivers.indexOf(d);
             const entry = entries[d.id];
@@ -432,7 +432,7 @@ export default function DriverBoardPage() {
             const stop = loads?.current?.stops.find(s => s.key === loads.stopKey);
             const stopType = stop?.type.toLowerCase();
             const stopLabel = stopType === "pickup" ? "PU" : stopType === "delivery" ? "DEL" : "";
-            const destinationBusy = dirty || saving || loading || leaving;
+            const destinationBusy = state.rowWaiting(d.id) || leaving;
             const next = loads?.next[0];
             const nextStop = next?.stops.find(stop => stop.type.toLowerCase() === "pickup");
             const nextPickup = nextStop?.schedule;
@@ -532,8 +532,8 @@ export default function DriverBoardPage() {
     <CellPresence presence={state.presence} />
     {nextStop && <NextStopDialog name={nextStop.name} status={nextStop.status} loads={nextStop.loads}
       onClose={() => setNextStop(null)} onApply={stopKey => advanceLoad(nextStop.id, nextStop.loads, stopKey)} />}
-    {etaEditor && entries[etaEditor.id]?.status !== "READY" && <ETAEditor key={etaEditor.id} targetChanged={etaEditor.target !== etaTarget(entries[etaEditor.id], board?.loads[etaEditor.id])} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
-    {pickupEditor && <ETAEditor key={`${pickupEditor.id}:${pickupEditor.planId}:${pickupEditor.pickup.key}`} anchor={pickupEditor.anchor} name={pickupEditor.name} value="" pickup={board?.loads[pickupEditor.id]?.next.find(load => load.planId === pickupEditor.planId)?.stops.find(stop => stop.key === pickupEditor.pickup.key) ?? pickupEditor.pickup} waiting={dirty || saving || loading} onAction={async action => {
+    {etaEditor && entries[etaEditor.id]?.status !== "READY" && <ETAEditor key={etaEditor.id} targetChanged={etaEditor.target !== etaTarget(entries[etaEditor.id], board?.loads[etaEditor.id])} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={state.rowWaiting(etaEditor.id)} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
+    {pickupEditor && <ETAEditor key={`${pickupEditor.id}:${pickupEditor.planId}:${pickupEditor.pickup.key}`} anchor={pickupEditor.anchor} name={pickupEditor.name} value="" pickup={board?.loads[pickupEditor.id]?.next.find(load => load.planId === pickupEditor.planId)?.stops.find(stop => stop.key === pickupEditor.pickup.key) ?? pickupEditor.pickup} waiting={state.rowWaiting(pickupEditor.id)} onAction={async action => {
       const view = board?.loads[pickupEditor.id];
       if (!view || view.next[0]?.planId !== pickupEditor.planId) throw new Error("Next load changed. Close and reopen the pickup time.");
       await state.changeLoads(pickupEditor.id, view, { ...action, planId: pickupEditor.planId, stopKey: pickupEditor.pickup.key });
@@ -543,6 +543,6 @@ export default function DriverBoardPage() {
     {setupDriver && <DriverIntakeSetup key={setupDriver.intakeId} intakeId={setupDriver.intakeId} name={setupDriver.fullName} onClose={() => setSetupDriver(null)} onSaved={() => { setSetupDriver(null); setOrderNotice("Saved."); state.refresh(); }} />}
     {terminating&&<DriverStatusDialog driver={terminating} startTerminated onClose={()=>setTerminating(null)} onSaved={()=>{setTerminating(null);void reload();}}/>}
     {history && <BoardHistory key={`${history.ids.join(",")}:${history.field ?? ""}`} initialField={history.field} driverIds={history.ids} title={history.name} canUndo={canEdit} waiting={dirty || saving || loading} onUndo={(id, driverId) => state.undo(id, driverId, true)} onClose={() => setHistory(null)} onLoads={history.driverId ? () => { const d = board?.drivers.find(d => d.id === history.driverId); if (d) { setLoadDriver({ id: d.id, name: d.fullName }); setHistory(null); } } : undefined} />}
-    {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit && !board.drivers.find(d => d.id === loadDriver.id)?.departed} waiting={dirty || saving || loading} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
+    {loadDriver && board?.loads[loadDriver.id] && <BoardLoads key={loadDriver.id} driverId={loadDriver.id} name={loadDriver.name} initial={board.loads[loadDriver.id]} canEdit={canEdit && !board.drivers.find(d => d.id === loadDriver.id)?.departed} waiting={state.rowWaiting(loadDriver.id)} onChange={state.changeLoads} onClose={() => setLoadDriver(null)} onHistory={() => { setHistory({ driverId: loadDriver.id, name: `${loadDriver.name} · History`, ids: [loadDriver.id] }); setLoadDriver(null); }} />}
   </div>;
 }

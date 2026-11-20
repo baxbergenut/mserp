@@ -18,7 +18,8 @@ export function useDriverBoard(lockedDriverId?: string) {
   const [changes, setChanges] = useState<Record<string, DriverBoardEntry>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [actionBusy, setActionBusy] = useState(false);
+  const [actionDriver, setActionDriver] = useState<string | null>(null);
+  const actionBusy = actionDriver !== null;
   const [orderSaving, setOrderSaving] = useState(false);
   const orderSavingRef = useRef(false);
   const [error, setError] = useState("");
@@ -29,7 +30,12 @@ export function useDriverBoard(lockedDriverId?: string) {
   const idle = useRef(false);
   const refreshWanted = useRef<(board?: DriverBoard) => void>(() => {});
   const resumeLive = useRef<() => void>(() => {});
-  const busyDrivers = useRef<string[]>([]);
+  const inlineRows = useRef(new Set<string>());
+  const actionRow = useRef<string | null>(null);
+  const syncSaving = useCallback(() => {
+    savingRef.current = inlineRows.current.size > 0 || actionRow.current !== null;
+    setSaving(savingRef.current);
+  }, []);
   const lockedDriver = useRef(lockedDriverId);
   const live = useBoardLive(useCallback((value?: DriverBoard) => refreshWanted.current(value), []));
   const connectedRef = useRef(false);
@@ -39,8 +45,10 @@ export function useDriverBoard(lockedDriverId?: string) {
   const undoStack = useRef<{ id: number; driverId: string; group: number }[]>([]);
   const draftUndo = useRef<{ id: string; field: keyof DriverBoardEntry; before?: DriverBoardEntry; group: number }[]>([]);
   const lastTextEdit = useRef(-Infinity);
-  const response = useRef({ open: 0, save: 0, submitted: 0, load: 0 });
-  const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0), confirmedLoad = useRef(0);
+  const response = useRef({ open: 0, load: 0 });
+  const editTimes = useRef(new Map<string, number>());
+  const confirmedSaves = useRef<{ start: number; sent: number; received: number }[]>([]);
+  const openStarted = useRef(0), confirmedLoad = useRef(0);
   const editSession = useRef<{ id: string; field: keyof DriverBoardEntry; group: number } | null>(null);
   const editSequence = useRef(0);
   const pendingUndo = useRef(false);
@@ -53,7 +61,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     idle.current = !loading && !eldRefreshing;
     lockedDriver.current = lockedDriverId;
     resumeLive.current();
-  }, [dirty, saving, loading, eldRefreshing, lockedDriverId]);
+  }, [dirty, saving, actionDriver, loading, eldRefreshing, lockedDriverId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +84,8 @@ export function useDriverBoard(lockedDriverId?: string) {
       if (cancelled) return;
       latest = value;
       if (!idle.current || document.hidden) return;
-      const held = new Set([...Object.keys(changesRef.current), ...busyDrivers.current]);
+      const held = new Set([...Object.keys(changesRef.current), ...inlineRows.current]);
+      if (actionRow.current) held.add(actionRow.current);
       const focused = document.activeElement?.matches('input,textarea,select') ? selectedBoardCell(document.activeElement) : null;
       if (focused) held.add(focused.driverId);
       if (lockedDriver.current) held.add(lockedDriver.current);
@@ -138,16 +147,14 @@ export function useDriverBoard(lockedDriverId?: string) {
       recordBoardPaint("status", "load", confirmedLoad.current, confirmedLoad.current, response.current.load);
       confirmedLoad.current = 0;
     }
-    if (!dirty && !saving && confirmedEdit.current) {
-      recordBoardPaint("status", "save", confirmedEdit.current, response.current.submitted, response.current.save);
-      confirmedEdit.current = 0;
+    for (const { start, sent, received } of confirmedSaves.current.splice(0)) {
+      recordBoardPaint("status", "save", start, sent, received);
     }
   }, [actionBusy, board, dirty, loading, saving]);
 
   const edit = useCallback((id: string, field: keyof DriverBoardEntry, value: string, patch?: Partial<DriverBoardEntry>) => {
-    if (!canEdit) return;
-    editStarted.current = performance.now();
-    confirmedEdit.current = 0;
+    if (!canEdit || orderSavingRef.current || actionRow.current === id) return;
+    editTimes.current.set(id, performance.now());
     lastTextEdit.current = -Infinity;
     activity.current += 1;
     if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
@@ -161,7 +168,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     if (field === "status") next.statusEdited = true;
     const result = { ...current, [id]: next };
     // While saving, a revert must still be sent after the first write finishes.
-    if (!savingRef.current && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
+    if (!inlineRows.current.has(id) && JSON.stringify(next) === JSON.stringify(baseline)) delete result[id];
     changesRef.current = result;
     setChanges(result);
   }, [canEdit]);
@@ -240,31 +247,36 @@ export function useDriverBoard(lockedDriverId?: string) {
   }, []);
 
   const save = useCallback(async () => {
-    if (!canEdit || savingRef.current || !Object.keys(changesRef.current).length || loading) return;
-    savingRef.current = true; activity.current += 1;
-    const snapshot = { ...changesRef.current };
-    busyDrivers.current = Object.keys(snapshot);
-    const draftActions = draftUndo.current;
+    if (!canEdit || orderSavingRef.current || loading) return;
+    const snapshot = Object.fromEntries(Object.entries(changesRef.current).filter(([id]) =>
+      !inlineRows.current.has(id) && actionRow.current !== id));
+    const ids = Object.keys(snapshot);
+    if (!ids.length) return;
+    for (const id of ids) inlineRows.current.add(id);
+    const draftActions = draftUndo.current.filter(action => snapshot[action.id]);
+    draftUndo.current = draftUndo.current.filter(action => !snapshot[action.id]);
     const baselines = { ...savedRef.current };
-    draftUndo.current = [];
-    setSaving(true); setError("");
+    const start = Math.max(...ids.map(id => editTimes.current.get(id) ?? 0));
+    syncSaving();
+    setError("");
     try {
       const commands = Object.values(snapshot).map(draft => ({
         ...draft, editedFields: editedBoardFields(baselines[draft.driverId], draft),
       }));
-      response.current.submitted = performance.now();
+      const sent = performance.now();
       const committed = await saveDriverBoard(commands);
-      response.current.save = performance.now();
+      const received = performance.now();
       const loadIds = committed.filter(e => { const base = savedRef.current[e.driverId]; return !base || base.currentLoad !== e.currentLoad || base.status !== e.status || base.destination !== e.destination || base.eta !== e.eta || snapshot[e.driverId]?.resolveCurrentLoad; }).map(e => e.driverId);
       // Advance the authoritative refs before releasing the save lock. A new
       // keystroke can arrive before React renders this response.
       committed.forEach(e => { savedRef.current[e.driverId] = e; });
       const remaining = reconcileDriverBoard(changesRef.current, snapshot, committed);
-      if (!Object.keys(remaining).length) confirmedEdit.current = editStarted.current;
+      if (ids.every(id => !remaining[id])) confirmedSaves.current.push({ start, sent, received });
       changesRef.current = remaining;
       setChanges(remaining);
       const editOrder = draftActions.map(a => a.id);
       for (const e of [...committed].sort((a,b) => editOrder.lastIndexOf(a.driverId) - editOrder.lastIndexOf(b.driverId))) if (e.undoId) undoStack.current.push({ id: e.undoId, driverId: e.driverId, group: draftActions.findLast(a => a.id === e.driverId)?.group ?? ++editSequence.current });
+      undoStack.current.sort((a, b) => a.group - b.group);
       setBoard(current => {
         if (!current) return current;
         const entries = Object.fromEntries(current.entries.map(e => [e.driverId, e]));
@@ -279,12 +291,15 @@ export function useDriverBoard(lockedDriverId?: string) {
         return { ...current, loads, entries: Object.values(entries), drivers: applyCommittedFleetStatus(current.drivers, committed) };
       });
       if (loadIds.length) void refreshLoads(loadIds);
-    } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current]; setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
-    finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); }
-  }, [canEdit, loading, refreshLoads]);
+    } catch (err) { draftUndo.current = [...draftActions, ...draftUndo.current].sort((a, b) => a.group - b.group); setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here."); }
+    finally {
+      for (const id of ids) inlineRows.current.delete(id);
+      syncSaving();
+    }
+  }, [canEdit, loading, refreshLoads, syncSaving]);
 
   useEffect(() => {
-    if (!dirty || saving || error || loading) return;
+    if (!dirty || error || loading || orderSaving) return;
     // A short typing burst should produce one committed command. Leaving the
     // input or navigating flushes the draft, including edits made during a save.
     const flush = () => { void save(); };
@@ -292,7 +307,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     const timer = setTimeout(flush, delay);
     document.addEventListener("focusout", flush);
     return () => { clearTimeout(timer); document.removeEventListener("focusout", flush); };
-  }, [changes, dirty, saving, error, loading, save, pendingLink]);
+  }, [changes, dirty, saving, error, loading, orderSaving, save, pendingLink]);
 
   async function reload() {
     if (savingRef.current) return;
@@ -323,30 +338,36 @@ export function useDriverBoard(lockedDriverId?: string) {
     if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");
-    savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true); setActionBusy(true);
-    busyDrivers.current = [driverId];
+    actionRow.current = driverId; setActionDriver(driverId); syncSaving();
+    idle.current = false; activity.current += 1;
     try {
       const committed = await undoDriverBoardEvent(eventId, entry, personal);
       savedRef.current[driverId] = committed;
       undoStack.current = undoStack.current.filter(e => e.id !== eventId);
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? committed : e), drivers: applyCommittedFleetStatus(current.drivers, [committed]) } : current);
       await refreshLoads([driverId]);
-    } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
+    } finally { activity.current += 1; actionRow.current = null; setActionDriver(null); syncSaving(); }
   }
 
   async function changeLoads(driverId: string, view: BoardLoads, action: BoardLoadAction, onStale?: (message: string) => void) {
     const started = performance.now();
     if (!canEdit) return view;
-    if (dirty || savingRef.current || loading) throw new Error("Wait for your board changes to save first.");
+    if (changesRef.current[driverId] || inlineRows.current.has(driverId) || actionRow.current || orderSavingRef.current || loading) {
+      throw new Error("Wait for this driver's changes to save first.");
+    }
+    const group = ++editSequence.current;
+    editSession.current = null;
     const entry = savedRef.current[driverId];
     if (!entry) throw new Error("This driver is no longer on the active board.");
-    savingRef.current = true; idle.current = false; activity.current += 1; setSaving(true); setActionBusy(true);
-    busyDrivers.current = [driverId];
+    actionRow.current = driverId; setActionDriver(driverId); syncSaving();
+    idle.current = false; activity.current += 1;
     try {
       const result = await changeBoardLoads(entry, view, action);
       response.current.load = performance.now();
-      editSession.current = null;
-      if (result.entry.undoId) undoStack.current.push({ id: result.entry.undoId, driverId, group: ++editSequence.current });
+      if (result.entry.undoId) {
+        undoStack.current.push({ id: result.entry.undoId, driverId, group });
+        undoStack.current.sort((a, b) => a.group - b.group);
+      }
       savedRef.current[driverId] = result.entry;
       setBoard(current => current ? { ...current, entries: current.entries.map(e => e.driverId === driverId ? result.entry : e), drivers: applyCommittedFleetStatus(current.drivers, [result.entry]), loads: { ...current.loads, [driverId]: result.loads } } : current);
       confirmedLoad.current = started;
@@ -363,7 +384,7 @@ export function useDriverBoard(lockedDriverId?: string) {
       }
       onStale(message);
       throw new Error(message);
-    } finally { activity.current += 1; busyDrivers.current = []; savingRef.current = false; setSaving(false); setActionBusy(false); }
+    } finally { activity.current += 1; actionRow.current = null; setActionDriver(null); syncSaving(); }
   }
 
   useLayoutEffect(() => {
@@ -426,5 +447,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   const entries = useMemo(() => Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [
     id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) },
   ])), [saved, changes, board?.statusSyncEnabled, board?.loads]);
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, editText, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, actionDriver, orderSaving, rowWaiting: (id: string) => loading || actionBusy || orderSaving || !!changes[id], dirty, error, refreshError, eldRefreshing, edit, editText, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
 }
