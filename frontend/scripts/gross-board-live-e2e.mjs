@@ -328,6 +328,44 @@ export async function runGrossBoardLiveE2E({page,base,sql,schema,temp,setNetwork
     await expect.poll(()=>numeric(field(page,'driver rate',week,'Gross Live B'))).toBe(1755);
     await expect(field(page)).toHaveValue('1599');release();await saved();
     await expect.poll(()=>numeric(field(viewer))).toBe(1599);
+    // Compare paste and typing in the same cell, from native input to the PUT.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    const amount = field(page);
+    await page.evaluate(() => performance.clearResourceTimings());
+    setNetworkLatency(178);
+    const sendMedians = {};
+    for (const action of ['typing', 'paste']) {
+      const delays = [], confirmations = [];
+      for (let i = 0; i < 3; i++) {
+        const value = String((action === 'paste' ? 1680 : 1650) + i);
+        await amount.focus();
+        await amount.press('ControlOrMeta+a');
+        await amount.evaluate(input => {
+          input.addEventListener('input', () => { window.grossInputAt = performance.now(); }, { once: true });
+        });
+        if (action === 'paste') {
+          await page.evaluate(value => navigator.clipboard.writeText(value), value);
+          await amount.press('ControlOrMeta+v');
+        } else {
+          await page.keyboard.insertText(value);
+        }
+        await expect.poll(() => numeric(field(viewer))).toBe(Number(value));
+        await saved();
+        const writes = await page.evaluate(() => performance.getEntriesByType('resource')
+          .filter(entry => new URL(entry.name).pathname === '/api/gross-board' &&
+            !new URL(entry.name).search && entry.startTime >= window.grossInputAt)
+          .map(entry => ({
+            send: Math.round(entry.startTime - window.grossInputAt),
+            receipt: Math.round(entry.responseEnd - window.grossInputAt),
+          })));
+        expect(writes).toHaveLength(1);
+        delays.push(writes[0].send);
+        confirmations.push(writes[0].receipt);
+      }
+      sendMedians[action] = [...delays].sort((a, b) => a - b)[1];
+      console.log(`Gross Board ${action} with 178ms RTT, input to send: ${delays.join(', ')}ms; input to receipt: ${confirmations.join(', ')}ms`);
+    }
+    expect(sendMedians.typing - sendMedians.paste).toBeGreaterThan(20);
     // Measure actual edit -> other-screen latency, including SSE network frames.
     for(const latency of [0,178]){
       setNetworkLatency(latency);const samples=[];

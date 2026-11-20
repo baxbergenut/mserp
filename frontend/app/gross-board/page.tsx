@@ -36,7 +36,7 @@ import { DaySummaryCell } from "./DaySummaryCell";
 import { BalanceDetails } from "./BalanceDetails";
 import { BoardScrollArea } from "./BoardScrollArea";
 import { SaveIssues } from "./SaveIssues";
-import { entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, rpmDisplay, shortDate, totals, validDecimal } from "./board";
+import { type GrossEntryEdit, entryForDispatcher, dispatcherRows, indexBoardEntries, addDays, balanceLabel, decimalDisplay, emptyEntry, entryKey, incompleteRates, rateBalance, signedMoney, rpmDisplay, shortDate, totals, validDecimal } from "./board";
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const columnWidths = [170, 65, 82, ...weekdays.map(() => 145), 112, 112, 112, 80, 80, 112];
@@ -99,6 +99,7 @@ export default function GrossBoardPage() {
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const response = useRef({ open: 0, save: 0, submitted: 0 });
+  const saveAfter = useRef(0);
   const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0);
   const dirty = canEdit && Object.keys(changes).length > 0;
   useLayoutEffect(() => {
@@ -295,7 +296,7 @@ export default function GrossBoardPage() {
     return () => clearTimeout(timer);
   }, [pendingWeek, pendingLink, dirty, saving, loading, error, lockedForEditing]);
 
-  const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
+  const edit = useCallback<GrossEntryEdit>((driverId, date, slot, update, intent) => {
     if (!canEdit) return;
     const key = entryKey(driverId, date, slot);
     const current = changesRef.current;
@@ -304,6 +305,8 @@ export default function GrossBoardPage() {
     const next = update(previous);
     if (next === previous) return;
     editStarted.current = performance.now(); confirmedEdit.current = 0;
+    // A pasted amount or an applied dialog already contains the finished value.
+    saveAfter.current = intent === "complete" ? 0 : editStarted.current + 60;
     if (!current[key]) baselinesRef.current[key] = baseline;
     const result = { ...current, [key]: next };
     // A revert during an in-flight save is a new edit; the old saved value
@@ -365,7 +368,7 @@ export default function GrossBoardPage() {
 
   useEffect(() => {
     if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
-    const delay = pendingWeek || pendingLink ? 0 : Math.max(0, 60 - (performance.now() - editStarted.current));
+    const delay = pendingWeek || pendingLink ? 0 : Math.max(0, saveAfter.current - performance.now());
     const timer = setTimeout(() => { void save(); }, delay);
     return () => clearTimeout(timer);
   }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);

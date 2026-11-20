@@ -1,5 +1,7 @@
 import type { DriverBoardGrossEntry, GrossBoardDayStatus, GrossBoardDriver, GrossBoardEntry, GrossBoardLoad } from "@/app/lib/types";
 
+export type GrossEntryEdit = (driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry, intent?: "complete") => void;
+
 export function dispatcherRows(drivers: GrossBoardDriver[], dates: string[], entries: GrossBoardEntry[] = []) {
   const transfers = new Map<string, GrossBoardEntry[]>();
   for (const entry of entries) {
