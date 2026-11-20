@@ -103,7 +103,7 @@ conversion used that faulty check and created duplicate slots.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
-Status Board row conflicts return `board_row_changed`. The browser rebases independent fields once and shows conflicting saved values for review. Load actions use the row version and queue revision from the same load snapshot. Exercise `frontend/scripts/test-investors-e2e.mjs --board-save-only` for two-user save, conflict and reload behavior.
+Status Board row conflicts return `board_row_changed`. Existing inline Status Board edits apply the submitted fields to the current row under the driver lock. The latest committed edit to a field wins. Load actions use the row version and queue revision from the same load snapshot. Exercise `frontend/scripts/test-investors-e2e.mjs --board-save-only` for two-user save, conflict and reload behavior.
 
 Current-week Gross Board planning text takes a lock for its own New York week.
 Driver and Investor Pay acquire the shared side before pinning a finalization
@@ -111,9 +111,11 @@ snapshot, including at Monday rollover. Historical or mixed planning saves
 retain the global source gate. Load-slot and financial writes retain their
 existing protocol. Status Board text load selection resolves weekly native
 plans before the unique available provider fallback. Status Board coalesces rapid
-text input for up to 120 ms and flushes on blur or navigation. Browser timings
+typing for up to 120 ms and flushes on blur or navigation. Paste, drop, load
+selection and dialog Apply submit without the typing delay. Browser timings
 for visible board opens and confirmed edits travel on subsequent ordinary board
-requests. Full-board HTTP and stream snapshots share two build slots per API
+requests. A disconnected Gross Board confirms saves from the PUT receipt and
+refreshes derived values in the background. Full-board HTTP and stream snapshots share two build slots per API
 process so bursts of refreshes leave database connections available for writes.
 
 Status Board autosaves for existing notes and trailer text use the submitted

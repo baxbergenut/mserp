@@ -6,7 +6,7 @@ import type { DriverBoardEntry } from "@/app/lib/types";
 
 export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
   entry: DriverBoardEntry; name: string; disabled: boolean;
-  edit: (id: string, field: keyof DriverBoardEntry, value: string) => void;
+  edit: (id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => void;
   onHistory: () => void;
 }) {
   // Driver Board spreadsheet, TODAY trailer column (effective displayed colors).
@@ -49,7 +49,7 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
     onKeyDown={event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); event.stopPropagation(); show("menu", true); } }}
     onMouseEnter={() => { cancel(); if (!open && entry.trailerNote?.trim() && entry.trailerNumber.trim()) show("note"); }} onMouseLeave={leave}>
     <input type="text" aria-label={`${name} · Trailer`} title={entry.trailerNumber} maxLength={100} readOnly={disabled} value={entry.trailerNumber}
-      onChange={event => edit(entry.driverId, "trailerNumber", event.target.value)}
+      onChange={event => edit(entry.driverId, "trailerNumber", event.target.value, event.nativeEvent)}
       className={`block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500 ${trailerColor ? "text-inherit focus:bg-black/10" : "text-zinc-200 focus:bg-zinc-800"}`} />
     {entry.trailerNumber.trim() && entry.trailerNote?.trim() && <span role="img" aria-label="Has trailer note" className="pointer-events-none absolute right-0 top-0 z-10 h-0 w-0 border-l-[9px] border-t-[9px] border-l-transparent border-t-[#18181b] drop-shadow-[0_0_1px_#a1a1aa]" />}
     {open && createPortal(<div ref={popup} data-grid-ignore data-board-undo data-board-driver={entry.driverId} role={open.kind === "menu" ? "menu" : "dialog"} aria-label={open.kind === "menu" ? "Trailer actions" : "Trailer note"}
@@ -71,7 +71,7 @@ export function TrailerCell({ entry, name, disabled, edit, onHistory }: {
         {!disabled && entry.trailerNote?.trim() && <button role="menuitem" className={`${menuButton} text-red-300`} onClick={() => { edit(entry.driverId, "trailerNote", ""); setOpen(null); }}>Delete note</button>}
         <button role="menuitem" className={menuButton} onClick={() => { setOpen(null); onHistory(); }}>View trailer history</button>
       </> : <textarea aria-label={`Note for trailer ${entry.trailerNumber}`} readOnly={disabled} maxLength={5000} rows={4} value={entry.trailerNote ?? ""} placeholder="Add a note…"
-        onChange={event => edit(entry.driverId, "trailerNote", event.target.value)} className="block w-full resize-y rounded border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-200 outline-none focus:border-blue-500" />}
+        onChange={event => edit(entry.driverId, "trailerNote", event.target.value, event.nativeEvent)} className="block w-full resize-y rounded border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-200 outline-none focus:border-blue-500" />}
     </div>, document.body)}
   </td>;
 }

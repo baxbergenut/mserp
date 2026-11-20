@@ -7,7 +7,7 @@ import { addDays, shortDate } from "@/app/gross-board/board";
 
 export function CurrentLoadInput({ value, label, disabled, entries, week, onChange, warning }: {
   value: string; label: string; disabled: boolean; entries: DriverBoardGrossEntry[]; week: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, event?: Event) => void;
   warning?: string;
 }) {
   const id = useId();
@@ -52,7 +52,7 @@ export function CurrentLoadInput({ value, label, disabled, entries, week, onChan
     <input ref={input} type="text" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined} aria-activedescendant={open ? `${id}-${selected}` : undefined}
       aria-label={label} aria-invalid={!!warning} title={warning ? `${value} · ${warning}` : value} maxLength={300} readOnly={disabled} autoComplete="off" value={value}
       onFocus={() => { setFocused(true); setActive(0); }} onBlur={() => setFocused(false)}
-      onChange={event => { setFocused(true); setActive(0); onChange(event.target.value); }}
+      onChange={event => { setFocused(true); setActive(0); onChange(event.target.value, event.nativeEvent); }}
       onKeyDown={event => {
         if (!open) return;
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setFocused(false); }

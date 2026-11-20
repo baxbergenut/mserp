@@ -67,8 +67,15 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
       await route.continue();
     });
     await review(first).click();
-    await first.getByRole('button', {name: 'Accept DataTruck driver gross', exact: true}).click();
-    await fillRate(first, sharedDay, '550');
+    // Submit both edits in the same browser task so CI scheduling cannot
+    // split the batch while Playwright moves between controls.
+    const acceptRate = first.getByRole('button', {name: 'Accept DataTruck driver gross', exact: true});
+    await acceptRate.evaluate((button, input) => {
+      button.click();
+      input.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '550');
+      input.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText'}));
+    }, await rate(first, sharedDay).elementHandle());
     expect((await captured).postDataJSON().entries).toHaveLength(2);
     // Hold the first request while a provider source update and the second
     // dispatcher's write commit. The production repository refresh path is
@@ -149,6 +156,45 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     await expect(rate(second, sharedDay)).toBeEditable();
     await fillRate(second, sharedDay, '590');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('590.00');
+    // A committed write and the next edit must complete even if the live
+    // stream is down and the recovery GET is still carrying an older snapshot.
+    await second.route('**/api/gross-board/events?**', route => route.abort());
+    await second.reload();
+    await expect(rate(second, sharedDay)).toHaveValue('$590.00');
+    let unblockRead;
+    const held = new Promise(resolve => { unblockRead = resolve; });
+    let reads = 0, started = false;
+    const recovery = async route => {
+      if (route.request().method() !== 'GET') return route.continue();
+      reads++;
+      if (reads !== 1) return route.continue();
+      const snapshot = await route.fetch();
+      started = true;
+      await held;
+      await route.fulfill({response:snapshot});
+    };
+    await second.route('**/api/gross-board?**', recovery);
+    const receipt = () => second.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/gross-board');
+    try {
+      const firstWrite = receipt();
+      await fillRate(second, sharedDay, '601');
+      expect((await firstWrite).ok()).toBe(true);
+      await expect.poll(() => started).toBe(true);
+      await saved(second);
+      const nextWrite = receipt();
+      await fillRate(second, sharedDay, '602');
+      expect((await nextWrite).ok()).toBe(true);
+      await saved(second);
+      expect((await read(sharedDay)).driverRate).toBe('602.00');
+      unblockRead();
+      await expect.poll(() => reads).toBeGreaterThan(1);
+      await rate(second, sharedDay).blur();
+      await expect(rate(second, sharedDay)).toHaveValue('$602.00');
+    } finally {
+      unblockRead();
+      await second.unroute('**/api/gross-board?**', recovery);
+    }
+    console.log('Gross Board confirmed two saves while a disconnected recovery GET was held, and retained the latest rate.');
     console.log('Gross Board passed locked-week editing for Administrators and Accountants, with dispatcher writes blocked until unlock.');
   } finally {
     release?.();
