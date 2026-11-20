@@ -63,6 +63,28 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await expect(input('Trailer')).toHaveValue('KEEP-42');
     const view=await (await other.request.get('/api/driver-board/loads/'+id)).json();
     expect(view.entryVersion).toBe((await read()).version);
+    await page.getByRole('button', {name: name+' · Next load', exact: true}).click();
+    const drawer = page.getByRole('dialog', {name: name+' · Loads'});
+    await drawer.getByLabel('Add next load').fill('TEXT-RACE-52');
+    const loadPath = '/api/driver-board/loads/'+id;
+    let posts = 0;
+    const interveningNote = async route => {
+      if (route.request().method() === 'POST') {
+        posts++;
+        await write({notes: 'Other dispatcher updated notes while adding load'});
+      }
+      await route.continue();
+    };
+    await page.route('**'+loadPath, interveningNote);
+    const receipt = page.waitForResponse(r => new URL(r.url()).pathname === loadPath && r.request().method() === 'POST');
+    await drawer.getByLabel('Add next load').press('Enter');
+    expect((await receipt).status()).toBe(200);
+    await expect(drawer.getByText('TEXT-RACE-52', {exact: true}).first()).toBeVisible();
+    await page.unroute('**'+loadPath, interveningNote);
+    expect(posts).toBe(1);
+    const persisted = await (await other.request.get(loadPath)).json();
+    expect(persisted.next.filter(p => p.number === 'TEXT-RACE-52')).toHaveLength(1);
+    expect((await read()).notes).toBe('Other dispatcher updated notes while adding load');
     console.log('Two-user Status Board save recovery passed for load edits, unrelated notes, overlapping edits, review, discard and reload.');
   } finally {await other.close();}
 }

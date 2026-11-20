@@ -17,12 +17,13 @@ import (
 var ErrDriverBoardConflict = errors.New("status board changed; reload to review the latest values before editing again")
 
 type DriverBoardEntry struct {
-	FleetStatus  *BoardFleetStatus `json:"fleetStatus,omitempty"`
-	StatusReason string            `json:"statusReason,omitempty"`
-	LeavePlan    *DriverLeavePlan  `json:"leavePlan,omitempty"`
-	EffectiveAt  *time.Time        `json:"effectiveAt,omitempty"`
-	UndoID       int64             `json:"undoId,omitempty"`
-	StatusEdited bool              `json:"statusEdited,omitempty"`
+	loadActionVersion int
+	FleetStatus       *BoardFleetStatus `json:"fleetStatus,omitempty"`
+	StatusReason      string            `json:"statusReason,omitempty"`
+	LeavePlan         *DriverLeavePlan  `json:"leavePlan,omitempty"`
+	EffectiveAt       *time.Time        `json:"effectiveAt,omitempty"`
+	UndoID            int64             `json:"undoId,omitempty"`
+	StatusEdited      bool              `json:"statusEdited,omitempty"`
 	// Write-only intent: selecting the same number should still resolve its stops.
 	ResolveCurrentLoad bool   `json:"resolveCurrentLoad,omitempty"`
 	DriverID           string `json:"driverId"`
