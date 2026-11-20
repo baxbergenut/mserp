@@ -29,6 +29,8 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1800, height: 1000 } });
   const cdp = await page.context().newCDPSession(page); await cdp.send('Performance.enable'); const cpu = [];
+  const cpuRate = Number(process.env.BOARD_CPU_RATE ?? 1);
+  if (cpuRate > 1) await cdp.send('Emulation.setCPUThrottlingRate', {rate:cpuRate});
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.clock.setFixedTime(new Date('2026-11-12T14:00:00Z'));
   await page.addInitScript(() => {
@@ -46,16 +48,25 @@ try {
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/driver-board`);
   await page.waitForFunction(() => window.openingTimes.length === 1);
-  const typing = await page.evaluate(() => {
-    const input = document.querySelector('tr[data-driver-id] input');
-    const pending = () => document.querySelectorAll('[data-board-row-pending]').length;
-    const before = pending(), start = performance.now();
-    input.dispatchEvent(new KeyboardEvent('keydown', {key:'Shift',shiftKey:true,bubbles:true}));
-    input.dispatchEvent(new KeyboardEvent('keydown', {key:'A',shiftKey:true,bubbles:true}));
-    return { before, after:pending(), keyMS:Math.round(performance.now()-start) };
-  });
-  console.log("Status Board uppercase key", JSON.stringify(typing));
-  if (!typing.before || typing.after !== typing.before) throw new Error("Typing in one cell mounted off-screen editors");
+  const checkCellShortcuts = async (board, selector) => {
+    const typing = await page.evaluate(selector => {
+      const input = document.querySelector(selector);
+      const pending = () => document.querySelectorAll('[data-board-row-pending]').length;
+      const before = pending(), start = performance.now();
+      input.dispatchEvent(new KeyboardEvent('keydown', {key:'Shift',shiftKey:true,bubbles:true}));
+      input.dispatchEvent(new KeyboardEvent('keydown', {key:'A',shiftKey:true,bubbles:true}));
+      const afterTyping = pending(), typingMS = Math.round(performance.now()-start);
+      const shortcutStart = performance.now();
+      input.focus();
+      input.dispatchEvent(new KeyboardEvent('keydown', {key:'a',ctrlKey:true,bubbles:true}));
+      input.dispatchEvent(new KeyboardEvent('keydown', {key:'v',ctrlKey:true,bubbles:true}));
+      input.dispatchEvent(new ClipboardEvent('paste', {bubbles:true, clipboardData:new DataTransfer()}));
+      return { before, afterTyping, after:pending(), typingMS, shortcutMS:Math.round(performance.now()-shortcutStart) };
+    }, selector);
+    console.log(board + " typing and in-cell select/paste", JSON.stringify({cpuRate,...typing}));
+    if (!typing.before || typing.afterTyping !== typing.before || typing.after !== typing.before) throw new Error("A single-cell edit mounted off-screen editors");
+  };
+  await checkCellShortcuts('Status Board', 'tr[data-driver-id] input');
   for (const path of ['/gross-board', '/driver-board', '/gross-board', '/driver-board', '/gross-board']) {
     await page.waitForFunction(() => !document.querySelector('[data-board-row-pending]'));
     if (path === '/gross-board') {
@@ -69,6 +80,7 @@ try {
     await page.evaluate(path => { window.measureBoard(path); document.querySelector(`a[href="${path}"]`).click(); }, path);
     await page.waitForFunction(count => window.openingTimes.length > count, count, { timeout: 10000 }).catch(async error => { console.error(JSON.stringify({ path, errors, state: await page.evaluate(() => ({ path: location.pathname, times: window.openingTimes, rows: document.querySelectorAll('td[data-gross-driver]').length, body: document.body.innerText.slice(-500) })) })); throw error; });
   }
+  await checkCellShortcuts('Gross Board', '[data-gross-board-grid] input');
   const selectionPreserved = await page.evaluate(() => {
     const input = document.querySelector('[data-gross-board-grid] input');
     input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));

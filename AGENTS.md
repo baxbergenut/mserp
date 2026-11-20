@@ -3944,7 +3944,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   compares the complete dropdown choices against the canonical query after transitions.
   Board rows mount visible editors first and progressively mount off-screen
   editors without unmounting them afterward. Scroll/deep-link targets load eagerly;
-  spreadsheet selection/navigation flushes remaining rows before using the DOM.
+  spreadsheet selection/navigation flushes remaining rows before using the DOM. Single-cell pastes and native editor clipboard shortcuts need only the current cell.
   `frontend/scripts/benchmark-board-opening.mjs` measures a synthetic 160-driver
   viewport with an explicit API-delay parameter; it is not a production latency claim.
   Check
