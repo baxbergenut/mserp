@@ -193,6 +193,35 @@ func TestTaskEventsCoalesce(t *testing.T) {
 	}
 }
 
+func TestBoardListenerIdleGrace(t *testing.T) {
+	h := newDatabaseEvents(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "test", "driver_board.read")
+	defer h.shutdown()
+	h.idleGrace = 30 * time.Millisecond
+	stopped := make(chan struct{})
+	h.cancel = func() { close(stopped) }
+	_, leave := h.subscribe()
+	leave()
+	changes, leaveAgain := h.subscribe()
+	// The first departure's timeout must not tear down the returning tab.
+	select {
+	case <-stopped:
+		t.Fatal("stopped a listener reused by a new subscriber")
+	case <-time.After(2 * h.idleGrace):
+	}
+	h.publish()
+	select {
+	case <-changes:
+	default:
+		t.Fatal("reused listener missed a board change")
+	}
+	leaveAgain()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("idle listener was retained")
+	}
+}
+
 func TestBoardStreamOpeningDoesNotWaitForSnapshot(t *testing.T) {
 	for _, initial := range []string{"", "none"} {
 		t.Run("initial="+initial, func(t *testing.T) {

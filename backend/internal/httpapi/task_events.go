@@ -28,6 +28,8 @@ type taskEvents struct {
 	config          *pgx.ConnConfig
 	logger          *slog.Logger
 	stopped         chan struct{}
+	idleGrace       time.Duration
+	idleTimer       *time.Timer
 	openings        *boardOpenings
 	channel         string
 	permission      string
@@ -71,6 +73,10 @@ func (h *taskEvents) shutdown() {
 	default:
 		close(h.stopped)
 	}
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
+	}
 	if h.cancel != nil {
 		h.cancel()
 	}
@@ -86,6 +92,10 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 		return ch, func() {}
 	default:
 	}
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
+	}
 	h.clients[ch] = struct{}{}
 	if h.cancel == nil {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -99,10 +109,27 @@ func (h *taskEvents) subscribe() (chan struct{}, func()) {
 			return
 		}
 		delete(h.clients, ch)
-		if len(h.clients) == 0 {
+		if len(h.clients) != 0 {
+			return
+		}
+		if h.idleGrace <= 0 || h.shutdownContext.Err() != nil {
 			h.cancel()
 			h.cancel = nil
+			return
 		}
+		// A dispatcher switching between boards can reuse the same LISTEN
+		// connection. Reconnecting would broadcast another full snapshot.
+		var timer *time.Timer
+		timer = time.AfterFunc(h.idleGrace, func() {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if h.idleTimer == timer {
+				h.cancel()
+				h.cancel = nil
+				h.idleTimer = nil
+			}
+		})
+		h.idleTimer = timer
 	}
 }
 func (h *taskEvents) publish() {

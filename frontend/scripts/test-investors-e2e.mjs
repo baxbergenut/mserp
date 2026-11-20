@@ -63,6 +63,7 @@ try {
   execFileSync('go', ['build', '-o', binary, './cmd/server'], { cwd: backend, windowsHide: true });
   database.searchParams.set('search_path', `${schema},public`);
   database.searchParams.set('role', 'mserp_app');
+  if (process.argv.includes('--board-opening-only')) database.searchParams.set('application_name', schema);
   const apiPort = Number(process.env.MSERP_E2E_API_PORT || 18549);
   const webPort = Number(process.env.MSERP_E2E_WEB_PORT || 13549);
   api = spawn(binary, [], { cwd: temp, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
