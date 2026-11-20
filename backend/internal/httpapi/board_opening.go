@@ -100,6 +100,11 @@ func (b *boardOpenings) admit(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func writeBoardSnapshot(w http.ResponseWriter, r *http.Request, value any) {
+	previous := r.Header.Get(boardSectionsHeader)
+	if len(previous) <= 1024 && (previous == "v1" || strings.HasPrefix(previous, "v1,")) {
+		writeBoardSections(w, r, value, previous)
+		return
+	}
 	if opening := r.URL.Query().Get("opening"); opening != "" {
 		value = map[string]any{"opening": opening, "board": value}
 	}

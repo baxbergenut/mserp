@@ -412,7 +412,7 @@ func main() {
 	handler := cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.FrontendOrigin},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key", "X-Clustie-Board-Timing"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key", "X-Clustie-Board-Timing", "X-Clustie-Board-Sections"},
 		AllowCredentials: true,
 	})(router)
 

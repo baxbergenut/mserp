@@ -1,3 +1,4 @@
+import { BoardSections } from "./boardSections";
 import { takeBoardTimingHeader } from "./boardTiming";
 import { expensePayload } from "./expenseCosts";
 export const fetchTruckAssignmentChoices = () => apiRequest<import("./types").TruckAssignmentChoice[]>("/drivers/truck-assignment-choices");
@@ -187,8 +188,11 @@ export const reviewRelayIdentity = (id: string, driverId: string, action: "link"
   });
 
 function readBoardSnapshot<T>(key: string, path: string, query: Record<string, string>, signal?: AbortSignal) {
-  return boardReadiness.read(key, () => apiRequest<T>(withQuery(path, query), { signal }),
-    opening => apiRequest<{ opening: string; board: T } | undefined>(withQuery(path, { ...query, opening }), { signal }));
+  const scope = withQuery(path, query);
+  const read = <R>(url: string) => reads.read(url, sharedSignal => boardSections.read<R>(path, scope, offer =>
+    performRequest<R>(url, { signal: sharedSignal, headers: offer ? { "X-Clustie-Board-Sections": offer } : {} })), signal);
+  return boardReadiness.read(key, () => read<T>(scope),
+    opening => read<{ opening: string; board: T } | undefined>(withQuery(path, { ...query, opening })));
 }
 export const fetchGrossBoard = (weekStart: string) =>
   readBoardSnapshot<GrossBoard>(`gross:${weekStart}`, "/gross-board", { weekStart });
@@ -328,13 +332,14 @@ export const syncFuelTransactions = () =>
   apiRequest<SyncFuelResult>("/jobs/sync-fuel", { method: "POST" });
 
 const reads = new ReadRequests();
+const boardSections = new BoardSections();
 let accessGeneration = 0;
 let accessFingerprint = "";
 let currentPermissions: string[] = [];
 export class APIError extends Error {
   constructor(message: string, public status: number, public code: string, public review?: DriverPayWeek, public currentEntries?: DriverBoardEntry[]) { super(message); this.name = "APIError"; }
 }
-export function resetAccessRequests() { accessGeneration++; reads.clear(true); }
+export function resetAccessRequests() { accessGeneration++; reads.clear(true); boardSections.clear(); }
 function acceptSession(session: AuthSession) {
   boardReadiness.parallel = session.parallelBoardOpening === true;
   const fingerprint = JSON.stringify([session.user.id, session.user.accessRevision, session.user.permissions, session.user.expenseCategoryAccess]);
@@ -448,7 +453,7 @@ export async function logout(): Promise<void> {
 		await apiRequest<void>("/auth/logout", { method: "POST" });
 	} finally {
 		csrfToken = "";
-    reads.clear(true);
+    resetAccessRequests();
 	}
 }
 

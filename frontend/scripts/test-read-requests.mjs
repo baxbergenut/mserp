@@ -68,3 +68,30 @@ disconnected.error(); disconnected.open();
 assert.equal(recoveries, before + 2);
 disconnected.close();
 console.log("Parallel reads require a matching registration and recover after a missed stream.");
+
+
+const { BoardSections } = await import(compile("../app/lib/boardSections.ts"));
+const sections = new BoardSections();
+const initial = await sections.read("status", "week", async offer => {
+  assert.equal(offer, "v1");
+  return { drivers: [{name:"Original"}], planningEntries:["Private"], _sections:{drivers:"a",planningEntries:"p"} };
+});
+initial.drivers[0].name = "Unsaved client edit";
+const refreshedBoard = await sections.read("status", "week", async offer => {
+  assert.ok(offer.includes("drivers=a"));
+  return { opening:"tab", board:{entries:["New edit"], _sections:{drivers:"a",entries:"b"}} };
+});
+assert.deepEqual(refreshedBoard.board, {entries:["New edit"], drivers:[{name:"Original"}]});
+const offers = [];
+const recovered = await sections.read("status", "week", async offer => {
+  offers.push(offer);
+  return offer ? {_sections:{drivers:"unknown"}} : {drivers:["Recovered"]};
+});
+assert.deepEqual(recovered.drivers, ["Recovered"]);
+assert.equal(offers.length, 2);
+assert.equal(offers[1], undefined);
+for (const scope of ["other week", "week"]) {
+  if (scope === "week") sections.clear();
+  await sections.read("status",scope,async offer => {assert.equal(offer,"v1");return {drivers:[]};});
+}
+console.log("Board section reuse verified for independent edits, removed permissions, recovery, week and access changes.");
