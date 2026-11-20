@@ -565,7 +565,33 @@ func readBoardLoadViews(ctx context.Context, tx pgx.Tx, ids []string, from strin
 	return readBoardLoadViewsCached(ctx, tx, ids, from, now, boardLoadViewOptions{includeRoute: includeRoute}, nil, "")
 }
 
+type boardQueueRow struct {
+	entry    DriverBoardEntry
+	hasEntry bool
+	payload  []byte
+}
+
+// Single-driver commands read their validation state while holding the driver lock.
+func readBoardQueueRows(ctx context.Context, tx pgx.Tx, ids []string) (map[string]boardQueueRow, error) {
+	rows, err := tx.Query(ctx, `SELECT b.driver_id,coalesce(s.payload,'{}'::jsonb),coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,''),b.version FROM driver_board b LEFT JOIN driver_board_load_state s ON b.driver_id=s.driver_id WHERE b.driver_id=ANY($1::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]boardQueueRow, len(ids))
+	for rows.Next() {
+		var id string
+		row := boardQueueRow{hasEntry: true}
+		if err := rows.Scan(&id, &row.payload, &row.entry.CurrentLoad, &row.entry.Status, &row.entry.Destination, &row.entry.Version); err != nil {
+			return nil, err
+		}
+		result[id] = row
+	}
+	return result, rows.Err()
+}
+
 type boardLoadViewOptions struct {
+	roster            map[string]boardQueueRow
 	includeRoute      bool
 	queuePresenceOnly bool
 	jitDisabled       bool // The enclosing board transaction already set jit=off.
@@ -603,41 +629,54 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		states[id] = boardLoadState{}
 		result[id] = BoardLoads{Week: []BoardLoad{}, Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
 	}
-	rows, err := tx.Query(ctx, `SELECT b.driver_id,coalesce(s.payload,'{}'::jsonb),coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,''),b.version FROM driver_board b LEFT JOIN driver_board_load_state s ON b.driver_id=s.driver_id WHERE b.driver_id=ANY($1::uuid[])`, ids)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var id string
-		var s boardLoadState
-		var raw []byte
-		var currentText string
-		var entry DriverBoardEntry
-		if err = rows.Scan(&id, &raw, &currentText, &entry.Status, &entry.Destination, &entry.Version); err != nil {
-			rows.Close()
+	queues := options.roster
+	if queues == nil {
+		var err error
+		queues, err = readBoardQueueRows(ctx, tx, ids)
+		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal(raw, &s); err != nil {
-			rows.Close()
-			return nil, err
+	}
+	// Include absent board entries in the scope. A retained queue can still
+	// affect the historical SQL selection even when it has no dispatch row.
+	type planFilter struct {
+		LoadID           *int
+		Order, Cancelled []string
+		Detached         json.RawMessage
+	}
+	var filters map[string]planFilter
+	if options.roster != nil && cache != nil && sourceKey != "" {
+		filters = make(map[string]planFilter, len(queues))
+	}
+	for id, row := range queues {
+		if !row.hasEntry {
+			if filters != nil {
+				filters[id] = planFilter{Detached: row.payload}
+			}
+			continue
+		}
+		var state boardLoadState
+		if len(row.payload) > 0 {
+			if err := json.Unmarshal(row.payload, &state); err != nil {
+				return nil, err
+			}
 		}
 		if options.command != nil {
-			options.command.stateJSON = raw
+			options.command.stateJSON = row.payload
 		}
-		states[id] = s
-		entry.CurrentLoad = currentText
-		entries[id] = entry
-		if s.Current != nil {
-			if s.Current.PlanID != "" {
-				selected = append(selected, s.Current.PlanID)
+		states[id] = state
+		entries[id] = row.entry
+		filter := planFilter{Order: state.Order, Cancelled: state.Cancelled}
+		if state.Current != nil {
+			filter.LoadID = state.Current.LoadID
+			if state.Current.PlanID != "" {
+				selected = append(selected, state.Current.PlanID)
 			}
-			manualMismatch[id] = !strings.EqualFold(strings.TrimSpace(currentText), strings.TrimSpace(s.Current.Number))
+			manualMismatch[id] = !strings.EqualFold(strings.TrimSpace(row.entry.CurrentLoad), strings.TrimSpace(state.Current.Number))
 		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return nil, err
+		if filters != nil {
+			filters[id] = filter
+		}
 	}
 	readPlans := func() (map[string][]BoardLoad, error) {
 		plans := map[string][]BoardLoad{}
@@ -674,18 +713,16 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		return plans, nil
 	}
 	var plans map[string][]BoardLoad
-	if cache != nil && sourceKey != "" {
-		// Include every driver's selection, custom order and cancellations used by the
-		// historical-plan query, even when that driver has no Status Board row yet.
+	var err error
+	if filters != nil {
 		slices.Sort(selected)
-		var planKey string
-		err = tx.QueryRow(ctx, `SELECT jsonb_build_array($2::text,$3::date,$1::uuid[],$4::uuid[],
- (SELECT jsonb_object_agg(s.driver_id,jsonb_build_array(s.payload->'current'->>'loadId',s.payload->'order',s.payload->'cancelled'))
- FROM driver_board_load_state s WHERE s.driver_id=ANY($1::uuid[])))::text`, ids, sourceKey, week, selected).Scan(&planKey)
-		if err != nil {
-			return nil, err
+		filterKey, marshalErr := json.Marshal([]any{week, selected, filters})
+		if marshalErr != nil {
+			return nil, marshalErr
 		}
-		plans, err = cache.plans.get(ctx, planKey, cloneBoardPlans, readPlans)
+		// Source revisions and operational queue inputs come from the same repeatable snapshot.
+		key := sourceKey + "\x00" + string(filterKey)
+		plans, err = cache.plans.get(ctx, key, cloneBoardPlans, readPlans)
 	} else {
 		plans, err = readPlans()
 	}

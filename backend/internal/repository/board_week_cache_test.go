@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -175,5 +176,50 @@ func TestBoardManualSourcesDatabase(t *testing.T) {
 		if p := read(); p.LoadID != nil {
 			t.Fatal("ambiguous source was selected")
 		}
+	})
+}
+
+func TestBoardRosterQueueInputsDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		week := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+		repo := NewDriverBoardRepository(pool)
+		repo.now = func() time.Time { return week }
+		if _, err := pool.Exec(ctx, `UPDATE fleet_status_control SET enabled=true WHERE singleton`); err != nil {
+			t.Fatal(err)
+		}
+		empty, err := repo.Get(ctx, week)
+		if err != nil || !empty.StatusSyncEnabled || len(empty.Drivers) != 0 {
+			t.Fatalf("empty roster with fleet sync: drivers=%d enabled=%v err=%v", len(empty.Drivers), empty.StatusSyncEnabled, err)
+		}
+		const driver = "19700000-0000-0000-0000-000000000001"
+		const plan = "19700000-0000-0000-0000-000000000002"
+		if _, err := pool.Exec(ctx, `INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('19700000-0000-0000-0000-000000000001','Queue Roster','queue roster','cpm',0);
+ INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(1971001,'QUEUE-197','Delivered',0,0,'{}');
+ INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,plan_id) VALUES('19700000-0000-0000-0000-000000000001','2026-10-19','QUEUE-197',1971001,'19700000-0000-0000-0000-000000000002');`); err != nil {
+			t.Fatal(err)
+		}
+		check := func(want bool) {
+			t.Helper()
+			board, err := repo.Get(ctx, week)
+			if err != nil {
+				t.Fatal(err)
+			}
+			view, ok := board.Loads[driver]
+			if !ok || view.Current != nil {
+				t.Fatal("retained queue became an active selection")
+			}
+			if got := slices.ContainsFunc(view.Unavailable, func(p BoardLoad) bool { return p.PlanID == plan }); got != want {
+				t.Fatalf("historical completed plan visible = %v, want %v", got, want)
+			}
+		}
+		check(false)
+		if _, err := pool.Exec(ctx, `INSERT INTO driver_board_load_state(driver_id,payload) VALUES($1,jsonb_build_object('order',jsonb_build_array($2::text)))`, driver, plan); err != nil {
+			t.Fatal(err)
+		}
+		check(true)
+		if _, err := pool.Exec(ctx, `UPDATE driver_board_load_state SET payload='{}' WHERE driver_id=$1`, driver); err != nil {
+			t.Fatal(err)
+		}
+		check(false)
 	})
 }
