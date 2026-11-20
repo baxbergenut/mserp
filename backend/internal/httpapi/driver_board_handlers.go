@@ -307,10 +307,15 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 			fail(w, err)
 			return
 		}
-		if r.URL.Query().Get("overview") == "1" {
-			board = repository.BoardOverview(board)
+		query := r.URL.Query()
+		if query.Get("overview") == "1" {
+			if query.Get("compact") == "grid" && query.Get("weekPreview") == "1" {
+				board = repository.BoardGridOverview(board)
+			} else {
+				board = repository.BoardOverview(board)
+			}
 		}
-		switch r.URL.Query().Get("compact") {
+		switch query.Get("compact") {
 		case "grid":
 			writeBoardSnapshot(w, r, repository.CompactBoardGrid(board))
 			return
