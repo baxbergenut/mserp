@@ -373,6 +373,13 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await runStatusBoardProgressE2E({ page, base, sql, schema, week });
+  const progressPage = await page.context().browser().newPage({
+    baseURL: base, storageState: await page.context().storageState(), viewport: page.viewportSize(),
+  });
+  try {
+    await runStatusBoardProgressE2E({ page: progressPage, base, sql, schema, week });
+  } finally {
+    await progressPage.close();
+  }
   console.log('Status Board E2E passed: totals, autosave, navigation flush, profile address preservation, history/undo, dispatcher/status checkbox filters, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
 }
