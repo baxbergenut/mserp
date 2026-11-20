@@ -10,7 +10,7 @@ import { Modal } from "@/app/components/management/ManagementUI";
 import { opensGridDetails, spreadsheetGridEvents } from "@/app/lib/spreadsheetGrid";
 import { useDayPlanning } from "./DayPlanning";
 import { DayCell } from "./DayCell";
-import { grossLoadStatusColor, additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
+import { type GrossEntryEdit, grossLoadStatusColor, additionalLoadEntries, amountDisplay, applyDailyDraft, decimalDisplay, emptyEntry, mismatch, dayStatuses, totals, validDecimal } from "./board";
 
 type Props = {
   readOnly?: boolean;
@@ -26,7 +26,7 @@ type Props = {
   driverId: string;
   driverName: string;
   date: string;
-  onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
+  onChange: GrossEntryEdit;
 };
 
 function hasDayContent(entry: GrossBoardEntry) {
@@ -119,7 +119,7 @@ export const DaySummaryCell = memo(function DaySummaryCell({ readOnly = false, w
         const previous = draftBaseline.current.find(saved => saved.slot === entry.slot);
         if ((!previous || previous.deleted) && !hasDayContent(entry)) continue;
         if (JSON.stringify(previous) !== JSON.stringify(entry)) onChange(driverId, date, entry.slot,
-          current => applyDailyDraft(current, previous, entry));
+          current => applyDailyDraft(current, previous, entry), "complete");
       }
       setDraft(null);
       return true;

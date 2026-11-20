@@ -9,7 +9,7 @@ import type { GrossBoardDayStatus, GrossBoardEntry, GrossBoardLoad } from "@/app
 import { amountDisplay, grossLoadStatusColor, dayStatuses, matchLoad, setDayStatus, suggestedDayStatuses } from "./board";
 import { BoardDialog } from "./BoardDialog";
 
-export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
+export type DayEdit = (driverId: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry, intent?: "complete") => void;
 type Option = { kind: "status"; status: typeof dayStatuses[number] } | { kind: "load"; load: GrossBoardLoad } | { kind: "clear" } | { kind: "manual" } | { kind: "cancel" } | { kind: "custom" };
 
 export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview, onChange, onCustomStatus, resetRef, customStatusUnavailable, allowDayStatus = true }: {
@@ -121,13 +121,13 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
         note: query.toLowerCase() === current.loadNumber.trim().toLowerCase() ? current.note : "",
         originalRate: current.loadRecordId !== null ? "" : current.originalRate, driverRate: current.loadRecordId !== null ? "" : current.driverRate, miles: current.loadRecordId !== null ? "" : current.miles,
         enteredOriginalRate: current.loadRecordId !== null ? "" : current.enteredOriginalRate, enteredMiles: current.loadRecordId !== null ? "" : current.enteredMiles,
-        duplicate: false, systemDriverRate: "", acceptDriverGross: false, acceptSystemValues: false }));
+        duplicate: false, systemDriverRate: "", acceptDriverGross: false, acceptSystemValues: false }), "complete");
       setDraft(null); return;
     }
     setDraft(null);
     if (option.kind === "status" && hasAmounts(entry)) { setPendingStatus(option.status.value); return; }
     onChange(entry.driverId, entry.date, (current) => option.kind === "load" ? matchLoad(current, option.load) :
-      setDayStatus(current, option.kind === "status" ? option.status.value : ""));
+      setDayStatus(current, option.kind === "status" ? option.status.value : ""), "complete");
   };
   return <>
     <div data-grid-cell className="relative">
@@ -206,7 +206,7 @@ export function LoadStatusPicker({ entry, label, disabled, needsReview, onReview
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={() => setPendingStatus("")}>Keep load</button>
         <button type="button" className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white" onClick={() => {
-          onChange(entry.driverId, entry.date, (current) => setDayStatus(current, pendingStatus)); setPendingStatus("");
+          onChange(entry.driverId, entry.date, (current) => setDayStatus(current, pendingStatus), "complete"); setPendingStatus("");
         }}>Use {pendingStatus}</button>
       </div>
     </BoardDialog>}

@@ -5,8 +5,8 @@ import { useLoadNotes } from "./useLoadNotes";
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { GrossBoardEntry } from "@/app/lib/types";
 import { Plus, X } from "lucide-react";
-import { amountDisplay, editAmount, emptyEntry, mismatch, validDecimal } from "./board";
-import { LoadStatusPicker } from "./LoadStatusPicker";
+import { type GrossEntryEdit, amountDisplay, editAmount, emptyEntry, mismatch, validDecimal } from "./board";
+import { type DayEdit, LoadStatusPicker } from "./LoadStatusPicker";
 import { BoardDialog } from "./BoardDialog";
 import { SplitReviewDialog } from "./SplitReviewDialog";
 import { DecimalInput } from "./DecimalInput";
@@ -23,7 +23,7 @@ type DayCellProps = {
   disabled: boolean;
   // Permission to add to the day is independent of this entry being read-only.
   onAdd?: (driverId: string, date: string) => void;
-  onChange: (driverId: string, date: string, slot: number, update: (current: GrossBoardEntry) => GrossBoardEntry) => void;
+  onChange: GrossEntryEdit;
 };
 
 export const DayCell = memo(function DayCell({ entry, driverName, disabled, onChange, onAdd, id, highlighted, planning, onCustomStatus, customStatusUnavailable, allowDayStatus }: DayCellProps) {
@@ -35,7 +35,7 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
     cellRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
     cellRef.current?.focus({ preventScroll: true });
   }, [highlighted]);
-  const pickerChange = useCallback((id: string, date: string, update: (current: GrossBoardEntry) => GrossBoardEntry) => onChange(id, date, entry.slot, update), [onChange, entry.slot]);
+  const pickerChange = useCallback<DayEdit>((id, date, update, intent) => onChange(id, date, entry.slot, update, intent), [onChange, entry.slot]);
   const [reviewing, setReviewing] = useState(false);
   const confirmed = entry.loadRecordId !== null && !entry.sourceMissing;
   const rateMismatch = confirmed && mismatch(entry.enteredOriginalRate, entry.systemOriginalRate ?? "");
@@ -66,14 +66,15 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
           nonnegative={field === "miles"}
           title={different ? `Entered: ${amountDisplay(entered, field !== "miles")}; system: ${amountDisplay(system ?? "", field !== "miles") || "missing"}. Totals use the entered value.` : !valid ? "Enter a number with up to 2 decimal places" : undefined}
           placeholder="0"
-          onValueChange={(value) => {
-            onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value));
+          onValueChange={(value, event) => {
+            onChange(entry.driverId, entry.date, entry.slot, current => editAmount(current, field, value),
+              event instanceof InputEvent && ["insertFromPaste", "insertFromDrop"].includes(event.inputType) ? "complete" : undefined);
           }}
           className={`${fieldClass} ${different || !valid ? "!bg-red-500/15 text-red-300" : "text-zinc-300"}`}
         /></div>;
       })}
       {planning}
-      {reviewing && entry.split && <SplitReviewDialog entry={entry} driverName={driverName} disabled={disabled} onClose={() => setReviewing(false)} onApply={next => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...next, version: current.version }))} />}
+      {reviewing && entry.split && <SplitReviewDialog entry={entry} driverName={driverName} disabled={disabled} onClose={() => setReviewing(false)} onApply={next => onChange(entry.driverId, entry.date, entry.slot, current => ({ ...next, version: current.version }), "complete")} />}
       {reviewing && !entry.split && <BoardDialog title={`Review load ${entry.loadNumber}`} onClose={() => setReviewing(false)}>
         <p className="mb-4 text-zinc-400">{driverName} · {entry.date}. Totals use your entered values. Current system values are shown for comparison.</p>
         <table className="w-full text-left text-sm">
@@ -82,13 +83,13 @@ export const DayCell = memo(function DayCell({ entry, driverName, disabled, onCh
             <tr key={String(name)} className={different ? "bg-red-500/10 text-red-300" : "text-zinc-400"}><th className="p-2 font-medium">{name}</th><td>{amountDisplay(String(entered ?? ""), name !== "Miles") || "—"}</td><td>{amountDisplay(String(actual ?? ""), name !== "Miles") || "—"}</td></tr>)}</tbody>
         </table>
         <button type="button" hidden={disabled || !driverMismatch || entry.tripReview} disabled={!entry.systemDriverRate} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={() => {
-          onChange(entry.driverId, entry.date, entry.slot, current => ({ ...current, driverRate: current.systemDriverRate ?? "", acceptDriverGross: true })); setReviewing(false);
+          onChange(entry.driverId, entry.date, entry.slot, current => ({ ...current, driverRate: current.systemDriverRate ?? "", acceptDriverGross: true }), "complete"); setReviewing(false);
         }}>Accept DataTruck driver gross</button>
         <p className="mt-4 text-xs text-zinc-500">Driver gross stays as entered. Accepting system values replaces the total gross and miles with the values shown here.</p>
         <button type="button" hidden={disabled || entry.tripReview || entry.sourceMissing} disabled={disabled || entry.tripReview || entry.sourceMissing} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500" onClick={() => {
           onChange(entry.driverId, entry.date, entry.slot, (current) => ({ ...current, acceptSystemValues: true,
             originalRate: current.systemOriginalRate ?? "", miles: current.systemMiles ?? "",
-            enteredOriginalRate: current.systemOriginalRate ?? "", enteredMiles: current.systemMiles ?? "" }));
+            enteredOriginalRate: current.systemOriginalRate ?? "", enteredMiles: current.systemMiles ?? "" }), "complete");
           setReviewing(false);
         }}>Accept system values</button>
       </BoardDialog>}

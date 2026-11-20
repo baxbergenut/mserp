@@ -4,7 +4,7 @@ import { compactDecimal, decimalInputValue } from "./board";
 export function DecimalInput({ value, displayValue, onValueChange, nonnegative = false, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
   value: string;
   displayValue: string;
-  onValueChange: (value: string, text: string) => void;
+  onValueChange: (value: string, event: Event) => void;
   nonnegative?: boolean;
 }) {
   // A live value replacement collapses a selection before the first keystroke.
@@ -25,6 +25,6 @@ export function DecimalInput({ value, displayValue, onValueChange, nonnegative =
       const next = decimalInputValue(text, nonnegative);
       if (next === null) return;
       setTyping(text);
-      onValueChange(next, text);
+      onValueChange(next, event.nativeEvent);
     }} />;
 }
