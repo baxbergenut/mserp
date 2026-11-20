@@ -766,6 +766,48 @@ func TestGrossBoardDatabase(t *testing.T) {
 		assertEnding(week.AddDate(0, 0, 7), "84.75")
 	})
 
+	t.Run("opening carry matches source history across a reset", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		_, err = tx.Exec(ctx, `INSERT INTO pg_temp.loads(id,load_id,total_pay,total_miles,raw_payload,split_expected,split_allocation) VALUES
+ (9001,'BEFORE-RESET',500,100,'{}',false,NULL),
+ (9002,'UNSELECTED-SPLIT',500,100,'{"trips":[{},{}]}',false,NULL),
+ (9003,'UNSPLIT-PARENT',200,100,'{"trips":[{}]}',false,NULL),
+ (9004,'REVIEWED-PARENT',200,100,'{}',false,'{}'),
+ (9005,'MISSING-SPLIT',300,100,'{}',true,NULL),
+ (9006,'SELECTED-SPLIT',100,100,'{"trips":[{"id":11,"driver__full_name":"A","total_load_pay":"80","mile":"60","empty_mile":"0"},{"id":12,"driver__full_name":"B","total_load_pay":"20","mile":"40","empty_mile":"0"}]}',true,NULL)`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO pg_temp.gross_board_rate_resets(driver_id,week_start,target,week_change) VALUES ($1,'2027-06-07',10,0)`, carryDriver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO pg_temp.gross_board_entries(driver_id,service_date,load_number,load_record_id,load_trip_id,entered_original_rate,driver_rate) VALUES
+ ($1,'2027-06-01','BEFORE-RESET',NULL,NULL,NULL,400),
+ ($1,'2027-06-08','BEFORE-RESET',9001,NULL,NULL,400),
+ ($1,'2027-06-09','UNSELECTED-SPLIT',9002,NULL,400,100),
+ ($1,'2027-06-10','UNSPLIT-PARENT',9003,NULL,150,100),
+ ($1,'2027-06-11','REVIEWED-PARENT',9004,NULL,150,100),
+ ($1,'2027-06-12','MISSING-SPLIT',9005,NULL,NULL,100),
+ ($1,'2027-06-13','SELECTED-SPLIT',9006,11,NULL,70),
+ ($1,'2027-06-14','SELECTED-SPLIT',9006,12,NULL,15)`, carryDriver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, query := range []string{grossBoardEffective + grossBoardOpenings, grossBoardOpeningValues} {
+			var amount string
+			var incomplete int
+			var reset bool
+			err = tx.QueryRow(ctx, query+`SELECT opening,incomplete,reset_this_week FROM openings WHERE driver_id=$2`, "2027-06-21", carryDriver).Scan(&amount, &incomplete, &reset)
+			if err != nil || amount != "175.00" || incomplete != 2 || reset {
+				t.Fatalf("opening %s, incomplete %d, reset %t: %v", amount, incomplete, reset, err)
+			}
+		}
+	})
 	t.Run("display source status", func(t *testing.T) {
 		if _, err := pool.Exec(ctx, "UPDATE pg_temp.loads SET status='in_transit'"); err != nil {
 			t.Fatal(err)

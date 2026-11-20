@@ -16,7 +16,7 @@ const grossBoardCheckpoints = `checkpoints AS (
  ORDER BY driver_id,week_start DESC,id DESC
 )`
 
-const grossBoardOpeningGroups = `, openings AS (
+const grossBoardOpeningChanges = `, openings AS (
  SELECT driver_id,coalesce(sum(change),0)::text AS opening,
  count(*) FILTER (WHERE incomplete)::int AS incomplete,bool_or(reset_this_week) AS reset_this_week
  FROM (
@@ -24,46 +24,53 @@ const grossBoardOpeningGroups = `, openings AS (
    UNION ALL
    SELECT e.driver_id,e.balance_change,NOT e.deleted AND e.day_status='' AND e.balance_change IS NULL AND NOT e.duplicate
      AND (e.load_number<>'' OR e.effective_original IS NOT NULL OR e.driver_rate IS NOT NULL),false
-   FROM effective e LEFT JOIN checkpoints c ON c.driver_id=e.driver_id
-   WHERE e.service_date < $1::date AND (c.driver_id IS NULL OR e.service_date >= c.week_start)
+   FROM effective e`
+
+const grossBoardOpeningTotals = `
  ) changes GROUP BY driver_id
 ) `
 
-const grossBoardOpenings = ", " + grossBoardCheckpoints + grossBoardOpeningGroups
+const grossBoardOpenings = ", " + grossBoardCheckpoints + grossBoardOpeningChanges + `
+ LEFT JOIN checkpoints c ON c.driver_id=e.driver_id
+ WHERE e.service_date < $1::date AND (c.driver_id IS NULL OR e.service_date >= c.week_start)` + grossBoardOpeningTotals
 
-// Carry needs the original rate only. For an unselected, unsplit load with
-// zero or one trip the full validator always uses the parent total. Keep
-// duplicate ranking across the complete history, including pre-reset rows.
-var grossBoardOpeningValues = `WITH ` + grossBoardCheckpoints + `, ranked AS MATERIALIZED (
- SELECT e.driver_id,e.service_date,e.deleted,e.day_status,e.load_number,e.load_trip_id,
- e.entered_original_rate,e.original_rate,e.driver_rate,l.id matched_id,
- l.id IS NOT NULL AND row_number() OVER (
- PARTITION BY e.driver_id,l.id,e.load_trip_id ORDER BY e.source_date,e.source_slot)>1 duplicate
- FROM ` + dispatchBoardEntriesSQL + ` e ` + grossBoardResolvedLoad + `
- WHERE e.source_date < $1::date+7
+// Find the first native placement across the entire history. A later checkpoint
+// seals carry, but a placement before it still makes a later row a duplicate.
+var grossBoardOpeningValues = `WITH ` + grossBoardCheckpoints + `, placed AS MATERIALIZED (
+ SELECT e.driver_id,e.service_date,e.deleted,e.day_status,e.load_number,e.load_trip_id,e.entered_original_rate,
+ e.original_rate,e.driver_rate,e.source_date,e.source_slot,
+ CASE WHEN NOT e.deleted AND e.day_status='' THEN ` + boardLoadIdentityStart + boardLoadIdentityFinish + ` END matched_id
+ FROM ` + dispatchBoardEntriesSQL + ` e WHERE e.source_date < $1::date+7
+), first_rows AS (
+ SELECT DISTINCT ON (driver_id,matched_id,load_trip_id) driver_id,matched_id,load_trip_id,source_date,source_slot
+ FROM placed WHERE matched_id IS NOT NULL ORDER BY driver_id,matched_id,load_trip_id,source_date,source_slot
 ), relevant AS (
- SELECT e.* FROM ranked e LEFT JOIN checkpoints c ON c.driver_id=e.driver_id
- WHERE e.service_date < $1::date AND (c.driver_id IS NULL OR e.service_date>=c.week_start)
-), amounts AS (
- SELECT e.*,CASE WHEN e.duplicate OR e.deleted OR e.day_status<>'' THEN NULL
+ SELECT p.*,coalesce((f.source_date,f.source_slot)<(p.source_date,p.source_slot),false) preceding
+ FROM placed p LEFT JOIN checkpoints c ON c.driver_id=p.driver_id
+ LEFT JOIN first_rows f ON f.driver_id=p.driver_id AND f.matched_id=p.matched_id AND f.load_trip_id IS NOT DISTINCT FROM p.load_trip_id
+ WHERE p.service_date < $1::date AND (c.driver_id IS NULL OR p.service_date>=c.week_start)
+), amounts AS MATERIALIZED (
+ SELECT e.driver_id,e.deleted,e.day_status,e.load_number,e.driver_rate,l.id IS NOT NULL AND e.preceding AS duplicate,
+ CASE WHEN (e.preceding AND l.id IS NOT NULL) OR e.deleted OR e.day_status<>'' THEN NULL
  WHEN l.id IS NULL AND e.load_trip_id IS NOT NULL THEN NULL
  WHEN l.id IS NULL THEN coalesce(e.entered_original_rate,e.original_rate)
- WHEN simple.use_parent THEN coalesce(e.entered_original_rate,l.total_pay)
+ -- An unselected split needs review. An unsplit parent uses its total, with
+ -- the same reviewed-source precedence as the full trip validator.
+ WHEN e.load_trip_id IS NULL THEN CASE
+ WHEN l.split_expected OR (l.raw_payload->'trips'->1) IS NOT NULL THEN NULL
+ WHEN nullif(l.split_allocation,'null'::jsonb) IS NOT NULL THEN l.total_pay
+ ELSE coalesce(e.entered_original_rate,l.total_pay) END
  WHEN detail.review THEN NULL WHEN detail.reviewed THEN detail.original
  ELSE coalesce(e.entered_original_rate,detail.original) END AS effective_original
  FROM relevant e LEFT JOIN loads l ON l.id=e.matched_id
- CROSS JOIN LATERAL (SELECT e.load_trip_id IS NULL AND NOT coalesce(l.split_expected,false)
- AND l.split_allocation IS NULL AND (l.raw_payload->'trips'->1) IS NULL AS use_parent) simple
  LEFT JOIN LATERAL (
  SELECT trip_source.review,trip_source.reviewed,trip_source.original
- -- Feed the validator only complex sources. A filter after the lateral join
- -- can still expand trip JSON for every ordinary historical row.
- FROM (SELECT l.* WHERE l.id IS NOT NULL AND NOT simple.use_parent AND NOT e.duplicate
+ FROM (SELECT l.* WHERE l.id IS NOT NULL AND e.load_trip_id IS NOT NULL AND NOT e.preceding
    AND NOT e.deleted AND e.day_status='' OFFSET 0) l ` + loadTripSourceSQL + `
  ) detail ON true
 ), effective AS (
  SELECT *,effective_original-driver_rate balance_change FROM amounts
-) ` + grossBoardOpeningGroups
+) ` + grossBoardOpeningChanges + grossBoardOpeningTotals
 
 // ResetRateBalance returns the new adjusted opening. An empty driver ID is
 // reserved for the one-time operator reset of the entire roster to zero.
