@@ -5,6 +5,8 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
   const id = 'e5070000-0000-0000-0000-000000000001';
   sql(`SET search_path TO ${schema},public;
     INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate) VALUES('${id}','Save Test Driver','save test driver','cpm',0);
+    INSERT INTO drivers(full_name,normalized_name,pay_type,pay_rate)
+    SELECT 'Wire Test Driver '||n,'wire test driver '||n,'cpm',0 FROM generate_series(1,48) n;
     INSERT INTO trucks(id,unit_number,status) VALUES('e5070000-0000-0000-0000-000000000002','SAVE-1','assigned');
     INSERT INTO truck_driver_assignments(truck_id,driver_id) VALUES('e5070000-0000-0000-0000-000000000002','${id}');
     INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(987652,'SAVE-52','Dispatched',500,500,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Dallas","state":"TX"}}]}');
@@ -14,6 +16,12 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     const login=await other.request.post('/api/auth/login',{data:{email:'save-second@example.test',password}});
     expect(login.status()).toBe(200);
     const session=await (await other.request.get('/api/auth/session')).json();
+    const wire = await page.context().newCDPSession(page);
+    await wire.send('Network.enable');
+    const frames = [];
+    wire.on('Network.eventSourceMessageReceived', e => {
+      if (e.eventName === 'board' || e.eventName === 'boardPatch') frames.push({name:e.eventName,bytes:Buffer.byteLength(e.data)});
+    });
     const opening = page.waitForResponse(response => new URL(response.url()).pathname === '/api/driver-board' && response.status() === 200);
     await page.goto(base+'/driver-board');
     const week = new URL((await opening).url()).searchParams.get('weekStart');
@@ -28,6 +36,16 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await write({notes:'initial note'});
     await page.reload();
     await expect(input('Notes')).toHaveValue('initial note');
+    await write({notes:'live baseline'});
+    await expect(input('Notes')).toHaveValue('live baseline');
+    await write({notes:'initial note'});
+    await expect(input('Notes')).toHaveValue('initial note');
+    await expect.poll(() => frames.filter(f => f.name === 'boardPatch').length).toBeGreaterThan(0);
+    const fullBytes = frames.filter(f => f.name === 'board').at(-1).bytes;
+    const patchBytes = frames.filter(f => f.name === 'boardPatch').at(-1).bytes;
+    expect(patchBytes).toBeLessThan(fullBytes / 10);
+    console.log('Status Board peer edit SSE bytes', {fullBytes,patchBytes});
+    await wire.detach();
     // Compare real keyboard and clipboard input in the focused cell. Record
     // input-to-PUT separately from PostgreSQL and the receipt's round trip.
     await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin:new URL(base).origin});

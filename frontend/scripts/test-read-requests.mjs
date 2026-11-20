@@ -95,3 +95,31 @@ for (const scope of ["other week", "week"]) {
   await sections.read("status",scope,async offer => {assert.equal(offer,"v1");return {drivers:[]};});
 }
 console.log("Board section reuse verified for independent edits, removed permissions, recovery, week and access changes.");
+
+const { subscribeBoardStream } = await import(compile("../app/lib/boardStream.ts"));
+const sockets = [];
+class TestBoardStream extends EventTarget {
+  constructor(url) { super(); this.url = url; sockets.push(this); }
+  close() { this.closed = true; }
+  emit(name, id, value) { this.dispatchEvent(new MessageEvent(name, { lastEventId: String(id), data: JSON.stringify(value) })); }
+}
+const previousEventSource = globalThis.EventSource;
+globalThis.EventSource = TestBoardStream;
+try {
+  const boards = [];
+  const ready = { open() {}, error() {}, close() {} };
+  const stop = subscribeBoardStream(enabled => enabled ? 'rows' : 'full', 'board', ready, board => boards.push(board), () => {}, () => {}, () => {});
+  const stream = sockets[0];
+  stream.emit('board', 1, { entries: [{id:'a'}, {id:'b'}], loads: {a:1,b:2}, week: 'one' });
+  stream.emit('boardPatch', 2, { base:1, rows:{entries:{1:{id:'b2'}}}, fields:{loads:{b:3}}, set:{week:'two'} });
+  assert.deepEqual(boards[1], {entries:[{id:'a'},{id:'b2'}],loads:{a:1,b:3},week:'two'});
+  assert.deepEqual(boards[0], {entries:[{id:'a'},{id:'b'}],loads:{a:1,b:2},week:'one'});
+  stream.emit('boardPatch', 4, {base:3, set:{week:'wrong'}});
+  assert.equal(stream.closed,true);
+  assert.equal(sockets[1].url,'full');
+  assert.equal(boards.at(-1),undefined);
+  sockets[1].emit('board', '', {entries:[{id:'restored'}]});
+  assert.deepEqual(boards.at(-1),{entries:[{id:'restored'}]});
+  stop();
+  assert.equal(sockets[1].closed,true);
+} finally { globalThis.EventSource = previousEventSource; }

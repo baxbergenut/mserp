@@ -1,3 +1,4 @@
+import { subscribeBoardStream } from "./boardStream";
 import { BoardSections } from "./boardSections";
 import { takeBoardTimingHeader } from "./boardTiming";
 import { expensePayload } from "./expenseCosts";
@@ -203,15 +204,7 @@ export const updateGrossPresence = (clientId: string, cell: import("./types").Gr
 export const clearGrossPresence = (clientId: string) => performRequest<void>(`/gross-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossBoard) => void, presence: (peers?: import("./types").GrossBoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const ready = boardReadiness.subscribe(`gross:${weekStart}`, () => changed());
-  const stream = new EventSource(`${API_BASE}${withQuery("/gross-board/events", { weekStart, initial: "none", opening: ready.opening })}`, { withCredentials: true });
-  stream.addEventListener("open", () => { ready.open(); connection(true); });
-  stream.addEventListener("error", () => { ready.error(); connection(false); });
-  stream.addEventListener("changed", () => changed());
-  stream.addEventListener("presence", () => presence());
-  stream.addEventListener("grossBoard", event => { try { changed(JSON.parse(event.data)); } catch { changed(); } });
-  stream.addEventListener("peers", event => { try { presence(JSON.parse(event.data)); } catch { presence(); } });
-  stream.addEventListener("unauthorized", () => { stream.close(); connection(false); unauthorized(); });
-  return () => { ready.close(); stream.close(); };
+  return subscribeBoardStream(patches => `${API_BASE}${withQuery("/gross-board/events", { weekStart, initial: "none", opening: ready.opening, rowUpdates: patches ? "1" : undefined })}`, "grossBoard", ready, changed, presence, connection, unauthorized);
 }
 export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) => {
   return readBoardSnapshot<DriverBoard | import("./types").CompactDriverBoard>("status", "/driver-board", { weekStart, overview: "1", compact: "grid", weekPreview: "1" }, signal).then(expandBoard);
@@ -237,15 +230,7 @@ export const clearBoardPresence = (clientId: string) =>
   performRequest<void>(`/driver-board/presence/${clientId}`, { method: "DELETE", keepalive: true });
 export function subscribeBoardEvents(changed: (board?: DriverBoard) => void, presence: (peers?: import("./types").BoardPresence[]) => void, connection: (connected: boolean) => void, unauthorized: () => void) {
   const ready = boardReadiness.subscribe("status", () => changed());
-  const stream = new EventSource(`${API_BASE}${withQuery("/driver-board/events", { overview: "1", initial: "none", opening: ready.opening })}`, { withCredentials: true });
-  stream.addEventListener("open", () => { ready.open(); connection(true); });
-  stream.addEventListener("error", () => { ready.error(); connection(false); });
-  stream.addEventListener("changed", () => changed());
-  stream.addEventListener("presence", () => presence());
-  stream.addEventListener("board", event => { try { changed(JSON.parse(event.data)); } catch { changed(); } });
-  stream.addEventListener("peers", event => { try { presence(JSON.parse(event.data)); } catch { presence(); } });
-  stream.addEventListener("unauthorized", () => { stream.close(); connection(false); unauthorized(); });
-  return () => { ready.close(); stream.close(); };
+  return subscribeBoardStream(patches => `${API_BASE}${withQuery("/driver-board/events", { overview: "1", initial: "none", opening: ready.opening, rowUpdates: patches ? "1" : undefined })}`, "board", ready, changed, presence, connection, unauthorized);
 }
 export const fetchDriverBoardHistory = (driverIds: string[], before = 0, field = "") =>
   apiRequest<DriverBoardHistory>(withQuery("/driver-board/history", { driverIds: driverIds.join(","), before, field }));
