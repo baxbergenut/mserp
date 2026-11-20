@@ -12,7 +12,55 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"mserp/internal/boardroutes"
+	"mserp/internal/db"
 )
+
+func TestAutomationRouteReadCountDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		board := NewDriverBoardRepository(pool)
+		routes := boardroutes.NewClient(boardroutes.Options{Enabled: true})
+		var firstCalls int64
+		for _, size := range []int{1, 64} {
+			if _, err := pool.Exec(ctx, `WITH added AS (
+ INSERT INTO drivers(id,full_name,normalized_name,pay_type,pay_rate,hire_date)
+ SELECT md5('route-test-'||n)::uuid,'Route '||n,'route '||n,'cpm',0.5,'2026-01-01'
+ FROM generate_series(1,$1::int)n ON CONFLICT(id) DO NOTHING RETURNING id)
+ INSERT INTO driver_board(driver_id,status,destination)
+ SELECT id,'ENROUTE','Dallas, TX' FROM added`, size); err != nil {
+				t.Fatal(err)
+			}
+			// A future deadline leaves the driver's saved route alone. Other drivers
+			// have no truck, so automation records the usual unavailable-GPS reason.
+			if _, err := pool.Exec(ctx, `INSERT INTO driver_board_automation(driver_id,route_not_before)
+ SELECT id,CASE WHEN full_name='Route 1' THEN now()+interval '1 day' END
+ FROM drivers WHERE normalized_name LIKE 'route %' ON CONFLICT(driver_id) DO UPDATE SET route_not_before=EXCLUDED.route_not_before`); err != nil {
+				t.Fatal(err)
+			}
+			if err := board.ReconcileAutomation(ctx, routes, nil, ""); err != nil {
+				t.Fatal(err)
+			}
+			measured, metrics := db.WithMetrics(ctx)
+			if err := board.ReconcileAutomation(measured, routes, nil, ""); err != nil {
+				t.Fatal(err)
+			}
+			var enabled, deferred int
+			if err := pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE c.travel->>'error'='GPS automation requires a unique assigned truck VIN' AND d.full_name<>'Route 1'),
+ count(*) FILTER (WHERE c.travel='{}'::jsonb AND d.full_name='Route 1')
+ FROM driver_board_automation c JOIN drivers d ON d.id=c.driver_id WHERE d.normalized_name LIKE 'route %'`).Scan(&enabled, &deferred); err != nil || enabled != size-1 || deferred != 1 {
+				t.Fatal("wrong per-driver route state", size, enabled, deferred, err)
+			}
+			calls := metrics.Queries.Load()
+			t.Logf("%d drivers, %d database calls per settled run", size, calls)
+			if size == 1 {
+				firstCalls = calls
+			} else if calls != firstCalls+1 {
+				t.Fatalf("expected one additional query for the second batch: %d to %d", firstCalls, calls)
+			}
+		}
+	})
+}
 
 func TestStatusBoardOperationalDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {

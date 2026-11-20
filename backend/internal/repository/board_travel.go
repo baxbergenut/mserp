@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"math"
 	"reflect"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"mserp/internal/boardroutes"
 	"mserp/internal/fiveeld"
@@ -236,6 +238,35 @@ func (r *DriverBoardRepository) ReconcileAutomation(ctx context.Context, routes 
 	return r.reconcileAutomation(ctx, conn, routes, eld, usdot, "", "")
 }
 
+// Route documents can contain large map geometry. Limit the number decoded at
+// once when deciding which drivers actually need provider work.
+const boardRouteReadBatch = 32
+
+type boardRouteInput struct {
+	travel    BoardTravel
+	vin       string
+	notBefore *time.Time
+}
+
+func readBoardRouteInputs(ctx context.Context, conn *pgxpool.Conn, driverIDs, truckIDs []string) ([]boardRouteInput, error) {
+	rows, err := conn.Query(ctx, `SELECT c.travel,coalesce(t.vin,''),c.route_not_before
+ FROM unnest($1::uuid[],$2::text[]) WITH ORDINALITY AS d(driver_id,truck_id,ord)
+ JOIN driver_board_automation c ON c.driver_id=d.driver_id
+ LEFT JOIN trucks t ON t.id=nullif(d.truck_id,'')::uuid ORDER BY d.ord`, driverIDs, truckIDs)
+	if err != nil {
+		return nil, err
+	}
+	inputs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (boardRouteInput, error) {
+		var input boardRouteInput
+		err := row.Scan(&input.travel, &input.vin, &input.notBefore)
+		return input, err
+	})
+	if err == nil && len(inputs) != len(driverIDs) {
+		return nil, pgx.ErrNoRows
+	}
+	return inputs, err
+}
+
 func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *pgxpool.Conn, routes *boardroutes.Client, eld *fiveeld.Client, usdot, onlyDriver, onlyContext string) error {
 	now := r.now().UTC()
 	week, _ := time.Parse(time.DateOnly, boardLoadToday(now))
@@ -252,6 +283,8 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 		lastKnown bool
 		urgent    bool
 	}
+	var candidates []target
+	var driverIDs, truckIDs []string
 	targets := []target{}
 	matchedDriver := false
 	for _, d := range board.Drivers {
@@ -316,13 +349,28 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 		if routes == nil || !routes.Options.Enabled || a.Context == "" || a.RequiresConfirmation {
 			continue
 		}
-		var t BoardTravel
-		var vin string
-		var routeNotBefore *time.Time
-		if err = conn.QueryRow(ctx, `SELECT travel,coalesce(t.vin,''),c.route_not_before FROM driver_board_automation c LEFT JOIN trucks t ON t.id::text=$2 WHERE c.driver_id=$1`, d.ID, d.TruckID).Scan(&t, &vin, &routeNotBefore); err != nil {
-			return err
+		candidates = append(candidates, target{driver: d, view: view, stop: stop})
+		driverIDs = append(driverIDs, d.ID)
+		truckIDs = append(truckIDs, d.TruckID)
+	}
+	if onlyDriver != "" && !matchedDriver {
+		return ErrETARetryUnavailable
+	}
+	// Evidence rows now exist. Providers still check each queued driver's settle
+	// deadline and store results under the existing version and driver guards.
+	var inputs []boardRouteInput
+	for i, candidate := range candidates {
+		if i%boardRouteReadBatch == 0 {
+			end := min(i+boardRouteReadBatch, len(candidates))
+			inputs, err = readBoardRouteInputs(ctx, conn, driverIDs[i:end], truckIDs[i:end])
+			if err != nil {
+				return err
+			}
 		}
-		if routeNotBefore != nil && now.Before(*routeNotBefore) {
+		input := inputs[i%boardRouteReadBatch]
+		d, view, stop := candidate.driver, candidate.view, candidate.stop
+		a, t := view.Automation, input.travel
+		if input.notBefore != nil && now.Before(*input.notBefore) {
 			if onlyDriver != "" {
 				return ErrETARetryBusy
 			}
@@ -375,10 +423,9 @@ func (r *DriverBoardRepository) reconcileAutomation(ctx context.Context, conn *p
 			continue
 		}
 		urgent := t.Context != a.Context || !sameTelemetrySource(t.Source, d.Location.Source) || t.Mode != boardroutes.RouteProfile
-		targets = append(targets, target{d, view, stop, t, vin, lastKnown, urgent})
-	}
-	if onlyDriver != "" && !matchedDriver {
-		return ErrETARetryUnavailable
+		candidate.travel, candidate.vin = t, input.vin
+		candidate.lastKnown, candidate.urgent = lastKnown, urgent
+		targets = append(targets, candidate)
 	}
 	sort.SliceStable(targets, func(i, j int) bool {
 		if targets[i].urgent != targets[j].urgent {
