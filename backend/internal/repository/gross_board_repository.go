@@ -41,6 +41,14 @@ func NewGrossBoardRepository(pool *pgxpool.Pool) *GrossBoardRepository {
 	return &GrossBoardRepository{pool: pool, weekEntries: new(boardWeekCache[[]GrossBoardEntry]), openings: new(boardWeekCache[[]GrossBoardBalance])}
 }
 
+// StatusBoard shares the weekly source rows with this Gross Board. Each board
+// projects its own response and reads the other sections in its own transaction.
+func (r *GrossBoardRepository) StatusBoard(fiveELDConfigured bool) *DriverBoardRepository {
+	board := NewDriverBoardRepository(r.pool, fiveELDConfigured)
+	board.weekEntries = r.weekEntries
+	return board
+}
+
 type GrossBoardEntry struct {
 	SourceStatus           string           `json:"sourceStatus,omitempty"` // Display-only current provider status.
 	SourceMissing          bool             `json:"sourceMissing,omitempty"`
@@ -214,13 +222,13 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 	defer tx.Rollback(ctx)
 
 	endRevision := db.Phase(ctx, "board_week_revision")
-	key, err := boardWeekRevision(ctx, tx, week, true)
+	keys, err := boardWeekRevision(ctx, tx, week, true)
 	endRevision()
 	if err != nil {
 		return GrossBoard{}, err
 	}
 	endEntries := db.Phase(ctx, "board_week_entries")
-	entries, err := r.weekEntries.get(ctx, key, cloneWeekEntries, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+	entries, err := r.weekEntries.get(ctx, keys.entries, cloneWeekEntries, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
 	endEntries()
 	if err != nil {
 		return GrossBoard{}, err
@@ -232,7 +240,7 @@ func (r *GrossBoardRepository) Get(ctx context.Context, week time.Time) (GrossBo
 		return board, err
 	}
 	endBalances := db.Phase(ctx, "gross_opening_balances")
-	board.Balances, err = r.openings.get(ctx, key, slices.Clone[[]GrossBoardBalance], func() ([]GrossBoardBalance, error) {
+	board.Balances, err = r.openings.get(ctx, keys.openings, slices.Clone[[]GrossBoardBalance], func() ([]GrossBoardBalance, error) {
 		snapshot := GrossBoard{Balances: []GrossBoardBalance{}}
 		err := readGrossBoardOpenings(ctx, tx, week, &snapshot)
 		return snapshot.Balances, err

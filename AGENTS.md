@@ -23,7 +23,9 @@ change.
 Board opens pair the authorized stream and the grid GET before taking the SQL
 snapshot. Matching includes the viewer, tab ID, board and Gross Board week.
 Keep the blocked-stream fallback and reconnect recovery when changing these
-routes. See `docs/BOARD_PERFORMANCE.md`.
+routes. The API shares weekly source rows between boards after checking their
+revision in each read transaction. Rate resets also fence Gross Board opening
+balances. See `docs/BOARD_PERFORMANCE.md`.
 
 Migrations 223–225 remove the unused accounting cutover and transfer audit tables,
 merge board cursors by board/client, and scope provider completion days by provider,

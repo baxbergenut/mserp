@@ -596,7 +596,6 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 	weekEnd := day.AddDate(0, 0, 7-(int(day.Weekday())+6)%7).Format(time.DateOnly)
 	result := map[string]BoardLoads{}
 	states := map[string]boardLoadState{}
-	missingIDs := map[int]bool{}
 	manualMismatch := map[string]bool{}
 	entries := map[string]DriverBoardEntry{}
 	selected := []string{}
@@ -604,10 +603,7 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		states[id] = boardLoadState{}
 		result[id] = BoardLoads{Week: []BoardLoad{}, Next: []BoardLoad{}, Earlier: []BoardLoad{}, Hidden: []BoardLoad{}, Unavailable: []BoardLoad{}, FromDate: from}
 	}
-	rows, err := tx.Query(ctx, `SELECT b.driver_id,coalesce(s.payload,'{}'::jsonb),coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,''),b.version,unavailable.load_id
- FROM driver_board b LEFT JOIN driver_board_load_state s ON b.driver_id=s.driver_id
- LEFT JOIN load_source_availability unavailable ON unavailable.load_id=(s.payload->'current'->>'loadId')::int AND NOT unavailable.present
- WHERE b.driver_id=ANY($1::uuid[])`, ids)
+	rows, err := tx.Query(ctx, `SELECT b.driver_id,coalesce(s.payload,'{}'::jsonb),coalesce(b.current_load,''),coalesce(b.status,''),coalesce(b.destination,''),b.version FROM driver_board b LEFT JOIN driver_board_load_state s ON b.driver_id=s.driver_id WHERE b.driver_id=ANY($1::uuid[])`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -615,19 +611,15 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		var id string
 		var s boardLoadState
 		var raw []byte
-		var missingID *int
 		var currentText string
 		var entry DriverBoardEntry
-		if err = rows.Scan(&id, &raw, &currentText, &entry.Status, &entry.Destination, &entry.Version, &missingID); err != nil {
+		if err = rows.Scan(&id, &raw, &currentText, &entry.Status, &entry.Destination, &entry.Version); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		if err := json.Unmarshal(raw, &s); err != nil {
 			rows.Close()
 			return nil, err
-		}
-		if missingID != nil {
-			missingIDs[*missingID] = true
 		}
 		if options.command != nil {
 			options.command.stateJSON = raw
@@ -725,6 +717,10 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 	if err != nil {
 		return nil, err
 	}
+	missingIDs, err := missingBoardSelections(ctx, tx, states, plans, manualPlans, imported)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		s := states[id]
 		view := result[id]
@@ -751,11 +747,6 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 			}
 		}
 		for _, p := range plans[id] {
-			// Pinned plans carry availability from their own source join. A saved
-			// selection without a plan was checked in the state read above.
-			if p.SourceMissing && p.LoadID != nil {
-				missingIDs[*p.LoadID] = true
-			}
 			if !p.Manual && p.PlanID != "" && p.Date >= week && p.Date < weekEnd {
 				p.Completed = !p.SourceMissing && providerCompletedLoad(p.SourceStatus)
 				view.Week = append(view.Week, p)
@@ -939,6 +930,52 @@ func readBoardLoadViewsCached(ctx context.Context, tx pgx.Tx, ids []string, from
 		return nil, err
 	}
 	return result, nil
+}
+
+// Plans already carry source availability in this snapshot. Only a saved
+// selection whose pinned ID is absent from all resolved plans needs another lookup.
+func missingBoardSelections(ctx context.Context, tx pgx.Tx, states map[string]boardLoadState, plans, manual map[string][]BoardLoad, imported map[string]*BoardLoad) (map[int]bool, error) {
+	unchecked := make(map[int]bool)
+	for _, s := range states {
+		if s.Current != nil && s.Current.LoadID != nil {
+			unchecked[*s.Current.LoadID] = true
+		}
+	}
+	missing := make(map[int]bool)
+	for _, group := range []map[string][]BoardLoad{plans, manual} {
+		for _, list := range group {
+			for _, plan := range list {
+				if plan.LoadID != nil {
+					delete(unchecked, *plan.LoadID)
+					if plan.SourceMissing {
+						missing[*plan.LoadID] = true
+					}
+				}
+			}
+		}
+	}
+	for _, load := range imported {
+		if load != nil && load.LoadID != nil {
+			delete(unchecked, *load.LoadID)
+		}
+	}
+	if len(unchecked) == 0 {
+		return missing, nil
+	}
+	ids := make([]int, 0, len(unchecked))
+	for id := range unchecked {
+		ids = append(ids, id)
+	}
+	rows, err := tx.Query(ctx, `SELECT load_id FROM load_source_availability WHERE load_id=ANY($1::int[]) AND NOT present`, ids)
+	if err != nil {
+		return nil, err
+	}
+	var id int
+	_, err = pgx.ForEachRow(rows, []any{&id}, func() error {
+		missing[id] = true
+		return nil
+	})
+	return missing, err
 }
 
 func (r *DriverBoardRepository) Loads(ctx context.Context, id, from string) (BoardLoads, error) {

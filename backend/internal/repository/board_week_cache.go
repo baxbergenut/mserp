@@ -9,10 +9,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type boardWeekKeys struct {
+	entries  string
+	openings string
+}
+
 // The key and the data must be read in the same read-only repeatable snapshot.
 // The four source tables advance their revisions on INSERT, UPDATE, DELETE and
 // TRUNCATE. Availability and reset records have independent write paths.
-func boardWeekRevision(ctx context.Context, tx pgx.Tx, week time.Time, openings bool) (string, error) {
+func boardWeekRevision(ctx context.Context, tx pgx.Tx, week time.Time, openings bool) (boardWeekKeys, error) {
 	// Some callers run against a partial schema or transaction-local board
 	// tables. A counter for a shadowed table cannot certify those rows.
 	var available bool
@@ -21,16 +26,20 @@ func boardWeekRevision(ctx context.Context, tx pgx.Tx, week time.Time, openings 
  (SELECT count(*)=16 FROM pg_trigger WHERE tgrelid IN ('gross_board_entries'::regclass,'gross_board_extra_entries'::regclass,'gross_board_transfers'::regclass,'loads'::regclass)
  AND tgname IN ('payroll_cache_insert','payroll_cache_update','payroll_cache_delete','payroll_cache_truncate')
  AND tgenabled IN ('O','A'))`).Scan(nil, nil, &available); err != nil || !available {
-		return "", err
+		return boardWeekKeys{}, err
 	}
-	var key string
+	var keys boardWeekKeys
+	var resets string
 	err := tx.QueryRow(ctx, `SELECT CASE WHEN count(*)=4 AND NOT bool_or(payroll_resource_table(table_name)) THEN
  jsonb_build_array(current_schema(),$1::date,array_agg(revision ORDER BY table_name),
- (SELECT array_agg(load_id ORDER BY load_id) FROM load_source_availability WHERE NOT present),
- CASE WHEN $2 THEN (SELECT jsonb_agg(jsonb_build_array(id,driver_id,week_start,target,week_change) ORDER BY id)
- FROM gross_board_rate_resets WHERE week_start<=$1::date) END)::text ELSE '' END
- FROM payroll_cache_revisions WHERE table_name IN ('gross_board_entries','gross_board_extra_entries','gross_board_transfers','loads')`, week, openings).Scan(&key)
-	return key, err
+ (SELECT array_agg(load_id ORDER BY load_id) FROM load_source_availability WHERE NOT present))::text ELSE '' END,
+ CASE WHEN $2 THEN coalesce((SELECT jsonb_agg(jsonb_build_array(id,driver_id,week_start,target,week_change) ORDER BY id)
+ FROM gross_board_rate_resets WHERE week_start<=$1::date)::text,'') ELSE '' END
+ FROM payroll_cache_revisions WHERE table_name IN ('gross_board_entries','gross_board_extra_entries','gross_board_transfers','loads')`, week, openings).Scan(&keys.entries, &resets)
+	if keys.entries != "" && openings {
+		keys.openings = keys.entries + "\x00" + resets
+	}
+	return keys, err
 }
 
 // Each repository retains at most the last displayed week. Concurrent readers

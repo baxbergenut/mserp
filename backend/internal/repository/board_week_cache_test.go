@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"mserp/internal/db"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -80,6 +82,56 @@ func TestSharedBoardPendingViewerDatabase(t *testing.T) {
 	})
 }
 
+func TestSharedBoardWeekEntriesDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
+		week := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+		gross := NewGrossBoardRepository(pool)
+		status := gross.StatusBoard(false)
+		gridRead := func(name string, wantEntries, wantOpenings int) {
+			t.Helper()
+			measured, metrics := db.WithMetrics(ctx)
+			var err error
+			if name == "status" {
+				_, err = status.GetShared(measured, week)
+			} else {
+				_, err = gross.Get(measured, week)
+			}
+			counts := metrics.Events()
+			if err != nil || int(counts["board_week_entries_queries"]) != wantEntries || int(counts["gross_opening_balances_queries"]) != wantOpenings {
+				t.Fatalf("%s: entry queries %v, opening queries %v: %v", name, counts["board_week_entries_queries"], counts["gross_opening_balances_queries"], err)
+			}
+		}
+		gridRead("status", 1, 0)
+		gridRead("gross", 0, 1)
+		gridRead("gross", 0, 0)
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		before, err := boardWeekRevision(ctx, tx, week, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO gross_board_rate_resets(driver_id,week_start,target,week_change) VALUES(gen_random_uuid(),$1,50,0)`, week)
+		if err != nil {
+			t.Fatal(err)
+		}
+		after, err := boardWeekRevision(ctx, tx, week, true)
+		if err != nil || before.entries != after.entries || before.openings == after.openings {
+			t.Fatal("reset must invalidate only opening balances", err)
+		}
+		if err := tx.Rollback(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload) VALUES(1920101,'SHARED-WEEK-192','Dispatched',0,0,'{}')`); err != nil {
+			t.Fatal(err)
+		}
+		gridRead("gross", 1, 1)
+		gridRead("status", 0, 0)
+	})
+}
+
 func TestBoardManualSourcesDatabase(t *testing.T) {
 	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, _ *pgx.Conn) {
 		var caches boardLoadSourceCaches
@@ -92,10 +144,10 @@ func TestBoardManualSourcesDatabase(t *testing.T) {
 			}
 			defer tx.Rollback(ctx)
 			key, err := boardWeekRevision(ctx, tx, time.Now(), false)
-			if err != nil || key == "" {
-				t.Fatalf("missing revision %q, %v", key, err)
+			if err != nil || key.entries == "" {
+				t.Fatalf("missing revision %q, %v", key.entries, err)
 			}
-			out, err := caches.readManual(ctx, tx, key, states)
+			out, err := caches.readManual(ctx, tx, key.entries, states)
 			if err != nil {
 				t.Fatal(err)
 			}
