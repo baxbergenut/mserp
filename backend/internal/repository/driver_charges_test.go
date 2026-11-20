@@ -75,3 +75,19 @@ func TestChargeCountRoundingAndPause(t *testing.T) {
 		t.Fatal("accepted Tuesday")
 	}
 }
+
+func TestInstallmentSkipPreservesPaymentSlotsAndPriorCarry(t *testing.T) {
+	total := "10.00"
+	s := ChargeSchedule{Kind: "installment", Direction: "charge", StartWeek: "2026-09-28", Eligibility: "calendar",
+		Total: &total, InstallmentCount: 3, Phases: []ChargePhase{{WeekStart: "2026-09-28", Amount: "3.33"}},
+		Occurrences: []ChargeOccurrence{
+			{WeekStart: "2026-09-28", Amount: "-2.00", BaseAmount: "-3.33"},
+			{WeekStart: "2026-10-05", Amount: "0.00", BaseAmount: "-3.33", WaiveRemainder: true},
+			{WeekStart: "2026-10-12", Amount: "0.00", BaseAmount: "-3.33", WaiveRemainder: true},
+		},
+	}
+	rows, err := projectCharges(s, "2026-11-02", nil, false)
+	if err != nil || len(rows) != 5 || rows[3].Amount != "-4.66" || rows[4].Amount != "-3.34" {
+		t.Fatalf("consecutive skips after a partial payment: %+v %v", rows, err)
+	}
+}

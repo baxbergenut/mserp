@@ -93,8 +93,11 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 				return nil, err
 			}
 		}
-		if input.WaiveRemainder && (s.Kind != "recurring" || s.Direction != "charge" || n > 0) {
-			return nil, chargeInvalid("Only recurring deductions can use a reduced charge for this week")
+		if input.WaiveRemainder && s.Kind == "installment" && n != 0 {
+			return nil, chargeInvalid("A skipped installment must have a zero deduction")
+		}
+		if input.WaiveRemainder && (s.Direction != "charge" || n > 0) {
+			return nil, chargeInvalid("Only deductions can use a reduced charge for this week")
 		}
 		carried, _ := chargeCents(current.CarryForward)
 		if !input.Reset && input.Name == current.Name && input.Amount == current.Amount && input.WaiveRemainder == current.WaiveRemainder && !(current.Version == 0 && carried > 0) {
@@ -133,6 +136,24 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 		if err = freezeChargesBefore(ctx, tx, s, week, loads[driver]); err != nil {
 			return nil, err
 		}
+		// Most plans end when principal runs out. Move an explicit final
+		// week too, including when a saved skip is reset or edited.
+		skipped := input.WaiveRemainder && !input.Reset
+		if s.Kind == "installment" && s.EndWeek != nil && skipped != current.WaiveRemainder {
+			days := -7
+			if skipped {
+				days = 7
+			}
+			end, err := chargeWeek(*s.EndWeek)
+			if err != nil {
+				return nil, err
+			}
+			shifted := end.AddDate(0, 0, days).Format(time.DateOnly)
+			if _, err := chargeWeek(shifted); err != nil {
+				return nil, err
+			}
+			s.EndWeek = &shifted
+		}
 		if input.Reset {
 			if _, err = tx.Exec(ctx, `DELETE FROM driver_charge_occurrences WHERE schedule_id=$1 AND week_start=$2::date`, s.ID, week); err != nil {
 				return nil, err
@@ -164,7 +185,7 @@ func saveGeneratedCharges(ctx context.Context, tx pgx.Tx, driver, week, actor st
 		if _, err = projectCharges(*s, "2100-12-27", loads[driver], false); err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE driver_charge_schedules SET version=version+1 WHERE id=$1`, s.ID); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE driver_charge_schedules SET version=version+1,end_week=$2::date WHERE id=$1`, s.ID, s.EndWeek); err != nil {
 			return nil, err
 		}
 		action := "weekly_override"
