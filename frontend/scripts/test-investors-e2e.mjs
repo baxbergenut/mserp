@@ -81,7 +81,7 @@ try {
         if (latency) await new Promise(done => setTimeout(done, latency / 2));
         const chunks = []; for await (const chunk of req) chunks.push(chunk);
         const headers = {};
-        for (const key of ['cookie', 'content-type', 'x-csrf-token', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
+        for (const key of ['cookie', 'content-type', 'x-csrf-token', 'x-clustie-board-timing', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
         const response = await fetch(`http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
         if (latency) await new Promise(done => setTimeout(done, latency / 2));
         res.writeHead(response.status, Object.fromEntries(response.headers));

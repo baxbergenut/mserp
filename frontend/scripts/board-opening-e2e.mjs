@@ -12,6 +12,15 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
   });
   setNetworkLatency(178);
   const results = [];
+  const measuredBoards = new Set();
+  const checkTiming = req => {
+    const samples = req.headers()['x-clustie-board-timing'] || '';
+    for (const sample of samples.split(',')) {
+      const paired = /^(status|gross)-open=\d+(?:\/\d+){4}~(\d+)\/(\d+)\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/.exec(sample);
+      if (paired && Number(paired[4]) > Number(paired[3]) && Number(paired[7]) > 0) measuredBoards.add(paired[1]);
+    }
+  };
+  page.on('request', checkTiming);
   for (const enabled of [false, true]) {
     parallel = enabled;
     await page.goto(base + '/investors');
@@ -57,6 +66,8 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
     }
   }
   console.log('Actual browser/API/PostgreSQL opening at 178 ms RTT', JSON.stringify(results));
+  page.off('request', checkTiming);
+  expect([...measuredBoards].sort()).toEqual(['gross', 'status']);
   setNetworkLatency(0);
   await page.unrouteAll({behavior: 'wait'});
   await checkTruckProfileRequests(page, base, sql, schema);
