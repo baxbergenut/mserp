@@ -115,6 +115,7 @@ func TestLoadTripsDatabase(t *testing.T) {
 			exec(`INSERT INTO truck_driver_assignments(truck_id,driver_id,assigned_at) VALUES
  ('82000000-0000-0000-0000-000000000001',$1,'2026-10-01 00:00-04'),
  ('82000000-0000-0000-0000-000000000002',$2,'2026-10-01 00:00-04')`, a, b)
+			testGrossBoardSourceDuringProviderUpdate(t, ctx, pool)
 			week, _ := time.Parse(time.DateOnly, "2026-10-19")
 			repo := NewGrossBoardRepository(pool)
 			board, err := repo.Get(ctx, week)
@@ -311,6 +312,61 @@ func TestLoadTripsDatabase(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func testGrossBoardSourceDuringProviderUpdate(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, err := pool.Exec(ctx, `INSERT INTO loads(id,load_id,status,total_pay,load_pay,total_miles,raw_payload) VALUES(8198,'SOURCE-UPDATE','delivered',100,100,50,'{}')`); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := pgx.ConnectConfig(ctx, pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close(context.Background())
+	writer, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Rollback(context.Background())
+	if _, err = writer.Exec(ctx, "UPDATE loads SET total_pay=200 WHERE id=8198"); err != nil {
+		t.Fatal(err)
+	}
+	readerPID := int(reader.PgConn().PID())
+	result := make(chan error, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var amount string
+		err := reader.QueryRow(ctx, grossBoardLockedSourceSQL, 8198, nil).Scan(&amount, nil, nil, nil, nil, nil, nil)
+		if err == nil && amount != "200.00" {
+			err = fmt.Errorf("save used provider amount %q after a concurrent update", amount)
+		}
+		result <- err
+	}()
+	defer func() { cancel(); <-done }()
+	for {
+		var waiting bool
+		if err = writer.QueryRow(ctx, "SELECT pg_backend_pid()=ANY(pg_blocking_pids($1))", readerPID).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case err := <-result:
+			t.Fatalf("source read returned before acquiring the provider row: %v", err)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err = writer.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-result; err != nil {
+		t.Fatal(err)
 	}
 }
 
