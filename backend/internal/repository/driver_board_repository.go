@@ -24,6 +24,7 @@ type DriverBoardEntry struct {
 	EffectiveAt       *time.Time        `json:"effectiveAt,omitempty"`
 	UndoID            int64             `json:"undoId,omitempty"`
 	StatusEdited      bool              `json:"statusEdited,omitempty"`
+	EditedFields      []string          `json:"editedFields,omitempty"` // Write-only field mask for inline edits.
 	// DispatchOnly leaves the committed Notes and trailer cells untouched.
 	DispatchOnly bool `json:"dispatchOnly,omitempty"`
 	// Selecting the same number should still resolve its stops.
@@ -400,6 +401,13 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		}
 		if err != nil {
 			return nil, err
+		}
+		if matchCurrentLoad && active && e.EditedFields != nil && e.Version <= old.Version {
+			empty := len(e.EditedFields) == 0
+			e.applyInlineEdit(ctx, old)
+			if empty {
+				continue
+			}
 		}
 		if matchCurrentLoad && e.DispatchOnly {
 			// The dispatcher did not edit these cells. Keep their committed values

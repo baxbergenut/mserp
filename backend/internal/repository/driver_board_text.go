@@ -26,6 +26,52 @@ func boardTextCandidate(e DriverBoardEntry) bool {
 		e.StatusReason == "" && e.HomeTime == "" && leaveValues(e.LeavePlan).HomeStart == ""
 }
 
+// Apply only the submitted fields to the locked row. Coupled load/status effects
+// are calculated by the ordinary save code against this same committed state.
+func (e *DriverBoardEntry) applyInlineEdit(ctx context.Context, current DriverBoardEntry) {
+	db.Event(ctx, "board_inline_patch")
+	if e.Version < current.Version {
+		db.Event(ctx, "board_inline_merged")
+	}
+	edit := *e
+	*e = current
+	for _, field := range edit.EditedFields {
+		switch field {
+		case "notes":
+			e.Notes = edit.Notes
+		case "trailerNumber":
+			e.TrailerNumber = edit.TrailerNumber
+		case "trailerNote":
+			e.TrailerNote = edit.TrailerNote
+		case "currentLoad":
+			e.CurrentLoad, e.ResolveCurrentLoad = edit.CurrentLoad, edit.ResolveCurrentLoad
+		case "status":
+			e.Status, e.StatusEdited = edit.Status, edit.StatusEdited
+			e.StatusReason, e.EffectiveAt = edit.StatusReason, edit.EffectiveAt
+		case "destination":
+			e.Destination = edit.Destination
+		case "eta":
+			e.ETA = edit.ETA
+		case "homeTime":
+			e.HomeTime = edit.HomeTime
+		case "leavePlan":
+			e.LeavePlan = edit.LeavePlan
+		}
+	}
+}
+
+func inlineTextEdit(e DriverBoardEntry) bool {
+	if e.EditedFields == nil || e.Version <= 0 {
+		return false
+	}
+	for _, field := range e.EditedFields {
+		if field != "notes" && field != "trailerNumber" && field != "trailerNote" {
+			return false
+		}
+	}
+	return true
+}
+
 func leaveValues(plan *DriverLeavePlan) DriverLeavePlan {
 	if plan == nil {
 		return DriverLeavePlan{}
@@ -48,7 +94,7 @@ func (r *DriverBoardRepository) SaveWithTextBase(ctx context.Context, entries []
 	// Older tabs send a complete row without the values the dispatcher saw. A
 	// matching persisted version supplies that baseline. Stale legacy rows still
 	// go through conflict review. New clients opt out of this probe for full saves.
-	if bases == nil && len(entries) == 1 && boardTextCandidate(entries[0]) {
+	if bases == nil && len(entries) == 1 && entries[0].EditedFields == nil && boardTextCandidate(entries[0]) {
 		edit := entries[0]
 		base, err := scanBoardEntry(r.pool.QueryRow(ctx, boardEntryQuery, edit.DriverID))
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -62,11 +108,11 @@ func (r *DriverBoardRepository) SaveWithTextBase(ctx context.Context, entries []
 		}
 		bases = map[string]DriverBoardEntry{edit.DriverID: base}
 	}
-	if len(bases) != len(entries) || len(entries) == 0 {
+	if len(entries) == 0 {
 		return r.saveWithConflict(ctx, entries, actor)
 	}
 	for _, e := range entries {
-		if !boardTextOnly(bases[e.DriverID], e) {
+		if !inlineTextEdit(e) && (e.EditedFields != nil || len(entries) != len(bases) || !boardTextOnly(bases[e.DriverID], e)) {
 			return r.saveWithConflict(ctx, entries, actor)
 		}
 	}
@@ -129,19 +175,24 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 		}
 		base := bases[edit.DriverID]
 		notes, number, note := current.Notes, current.TrailerNumber, current.TrailerNote
-		if base.Notes != edit.Notes {
-			if notes != base.Notes && notes != edit.Notes {
-				return nil, &DriverBoardRowConflict{Entries: currentRows}
+		if edit.EditedFields != nil {
+			edit.applyInlineEdit(ctx, current)
+			notes, number, note = edit.Notes, edit.TrailerNumber, edit.TrailerNote
+		} else {
+			if base.Notes != edit.Notes {
+				if notes != base.Notes && notes != edit.Notes {
+					return nil, &DriverBoardRowConflict{Entries: currentRows}
+				}
+				notes = edit.Notes
 			}
-			notes = edit.Notes
-		}
-		if base.TrailerNumber != edit.TrailerNumber || base.TrailerNote != edit.TrailerNote {
-			matchesBase := number == base.TrailerNumber && note == base.TrailerNote
-			matchesEdit := number == edit.TrailerNumber && note == edit.TrailerNote
-			if !matchesBase && !matchesEdit {
-				return nil, &DriverBoardRowConflict{Entries: currentRows}
+			if base.TrailerNumber != edit.TrailerNumber || base.TrailerNote != edit.TrailerNote {
+				matchesBase := number == base.TrailerNumber && note == base.TrailerNote
+				matchesEdit := number == edit.TrailerNumber && note == edit.TrailerNote
+				if !matchesBase && !matchesEdit {
+					return nil, &DriverBoardRowConflict{Entries: currentRows}
+				}
+				number, note = edit.TrailerNumber, edit.TrailerNote
 			}
-			number, note = edit.TrailerNumber, edit.TrailerNote
 		}
 		if notes != current.Notes || number != current.TrailerNumber || note != current.TrailerNote {
 			finish := db.Phase(ctx, "board_text_update")

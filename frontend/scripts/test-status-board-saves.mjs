@@ -33,10 +33,10 @@ try {
       const input = req.postDataJSON().entries[0];
       expect(input.fleetStatus).toBeUndefined();
       if (saveGate) await saveGate;
-      if (conflict || input.version !== entry.version) return route.fulfill({ status: 409, json: { error: 'Status board changed; your draft is retained.' } });
+      if (conflict) return route.fulfill({ status: 409, json: { error: 'Status board changed; your draft is retained.' } });
       writes++;
-      entry = { ...input, statusEdited: false, version: entry.version + 1,
-        status: input.status === 'SHOP' && driver.availabilityStatus === 'rest' ? 'REST' : input.status,
+      entry = { ...entry, ...Object.fromEntries(input.editedFields.map(field => [field,input[field]])), statusEdited: false, version: entry.version + 1,
+        status: input.status === 'SHOP' && driver.availabilityStatus === 'rest' ? 'REST' : input.status ?? entry.status,
         fleetStatus: { availabilityStatus: driver.availabilityStatus, statusVersion: 1, truckId: 'truck', truckOperatingStatus: input.status === 'SHOP' ? 'shop' : driver.truckOperatingStatus } };
       Object.assign(driver, entry.fleetStatus);
       return route.fulfill({ json: [entry] });

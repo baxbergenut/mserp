@@ -40,6 +40,23 @@ func (request *driverBoardRequest) validate() error {
 		if e.Version < 0 || e.Version > 2147483646 {
 			return errors.New("invalid version")
 		}
+		if e.EditedFields != nil {
+			seenFields := make(map[string]bool)
+			for _, field := range e.EditedFields {
+				switch field {
+				case "notes", "trailerNumber", "trailerNote", "currentLoad", "status", "destination", "eta", "homeTime", "leavePlan":
+				default:
+					return errors.New("unknown edited board field")
+				}
+				if seenFields[field] {
+					return errors.New("duplicate edited board field")
+				}
+				seenFields[field] = true
+			}
+			if e.DispatchOnly || (e.ResolveCurrentLoad && !seenFields["currentLoad"]) || (e.StatusEdited && !seenFields["status"]) {
+				return errors.New("board intent does not match edited fields")
+			}
+		}
 		for _, field := range []struct {
 			value *string
 			max   int

@@ -175,9 +175,10 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   let mergedTextSave;
   await page.route('**/api/driver-board', async route => {
     const payload = route.request().postDataJSON();
-    const original = payload.textBase[id];
+    const original = payload.entries.find(row => row.driverId === id);
+    expect(original.editedFields).toEqual(['notes']);
     const remote = await page.request.put(base + '/api/driver-board', { headers,
-      data: { entries: [{ ...original, trailerNumber: 'Concurrent trailer' }], textBase: { [id]: original } } });
+      data: { entries: [{ driverId: id, version: original.version, editedFields: ['trailerNumber'], trailerNumber: 'Concurrent trailer' }] } });
     expect(remote.status()).toBe(200);
     const response = await route.fetch();
     mergedTextSave = { status: response.status(), row: (await response.json())[0] };
@@ -285,19 +286,17 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   const latest = (await getBoard()).entries.find(e => e.driverId === id);
   expect((await page.request.post(`${base}/api/driver-board/history/${profileEvent.id}/undo`, { headers, data: { driverId: id, version: latest.version } })).status()).toBe(409);
   await runStatusBoardEditingE2E({ page, base, id, week });
-  // Stale rows fail with 409 and preserve local text until explicitly reloaded.
+  // A later Notes edit commits immediately against the current row.
   let remote = (await getBoard()).entries.find(e => e.driverId === id);
   await field('Notes').focus();
   const changed = await page.request.put(`${base}/api/driver-board`, { headers, data: { entries: [{ ...remote, notes: 'Other dispatcher edit' }] } });
   expect(changed.status()).toBe(200);
-  await field('Notes').fill('Local unsaved edit');
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('changed', { timeout: 15000 });
-  await expect(field('Notes')).toHaveValue('Local unsaved edit');
+  await field('Notes').fill('Latest dispatcher edit');
+  await expect.poll(async () => (await getBoard()).entries.find(e => e.driverId === id).notes).toBe('Latest dispatcher edit');
   await page.getByRole('link', { name: 'Board Cpm', exact: true }).click();
-  await page.getByRole('button', { name: 'Discard edits and leave', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Board Cpm', exact: true })).toBeVisible();
   await page.goto(`${base}/driver-board`);
-  await expect(field('Notes')).toHaveValue('Other dispatcher edit');
+  await expect(field('Notes')).toHaveValue('Latest dispatcher edit');
   // A delayed response cannot drop text typed while that save is in flight.
   let release, intercepted;
   const inFlight = new Promise(resolve => { intercepted = resolve; });
@@ -381,5 +380,5 @@ export async function runDriverBoardE2E({ page, base, sql, schema, temp, setNetw
   } finally {
     await progressPage.close();
   }
-  console.log('Status Board E2E passed: totals, autosave, navigation flush, profile address preservation, history/undo, dispatcher/status checkbox filters, persistence, stale conflict, queued typing, clearing, read-only history permissions and mobile layout.');
+  console.log('Status Board E2E passed: totals, autosave, navigation flush, profile address preservation, history/undo, dispatcher/status checkbox filters, persistence, latest concurrent edit, queued typing, clearing, read-only history permissions and mobile layout.');
 }

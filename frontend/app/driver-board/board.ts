@@ -112,52 +112,35 @@ export function statusColor(status: string) {
   return "text-zinc-400";
 }
 
-const boardFieldGroups = [
-  ["notes"], ["trailerNumber", "trailerNote"],
-  ["currentLoad", "destination", "eta", "status", "homeTime", "leavePlan"],
-] as const;
-type BoardField = (typeof boardFieldGroups)[number][number];
-export function boardConflictGroupFields(conflicts: readonly BoardField[]) {
-  return boardFieldGroups.flatMap<BoardField>(group => group.some(field => conflicts.includes(field)) ? [...group] : []);
-}
+const editableBoardFields = ["notes", "trailerNumber", "trailerNote", "currentLoad", "destination", "eta", "status", "homeTime", "leavePlan"] as const;
+type BoardField = (typeof editableBoardFields)[number];
 
 const sameField = (a: DriverBoardEntry, b: DriverBoardEntry, field: BoardField) =>
   field === "leavePlan"
     ? a.leavePlan?.homeStart === b.leavePlan?.homeStart && a.leavePlan?.homeEnd === b.leavePlan?.homeEnd && a.leavePlan?.vacationReturn === b.leavePlan?.vacationReturn
     : a[field] === b[field];
 
-// Reapply only this dispatcher's editable fields to a newer committed row.
-// A load, status, ETA and leave dates may change together in the database.
-export function isBoardTextEdit(base: DriverBoardEntry | undefined, draft: DriverBoardEntry) {
-  return !!base && base.version > 0 && base.version === draft.version &&
-    !draft.statusEdited && !draft.resolveCurrentLoad && !draft.statusReason && !draft.effectiveAt &&
-    !base.homeTime && !base.leavePlan?.homeStart &&
-    boardFieldGroups[2].every(field => sameField(base, draft, field)) &&
-    (base.notes !== draft.notes || base.trailerNumber !== draft.trailerNumber || base.trailerNote !== draft.trailerNote);
+export function editedBoardFields(base: DriverBoardEntry, draft: DriverBoardEntry): BoardField[] {
+  return editableBoardFields.filter(field => !sameField(base, draft, field) ||
+    (field === "currentLoad" && !!draft.resolveCurrentLoad) ||
+    (field === "status" && !!draft.statusEdited) ||
+    (field === "trailerNote" && base.trailerNumber !== draft.trailerNumber));
 }
 
-export function rebaseBoardDraft(base: DriverBoardEntry, draft: DriverBoardEntry, latest: DriverBoardEntry, savedFields: readonly (keyof DriverBoardEntry)[] = []) {
+// Reapply only what the dispatcher typed after this command was sent.
+export function rebaseBoardDraft(base: DriverBoardEntry, draft: DriverBoardEntry, latest: DriverBoardEntry) {
   const entry = { ...latest };
-  const conflicts: BoardField[] = [];
-  for (const group of boardFieldGroups) {
-    if (group.some(field => savedFields.includes(field))) continue;
-    if (group[0] === "currentLoad") {
-      if (draft.resolveCurrentLoad && (!base.resolveCurrentLoad || draft.currentLoad !== base.currentLoad)) entry.resolveCurrentLoad = true;
-      if (draft.statusEdited && (!base.statusEdited || draft.status !== base.status || draft.effectiveAt !== base.effectiveAt || draft.statusReason !== base.statusReason)) {
-        entry.statusEdited = true;
-        entry.statusReason = draft.statusReason;
-        entry.effectiveAt = draft.effectiveAt;
-      }
-    }
-    const changed = group.filter(field => !sameField(base, draft, field));
-    const hasIntent = group[0] === "currentLoad" && (entry.resolveCurrentLoad || entry.statusEdited);
-    if (!changed.length && !hasIntent) continue;
-    for (const field of group) {
-      if (!sameField(base, latest, field) && (!sameField(draft, latest, field) || hasIntent)) conflicts.push(field);
-    }
-    for (const field of changed) Object.assign(entry, { [field]: draft[field] });
+  for (const field of editableBoardFields) {
+    if (!sameField(base, draft, field)) Object.assign(entry, { [field]: draft[field] });
   }
-  return { entry, conflicts };
+  if (base.trailerNumber !== draft.trailerNumber) entry.trailerNote = draft.trailerNote;
+  if (draft.resolveCurrentLoad && (!base.resolveCurrentLoad || draft.currentLoad !== base.currentLoad)) entry.resolveCurrentLoad = true;
+  if (draft.statusEdited && (!base.statusEdited || draft.status !== base.status || draft.effectiveAt !== base.effectiveAt || draft.statusReason !== base.statusReason)) {
+    entry.statusEdited = true;
+    entry.statusReason = draft.statusReason;
+    entry.effectiveAt = draft.effectiveAt;
+  }
+  return entry;
 }
 
 // An in-flight save may finish after more typing. Keep the new text, while
@@ -167,7 +150,7 @@ export function reconcileDriverBoard(current: Record<string, DriverBoardEntry>, 
   for (const entry of committed) {
     const draft = current[entry.driverId];
     if (!draft || JSON.stringify(draft) === JSON.stringify(snapshot[entry.driverId])) delete remaining[entry.driverId];
-    else remaining[entry.driverId] = rebaseBoardDraft(snapshot[entry.driverId], draft, entry).entry;
+    else remaining[entry.driverId] = rebaseBoardDraft(snapshot[entry.driverId], draft, entry);
   }
   return remaining;
 }
