@@ -98,7 +98,7 @@ export default function GrossBoardPage() {
   const [issues, setIssues] = useState<GrossBoardSaveIssue[]>([]);
   const [message, setMessage] = useState("");
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
-  const response = useRef({ open: 0, save: 0, submitted: 0 });
+  const response = useRef({ open: 0, save: 0, submitted: 0, completed: false });
   const saveAfter = useRef(0);
   const editStarted = useRef(0), openStarted = useRef(0), confirmedEdit = useRef(0);
   const dirty = canEdit && Object.keys(changes).length > 0;
@@ -109,7 +109,7 @@ export default function GrossBoardPage() {
       openStarted.current = 0;
     }
     if (!dirty && !saving && confirmedEdit.current) {
-      recordBoardPaint("gross", "save", confirmedEdit.current, response.current.submitted, response.current.save);
+      recordBoardPaint("gross", "save", confirmedEdit.current, response.current.submitted, response.current.save, response.current.completed);
       confirmedEdit.current = 0;
     }
   }, [board, dirty, loading, saving, week]);
@@ -317,13 +317,14 @@ export default function GrossBoardPage() {
     setMessage("");
   }, [canEdit, setDrafts]);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (completed = false) => {
     if (!canEdit || savingRef.current || invalid || !Object.keys(changesRef.current).length || loading) return;
     savingRef.current = true;
     const snapshot = { ...changesRef.current };
     busyKeys.current = Object.keys(snapshot);
     setSaving(true); setError(""); setMessage("");
     try {
+      response.current.completed = completed;
       response.current.submitted = performance.now();
       const { entries: committed, issues: rejected } = await saveGrossBoard(week, Object.entries(snapshot).map(([key, entry]) => ({
         ...entry, fields: grossDraftFields(entry, baselinesRef.current[key]), previousLoadNumber: baselinesRef.current[key]?.loadNumber,
@@ -366,9 +367,15 @@ export default function GrossBoardPage() {
     finally { busyKeys.current = []; savingRef.current = false; setSaving(false); }
   }, [canEdit, invalid, loading, week, setDrafts]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
     const delay = pendingWeek || pendingLink ? 0 : Math.max(0, saveAfter.current - performance.now());
+    // All slots from this interaction are staged together at commit. Let the
+    // finished command travel while the browser paints the optimistic values.
+    if (delay === 0) {
+      void save(saveAfter.current === 0);
+      return;
+    }
     const timer = setTimeout(() => { void save(); }, delay);
     return () => clearTimeout(timer);
   }, [changes, dirty, hasReadyEdits, saving, error, invalid, loading, save, pendingWeek, pendingLink]);
@@ -463,10 +470,10 @@ export default function GrossBoardPage() {
     </PinnablePageHeader>
 
       {lockError?.week === week && <p role="alert" className="text-xs text-red-300">{lockError.message}</p>}
-      {!lockedForEditing && error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <><button className={`${buttonClass} ml-3`} onClick={save} disabled={saving || invalid}>Retry save</button><button className={`${buttonClass} ml-3`} onClick={reload} disabled={saving}>Discard unsaved changes</button></>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
+      {!lockedForEditing && error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{error} {dirty && "Your unsaved edits are still on this page."}{dirty && <><button className={`${buttonClass} ml-3`} onClick={() => void save()} disabled={saving || invalid}>Retry save</button><button className={`${buttonClass} ml-3`} onClick={reload} disabled={saving}>Discard unsaved changes</button></>}{!board && <button className={`${buttonClass} ml-3`} onClick={load}>Retry</button>}</div>}
       {!lockedForEditing && !error && issues.length > 0 && <SaveIssues issues={issues} changes={changes} drivers={board?.drivers ?? []}
         saving={saving} onDiscard={discardIssue}
-        actions={<><button className={buttonClass} onClick={save} disabled={saving || invalid}>Retry save</button><button className={buttonClass} onClick={reload} disabled={saving}>Discard unsaved changes</button></>} />}
+        actions={<><button className={buttonClass} onClick={() => void save()} disabled={saving || invalid}>Retry save</button><button className={buttonClass} onClick={reload} disabled={saving}>Discard unsaved changes</button></>} />}
       {(pendingWeek || pendingLink) && (dirty || saving) && <BoardNavigationNotice
         message={invalid ? "Correct the highlighted fields to save your edits." : error ? "Your edits could not be saved." : saveNeedsReview ? "Some edits need review before they can be saved." : "Saving edits before leaving…"}
         onStay={() => { cancelWeekChange(); cancelNavigation(); }}

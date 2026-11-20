@@ -59,17 +59,37 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     expect(gridGzip).toBeLessThan(legacyGzip);
     console.log('Status Board peer edit SSE bytes', {fullBytes,patchBytes,legacyGzip,gridGzip});
     await wire.detach();
+    const peerName = 'Wire Test Driver 1';
+    const peerNotes = page.getByLabel(peerName+' · Notes', {exact:true});
+    await peerNotes.evaluate(input => {
+      let writes = 0;
+      const observer = new MutationObserver(records => { writes += records.length; });
+      for (const field of ['notes', 'trailerNumber', 'destination']) {
+        const editor = input.closest('tr').querySelector('[data-board-column="'+field+'"] input');
+        observer.observe(editor, {attributes:true, attributeFilter:['name','type','value']});
+      }
+      window.finishPeerInputCheck = () => {
+        writes += observer.takeRecords().length;
+        observer.disconnect();
+        return writes;
+      };
+    });
     // Compare real keyboard and clipboard input in the focused cell. Record
     // input-to-PUT separately from PostgreSQL and the receipt's round trip.
     await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin:new URL(base).origin});
     await page.evaluate(() => {
-      let lastInput = 0;
-      document.addEventListener('input', () => { lastInput = performance.now(); }, true);
+      let lastInput = 0, pasting = false;
+      document.addEventListener('input', event => {
+        lastInput = performance.now();
+        pasting = event.inputType === 'insertFromPaste';
+      }, true);
+      document.addEventListener('input', () => { pasting = false; });
       const send = window.fetch.bind(window);
       window.saveStartDelays = [];
       window.fetch = (url, opts) => {
         if (opts?.method === 'PUT' && new URL(url, location.href).pathname === '/api/driver-board') {
           window.saveStartDelays.push(Math.round(performance.now() - lastInput));
+          if (pasting) window.sentPasteDuringInput = true;
         }
         return send(url, opts);
       };
@@ -92,9 +112,9 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     expect((await read()).notes).toBe('pasted dispatch note');
     const delays = await page.evaluate(() => window.saveStartDelays);
     expect(delays).toHaveLength(2);
+    expect(await page.evaluate(() => window.sentPasteDuringInput)).toBe(true);
     console.log('Status note input to PUT (ms)', {typed:delays[0], pasted:delays[1]});
-    const peerName = 'Wire Test Driver 1';
-    const peerNotes = page.getByLabel(peerName+' · Notes', {exact:true});
+    expect(await page.evaluate(() => window.finishPeerInputCheck())).toBe(0);
     let release;
     const held = new Promise(resolve => { release = resolve; });
     const waitForFirst = async route => {

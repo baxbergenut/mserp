@@ -67,14 +67,13 @@ function getDestination(entry: DriverBoardEntry, driver: DriverBoardDriver, load
   return { value: entry.destination, title: entry.destination, showStop: true, color: "text-zinc-200" };
 }
 
-const TextCell = memo(function TextCell({ entry, field, label, limit, disabled, edit }: {
-  entry: DriverBoardEntry; field: "currentLoad" | "trailerNumber" | "destination" | "notes" | "homeTime";
-  label: string; limit: number; disabled: boolean;
+const TextCell = memo(function TextCell({ driverId, field, label, value, title = value, placeholder, disabled, className, edit }: {
+  driverId: string; field: "notes" | "destination"; label: string; value: string; title?: string; placeholder?: string;
+  disabled: boolean; className: string;
   edit: (id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => void;
 }) {
-  return <input type="text" aria-label={label} title={entry[field]} maxLength={limit} readOnly={disabled}
-    value={entry[field]} onChange={event => edit(entry.driverId, field, event.target.value, event.nativeEvent)}
-    className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none placeholder:text-zinc-700 focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" />;
+  return <input type="text" aria-label={label} title={title} placeholder={placeholder} maxLength={field === "notes" ? 5000 : 500} readOnly={disabled}
+    value={value} onChange={event => edit(driverId, field, event.target.value, event.nativeEvent)} className={className} />;
 });
 
 const emptyTotals = totals([]);
@@ -121,6 +120,9 @@ export default function DriverBoardPage() {
     return legacy === "all" ? null : [legacy];
   });
   const [history, setHistory] = useState<{ driverId?: string; name: string; ids: string[]; field?: string } | null>(null);
+  const openTrailerHistory = useCallback((driverId: string, name: string) => {
+    setHistory({ driverId, name: `${name} · Trailer history`, ids: [driverId], field: "trailerNumber" });
+  }, []);
   const [loadDriver, setLoadDriver] = useState<{ id: string; name: string } | null>(null);
   const [destinationError, setDestinationError] = useState("");
   const [orderError, setOrderError] = useState("");
@@ -277,10 +279,6 @@ export default function DriverBoardPage() {
       return true;
     } catch (err) { setOrderError(err instanceof Error ? err.message : "Dispatcher order could not be saved. Try again."); return false; }
   }
-  function textCell(entry: DriverBoardEntry, name: string, field: Parameters<typeof TextCell>[0]["field"], label: string, limit: number) {
-    return <TextCell entry={entry} field={field} label={`${name} · ${label}`} limit={limit} disabled={!canEdit || loading || leaving || state.orderSaving || state.actionDriver === entry.driverId || !!board?.drivers.find(d => d.id === entry.driverId)?.departed} edit={editText} />;
-  }
-
   function groupHeader(d: Pick<DriverBoardDriver, "dispatcherId" | "dispatcherName"> & Partial<DriverBoardDriver>) {
     const group = groups.get(d.dispatcherId) ?? { original: BigInt(0), driver: BigInt(0), miles: BigInt(0) };
     const enabled = !!autoOrder?.[d.dispatcherId];
@@ -444,7 +442,7 @@ export default function DriverBoardPage() {
             const pickupDisabled = disabled || next?.loadId === null;
             const homeTimeTitle = leavePlanDetails(entry.leavePlan) || entry.homeTime;
             const cells: Record<BoardColumn, ReactElement> = {
-              currentLoad: <td key="currentLoad" data-board-column="currentLoad" className={`${cellClass} bg-zinc-950`}><CurrentLoadInput value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id) ?? []} week={board!.weekStart} onChange={(value, event) => editText(d.id, "currentLoad", value, event)} /></td>,
+              currentLoad: <td key="currentLoad" data-board-column="currentLoad" className={`${cellClass} bg-zinc-950`}><CurrentLoadInput driverId={d.id} value={entry.currentLoad} label={`${d.fullName} · Current load`} warning={loads?.resolutionWarning} disabled={disabled} entries={index.byDriver.get(d.id)} week={board!.weekStart} edit={editText} /></td>,
               driver: <th key="driver" data-board-column="driver" scope="row" title={d.fullName} className={`${cellClass} bg-zinc-950 px-1.5 text-left font-medium text-zinc-200`}><div className="flex items-center gap-1">
                   {canEdit && <button type="button" data-grid-ignore aria-label={`Move ${d.fullName}`} title={autoOrder?.[d.dispatcherId] ? "Drag to move to another dispatcher. Alt + Arrow Up unassigns." : "Drag to change the shared driver order or move between dispatchers. Arrow Up / Down moves rows; Alt + Arrow Up unassigns."} disabled={orderDisabled || !board?.driverOrderRevisions?.[d.dispatcherId]}
                     className="flex h-8 shrink-0 touch-none select-none cursor-grab items-center text-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
@@ -465,7 +463,7 @@ export default function DriverBoardPage() {
                     }}><GripVertical className="h-4 w-4" /></button>}
                   <span className="min-w-0 truncate">{permissions.includes("drivers.read") ? <Link href={`/drivers/detail?id=${d.id}`} className="hover:text-blue-300">{d.fullName}</Link> : d.fullName}</span><span className="shrink-0 font-mono text-[10px] text-zinc-400">{`(${d.driverType})`}</span><span className="ml-auto"><LocationCell name={d.fullName} location={d.location} /></span></div></th>,
               truck: <td key="truck" data-board-column="truck" title={d.truckUnit} className={`${cellClass} px-1 font-mono text-zinc-300`}>{canAssignTruck && !d.departed ? <TruckAssignmentCell id={d.id} name={d.fullName} truckId={d.truckId || ""} unit={d.truckUnit} choices={truckChoices} currentChoice={trucksById.get(d.truckId)} disabled={loading || leaving || state.actionBusy || saving || dirty} onFocus={refreshTruckChoices} onError={setOrderError} onSaved={unit => { setOrderNotice(`Truck ${unit} assigned effective today.`); state.refresh(); refreshTruckChoices(); }} /> : d.truckId && permissions.includes("trucks.read") ? <Link href={`/trucks/detail?id=${d.truckId}`} className="hover:text-blue-300">{d.truckUnit}</Link> : d.truckUnit || "—"}</td>,
-              trailerNumber: <TrailerCell key="trailerNumber" entry={entry} name={d.fullName} disabled={disabled} edit={editText} onHistory={() => setHistory({ driverId: d.id, name: `${d.fullName} · Trailer history`, ids: [d.id], field: "trailerNumber" })} />,
+              trailerNumber: <TrailerCell key="trailerNumber" driverId={d.id} trailerNumber={entry.trailerNumber} trailerNote={entry.trailerNote} name={d.fullName} disabled={disabled} edit={editText} onHistory={openTrailerHistory} />,
               originalGross: <td key="originalGross" data-board-column="originalGross" className={grossCellClass}>{decimalDisplay(sum.original, true)}</td>,
               driverGross: <td key="driverGross" data-board-column="driverGross" className={grossCellClass}>{decimalDisplay(sum.driver, true)}</td>,
               phone: <td key="phone" data-board-column="phone" className={`${cellClass} leading-4`}><PhoneCell name={d.fullName} phone={d.phone} /></td>,
@@ -482,9 +480,9 @@ export default function DriverBoardPage() {
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>,
               destination: <td key="destination" data-board-column="destination" className={cellClass}><div className="flex h-8 items-center">
-                  <input type="text" aria-label={d.fullName + " · Destination"} maxLength={500} readOnly={disabled}
+                  <TextCell driverId={d.id} field="destination" label={d.fullName + " · Destination"} disabled={disabled}
                     title={destination.title} value={destination.value}
-                    placeholder={entry.status === "READY" ? "Current location unavailable" : "Destination"} onChange={event => editText(d.id, "destination", event.target.value, event.nativeEvent)}
+                    placeholder={entry.status === "READY" ? "Current location unavailable" : "Destination"} edit={editText}
                     className={"h-8 w-full min-w-0 text-ellipsis bg-transparent px-1.5 text-[11px] outline-none focus:text-clip focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500 " + destination.color} />
                   {destination.showStop && stopLabel && <span className="shrink-0 pr-1.5 text-[11px] text-zinc-500">{stopLabel}</span>}
                 </div></td>,
@@ -504,7 +502,7 @@ export default function DriverBoardPage() {
                     onClick={event => { setEtaEditor(null); setPickupEditor(pickupEditor?.id === d.id ? null : { id: d.id, name: d.fullName, planId: next.planId, pickup: nextStop, anchor: event.currentTarget }); }}>{nextPickup?.label || "PU —"}</button>}
                 </div>
               </td>,
-              notes: <td key="notes" data-board-column="notes" className={cellClass}>{textCell(entry, d.fullName, "notes", "Notes", 5000)}</td>,
+              notes: <td key="notes" data-board-column="notes" className={cellClass}><TextCell driverId={d.id} field="notes" label={`${d.fullName} · Notes`} value={entry.notes} disabled={disabled} edit={editText} className="block h-8 w-full min-w-0 bg-transparent px-1.5 text-[11px] leading-4 text-zinc-200 outline-none placeholder:text-zinc-700 focus:bg-zinc-800 focus:ring-1 focus:ring-inset focus:ring-blue-500" /></td>,
               homeTime: <td key="homeTime" data-board-column="homeTime" className={cellClass} title={disabled ? homeTimeTitle : undefined}><button type="button" data-grid-display aria-label={`${d.fullName} · Home time`} title={homeTimeTitle} disabled={disabled} className="block h-8 w-full truncate px-1.5 text-left text-[11px] text-zinc-200 enabled:hover:bg-zinc-800" onClick={() => setLeaveEditor({ id: d.id, name: d.fullName, status: entry.status, changingStatus: false })}>{formatDriverLeave(entry.leavePlan, entry.status, entry.homeTime, today)}</button></td>,
               driverAddress: <td key="driverAddress" data-board-column="driverAddress" className={`${cellClass} px-1.5 text-zinc-200`} aria-label={`${d.fullName} · Driver address`} title={homeAddress || "Home address not set"}>{homeAddress || "—"}</td>,
             };

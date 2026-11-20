@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DriverBoardGrossEntry } from "@/app/lib/types";
 import { addDays, shortDate } from "@/app/gross-board/board";
 
-export function CurrentLoadInput({ value, label, disabled, entries, week, onChange, warning }: {
-  value: string; label: string; disabled: boolean; entries: DriverBoardGrossEntry[]; week: string;
-  onChange: (value: string, event?: Event) => void;
+const noEntries: DriverBoardGrossEntry[] = [];
+
+export const CurrentLoadInput = memo(function CurrentLoadInput({ driverId, value, label, disabled, entries = noEntries, week, edit, warning }: {
+  driverId: string; value: string; label: string; disabled: boolean; entries?: DriverBoardGrossEntry[]; week: string;
+  edit: (driverId: string, field: "currentLoad", value: string, event?: Event) => void;
   warning?: string;
 }) {
   const id = useId();
@@ -47,12 +49,12 @@ export function CurrentLoadInput({ value, label, disabled, entries, week, onChan
   useEffect(() => {
     if (open) document.getElementById(`${id}-${selected}`)?.scrollIntoView({ block: "nearest" });
   }, [id, selected, open]);
-  function choose(number: string) { setFocused(false); onChange(number); }
+  function choose(number: string) { setFocused(false); edit(driverId, "currentLoad", number); }
   return <>
     <input ref={input} type="text" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? id : undefined} aria-activedescendant={open ? `${id}-${selected}` : undefined}
       aria-label={label} aria-invalid={!!warning} title={warning ? `${value} · ${warning}` : value} maxLength={300} readOnly={disabled} autoComplete="off" value={value}
       onFocus={() => { setFocused(true); setActive(0); }} onBlur={() => setFocused(false)}
-      onChange={event => { setFocused(true); setActive(0); onChange(event.target.value, event.nativeEvent); }}
+      onChange={event => { setFocused(true); setActive(0); edit(driverId, "currentLoad", event.target.value, event.nativeEvent); }}
       onKeyDown={event => {
         if (!open) return;
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setFocused(false); }
@@ -65,4 +67,4 @@ export function CurrentLoadInput({ value, label, disabled, entries, week, onChan
       {options.map((e, i) => <div key={e.loadNumber} id={`${id}-${i}`} role="option" aria-selected={i === selected} onMouseDown={event => event.preventDefault()} onClick={() => choose(e.loadNumber)} className={`flex cursor-pointer items-center justify-between gap-3 rounded px-2 py-2 text-xs text-zinc-200 hover:bg-zinc-800 ${i === selected ? "bg-blue-500/15" : ""}`}><span className="truncate">{e.loadNumber}</span><span className="shrink-0 text-zinc-500">{shortDate(e.date)}</span></div>)}
     </div>, document.body)}
   </>;
-}
+});

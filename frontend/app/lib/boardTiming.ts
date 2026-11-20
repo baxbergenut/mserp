@@ -42,7 +42,7 @@ function openingNetworkTiming(board: Board, start: number, received: number) {
 
 // Called after React commits the acknowledged rows. Allow a paint before
 // measuring, and omit hidden tabs where animation frames can be suspended.
-export function recordBoardPaint(board: Board, operation: Operation, start: number, sent: number, received: number) {
+export function recordBoardPaint(board: Board, operation: Operation, start: number, sent: number, received: number, completedEdit = false) {
   if (!start || document.hidden) return;
   const commit = Math.round(performance.now() - start);
   requestAnimationFrame(() => {
@@ -53,8 +53,9 @@ export function recordBoardPaint(board: Board, operation: Operation, start: numb
       if (ms < 0 || ms > 120000) return;
       const before = Math.round(sent - start), response = Math.round(received - start);
       const phases = before >= 0 && before <= response && response <= commit ? `/${before}/${response}/${commit}/${frame}` : "";
-      const network = phases && operation === "open" ? openingNetworkTiming(board, start, received) : "";
-      samples.push(`${board}-${operation}=${ms}${phases}${network}`);
+      let detail = completedEdit && operation === "save" ? "~complete" : "";
+      if (phases && operation === "open") detail = openingNetworkTiming(board, start, received);
+      samples.push(`${board}-${operation}=${ms}${phases}${detail}`);
       if (operation === "open" && directBoard === board) {
         const documentMS = Math.round(performance.now());
         directBoard = undefined;
