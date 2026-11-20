@@ -124,11 +124,18 @@ export async function runGrossBoardPartialE2E({page, base, sql, schema}) {
     expect((await read(sharedDay)).driverRate).toBe('550.00');
 
     await expect(rate(page, sharedDay)).toBeEditable();
+    const selectedRate = rate(accountant, sharedDay);
+    await expect(selectedRate).toBeEditable();
+    await selectedRate.focus();
+    await selectedRate.press('ControlOrMeta+a');
     await fillRate(page, sharedDay, '560');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('560.00');
     await expect(accountant.getByRole('button', { name: 'Unlock', exact: true })).toHaveAttribute('title', 'Locked by investor-e2e');
-    await expect(rate(accountant, sharedDay)).toBeEditable();
-    await fillRate(accountant, sharedDay, '570');
+    // The accountant selected the previous rate before the other editor saved.
+    // The new driver total proves the live update has reached this browser.
+    const driverRow = accountant.getByRole('row').filter({ has: accountant.getByRole('rowheader', { name: /Partial Save Driver/ }) });
+    await expect(driverRow.getByText('$1,840.00', { exact: true })).toBeVisible();
+    await accountant.keyboard.insertText('570');
     await expect.poll(async () => (await read(sharedDay)).driverRate).toBe('570.00');
     await expect(rate(second, sharedDay)).toHaveValue('$570.00');
     await expect(rate(second, sharedDay)).toHaveAttribute('readonly', '');

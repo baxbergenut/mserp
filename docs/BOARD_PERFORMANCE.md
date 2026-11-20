@@ -157,6 +157,16 @@ response-to-paint durations when the client has all three timestamps. They use
 the next ordinary request. The board read logs time the roster, weekly entries,
 load views, stop cities, row ordering and Gross Board openings.
 
+Gross Board validates load slots, planning statuses and active transfers for the
+affected driver-days in one database query per validation. The existing ordered
+day locks cover this read and the writes. In the PostgreSQL rate-edit fixture,
+a confirmed single-day save used 18 SQL calls, down from 20.
+
+A live numeric update can arrive between selecting a rate and typing its
+replacement. The numeric editor retains selected text through the edit and
+releases it on blur. A focused cell with no selection or draft continues to
+display incoming changes.
+
 ## References
 
 - [PostgreSQL 16: EXPLAIN](https://www.postgresql.org/docs/16/using-explain.html)

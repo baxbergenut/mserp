@@ -604,4 +604,13 @@ func verifyGrossBoardModeWrites(t *testing.T, ctx context.Context, pool *pgxpool
 	if len(state.loads) > 0 && len(state.statuses) > 0 {
 		t.Fatal("race stored both a load and status")
 	}
+	days := []grossBoardDay{{driver, raceDate}, {driver, "2026-10-21"}, {driver, date}}
+	batch, err := readGrossBoardModeStates(ctx, tx, days)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(batch[0], state) || !reflect.DeepEqual(batch[1], newGrossBoardDayModes()) ||
+		len(batch[2].loads) != 0 || batch[2].statuses["slot:1"] != "HOME" {
+		t.Fatalf("day evidence crossed dates or lost the fixed status: %+v", batch)
+	}
 }
