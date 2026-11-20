@@ -36,6 +36,17 @@ func TestBoardBrowserTimingPhases(t *testing.T) {
 	}
 }
 
+func TestBoardDocumentOpeningTiming(t *testing.T) {
+	var output strings.Builder
+	logBoardClientTimings(slog.New(slog.NewTextHandler(&output, nil)),
+		"status-document-open=324,gross-document-open=290,status-document-open=120001")
+	log := output.String()
+	if strings.Count(log, "board browser timing") != 2 || !strings.Contains(log, "operation=status-document-open duration_ms=324") ||
+		!strings.Contains(log, "operation=gross-document-open duration_ms=290") {
+		t.Fatal(log)
+	}
+}
+
 func TestBoardOpeningNetworkTiming(t *testing.T) {
 	var output strings.Builder
 	logger := slog.New(slog.NewTextHandler(&output, nil))
