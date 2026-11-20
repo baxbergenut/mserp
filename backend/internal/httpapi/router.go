@@ -210,7 +210,10 @@ func NewRouter(
 	boardEvents.openings = openings
 	boardEvents.idleGrace = boardListenerIdleGrace
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
-	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
+	if grossBoardRepo == nil {
+		grossBoardRepo = repository.NewGrossBoardRepository(pool)
+	}
+	boardRepo := grossBoardRepo.StatusBoard(fiveELDJob != nil)
 	statusRead := shareBoardReads(boardRepo.GetShared)
 	grossRead := shareBoardReads(grossBoardRepo.Get)
 	boardEvents.snapshotEvent = "board"

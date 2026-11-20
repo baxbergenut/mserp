@@ -174,7 +174,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		return result, err
 	}
 	defer tx.Rollback(ctx)
-	key, err := boardWeekRevision(ctx, tx, week, false)
+	keys, err := boardWeekRevision(ctx, tx, week, false)
 	if err != nil {
 		return result, err
 	}
@@ -262,7 +262,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	}
 	if displayBoard {
 		endEntries := db.Phase(ctx, "board_week_entries")
-		entries, err := r.weekEntries.get(ctx, key, cloneWeekEntries, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
+		entries, err := r.weekEntries.get(ctx, keys.entries, cloneWeekEntries, func() ([]GrossBoardEntry, error) { return readBoardWeekEntries(ctx, tx, week) })
 		endEntries()
 		if err != nil {
 			return result, err
@@ -283,7 +283,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		result.ELD.Configured = r.fiveELDConfigured
 	}
 	endLoads := db.Phase(ctx, "status_load_views")
-	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{jitDisabled: true}, r.loadSources, key)
+	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{jitDisabled: true}, r.loadSources, keys.entries)
 	endLoads()
 	if err != nil {
 		return result, err

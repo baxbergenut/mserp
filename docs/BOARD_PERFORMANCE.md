@@ -42,6 +42,8 @@ finishes any pending rows before reading the logical grid.
 
 ## Database and refresh changes
 
+Status Board and Gross Board share the weekly entry query in the API process. Both reads check the week, source revisions and missing load IDs in their own PostgreSQL snapshot. Gross Board also checks rate resets when reading opening balances. A reset can refresh the balance while reusing weekly loads. Each reader gets a private copy of the rows before its permission and roster filters run.
+
 - Migration 213 adds a partial expression index for the latest departure from an
   exact driver/source pair. It retains the original query and immutable history.
 - Explicit source IDs use a primary-key branch; number-only entries use a separate
