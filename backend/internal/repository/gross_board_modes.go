@@ -121,55 +121,76 @@ func lockGrossBoardDays(ctx context.Context, tx pgx.Tx, days []grossBoardDay) er
 	return nil
 }
 func readGrossBoardDayModes(ctx context.Context, tx pgx.Tx, day grossBoardDay) (grossBoardDayModes, error) {
-	state := newGrossBoardDayModes()
-	rows, err := tx.Query(ctx, `SELECT slot,deleted,coalesce(load_number,''),load_record_id,load_trip_id,coalesce(day_status,''),coalesce(original_rate::text,''),coalesce(driver_rate::text,''),coalesce(miles::text,''),coalesce(entered_original_rate::text,''),coalesce(entered_miles::text,''),note FROM `+grossBoardEntriesSQL+` e WHERE driver_id=$1 AND service_date=$2::date`, day.driver, day.date)
+	states, err := readGrossBoardModeStates(ctx, tx, []grossBoardDay{day})
 	if err != nil {
-		return state, err
+		return grossBoardDayModes{}, err
 	}
+	return states[0], nil
+}
+
+// Use one snapshot for all requested days, including days with only planning
+// or transferred-in loads. The existing day locks fence the subsequent writes.
+func readGrossBoardModeStates(ctx context.Context, tx pgx.Tx, days []grossBoardDay) ([]grossBoardDayModes, error) {
+	states := make([]grossBoardDayModes, len(days))
+	if len(days) == 0 {
+		return states, nil
+	}
+	drivers, dates := make([]string, len(days)), make([]string, len(days))
+	for i, day := range days {
+		drivers[i], dates[i] = day.driver, day.date
+		states[i] = newGrossBoardDayModes()
+	}
+	rows, err := tx.Query(ctx, `WITH days AS (
+ SELECT ordinal,driver::uuid AS driver_id,day::date AS service_date
+ FROM unnest($1::text[], $2::text[]) WITH ORDINALITY AS input(driver,day,ordinal)
+), evidence AS MATERIALIZED (
+ SELECT d.*,
+   (SELECT jsonb_object_agg(p.kind,p.text) FROM gross_board_planning_entries p
+    WHERE p.driver_id=d.driver_id AND p.service_date=d.service_date AND btrim(p.text)<>'') AS planning,
+   EXISTS(SELECT 1 FROM gross_board_transfers t
+          WHERE t.driver_id=d.driver_id AND t.dispatch_date=d.service_date AND t.active) AS transferred
+ FROM days d
+)
+SELECT d.ordinal,coalesce(e.slot,-1),coalesce(e.deleted,false),coalesce(e.load_number,''),e.load_record_id,e.load_trip_id,
+ coalesce(e.day_status,''),coalesce(e.original_rate::text,''),coalesce(e.driver_rate::text,''),coalesce(e.miles::text,''),
+ coalesce(e.entered_original_rate::text,''),coalesce(e.entered_miles::text,''),e.note,d.planning,d.transferred
+FROM evidence d LEFT JOIN LATERAL (
+ SELECT e.* FROM `+grossBoardEntriesSQL+` e
+ WHERE e.driver_id=d.driver_id AND e.service_date=d.service_date OFFSET 0
+) e ON true`, drivers, dates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	for rows.Next() {
+		var ordinal int
 		var e GrossBoardEntry
-		if err = rows.Scan(&e.Slot, &e.Deleted, &e.LoadNumber, &e.LoadRecordID, &e.LoadTripID, &e.DayStatus, &e.OriginalRate, &e.DriverRate, &e.Miles, &e.EnteredOriginalRate, &e.EnteredMiles, &e.Note); err != nil {
-			rows.Close()
-			return state, err
+		var planning map[string]string
+		var transferred bool
+		if err = rows.Scan(&ordinal, &e.Slot, &e.Deleted, &e.LoadNumber, &e.LoadRecordID, &e.LoadTripID, &e.DayStatus,
+			&e.OriginalRate, &e.DriverRate, &e.Miles, &e.EnteredOriginalRate, &e.EnteredMiles, &e.Note, &planning, &transferred); err != nil {
+			return nil, err
 		}
-		state.put(fmt.Sprintf("slot:%d", e.Slot), e)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return state, err
-	}
-	rows, err = tx.Query(ctx, `SELECT kind,text FROM gross_board_planning_entries WHERE driver_id=$1 AND service_date=$2::date AND btrim(text)<>''`, day.driver, day.date)
-	if err != nil {
-		return state, err
-	}
-	for rows.Next() {
-		var kind, text string
-		if err = rows.Scan(&kind, &text); err != nil {
-			rows.Close()
-			return state, err
+		state := states[ordinal-1]
+		if e.Slot >= 0 {
+			state.put(fmt.Sprintf("slot:%d", e.Slot), e)
 		}
-		state.statuses["planning:"+kind] = text
+		for kind, text := range planning {
+			state.statuses["planning:"+kind] = text
+		}
+		if transferred {
+			state.loads["transfer"] = "protected"
+		}
 	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return state, err
-	}
-	// A transferred-in load is protected content too; its source row is elsewhere.
-	var transferred bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND dispatch_date=$2::date AND active)`, day.driver, day.date).Scan(&transferred)
-	if transferred {
-		state.loads["transfer"] = "protected"
-	}
-	return state, err
+	return states, rows.Err()
 }
 func validateGrossBoardDayModes(ctx context.Context, tx pgx.Tx, days []grossBoardDay, entries []GrossBoardEntry, planning []GrossBoardPlanningEntry) error {
-	for _, day := range days {
-		before, err := readGrossBoardDayModes(ctx, tx, day)
-		if err != nil {
-			return err
-		}
+	states, err := readGrossBoardModeStates(ctx, tx, days)
+	if err != nil {
+		return err
+	}
+	for i, day := range days {
+		before := states[i]
 		after := before.clone()
 		for _, e := range entries {
 			if e.DriverID == day.driver && e.Date == day.date {
