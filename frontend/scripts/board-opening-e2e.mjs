@@ -215,6 +215,13 @@ async function checkFleetReturnPayloads(page, base, sql, schema) {
       await expect(page.locator(grid).first()).toBeVisible();
       if (!i) {
         expect(board.drivers.length).toBeGreaterThanOrEqual(60);
+        if (bytes >= 32 * 1024) {
+          expect(response.headers()['content-encoding']).toBe('br');
+          const encoded = await page.evaluate(url => performance.getEntriesByName(url, 'resource').at(-1)?.encodedBodySize, response.url());
+          expect(encoded).toBeGreaterThan(0);
+          expect(encoded).toBeLessThan(bytes);
+          console.log(name, 'Chromium received', encoded, 'bytes and decoded', bytes);
+        }
         firstBytes.set(path, bytes);
       } else {
         expect(board).not.toHaveProperty('drivers');

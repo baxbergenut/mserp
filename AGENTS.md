@@ -3930,7 +3930,7 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   Board streams flush their authenticated connection before snapshot work.
   Status and Gross Board opening GETs accept `X-Clustie-Board-Sections`. Each read
   still takes a current snapshot. Hash the permission-projected JSON before omitting
-  matching sections; absent sections have no hash. The browser retains bounded tab-local
+  matching sections; absent sections have no hash. Full-size negotiated board responses can use Brotli after permission projection. The API compresses at most one board at a time; parallel reads take the ordinary proxy path immediately. The browser retains bounded tab-local
   section data for one view per board and clears it on access changes and logout.
   A Status or Gross Board LISTEN connection survives up to 30 seconds without
   subscribers so switching boards reuses it. Each new tab still fetches current data.

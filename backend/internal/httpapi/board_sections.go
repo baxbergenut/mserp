@@ -4,12 +4,19 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"maps"
 	"net/http"
 	"strings"
 
+	"github.com/andybalholm/brotli"
+
 	"mserp/internal/db"
 )
+
+// Keep compression off the database path and bound CPU during simultaneous openings.
+// Excess requests use the existing proxy gzip path without waiting.
+var boardCompressionSlot = make(chan struct{}, 1)
 
 const boardSectionsHeader = "X-Clustie-Board-Sections"
 
@@ -72,6 +79,27 @@ func writeBoardSections(w http.ResponseWriter, r *http.Request, value any, previ
 	}
 	// Projection happened before computing the digests above.
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Add("Vary", "Accept-Encoding")
+	body, err := json.Marshal(response)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "Unable to encode board")
+		return
+	}
+	body = append(body, '\n')
+	var dst io.Writer = w
+	if len(body) >= 32*1024 && strings.Contains(strings.ToLower(r.Header.Get("Accept-Encoding")), "br") {
+		select {
+		case boardCompressionSlot <- struct{}{}:
+			defer func() { <-boardCompressionSlot }()
+			encoder := brotli.HTTPCompressorWithLevel(w, r, 5)
+			defer encoder.Close()
+			dst = encoder
+			if w.Header().Get("Content-Encoding") == "br" {
+				db.Event(r.Context(), "board_response_brotli")
+			}
+		default:
+		}
+	}
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(response)
+	_, _ = dst.Write(body)
 }
