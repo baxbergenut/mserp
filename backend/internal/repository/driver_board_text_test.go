@@ -159,8 +159,26 @@ func testLoadActionAcrossTextEdits(t *testing.T, ctx context.Context, repo *Driv
 	current = save(current, change)
 	change = current
 	change.Notes = "After dispatch change"
-	save(current, change)
+	withNote := save(current, change)
 	if _, err := repo.ChangeLoads(ctx, stale, ""); !errors.Is(err, ErrBoardLoadRowChanged) {
 		t.Fatal("dispatch field changed away and back", err)
+	}
+	inline := added.Entry
+	inline.DispatchOnly = true
+	inline.Destination = "New destination"
+	if _, err := repo.SaveWithTextBase(ctx, []DriverBoardEntry{inline}, nil, ""); !errors.Is(err, ErrDriverBoardConflict) {
+		t.Fatal("inline edit crossed a dispatch change and reversal", err)
+	}
+	inline.Version = current.Version
+	rows, err := repo.SaveWithTextBase(ctx, []DriverBoardEntry{inline}, nil, "")
+	if err != nil || len(rows) != 1 {
+		t.Fatal("inline save across a Notes edit", err)
+	}
+	got := rows[0]
+	if got.Destination != inline.Destination || got.Notes != withNote.Notes || got.Version <= withNote.Version || got.DispatchOnly || got.UndoID == 0 {
+		t.Fatal("incorrect inline save receipt", got)
+	}
+	if _, err := repo.SaveWithTextBase(ctx, []DriverBoardEntry{inline}, nil, ""); !errors.Is(err, ErrDriverBoardConflict) {
+		t.Fatal("replayed inline dispatch edit", err)
 	}
 }
