@@ -178,6 +178,10 @@ func (h *taskEvents) rawSnapshot(ctx context.Context) []byte {
 // Share a committed snapshot among subscribers to the same notification. The
 // session is checked separately for each subscriber before any frame is sent.
 func (h *taskEvents) frame(ctx context.Context, fallback string) string {
+	return h.viewerFrame(ctx, fallback, nil)
+}
+
+func (h *taskEvents) viewerFrame(ctx context.Context, fallback string, updates *boardStreamEncoder) string {
 	if h.snapshot == nil {
 		return "event: " + fallback + "\ndata: {}\n\n"
 	}
@@ -227,6 +231,22 @@ func (h *taskEvents) frame(ctx context.Context, fallback string) string {
 					}
 				}
 			}
+		}
+		if updates != nil {
+			if board, ok := value.(map[string]any); ok {
+				frame, err := updates.frame(h.snapshotEvent, board)
+				if err == nil {
+					if updates.sequence == 2 && strings.Contains(frame, "\nevent: boardPatch\n") {
+						// Compare one update with its full projection before proxy compression.
+						full, err := json.Marshal(board)
+						if err == nil {
+							h.logger.Info("board stream row update", "board", h.snapshotEvent, "full_json_bytes", len(full), "update_frame_bytes", len(frame))
+						}
+					}
+					return frame
+				}
+			}
+			return "event: changed\ndata: {}\n\n"
 		}
 		body, _ = json.Marshal(value)
 	}
@@ -321,11 +341,18 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 		if !send("retry: 5000\n: connected\n\n") {
 			return
 		}
+		var updates *boardStreamEncoder
+		if r.URL.Query().Get("rowUpdates") == "1" && (h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard") {
+			updates = new(boardStreamEncoder)
+		}
 		lastFrame := ""
 		deferInitial := (h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard") && r.URL.Query().Get("initial") == "none"
 		if !deferInitial {
-			lastFrame = h.frame(r.Context(), "changed")
-			if !send(lastFrame) {
+			frame := h.viewerFrame(r.Context(), "changed", updates)
+			if updates == nil {
+				lastFrame = frame
+			}
+			if !send(frame) {
 				return
 			}
 		}
@@ -394,13 +421,15 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 				return
 			}
 			if changed {
-				frame := h.frame(context.WithValue(r.Context(), authContextKey{}, session), "changed")
+				frame := h.viewerFrame(context.WithValue(r.Context(), authContextKey{}, session), "changed", updates)
 				// Invalidation-only events must always reach clients; snapshots may be identical.
-				if h.snapshot == nil || frame != lastFrame || strings.HasPrefix(frame, "event: changed\n") {
+				if frame != "" && (updates != nil || h.snapshot == nil || frame != lastFrame || strings.HasPrefix(frame, "event: changed\n")) {
 					if !send(frame) {
 						return
 					}
-					lastFrame = frame
+					if updates == nil {
+						lastFrame = frame
+					}
 				}
 			} else if presenceChanges != nil {
 				// The heartbeat also confirms lease renewals and silent expirations
