@@ -19,13 +19,22 @@ function schedule() {
 }
 
 function finishSelection(event: Event) {
+  const target = event.target instanceof Element ? event.target : null;
+  const textEditor = target?.matches("input,textarea");
+  // A paste targets one cell. Native editor shortcuts operate on its text.
+  // Neither needs the off-screen DOM to exist before the event is handled.
+  if (textEditor && (event.type === "copy" || event.type === "cut")) return;
   if (event instanceof KeyboardEvent) {
+    if (event.ctrlKey || event.metaKey) {
+      const key = event.key.toLowerCase();
+      if (key === "v" || (textEditor && ["a", "c", "x", "z", "y"].includes(key))) return;
+    }
     if (["Shift", "Control", "Alt", "Meta", "AltGraph"].includes(event.key)) return;
     const navigation = /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|PageUp|PageDown|Home|End|Tab|F3)$/.test(event.key);
     if (!navigation && !event.ctrlKey && !event.metaKey) return;
   }
   if (event instanceof PointerEvent && !event.shiftKey) return;
-  const table = event.target instanceof Element ? event.target.closest("table") : null;
+  const table = target?.closest("table");
   if (!table) return;
   const remaining = [...pending].filter(([row]) => row.closest("table") === table);
   // Spreadsheet navigation/copy must see the complete logical grid, including
@@ -38,7 +47,7 @@ function watch(row: HTMLTableRowElement, activate: () => void) {
     observer = new IntersectionObserver(entries => {
       for (const entry of entries) if (entry.isIntersecting) pending.get(entry.target as HTMLTableRowElement)?.();
     }, { rootMargin: "120px 0px" });
-    for (const event of ["keydown", "pointerdown", "copy", "cut", "paste"]) document.addEventListener(event, finishSelection, true);
+    for (const event of ["keydown", "pointerdown", "copy", "cut"]) document.addEventListener(event, finishSelection, true);
   }
   pending.set(row, activate);
   observer.observe(row);
@@ -49,7 +58,7 @@ function watch(row: HTMLTableRowElement, activate: () => void) {
     if (!pending.size) {
       clearTimeout(timer); timer = undefined;
       observer?.disconnect(); observer = undefined;
-      for (const event of ["keydown", "pointerdown", "copy", "cut", "paste"]) document.removeEventListener(event, finishSelection, true);
+      for (const event of ["keydown", "pointerdown", "copy", "cut"]) document.removeEventListener(event, finishSelection, true);
     }
   };
 }
