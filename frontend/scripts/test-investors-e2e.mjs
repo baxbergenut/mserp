@@ -120,7 +120,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Investors', exact: true })).toBeVisible();
   if (process.argv.includes('--board-opening-only')) {
-    await runBoardOpeningE2E({ page, base, setNetworkLatency });
+    await runBoardOpeningE2E({ page, base, setNetworkLatency, sql, schema });
   } else if (process.argv.includes('--board-save-only')) {
     await runBoardSaveRecovery({page,base,password,sql,schema});
   } else if (investorRetained) {
