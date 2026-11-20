@@ -25,7 +25,7 @@ import { runDriverBoardE2E } from './driver-board-e2e.mjs';
 import { runGrossBoardLiveE2E, runGrossBoardPartialE2E } from './gross-board-live-e2e.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, get as httpGet } from 'node:http';
 import { Readable, Transform } from 'node:stream';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -83,7 +83,20 @@ try {
         const chunks = []; for await (const chunk of req) chunks.push(chunk);
         const headers = {};
         for (const key of ['cookie', 'content-type', 'x-csrf-token', 'x-clustie-board-timing', 'x-clustie-board-sections', 'origin']) if (req.headers[key]) headers[key] = req.headers[key];
-        const response = await fetch(`http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
+        const upstream = `http://127.0.0.1:${apiPort}${url.pathname.slice(4)}${url.search}`;
+        if (req.method === 'GET' && ['/api/driver-board','/api/gross-board'].includes(url.pathname)) {
+          // Preserve the actual wire encoding through the fixture proxy. Node fetch
+          // automatically decompresses the body while retaining Content-Encoding.
+          if (req.headers['accept-encoding']) headers['accept-encoding'] = req.headers['accept-encoding'];
+          const board = await new Promise((resolve, reject) => httpGet(upstream, {headers}, resolve).on('error', reject));
+          if (latency) await new Promise(done => setTimeout(done, latency / 2));
+          res.writeHead(board.statusCode, board.headers);
+          res.on('close', () => board.destroy());
+          board.on('error', () => res.destroy());
+          board.pipe(res);
+          return;
+        }
+        const response = await fetch(upstream, { method: req.method, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) });
         if (latency) await new Promise(done => setTimeout(done, latency / 2));
         res.writeHead(response.status, Object.fromEntries(response.headers));
         if (response.headers.get('content-type')?.includes('text/event-stream')) {
