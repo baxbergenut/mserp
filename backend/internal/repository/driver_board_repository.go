@@ -178,9 +178,6 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	if err != nil {
 		return result, err
 	}
-	if err = tx.QueryRow(ctx, `SELECT fleet_status_enabled()`).Scan(&result.StatusSyncEnabled); err != nil {
-		return result, err
-	}
 	if displayBoard {
 		rule, err := readEffectiveCommissionRule(ctx, tx, result.WeekStart)
 		if err != nil {
@@ -196,6 +193,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	location, _ := time.LoadLocation("America/New_York")
 	today := r.now().In(location).Format(time.DateOnly)
 	endRoster := db.Phase(ctx, "status_roster")
+	queues := make(map[string]boardQueueRow)
 	rows, err := tx.Query(ctx, `SELECT d.id,d.full_name,d.pay_type,coalesce(i.driver_id=d.id,false),
  coalesce(NOT i.is_company,false),coalesce(i.driver_id=d.id,false),coalesce(t.unit_number,''),coalesce(t.id::text,''),coalesce(d.phone,''),
  coalesce(dp.id::text,''),coalesce(dp.full_name,'Unassigned'),
@@ -204,7 +202,8 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	 coalesce(b.eta,''),coalesce(b.notes,''),coalesce(b.home_time,''),coalesce(b.version,0),coalesce(b.leave_plan,'{}'::jsonb),
 	 el.latitude,el.longitude,el.reported_at,el.provider_truck_number,el.heading,el.source,
  `+boardTruckConditionSQL+`
- ELSE 'in_use' END,d.availability_status,d.status_version,coalesce(d.city,''),coalesce(d.state,''),NOT d.active
+ ELSE 'in_use' END,d.availability_status,d.status_version,coalesce(d.city,''),coalesce(d.state,''),NOT d.active,
+ b.driver_id IS NOT NULL
  FROM drivers d CROSS JOIN (SELECT $1::date AS today) board_day
  `+driverBoardDispatcherJoinSQL+`
  LEFT JOIN dispatchers dp ON dp.id=`+driverBoardDispatcherSQL+`
@@ -224,6 +223,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 	for rows.Next() {
 		var d DriverBoardDriver
 		var e DriverBoardEntry
+		var queue boardQueueRow
 		var pay string
 		var owner, investor, own bool
 		var providerTruckNumber, locationSource *string
@@ -232,7 +232,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		err = rows.Scan(&d.ID, &d.FullName, &pay, &owner, &investor, &own, &d.TruckUnit, &d.TruckID, &d.Phone, &d.DispatcherID, &d.DispatcherName,
 			&d.DispatcherExtension, &d.MainUpdaterName, &d.MainUpdaterExtension, &d.AfterHoursUpdaterName, &d.AfterHoursUpdaterExtension,
 			&e.CurrentLoad, &e.TrailerNumber, &e.TrailerNote, &e.Status, &e.Destination, &e.ETA, &e.Notes, &e.HomeTime, &e.Version, &e.LeavePlan,
-			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion, &d.City, &d.State, &d.Departed)
+			&latitude, &longitude, &reportedAt, &providerTruckNumber, &heading, &locationSource, &d.TruckOperatingStatus, &d.AvailabilityStatus, &d.StatusVersion, &d.City, &d.State, &d.Departed, &queue.hasEntry)
 		if err != nil {
 			rows.Close()
 			return result, err
@@ -242,6 +242,9 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 			d.Location = &DriverBoardLocation{Latitude: *latitude, Longitude: *longitude, Heading: heading,
 				ReportedAt: *reportedAt, ProviderTruckNumber: *providerTruckNumber, Source: pmRecordID(locationSource)}
 		}
+		// Queue resolution uses the stored dispatch status, including for departed drivers.
+		queue.entry = e
+		queues[d.ID] = queue
 		if d.Departed {
 			e.Status = "Left"
 			d.Location = nil
@@ -283,7 +286,32 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		result.ELD.Configured = r.fiveELDConfigured
 	}
 	endLoads := db.Phase(ctx, "status_load_views")
-	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{jitDisabled: true}, r.loadSources, keys.entries)
+	// Keep large saved queue documents out of the ordered roster query. A left
+	// join to one seed row returns the fleet setting even for an empty board.
+	queueRows, err := tx.Query(ctx, `SELECT (SELECT fleet_status_enabled()), q.driver_id::text, q.payload
+ FROM (VALUES (1)) seed(n) LEFT JOIN driver_board_load_state q ON q.driver_id=ANY($1::uuid[])`, ids)
+	if err != nil {
+		return result, err
+	}
+	for queueRows.Next() {
+		var id *string
+		var payload []byte
+		if err = queueRows.Scan(&result.StatusSyncEnabled, &id, &payload); err != nil {
+			queueRows.Close()
+			return result, err
+		}
+		if id != nil {
+			row := queues[*id]
+			row.payload = payload
+			queues[*id] = row
+		}
+	}
+	err = queueRows.Err()
+	queueRows.Close()
+	if err != nil {
+		return result, err
+	}
+	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{jitDisabled: true, roster: queues}, r.loadSources, keys.entries)
 	endLoads()
 	if err != nil {
 		return result, err
