@@ -41,7 +41,11 @@ try {
     }
     if (request.method() === 'PUT' && ['/driver-board', '/gross-board'].includes(path)) {
       const input = request.postDataJSON();
-      const committed = input.entries.map(e => ({ ...e, version: e.version + 1 }));
+      // Status Board sends edited fields and receives the complete committed row.
+      const committed = input.entries.map(e => ({
+        ...(path === '/driver-board' ? statusEntries.find(row => row.driverId === e.driverId) : {}),
+        ...e, version: e.version + 1,
+      }));
       if (path === '/driver-board') statusEntries = statusEntries.map(e => committed.find(c => c.driverId === e.driverId) ?? e);
       else grossEntries = [...grossEntries.filter(e => !committed.some(c => c.driverId === e.driverId && c.date === e.date && c.slot === e.slot)), ...committed];
       saves += 1;

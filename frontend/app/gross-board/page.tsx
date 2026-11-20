@@ -119,7 +119,6 @@ export default function GrossBoardPage() {
   const returnToPay = useCallback(() => { if (payReturn) { markBack(payReturn); requestNavigation(payReturn); } }, [payReturn, markBack, requestNavigation]);
   const [balanceDriver, setBalanceDriver] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState("");
-  const activityRef = useRef(0);
   const idleRef = useRef(false);
   const savingRef = useRef(false);
   const leavingRef = useRef(false);
@@ -210,7 +209,11 @@ export default function GrossBoardPage() {
       } finally { inFlight = false; if (pending && !cancelled) schedule(); }
     };
     const schedule = () => { pending = true; clearTimeout(timer); timer = setTimeout(() => void refresh(), 0); };
-    receiveLive.current = value => { if (value) { revision++; accept(value); } else schedule(); };
+    receiveLive.current = value => {
+      revision++;
+      if (value) accept(value);
+      else schedule();
+    };
     resumeLive.current = () => { if (latest) accept(latest); if (pending) schedule(); };
     const fallback = setInterval(() => { if (!connectedRef.current) schedule(); }, 30000);
     const focus = schedule;
@@ -279,7 +282,6 @@ export default function GrossBoardPage() {
 
   function switchWeek(next: string) {
     if (next === week || loading) return;
-    activityRef.current += 1;
     setBalanceDriver(null); setLoadTarget(null);
     cancelNavigation();
     setPendingWeek(next);
@@ -295,7 +297,6 @@ export default function GrossBoardPage() {
 
   const edit = useCallback((driverId: string, date: string, slot: number, update: (entry: GrossBoardEntry) => GrossBoardEntry) => {
     if (!canEdit) return;
-    activityRef.current += 1;
     const key = entryKey(driverId, date, slot);
     const current = changesRef.current;
     const baseline = savedRef.current[key] ?? emptyEntry(driverId, date, slot);
@@ -316,8 +317,6 @@ export default function GrossBoardPage() {
   const save = useCallback(async () => {
     if (!canEdit || savingRef.current || invalid || !Object.keys(changesRef.current).length || loading) return;
     savingRef.current = true;
-    activityRef.current += 1;
-    const saveRevision = activityRef.current;
     const snapshot = { ...changesRef.current };
     busyKeys.current = Object.keys(snapshot);
     setSaving(true); setError(""); setMessage("");
@@ -348,14 +347,9 @@ export default function GrossBoardPage() {
       setDrafts(remaining);
       if (committed.length && !Object.keys(remaining).length) confirmedEdit.current = editStarted.current;
       setMessage("Saved");
-      // The stream refreshes carry and matching metadata. Recover by GET when
-      // disconnected, preserving newer edits and navigation flushes.
-      if (committed.length > 0 && !live.connected && activityRef.current === saveRevision && !leavingRef.current) {
-        try {
-          const fresh = await fetchGrossBoard(week);
-          if (activityRef.current === saveRevision) receiveLive.current(fresh);
-        } catch { setRefreshError("Saved. Automatic load refresh is unavailable; retry to reconnect."); }
-      }
+      // The receipt confirms the write. Recover carry and matching metadata
+      // independently so a slow GET cannot hold the next edit or navigation.
+      if (committed.length && !connectedRef.current && !leavingRef.current) receiveLive.current();
     } catch (err) {
       if (err instanceof APIError && err.code === "gross_board_week_locked") {
         try {
@@ -366,8 +360,8 @@ export default function GrossBoardPage() {
         catch { setError("Unable to refresh the week lock. Your edits are still here."); }
       } else setError(err instanceof Error ? err.message : "Unable to save. Your edits are still here.");
     }
-    finally { activityRef.current += 1; busyKeys.current = []; savingRef.current = false; setSaving(false); }
-  }, [canEdit, live.connected, invalid, loading, week, setDrafts]);
+    finally { busyKeys.current = []; savingRef.current = false; setSaving(false); }
+  }, [canEdit, invalid, loading, week, setDrafts]);
 
   useEffect(() => {
     if (!dirty || !hasReadyEdits || saving || error || invalid || loading) return;
@@ -379,7 +373,6 @@ export default function GrossBoardPage() {
   async function reload() {
     if (lockedForEditing) { receiveLive.current(); return; }
     if (dirty && !window.confirm("Discard unsaved changes and reload the saved board?")) return;
-    activityRef.current += 1;
     setIssues([]);
     baselinesRef.current = {}; setDrafts({}); setMessage(""); setRefreshError(""); cancelWeekChange(); cancelNavigation(); await load();
   }
@@ -412,7 +405,6 @@ export default function GrossBoardPage() {
 
   function discardIssue(issue: GrossBoardSaveIssue) {
     if (savingRef.current || !window.confirm("Discard the unsaved edits for this issue?")) return;
-    activityRef.current += 1;
     const remaining = { ...changesRef.current };
     for (const location of issue.pending) {
       const key = grossLocationKey(location);

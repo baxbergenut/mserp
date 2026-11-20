@@ -87,7 +87,7 @@ export function opensGridDetails(event: MouseEvent<HTMLElement>, readOnly: boole
     ("pointerType" in event.nativeEvent && event.nativeEvent.pointerType === "touch");
 }
 
-function editCell(cell: Cell, value?: string) {
+function editCell(cell: Cell, value?: string, inputType = "insertText") {
   const input = cell.querySelector<HTMLInputElement>(textInputSelector);
   if (!input) {
     if (value === undefined) {
@@ -107,7 +107,7 @@ function editCell(cell: Cell, value?: string) {
       // Go through React's normal onChange path for existing controlled fields.
       // Bypass only the DOM value tracker so React sees the replacement.
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType }));
     }
   } else if (input.selectionStart !== null) input.setSelectionRange(input.value.length, input.value.length);
 }
@@ -144,7 +144,7 @@ export function pasteGridCell(event: ClipboardEvent<HTMLElement>) {
   if (!event.clipboardData.types.includes("text/plain")) return;
   event.preventDefault();
   event.stopPropagation();
-  editCell(cell, event.clipboardData.getData("text/plain"));
+  editCell(cell, event.clipboardData.getData("text/plain"), "insertFromPaste");
   // Commit the replacement through the field's usual blur/save path and keep
   // the cell selected, ready for another paste or arrow navigation.
   cell.tabIndex = -1;

@@ -28,6 +28,40 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     await write({notes:'initial note'});
     await page.reload();
     await expect(input('Notes')).toHaveValue('initial note');
+    // Compare real keyboard and clipboard input in the focused cell. Record
+    // input-to-PUT separately from PostgreSQL and the receipt's round trip.
+    await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin:new URL(base).origin});
+    await page.evaluate(() => {
+      let lastInput = 0;
+      document.addEventListener('input', () => { lastInput = performance.now(); }, true);
+      const send = window.fetch.bind(window);
+      window.saveStartDelays = [];
+      window.fetch = (url, opts) => {
+        if (opts?.method === 'PUT' && new URL(url, location.href).pathname === '/api/driver-board') {
+          window.saveStartDelays.push(Math.round(performance.now() - lastInput));
+        }
+        return send(url, opts);
+      };
+    });
+    const notes = input('Notes');
+    const noteReceipt = () => page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/driver-board');
+    await notes.focus();
+    await notes.press('Control+a');
+    const typed = noteReceipt();
+    await notes.pressSequentially('typed burst');
+    expect((await typed).status()).toBe(200);
+    await expect(page.getByText('Saved',{exact:true})).toBeVisible();
+    expect((await read()).notes).toBe('typed burst');
+    await page.evaluate(() => navigator.clipboard.writeText('pasted dispatch note'));
+    await notes.press('Control+a');
+    const pasted = noteReceipt();
+    await notes.press('Control+v');
+    expect((await pasted).status()).toBe(200);
+    await expect(page.getByText('Saved',{exact:true})).toBeVisible();
+    expect((await read()).notes).toBe('pasted dispatch note');
+    const delays = await page.evaluate(() => window.saveStartDelays);
+    expect(delays).toHaveLength(2);
+    console.log('Status note input to PUT (ms)', {typed:delays[0], pasted:delays[1]});
     let inlineWrites = 0;
     const concurrentText = async route => {
       if (route.request().method() === 'PUT') {

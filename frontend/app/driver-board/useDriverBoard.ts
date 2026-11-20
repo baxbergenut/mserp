@@ -148,7 +148,7 @@ export function useDriverBoard(lockedDriverId?: string) {
     if (!canEdit) return;
     editStarted.current = performance.now();
     confirmedEdit.current = 0;
-    lastTextEdit.current = ["currentLoad", "notes", "trailerNumber", "trailerNote", "destination", "eta", "homeTime"].includes(field) ? performance.now() : -Infinity;
+    lastTextEdit.current = -Infinity;
     activity.current += 1;
     if (!editSession.current || editSession.current.id !== id || editSession.current.field !== field) editSession.current = { id, field, group: ++editSequence.current };
     const last = draftUndo.current.at(-1);
@@ -165,6 +165,14 @@ export function useDriverBoard(lockedDriverId?: string) {
     changesRef.current = result;
     setChanges(result);
   }, [canEdit]);
+
+  const editText = useCallback((id: string, field: keyof DriverBoardEntry, value: string, event?: Event) => {
+    edit(id, field, value);
+    // A paste, drop or explicit selection already contains the finished value.
+    if (event && !(event instanceof InputEvent && ["insertFromPaste", "insertFromDrop"].includes(event.inputType))) {
+      lastTextEdit.current = performance.now();
+    }
+  }, [edit]);
 
   async function setAutoOrder(dispatcherId: string, enabled: boolean) {
     if (!canEdit || loading || savingRef.current || orderSavingRef.current || dirty || pendingLink || actionBusy) throw new Error("Finish the current save before changing Auto-order.");
@@ -418,5 +426,5 @@ export function useDriverBoard(lockedDriverId?: string) {
   const entries = useMemo(() => Object.fromEntries(Object.entries({ ...saved, ...changes }).map(([id, entry]) => [
     id, { ...entry, status: board?.statusSyncEnabled ? entry.status : progressStatus(entry.status, board?.loads[id]) },
   ])), [saved, changes, board?.statusSyncEnabled, board?.loads]);
-  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
+  return { board, entries, loading, saving: saving || orderSaving, actionBusy: actionBusy || orderSaving, dirty, error, refreshError, eldRefreshing, edit, editText, save, reload, refresh: () => refreshWanted.current(), refreshELD, undo, changeLoads, reorderDrivers, setAutoOrder, ...live, leaving: !!pendingLink, cancelNavigation, leave };
 }
