@@ -112,7 +112,7 @@ conversion used that faulty check and created duplicate slots.
 5. Run the narrowest relevant tests during development, then the validation
    commands listed below before handing off.
 
-Status Board row conflicts return `board_row_changed`. Existing inline Status Board edits apply the submitted fields to the current row under the driver lock. The latest committed edit to a field wins. Load actions use the row version and queue revision from the same load snapshot. Crossing a pickup deadline changes the overdue label without invalidating a load action. Editing the pickup schedule still invalidates the queue revision. Exercise `frontend/scripts/test-investors-e2e.mjs --board-save-only` for two-user save, conflict and reload behavior.
+Status Board row conflicts return `board_row_changed`. A pending inline save holds only its submitted drivers in the browser. Other drivers can save inline edits and change loads while that receipt is in flight. Newer edits to a submitted driver rebase on its receipt and then flush. Existing inline Status Board edits apply the submitted fields to the current row under the driver lock. The latest committed edit to a field wins. Load actions use the row version and queue revision from the same load snapshot. Crossing a pickup deadline changes the overdue label without invalidating a load action. Editing the pickup schedule still invalidates the queue revision. Exercise `frontend/scripts/test-investors-e2e.mjs --board-save-only` for two-user save, conflict and reload behavior.
 
 Current-week Gross Board planning text takes a lock for its own New York week.
 Driver and Investor Pay acquire the shared side before pinning a finalization

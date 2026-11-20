@@ -80,6 +80,43 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     const delays = await page.evaluate(() => window.saveStartDelays);
     expect(delays).toHaveLength(2);
     console.log('Status note input to PUT (ms)', {typed:delays[0], pasted:delays[1]});
+    const peerName = 'Wire Test Driver 1';
+    const peerNotes = page.getByLabel(peerName+' · Notes', {exact:true});
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    const waitForFirst = async route => {
+      if (route.request().method() === 'PUT' &&
+          route.request().postDataJSON().entries.some(e => e.driverId === id && e.notes === 'held first write')) await held;
+      await route.continue();
+    };
+    await page.route('**/api/driver-board', waitForFirst);
+    try {
+      const sentFirst = page.waitForRequest(r => r.method() === 'PUT' && new URL(r.url()).pathname === '/api/driver-board');
+      await notes.fill('held first write');
+      await sentFirst;
+      await notes.fill('latest on held row');
+      const peerReceipt = noteReceipt();
+      await peerNotes.fill('independent save');
+      expect((await peerReceipt).status()).toBe(200);
+      await page.getByRole('button', {name:peerName+' · Next load', exact:true}).click();
+      const peerDrawer = page.getByRole('dialog', {name:peerName+' · Loads'});
+      const peerQueue = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname.includes('/driver-board/loads/'));
+      await peerDrawer.getByLabel('Add next load').fill('INDEPENDENT-53');
+      await peerDrawer.getByLabel('Add next load').press('Enter');
+      const peerQueueReceipt = await peerQueue;
+      expect(peerQueueReceipt.status()).toBe(200);
+      const peerPath = new URL(peerQueueReceipt.url()).pathname;
+      const peerId = peerPath.split('/').at(-1);
+      const rows = await (await other.request.get('/api/driver-board?weekStart='+week)).json();
+      expect(rows.entries.find(e => e.driverId === peerId).notes).toBe('independent save');
+      expect(rows.entries.find(e => e.driverId === id).notes).toBe('pasted dispatch note');
+      expect((await (await other.request.get(peerPath)).json()).next.filter(p => p.number === 'INDEPENDENT-53')).toHaveLength(1);
+      await peerDrawer.getByLabel('Close loads').click();
+    } finally { release(); }
+    await expect.poll(async () => (await read()).notes).toBe('latest on held row');
+    await expect(page.getByText('Saved',{exact:true})).toBeVisible();
+    await page.unroute('**/api/driver-board', waitForFirst);
+    console.log('Independent driver note and load both committed before the held PUT. Newer same-driver edit survived.');
     let inlineWrites = 0;
     const concurrentText = async route => {
       if (route.request().method() === 'PUT') {
