@@ -195,6 +195,16 @@ func grossBoardEffectiveForDriver() string {
 	return strings.Replace(grossBoardEffective, "WHERE e.source_date < $1::date+7", "WHERE e.source_date < $1::date+7 AND e.driver_id=$2::uuid", 1)
 }
 
+func readGrossBoardSlot(ctx context.Context, tx pgx.Tx, entry *GrossBoardEntry) error {
+	date, err := time.Parse(time.DateOnly, entry.Date)
+	if err != nil {
+		return err
+	}
+	defer db.Phase(ctx, "gross_slot_read")()
+	return scanGrossBoardEntry(tx.QueryRow(ctx, grossBoardEffectiveForDriver()+"SELECT "+grossBoardEntryColumns+
+		" FROM effective WHERE driver_id=$2 AND service_date=$3::date AND slot=$4", date, entry.DriverID, entry.Date, entry.Slot), entry)
+}
+
 const grossBoardEntryColumns = `driver_id, service_date::text, display_number,
  matched_id, coalesce(effective_original::text,''), coalesce(driver_rate::text,''),
  coalesce(effective_miles::text,''), version, coalesce(entered_original_rate::text,''),
@@ -509,16 +519,27 @@ func (r *GrossBoardRepository) saveEntriesTx(ctx context.Context, tx pgx.Tx, ent
 	if len(actors) > 0 {
 		actor = actors[0]
 	}
-	if err := lockGrossBoardWrite(ctx, tx, actor); err != nil {
+	if err := lockGrossBoardWrite(ctx, tx, actor, entries); err != nil {
 		return nil, err
 	}
 	return r.saveEntriesLocked(ctx, tx, entries)
 }
 
-func lockGrossBoardWrite(ctx context.Context, tx pgx.Tx, actor string) error {
+func lockGrossBoardWrite(ctx context.Context, tx pgx.Tx, actor string, entries []GrossBoardEntry) error {
+	planMode := "force_custom_plan"
+	if len(entries) == 1 {
+		e := entries[0]
+		// Single-slot field edits read the effective slot before and after the
+		// update. Let PostgreSQL reuse its plan across saves on this connection.
+		if len(e.Fields) > 0 && e.SplitReview == nil && !e.AcceptSystemValues && !e.AcceptDriverGross &&
+			!slices.ContainsFunc(e.Fields, grossBoardIdentityField) {
+			planMode = "auto"
+			db.Event(ctx, "gross_single_slot_auto_plan")
+		}
+	}
 	finishFleetLock := db.Phase(ctx, "gross_fleet_lock_wait")
-	_, err := tx.Exec(ctx, `SELECT set_config('jit','off',true),set_config('plan_cache_mode','force_custom_plan',true),
- set_config('mserp.board_actor',$1,true),set_config('mserp.board_source','gross_board',true) FROM fleet_status_lock()`, actor)
+	_, err := tx.Exec(ctx, `SELECT set_config('jit','off',true),set_config('plan_cache_mode',$2,true),
+ set_config('mserp.board_actor',$1,true),set_config('mserp.board_source','gross_board',true) FROM fleet_status_lock()`, actor, planMode)
 	finishFleetLock()
 	if err != nil {
 		return err
@@ -785,13 +806,7 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 		return nil, err
 	}
 	for i := range entries {
-		date, err := time.Parse(time.DateOnly, entries[i].Date)
-		if err != nil {
-			return nil, err
-		}
-		err = scanGrossBoardEntry(tx.QueryRow(ctx, grossBoardEffectiveForDriver()+"SELECT "+grossBoardEntryColumns+
-			" FROM effective WHERE driver_id=$2 AND service_date=$3::date AND slot=$4", date, entries[i].DriverID, entries[i].Date, entries[i].Slot), &entries[i])
-		if err != nil {
+		if err = readGrossBoardSlot(ctx, tx, &entries[i]); err != nil {
 			return nil, err
 		}
 	}

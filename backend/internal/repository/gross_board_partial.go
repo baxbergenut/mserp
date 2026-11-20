@@ -128,7 +128,7 @@ func (r *GrossBoardRepository) SavePartialChanges(ctx context.Context, entries [
 	if err = assertGrossBoardDaysEditable(ctx, tx, grossBoardDays(entries, nil)); err != nil {
 		return GrossBoardSaveResult{}, err
 	}
-	if err = lockGrossBoardWrite(ctx, tx, actor); err != nil {
+	if err = lockGrossBoardWrite(ctx, tx, actor, entries); err != nil {
 		return GrossBoardSaveResult{}, err
 	}
 	result := GrossBoardSaveResult{Entries: []GrossBoardEntry{}, Issues: []GrossBoardSaveIssue{}}
