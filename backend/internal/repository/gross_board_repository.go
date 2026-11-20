@@ -529,6 +529,13 @@ func lockGrossBoardWrite(ctx context.Context, tx pgx.Tx, actor string) error {
 	return lockTruckAccounting(ctx, tx)
 }
 
+// Read the provider values from the row acquired by FOR SHARE. Under READ
+// COMMITTED a waiting edit must project the provider's newly committed row.
+const grossBoardLockedSourceSQL = `SELECT coalesce(trip_source.original::text,''), coalesce(trip_source.miles::text,''),
+ trip_source.split,trip_source.review,trip_source.review_reason,trip_source.reviewed,coalesce(trip_source.driver_gross::text,'')
+ FROM (SELECT * FROM loads WHERE id=$1 FOR SHARE) l
+ CROSS JOIN (SELECT $2::integer load_trip_id) e ` + loadTripSourceSQL
+
 func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx, entries []GrossBoardEntry) (_ []GrossBoardEntry, err error) {
 	var editing *GrossBoardEntry
 	defer func() {
@@ -583,14 +590,15 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 		editing = &e
 		var transferred bool
 		var oldTrip *int
-		var oldID *int
+		var oldID, pinnedID *int
 		var oldNumber string
 		var oldActive bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gross_board_transfers WHERE driver_id=$1 AND active AND ((source_date=$2::date AND source_slot=$3) OR (dispatch_date=$2::date AND dispatch_slot=$3))),
  CASE WHEN NOT p.deleted THEN p.load_trip_id END,p.load_record_id,coalesce(p.load_number,''),
- coalesce(NOT p.deleted AND p.day_status='' AND btrim(p.load_number)<>'',false)
+ coalesce(NOT p.deleted AND p.day_status='' AND btrim(p.load_number)<>'',false),
+ CASE WHEN NOT p.deleted AND lower(btrim(p.load_number))=lower(btrim($4)) THEN p.load_record_id END
  FROM (SELECT 1) seed LEFT JOIN `+grossBoardEntriesSQL+` p
- ON p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3`, e.DriverID, e.Date, e.Slot).Scan(&transferred, &oldTrip, &oldID, &oldNumber, &oldActive); err != nil {
+ ON p.driver_id=$1 AND p.service_date=$2::date AND p.slot=$3`, e.DriverID, e.Date, e.Slot, e.LoadNumber).Scan(&transferred, &oldTrip, &oldID, &oldNumber, &oldActive, &pinnedID); err != nil {
 			return nil, err
 		}
 		if transferred {
@@ -604,7 +612,7 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 		}
 		// Gross Board records financial plans regardless of fleet availability.
 		// Operational dispatch checks belong to Status Board, not this editor.
-		loadID, err := resolveAvailableBoardLoad(ctx, tx, e)
+		loadID, err := resolveAvailableBoardLoad(ctx, tx, e, pinnedID)
 		if err != nil {
 			return nil, err
 		}
@@ -639,11 +647,7 @@ func (r *GrossBoardRepository) saveEntriesLocked(ctx context.Context, tx pgx.Tx,
 		split, review, reviewed := false, false, false
 		reviewReason := ""
 		if loadID != nil {
-			// Lock the source before comparing the displayed allocation.
-			if _, err = tx.Exec(ctx, `SELECT id FROM loads WHERE id=$1 FOR SHARE`, *loadID); err != nil {
-				return nil, err
-			}
-			err = tx.QueryRow(ctx, `SELECT coalesce(trip_source.original::text,''),coalesce(trip_source.miles::text,''),trip_source.split,trip_source.review,trip_source.review_reason,trip_source.reviewed,coalesce(trip_source.driver_gross::text,'') FROM loads l CROSS JOIN (SELECT $2::integer load_trip_id) e `+loadTripSourceSQL+` WHERE l.id=$1`, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review, &reviewReason, &reviewed, &driverGross)
+			err = tx.QueryRow(ctx, grossBoardLockedSourceSQL, *loadID, e.LoadTripID).Scan(&original, &miles, &split, &review, &reviewReason, &reviewed, &driverGross)
 			if err != nil {
 				return nil, err
 			}

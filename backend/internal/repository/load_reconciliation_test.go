@@ -107,14 +107,21 @@ func TestLoadReconciliationDatabase(t *testing.T) {
 			t.Fatal("new missing selection accepted")
 		}
 		// An existing pinned link cannot silently move when an older client omits ID.
-		tx, err := pool.Begin(ctx)
+		tx, err := beginPayrollMutation(ctx, pool)
 		if err != nil {
 			t.Fatal(err)
 		}
-		id, err := resolveAvailableBoardLoad(ctx, tx, GrossBoardEntry{DriverID: projectionDriver, Date: "2026-10-05", LoadNumber: "DUP-REPAIR"})
-		tx.Rollback(ctx)
-		if err != nil || id == nil || *id != old {
-			t.Fatal("historical link replaced", id, err)
+		defer tx.Rollback(ctx)
+		legacy := GrossBoardEntry{DriverID: projectionDriver, Date: "2026-10-05", LoadNumber: " dup-repair ", DriverRate: "1700"}
+		if err = tx.QueryRow(ctx, `SELECT version FROM gross_board_entries WHERE driver_id=$1 AND service_date=$2::date`, legacy.DriverID, legacy.Date).Scan(&legacy.Version); err != nil {
+			t.Fatal(err)
+		}
+		saved, err := board.saveEntriesTx(ctx, tx, []GrossBoardEntry{legacy}, actor)
+		if err != nil || len(saved) != 1 || saved[0].LoadRecordID == nil || *saved[0].LoadRecordID != old {
+			t.Fatal("historical link replaced", saved, err)
+		}
+		if err = tx.Rollback(ctx); err != nil {
+			t.Fatal(err)
 		}
 		var live datatruck.Load
 		payload := `{"id":88202,"load_id":"DUP-REPAIR","status":"invoiced","customer__company_name":"Broker","total_pay":3408,"total_miles":713,"pickup_time":"2026-10-05T12:00:00Z","delivery_time":"2026-10-06T12:00:00Z","stops":[{"stop_type":"pickup","location":{"city":"Austin","state":"TX"}},{"stop_type":"delivery","location":{"city":"Dallas","state":"TX"}}]}`
