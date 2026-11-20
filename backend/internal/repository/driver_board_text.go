@@ -144,8 +144,10 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 			number, note = edit.TrailerNumber, edit.TrailerNote
 		}
 		if notes != current.Notes || number != current.TrailerNumber || note != current.TrailerNote {
+			finish := db.Phase(ctx, "board_text_update")
 			err = tx.QueryRow(ctx, `UPDATE driver_board SET notes=$2,trailer_number=$3,trailer_note=$4,
  version=version+1,updated_at=now() WHERE driver_id=$1 AND version=$5 RETURNING version`, edit.DriverID, notes, number, note, current.Version).Scan(&current.Version)
+			finish()
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, ErrDriverBoardConflict
 			}
@@ -154,10 +156,16 @@ func (r *DriverBoardRepository) saveText(ctx context.Context, entries []DriverBo
 			}
 			current.Notes, current.TrailerNumber, current.TrailerNote = notes, number, note
 		}
-		if err = attachBoardSaveReceipt(ctx, tx, &current); err != nil {
+		finish := db.Phase(ctx, "board_text_receipt")
+		err = attachBoardSaveReceipt(ctx, tx, &current)
+		finish()
+		if err != nil {
 			return nil, err
 		}
 		result = append(result, current)
 	}
-	return result, tx.Commit(ctx)
+	finish = db.Phase(ctx, "board_text_commit")
+	err = tx.Commit(ctx)
+	finish()
+	return result, err
 }

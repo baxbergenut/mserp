@@ -63,6 +63,7 @@ func logBoardClientTimings(logger *slog.Logger, raw string) {
 		default:
 			continue
 		}
+		value, network, _ := strings.Cut(value, "~")
 		total, phases, hasPhases := strings.Cut(value, "/")
 		ms, err := strconv.Atoi(total)
 		if err != nil || ms < 0 || ms > 120000 {
@@ -93,8 +94,34 @@ func logBoardClientTimings(logger *slog.Logger, raw string) {
 		if len(points) == 4 {
 			fields = append(fields, "response_to_commit_ms", points[2]-points[1], "commit_to_frame_ms", points[3]-points[2], "frame_interval_ms", ms-points[3])
 		}
+		if name == "status-open" || name == "gross-open" {
+			fields = appendOpeningNetwork(fields, network, points[1])
+		}
 		logger.Info("board browser timing", fields...)
 	}
+}
+
+// Times are relative to the same opening as the React phases. TTFB includes
+// the server's headers-ready duration. Values from other requests are omitted.
+func appendOpeningNetwork(fields []any, network string, received int) []any {
+	parts := strings.Split(network, "/")
+	if len(parts) != 6 {
+		return fields
+	}
+	var n [6]int
+	for i, part := range parts {
+		v, err := strconv.Atoi(part)
+		if err != nil || v < 0 {
+			return fields
+		}
+		n[i] = v
+	}
+	if n[0] > n[1] || n[1] > n[2] || n[2] > n[3] || n[3] > received || n[4] > 120000 || n[5] > 100<<20 {
+		return fields
+	}
+	return append(fields, "before_fetch_ms", n[0], "fetch_to_request_ms", n[1]-n[0],
+		"ttfb_ms", n[2]-n[1], "response_transfer_ms", n[3]-n[2], "body_to_view_ms", received-n[3],
+		"server_headers_ms", n[4], "encoded_body_bytes", n[5])
 }
 
 func performance(logger *slog.Logger) func(http.Handler) http.Handler {

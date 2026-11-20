@@ -36,6 +36,17 @@ func TestBoardBrowserTimingPhases(t *testing.T) {
 	}
 }
 
+func TestBoardOpeningNetworkTiming(t *testing.T) {
+	var output strings.Builder
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logBoardClientTimings(logger, "status-open=300/0/240/270/275~5/10/200/230/130/85000,gross-open=300/0/240/270/275~5/10/245/250/130/85000,status-save=300/0/240/270/275~5/10/200/230/130/85000")
+	log := output.String()
+	if strings.Count(log, "board browser timing") != 3 || strings.Count(log, "ttfb_ms=") != 1 ||
+		!strings.Contains(log, "before_fetch_ms=5 fetch_to_request_ms=5 ttfb_ms=190 response_transfer_ms=30 body_to_view_ms=10 server_headers_ms=130 encoded_body_bytes=85000") {
+		t.Fatal(log)
+	}
+}
+
 func TestPayrollPerformanceScenarios(t *testing.T) {
 	for _, tc := range []struct{ method, url, want string }{
 		{"GET", "/driver-pay?summary=1", "summary"},
