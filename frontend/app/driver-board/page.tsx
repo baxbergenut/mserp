@@ -129,6 +129,12 @@ export default function DriverBoardPage() {
   const [etaRetryError, setEtaRetryError] = useState("");
   const [etaRetrying, setEtaRetrying] = useState<Record<string, boolean>>({});
   const etaRetryInFlight = useRef(new Set<string>());
+  function advanceLoad(id: string, view: BoardLoadsView, stopKey?: string) {
+    return state.changeLoads(id, view, { action: "advance", stopKey }, message => {
+      setNextStop(null);
+      setDestinationError(message);
+    });
+  }
   async function retryETA(id: string, name: string, context: string) {
     if (!canEdit || dirty || saving || loading || leaving || state.actionBusy || etaRetryInFlight.current.has(id)) return;
     etaRetryInFlight.current.add(id);
@@ -472,7 +478,7 @@ export default function DriverBoardPage() {
                       setNextStop({ id: d.id, name: d.fullName, status: entry.status, loads });
                       return;
                     }
-                    try { await state.changeLoads(d.id, loads, { action: "advance" }); }
+                    try { await advanceLoad(d.id, loads); }
                     catch (err) { setDestinationError(err instanceof Error ? err.message : "Could not update load progress."); }
                   }} /></td>,
               destination: <td key="destination" data-board-column="destination" className={cellClass}><div className="flex h-8 items-center">
@@ -525,7 +531,7 @@ export default function DriverBoardPage() {
     </StatusBoardScrollArea>
     <CellPresence presence={state.presence} />
     {nextStop && <NextStopDialog name={nextStop.name} status={nextStop.status} loads={nextStop.loads}
-      onClose={() => setNextStop(null)} onApply={stopKey => state.changeLoads(nextStop.id, nextStop.loads, { action: "advance", stopKey })} />}
+      onClose={() => setNextStop(null)} onApply={stopKey => advanceLoad(nextStop.id, nextStop.loads, stopKey)} />}
     {etaEditor && entries[etaEditor.id]?.status !== "READY" && <ETAEditor key={etaEditor.id} targetChanged={etaEditor.target !== etaTarget(entries[etaEditor.id], board?.loads[etaEditor.id])} anchor={etaEditor.anchor} name={etaEditor.name} value={etaEditor.value} automation={board?.loads[etaEditor.id]?.automation} waiting={dirty || saving || loading} onAction={async action => { const view = board?.loads[etaEditor.id]; if (view) await state.changeLoads(etaEditor.id, view, action); }} onClose={() => setEtaEditor(null)} onApply={value => { edit(etaEditor.id, "eta", value); setEtaEditor(null); }} />}
     {pickupEditor && <ETAEditor key={`${pickupEditor.id}:${pickupEditor.planId}:${pickupEditor.pickup.key}`} anchor={pickupEditor.anchor} name={pickupEditor.name} value="" pickup={board?.loads[pickupEditor.id]?.next.find(load => load.planId === pickupEditor.planId)?.stops.find(stop => stop.key === pickupEditor.pickup.key) ?? pickupEditor.pickup} waiting={dirty || saving || loading} onAction={async action => {
       const view = board?.loads[pickupEditor.id];

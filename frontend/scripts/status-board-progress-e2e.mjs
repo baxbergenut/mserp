@@ -33,8 +33,27 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
   await expect(field('Current load')).toHaveValue('');
   await expect(field('Status')).toHaveValue('');
   await field('Current load').fill('BROWSER-A'); await field('Notes').click(); await saved();
+  // Change the source after the click so the first advance really is stale.
+  const loadPath = '/api/driver-board/loads/' + id;
+  let progressPosts = 0;
+  const changeSource = async route => {
+    if (route.request().method() === 'POST' && ++progressPosts === 1) {
+      sql(`SET search_path TO ${schema},public;
+        UPDATE loads SET raw_payload=jsonb_set(raw_payload,'{stops,0,location,city}','"Cambridge"') WHERE id=88132;`);
+    }
+    await route.continue();
+  };
+  await page.route('**'+loadPath, changeSource);
+  const stale = page.waitForResponse(r => new URL(r.url()).pathname === loadPath && r.status() === 409);
+  await advance.click();
+  expect((await (await stale).json()).code).toBe('board_load_plans_changed');
+  await expect(page.getByText("This driver's loads changed. Review the updated row before choosing the next action.")).toBeVisible();
+  await expect(field('Status')).toHaveValue('DISPATCHED');
+  expect(progressPosts).toBe(1);
   await advance.click(); await saved();
   await expect(field('Status')).toHaveValue('RESERVED');
+  expect(progressPosts).toBe(2);
+  await page.unroute('**'+loadPath, changeSource);
   await expect(location).toHaveValue('Dallas, TX');
   // A more recent action by another actor must never become this page's undo target.
   sql(`SET search_path TO ${schema},public; BEGIN; SELECT set_config('mserp.board_actor','other-updater',true),set_config('mserp.board_source','board',true); INSERT INTO driver_board(driver_id,notes) VALUES('${other}','Keep other user action'); COMMIT;`);
@@ -47,7 +66,7 @@ export async function runStatusBoardProgressE2E({ page, base, sql, schema, week 
   await advance.click(); await saved();
   await expect(field('Current load')).toHaveValue('BROWSER-B');
   await expect(field('Status')).toHaveValue('DISPATCHED');
-  await expect(location).toHaveValue('Boston, MA');
+  await expect(location).toHaveValue('Cambridge, MA');
   await expect(field('Next load')).toHaveText('—');
   await advance.dblclick(); await saved();
   await expect(field('Current load')).toHaveValue('BROWSER-B');
