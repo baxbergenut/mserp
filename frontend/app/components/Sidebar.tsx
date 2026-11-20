@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import Link from "@/app/components/AccessLink";
+import AccessLink from "@/app/components/AccessLink";
+import { IntentLink } from "@/app/components/IntentLink";
 import { usePathname } from "next/navigation";
 import {
   Banknote,
@@ -91,6 +92,7 @@ export function Sidebar() {
   const administrator = useAdministrator();
   const maintenanceAccess = useMaintenanceAccess();
   const pathname = usePathname();
+  const Link = pathname === "/driver-board" || pathname === "/gross-board" ? IntentLink : AccessLink;
   const narrow = useSyncExternalStore(subscribeNarrowViewport, narrowViewport, serverViewport);
   const [collapsePreference, setCollapsed] = useState<boolean | null>(null);
   const collapsed = collapsePreference ?? narrow;
