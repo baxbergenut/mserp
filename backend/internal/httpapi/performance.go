@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -43,11 +44,28 @@ func (w *timedWriter) Flush() {
 }
 func (w *timedWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// Browser timings ride on the next ordinary request and carry no identifiers.
-// Only bounded numeric observations and known operation names reach the log.
-func logBoardClientTimings(logger *slog.Logger, raw string) {
+func boardReleaseBuild() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" && len(setting.Value) >= 12 {
+				return setting.Value[:12]
+			}
+		}
+	}
+	return ""
+}
+
+// A build match distinguishes freshly loaded tabs. Only the boolean reaches the log.
+func logBoardClientTimings(logger *slog.Logger, raw string, release string) {
 	if raw == "" || len(raw) > 512 {
 		return
+	}
+	if claim, ok := strings.CutPrefix(raw, "build="); ok {
+		build, rest, _ := strings.Cut(claim, ",")
+		raw = rest
+		if release != "" && build == release {
+			logger = logger.With("current_client_build", true)
+		}
 	}
 	samples := strings.Split(raw, ",")
 	if len(samples) > 12 {
@@ -127,6 +145,7 @@ func appendOpeningNetwork(fields []any, network string, received int) []any {
 }
 
 func performance(logger *slog.Logger) func(http.Handler) http.Handler {
+	release := boardReleaseBuild()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, m := db.WithMetrics(r.Context())
@@ -135,7 +154,7 @@ func performance(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(&timedWriter{ResponseWriter: counted, start: start, metrics: m}, r.WithContext(ctx))
 			route := chi.RouteContext(r.Context()).RoutePattern()
 			if counted.Status() >= 200 && counted.Status() < 300 && (strings.HasPrefix(route, "/driver-board") || strings.HasPrefix(route, "/gross-board")) {
-				logBoardClientTimings(logger, r.Header.Get("X-Clustie-Board-Timing"))
+				logBoardClientTimings(logger, r.Header.Get("X-Clustie-Board-Timing"), release)
 			}
 			phases, _ := m.Details()
 			scenario := "default"

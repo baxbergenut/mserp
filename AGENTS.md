@@ -23,6 +23,9 @@ change.
 Production board documents preload the credentialed session GET. Keep direct
 visits to one session request and verify access again on focus. Browser timings
 with `-document-open` cover a fresh visible document through grid paint.
+The browser includes the CI release revision on its existing timing header. The
+API logs a boolean when it matches the running binary, so timings from updated
+tabs can be identified without logging client-supplied identifiers.
 Board opens pair the authorized stream and the grid GET before taking the SQL
 snapshot. Matching includes the viewer, tab ID, board and Gross Board week.
 Keep the blocked-stream fallback and reconnect recovery when changing these

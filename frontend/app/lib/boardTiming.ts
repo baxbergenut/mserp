@@ -68,6 +68,8 @@ export function recordBoardPaint(board: Board, operation: Operation, start: numb
 
 // The next normal API request carries the samples. No telemetry-only request.
 export function takeBoardTimingHeader(): Record<string,string> {
-  while (samples.join(",").length > 512) samples.shift();
-  return samples.length ? { "X-Clustie-Board-Timing": samples.splice(0).join(",") } : {};
+  const build = process.env.NEXT_PUBLIC_BOARD_BUILD;
+  const prefix = build ? `build=${build},` : "";
+  while (samples.length > (build ? 11 : 12) || prefix.length + samples.join(",").length > 512) samples.shift();
+  return samples.length ? { "X-Clustie-Board-Timing": prefix + samples.splice(0).join(",") } : {};
 }
