@@ -3917,10 +3917,9 @@ corrected, so an open Tasks page removes reviews whose due date moves forward.
   connected, and applies the latest retained snapshot on focusout without a GET.
   An older in-flight refresh cannot overwrite a newer stream snapshot.
   Board streams flush their authenticated connection before snapshot work.
-  `initial=none` skips the duplicate opening snapshot. A paired opening briefly waits
-  for a newly established PostgreSQL listener so its startup notification is covered by
-  the first GET. Slow listener establishment and later reconnects still publish catch-up
-  frames. On both boards, new clients subscribe before
+  A Status or Gross Board LISTEN connection survives up to 30 seconds without
+  subscribers so switching boards reuses it. Each new tab still fetches current data.
+  `initial=none` skips the duplicate opening snapshot: new clients subscribe before
   their initial GET, with a 150 ms HTTP fallback and explicit reconnect recovery.
   Pending invalidations resume after opening finishes; legacy stream clients keep
   initial snapshots. Check `TestBoardStreamOpeningDoesNotWaitForSnapshot` and

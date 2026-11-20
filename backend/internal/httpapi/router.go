@@ -208,6 +208,7 @@ func NewRouter(
 	boardEvents := newDatabaseEvents(pool, logger, "mserp_driver_board", "driver_board.read")
 	openings := &boardOpenings{}
 	boardEvents.openings = openings
+	boardEvents.idleGrace = boardListenerIdleGrace
 	boardPresence := newDatabaseEvents(pool, logger, "mserp_board_presence", "driver_board.read")
 	boardRepo := repository.NewDriverBoardRepository(pool, fiveELDJob != nil)
 	boardEvents.snapshotEvent = "board"

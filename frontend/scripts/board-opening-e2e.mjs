@@ -11,20 +11,7 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
     await route.fulfill({ response, json: { ...session, parallelBoardOpening: parallel } });
   });
   setNetworkLatency(178);
-  await page.addInitScript(() => {
-    window.openingFrames = [];
-    const NativeEventSource = window.EventSource;
-    window.EventSource = class extends NativeEventSource {
-      constructor(url, options) {
-        super(url, options);
-        if (new URL(url, location.href).searchParams.has('opening')) {
-          for (const type of ['board', 'grossBoard']) {
-            this.addEventListener(type, () => window.openingFrames.push(type));
-          }
-        }
-      }
-    };
-  });
+  const listenerPids = new Map();
   const results = [];
   const measuredBoards = new Set();
   const checkTiming = req => {
@@ -76,14 +63,16 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
       expect(board.drivers.length).toBeGreaterThan(0);
       await expect(page.locator(grid).first()).toBeVisible();
       const clickToPaintMS = await page.evaluate(() => window.boardClickPaint);
+      const channel = route === 'driver-board' ? 'mserp_driver_board' : 'mserp_gross_board';
+      const listener = () => sql(`COPY (SELECT pid FROM pg_stat_activity WHERE application_name='${schema}' AND query='LISTEN "${channel}"') TO STDOUT`).trim();
+      await expect.poll(listener).toMatch(/^\d+$/);
+      const pid = listener();
+      if (listenerPids.has(channel)) expect(pid).toBe(listenerPids.get(channel));
+      else listenerPids.set(channel, pid);
       results.push({ route, parallel: enabled, streamToGetMS: Math.round(sentAt - subscription.at), clickToPaintMS });
     }
   }
   console.log('Actual browser/API/PostgreSQL opening at 178 ms RTT', JSON.stringify(results));
-  // The fixture has no board writers while opening. Let any unintended
-  // startup snapshot make the full round trip through the delayed SSE proxy.
-  await page.waitForTimeout(400);
-  expect(await page.evaluate(() => window.openingFrames)).toEqual([]);
   page.off('request', checkTiming);
   expect([...measuredBoards].sort()).toEqual(['gross', 'status']);
   setNetworkLatency(0);

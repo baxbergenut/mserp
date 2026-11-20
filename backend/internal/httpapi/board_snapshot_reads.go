@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const boardListenerIdleGrace = 30 * time.Second
+
 // Full-fleet reads compete for CPU and the API's ten PostgreSQL connections.
 // Limit concurrent HTTP and live board builds before either acquires a connection.
 // Edits, load drawers, presence and financial commands never wait on this channel.

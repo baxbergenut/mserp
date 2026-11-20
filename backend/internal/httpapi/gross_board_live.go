@@ -17,6 +17,7 @@ type grossWeekContext struct{}
 func registerGrossBoardLive(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger, auth *authHandler, repo *repository.GrossBoardRepository, openings *boardOpenings) func() {
 	events := newDatabaseEvents(pool, logger, "mserp_gross_board", "board.read")
 	events.openings = openings
+	events.idleGrace = boardListenerIdleGrace
 	peers := newDatabaseEvents(pool, logger, "mserp_gross_presence", "board.read")
 	key := func(ctx context.Context) string {
 		return ctx.Value(grossWeekContext{}).(time.Time).Format(time.DateOnly)

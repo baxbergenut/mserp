@@ -24,11 +24,12 @@ import (
 type taskEvents struct {
 	mu              sync.Mutex
 	clients         map[chan struct{}]struct{}
-	listening       bool
 	cancel          context.CancelFunc
 	config          *pgx.ConnConfig
 	logger          *slog.Logger
 	stopped         chan struct{}
+	idleGrace       time.Duration
+	idleTimer       *time.Timer
 	openings        *boardOpenings
 	channel         string
 	permission      string
@@ -72,20 +73,28 @@ func (h *taskEvents) shutdown() {
 	default:
 		close(h.stopped)
 	}
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
+	}
 	if h.cancel != nil {
 		h.cancel()
 	}
 	h.stopSnapshots()
 }
 
-func (h *taskEvents) subscribe() (chan struct{}, bool, func()) {
+func (h *taskEvents) subscribe() (chan struct{}, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ch := make(chan struct{}, 1)
 	select {
 	case <-h.stopped:
-		return ch, false, func() {}
+		return ch, func() {}
 	default:
+	}
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
 	}
 	h.clients[ch] = struct{}{}
 	if h.cancel == nil {
@@ -93,27 +102,39 @@ func (h *taskEvents) subscribe() (chan struct{}, bool, func()) {
 		h.cancel = cancel
 		go h.listen(ctx)
 	}
-	return ch, h.listening, func() {
+	return ch, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		if _, exists := h.clients[ch]; !exists {
 			return
 		}
 		delete(h.clients, ch)
-		if len(h.clients) == 0 {
+		if len(h.clients) != 0 {
+			return
+		}
+		if h.idleGrace <= 0 || h.shutdownContext.Err() != nil {
 			h.cancel()
 			h.cancel = nil
-			h.listening = false
+			return
 		}
+		// A dispatcher switching between boards can reuse the same LISTEN
+		// connection. Reconnecting would broadcast another full snapshot.
+		var timer *time.Timer
+		timer = time.AfterFunc(h.idleGrace, func() {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if h.idleTimer == timer {
+				h.cancel()
+				h.cancel = nil
+				h.idleTimer = nil
+			}
+		})
+		h.idleTimer = timer
 	}
 }
 func (h *taskEvents) publish() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.publishLocked()
-}
-
-func (h *taskEvents) publishLocked() {
 	h.revision++
 	for ch := range h.clients {
 		select {
@@ -255,13 +276,8 @@ func (h *taskEvents) receive(ctx context.Context) error {
 	if _, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{h.channel}.Sanitize()); err != nil {
 		return err
 	}
-	// Publish readiness and the recovery notification atomically with subscribe.
-	h.mu.Lock()
-	if ctx.Err() == nil {
-		h.listening = true
-		h.publishLocked()
-	}
-	h.mu.Unlock()
+	// Reconcile anything missed during a connection interruption.
+	h.publish()
 	for {
 		if _, err = conn.WaitForNotification(ctx); err != nil {
 			return err
@@ -279,30 +295,17 @@ func (h *taskEvents) serve(auth *authHandler, presence ...*taskEvents) http.Hand
 		if err != nil {
 			return
 		}
-		changes, listening, unsubscribe := h.subscribe()
+		changes, unsubscribe := h.subscribe()
 		defer unsubscribe()
 		if h.openings != nil {
 			if key, ok := boardOpeningScope(r); ok {
-				if !listening && r.URL.Query().Get("initial") == "none" {
-					// The first LISTEN publishes a catch-up notification. A paired
-					// GET starts after registration below, so it covers this signal.
-					// On a slow connection leave the eventual catch-up enabled.
-					select {
-					case <-changes:
-					case <-time.After(75 * time.Millisecond):
-					case <-r.Context().Done():
-						return
-					case <-h.stopped:
-						return
-					}
-				}
 				defer h.openings.register(key)()
 			}
 		}
 		var presenceChanges chan struct{}
 		if len(presence) > 0 {
 			var closePresence func()
-			presenceChanges, _, closePresence = presence[0].subscribe()
+			presenceChanges, closePresence = presence[0].subscribe()
 			defer closePresence()
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
