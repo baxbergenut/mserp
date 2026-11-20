@@ -30,7 +30,12 @@ loads.automation.reason = 'Last known miles remaining · GPS data stale · last 
 await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 await page.route('**/api/**', async route => {
   const req = route.request(), path = new URL(req.url()).pathname.slice(4);
-  if (req.method() === 'PUT' && path === '/driver-board') { entry = { ...req.postDataJSON().entries[0], version: entry.version + 1 }; return route.fulfill({ json: [entry] }); }
+  if (req.method() === 'PUT' && path === '/driver-board') {
+    const [patch] = req.postDataJSON().entries;
+    const changes = Object.fromEntries(patch.editedFields.map(field => [field, patch[field]]));
+    entry = { ...entry, ...changes, version: entry.version + 1 };
+    return route.fulfill({ json: [entry] });
+  }
   if (req.method() === 'POST' && path === '/driver-board/loads/driver') {
     const { action, manualStopTime, planId, stopKey } = req.postDataJSON();
     if (action === 'stop_time') {
