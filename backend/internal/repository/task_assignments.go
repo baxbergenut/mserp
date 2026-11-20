@@ -36,6 +36,8 @@ func customTaskVisibility(adminParam, userParam int) string {
          WHERE a.kind=system_task_kind AND u.active AND u.id=NULLIF($%d,'')::uuid)))`, adminParam, userParam, userParam, userParam)
 }
 
+const systemTaskAssigneePredicate = `u.active AND (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids) OR u.role_id=ANY(a.assignee_role_ids))`
+
 func systemTaskVisible(ctx context.Context, q chargeQuery, kind string, lock bool) (bool, error) {
 	admin, userID := taskViewerArgs(ctx)
 	if admin {
@@ -46,8 +48,7 @@ func systemTaskVisible(ctx context.Context, q chargeQuery, kind string, lock boo
 		suffix = " FOR SHARE OF a"
 	}
 	var visible bool
-	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_users u WHERE u.active AND u.id=NULLIF($2,'')::uuid
- AND (u.id=a.assignee_id OR u.id=ANY(a.assignee_ids) OR u.role_id=ANY(a.assignee_role_ids))) FROM system_task_assignments a WHERE a.kind=$1`+suffix, kind, userID).Scan(&visible)
+	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_users u WHERE u.id=NULLIF($2,'')::uuid AND `+systemTaskAssigneePredicate+`) FROM system_task_assignments a WHERE a.kind=$1`+suffix, kind, userID).Scan(&visible)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

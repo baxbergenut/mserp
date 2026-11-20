@@ -16,7 +16,7 @@ import (
 func TestGrossBoardBalanceResetAuthorization(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(requirePermission)
-	registerGrossBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	registerGrossBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil, nil)
 	for _, tc := range []struct {
 		name string
 		user repository.AuthUser
@@ -44,7 +44,7 @@ func TestGrossBoardBalanceResetAuthorization(t *testing.T) {
 func TestGrossBoardWeekLockAuthorization(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(requirePermission)
-	registerGrossBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	registerGrossBoardRoutes(router, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil, nil)
 	for _, tc := range []struct {
 		name string
 		user repository.AuthUser

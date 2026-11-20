@@ -70,7 +70,7 @@ func TestGrossBoardPlanningPermissionAndPayloadBoundaries(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	router := chi.NewRouter()
 	router.Use(requirePermission)
-	registerGrossBoardRoutes(router, logger, nil, nil)
+	registerGrossBoardRoutes(router, logger, nil, nil, nil)
 	for _, permission := range []string{"board.read", "driver_board.write", "driver_pay.edit", "investor_pay.edit"} {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, capabilityRequest(http.MethodPut, "/gross-board/planning-entries", `{}`, permission))

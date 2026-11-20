@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ func TestBoardReadsFollowCommit(t *testing.T) {
 	var calls atomic.Int32
 	gate := make(chan struct{})
 	entered := make(chan struct{})
-	key := boardReadKey{week: time.Now(), viewer: "one"}
+	key := time.Now()
 	read := func(ctx context.Context, _ time.Time) (int, error) {
 		n := int(calls.Add(1))
 		if n == 1 {
@@ -63,23 +62,67 @@ func TestBoardReadsFollowCommit(t *testing.T) {
 	}
 }
 
-func TestBoardReadsIsolateViewers(t *testing.T) {
-	var reads boardSnapshotReads[string]
-	week := time.Now()
-	start := make(chan struct{})
-	done := make(chan bool, 3)
-	for _, key := range []boardReadKey{{week, "A", true}, {week, "A", false}, {week, "B", false}} {
-		go func(key boardReadKey) {
-			<-start
-			want := fmt.Sprint(key.viewer, key.admin)
-			got, err := reads.get(context.Background(), key, func(context.Context, time.Time) (string, error) { return want, nil })
-			done <- err == nil && got == want
-		}(key)
+func TestBoardReadsCoalesceQueuedWeeks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Hold all slots to force requests from both transports into the queue.
+	first, err := acquireBoardRead(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	close(start)
-	for range 3 {
-		if !<-done {
-			t.Fatal("board result crossed viewer or administrator scope")
+	defer first()
+	second, err := acquireBoardRead(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondHeld := true
+	defer func() {
+		if secondHeld {
+			second()
 		}
+	}()
+
+	var reads boardSnapshotReads[time.Time]
+	var calls atomic.Int32
+	week := time.Now().UTC()
+	next := week.AddDate(0, 0, 7)
+	results := make(chan bool, 5)
+	for _, w := range []time.Time{week, week, next, week, next} {
+		go func() {
+			got, err := reads.get(ctx, w, func(_ context.Context, target time.Time) (time.Time, error) {
+				calls.Add(1)
+				return target, nil
+			})
+			results <- err == nil && got == w
+		}()
+	}
+	for {
+		reads.mu.Lock()
+		a, b := reads.pending[week], reads.pending[next]
+		queued := a != nil && a.waiters == 3 && b != nil && b.waiters == 2
+		reads.mu.Unlock()
+		if queued {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(time.Millisecond):
+		}
+	}
+	second()
+	secondHeld = false
+	for range 5 {
+		select {
+		case ok := <-results:
+			if !ok {
+				t.Fatal("wrong board week")
+			}
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("five reads ran %d builds for two weeks", calls.Load())
 	}
 }

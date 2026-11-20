@@ -26,15 +26,18 @@ func acquireBoardRead(ctx context.Context) (func(), error) {
 }
 
 // Only callers present before the SQL read begins may share its snapshot.
-type boardReadKey struct {
-	week   time.Time
-	viewer string
-	admin  bool
+type boardWeekReader[T any] func(context.Context, time.Time) (T, error)
+
+func shareBoardReads[T any](read boardWeekReader[T]) boardWeekReader[T] {
+	var snapshots boardSnapshotReads[T]
+	return func(ctx context.Context, week time.Time) (T, error) {
+		return snapshots.get(ctx, week, read)
+	}
 }
 
 type boardSnapshotReads[T any] struct {
 	mu      sync.Mutex
-	pending map[boardReadKey]*boardRead[T]
+	pending map[time.Time]*boardRead[T]
 }
 
 type boardRead[T any] struct {
@@ -46,10 +49,10 @@ type boardRead[T any] struct {
 	err     error
 }
 
-func (r *boardSnapshotReads[T]) get(ctx context.Context, key boardReadKey, read func(context.Context, time.Time) (T, error)) (T, error) {
+func (r *boardSnapshotReads[T]) get(ctx context.Context, key time.Time, read func(context.Context, time.Time) (T, error)) (T, error) {
 	r.mu.Lock()
 	if r.pending == nil {
-		r.pending = make(map[boardReadKey]*boardRead[T])
+		r.pending = make(map[time.Time]*boardRead[T])
 	}
 	batch := r.pending[key]
 	if batch == nil || batch.ctx.Err() != nil {
@@ -57,6 +60,8 @@ func (r *boardSnapshotReads[T]) get(ctx context.Context, key boardReadKey, read 
 		batch = &boardRead[T]{done: make(chan struct{}), ctx: workCtx, cancel: cancel}
 		r.pending[key] = batch
 		go r.run(key, batch, read)
+	} else {
+		db.Event(ctx, "board_read_joined")
 	}
 	batch.waiters++
 	r.mu.Unlock()
@@ -77,7 +82,7 @@ func (r *boardSnapshotReads[T]) get(ctx context.Context, key boardReadKey, read 
 	}
 }
 
-func (r *boardSnapshotReads[T]) run(key boardReadKey, batch *boardRead[T], read func(context.Context, time.Time) (T, error)) {
+func (r *boardSnapshotReads[T]) run(key time.Time, batch *boardRead[T], read func(context.Context, time.Time) (T, error)) {
 	// Coalesce callers until a slot is available. A request arriving after
 	// the read starts belongs to a newer batch and observes later commits.
 	timer := time.NewTimer(2 * time.Millisecond)
@@ -101,7 +106,8 @@ func (r *boardSnapshotReads[T]) run(key boardReadKey, batch *boardRead[T], read 
 	if err != nil {
 		batch.err = err
 	} else {
-		batch.board, batch.err = read(batch.ctx, key.week)
+		db.Event(batch.ctx, "board_read_started")
+		batch.board, batch.err = read(batch.ctx, key)
 	}
 	close(batch.done)
 	batch.cancel()

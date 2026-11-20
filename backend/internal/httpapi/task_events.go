@@ -160,18 +160,7 @@ func (h *taskEvents) rawSnapshot(ctx context.Context) []byte {
 	if cached.body == nil || cached.revision != revision || time.Since(cached.at) > time.Second {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		stop := context.AfterFunc(h.shutdownContext, cancel)
-		var body []byte
-		var err error
-		if h.snapshotEvent == "board" || h.snapshotEvent == "grossBoard" {
-			var release func()
-			release, err = acquireBoardRead(ctx)
-			if err == nil {
-				body, err = h.snapshot(ctx)
-				release()
-			}
-		} else {
-			body, err = h.snapshot(ctx)
-		}
+		body, err := h.snapshot(ctx)
 		stop()
 		cancel()
 		if err != nil {

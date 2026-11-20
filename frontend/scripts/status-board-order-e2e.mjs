@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 import { join } from 'node:path';
 
-export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, headers, temp, week }) {
+export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, headers, temp, week, password }) {
   const dispatcher = 'e4500000-0000-0000-0000-000000000071';
   const other = 'e4500000-0000-0000-0000-000000000076';
   const ids = [72,73,74,75].map(n => `e4500000-0000-0000-0000-${String(n).padStart(12,'0')}`);
@@ -215,7 +215,29 @@ export async function runStatusBoardOrderE2E({ page, viewer, base, sql, schema, 
   await expect(page.locator('tr[data-dispatcher-id=""]')).toBeVisible();
   await expect(pending).toBeVisible();
   await page.screenshot({path:join(temp,'status-board-pending-hire.png'),fullPage:true});
-  expect((await (await viewer.request.get(`${base}/api/driver-board?weekStart=${week}`)).json()).pendingDrivers).toEqual([]);
+  sql(`SET search_path TO ${schema},public;
+    INSERT INTO app_users(username,email,password_hash,role_id)
+    SELECT 'Burst viewer '||n,'burst-'||n||'@example.test',v.password_hash,v.role_id
+    FROM app_users v CROSS JOIN generate_series(1,4) n WHERE v.email='order-viewer@example.com';`);
+  const burstViewers = await Promise.all(Array.from({length:4}, () => page.context().browser().newContext({baseURL:base})));
+  try {
+    await Promise.all(burstViewers.map(async (context, i) => {
+      const login = await context.request.post('/api/auth/login',{data:{email:`burst-${i+1}@example.test`,password}});
+      expect(login.ok()).toBe(true);
+    }));
+    const requests = [viewer.request,page.request,...burstViewers.map(context => context.request)];
+    const calls = await Promise.all(requests.map(async request => {
+      const response = await request.get(`${base}/api/driver-board?weekStart=${week}`);
+      expect(response.ok()).toBe(true);
+      const names = (await response.json()).pendingDrivers;
+      if (request === page.request) expect(names.some(hire => hire.intakeId === intake)).toBe(true);
+      else expect(names).toEqual([]);
+      return Number(/queries;desc="(\d+)"/.exec(response.headers()['server-timing'])[1]);
+    }));
+    console.log('Database calls per Status Board GET for six simultaneous users', calls);
+  } finally {
+    await Promise.all(burstViewers.map(context => context.close()));
+  }
   await expect(viewer.locator('[data-pending-intake-id]')).toHaveCount(0);
   // All dispatcher groups expose personal ordering, including Unassigned.
   await page.getByLabel('Dispatcher filter',{exact:true}).click();

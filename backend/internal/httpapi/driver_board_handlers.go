@@ -84,7 +84,7 @@ func (request *driverBoardRequest) validate() error {
 	return nil
 }
 
-func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository, openings *boardOpenings) {
+func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *repository.DriverBoardRepository, openings *boardOpenings, read boardWeekReader[repository.SharedDriverBoard]) {
 	registerBoardPresenceRoutes(r, logger, repo)
 	fail := func(w http.ResponseWriter, err error) {
 		var statusError *pgconn.PgError
@@ -306,24 +306,22 @@ func registerDriverBoardRoutes(r chi.Router, logger *slog.Logger, repo *reposito
 	r.Post("/driver-board/dispatcher-order", func(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusGone, "Dispatcher ordering is now personal to this browser. Reload the page to reorder.")
 	})
-	var snapshots boardSnapshotReads[repository.DriverBoard]
 	r.Get("/driver-board", func(w http.ResponseWriter, r *http.Request) {
 		week, err := grossBoardWeek(r.URL.Query().Get("weekStart"))
 		if err != nil {
 			writeAPIError(w, 400, err.Error())
 			return
 		}
-		// Pending onboarding rows are authorized inside the repository transaction.
 		session, _ := authSessionFromContext(r.Context())
-		key := boardReadKey{week: week, viewer: session.User.ID, admin: session.User.Administrator}
 		if !openings.admit(w, r) {
 			return
 		}
-		board, err := snapshots.get(r.Context(), key, repo.Get)
+		snapshot, err := read(r.Context(), week)
 		if err != nil {
 			fail(w, err)
 			return
 		}
+		board := snapshot.ForViewer(session.User.ID, session.User.Administrator)
 		query := r.URL.Query()
 		if query.Get("overview") == "1" {
 			if query.Get("compact") == "grid" && query.Get("weekPreview") == "1" {
