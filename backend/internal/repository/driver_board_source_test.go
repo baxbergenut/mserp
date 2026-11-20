@@ -179,6 +179,16 @@ func testBoardCurrentEntryParity(t *testing.T, ctx context.Context, pool *pgxpoo
  ($1,'2026-10-06','PARITY-OTHER',200,700,400),($1,'2026-10-12','UNMATCHED-PARITY',200,800,500)`, driver); err != nil {
 		t.Fatal(err)
 	}
+	// A Saturday explicit selection appears on Monday. Its source slot must
+	// outrank the later number-only occurrence of the same load.
+	if _, err = tx.Exec(ctx, `INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id,driver_rate)
+ VALUES($1,'2026-10-03','PARITY-OTHER',88131,150)`, driver); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO gross_board_transfers(driver_id,source_date,source_slot,dispatch_date,dispatch_slot,settlement_date,dispatcher_id,dispatcher_name,version,active)
+ VALUES($1,'2026-10-03',0,'2026-10-05',1,'2026-10-03','','',1,true)`, driver); err != nil {
+		t.Fatal(err)
+	}
 	// Compare the complete API rows, including duplicate flags, with the original
 	// financial projection. Existing board fixtures include historical repeats,
 	// manual values, unresolved numbers and split/trip selections.

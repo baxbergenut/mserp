@@ -17,10 +17,17 @@ const driverBoardDispatcherJoinSQL = `
 
 const driverBoardDispatcherSQL = `CASE WHEN d.active THEN d.dispatcher_id ELSE departure_dispatcher.dispatcher_id END`
 
-const driverBoardRosterPredicateSQL = `(
- (d.active AND payroll_driver_at(d.id,board_day.today)=d.id)
+// The board displays the main driver for an effective team. Exposing the
+// membership test lets PostgreSQL join the roster to the small dated team set.
+func boardPrimaryDriverSQL(day string) string {
+	return `NOT EXISTS (SELECT 1 FROM driver_teams team WHERE team.team_driver_id=d.id
+ AND team.start_week<=` + day + ` AND (team.end_week IS NULL OR ` + day + `<team.end_week))`
+}
+
+var driverBoardRosterPredicateSQL = `(
+ (d.active AND ` + boardPrimaryDriverSQL("board_day.today") + `)
  OR (NOT d.active AND d.termination_date BETWEEN date_trunc('week',board_day.today)::date AND board_day.today
-  AND payroll_driver_at(d.id,d.termination_date)=d.id)
+  AND ` + boardPrimaryDriverSQL("d.termination_date") + `)
 )`
 
 const driverBoardTruckJoinSQL = `

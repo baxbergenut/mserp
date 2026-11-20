@@ -146,11 +146,13 @@ const grossBoardEntriesSQL = `(SELECT driver_id,service_date,0 AS slot,false AS 
 // remain plans until a dispatcher chooses the intended upstream record.
 const boardLoadIdentityJoin = `
  LEFT JOIN loads l ON l.id = CASE WHEN NOT e.deleted AND e.day_status='' THEN
-   coalesce(e.load_record_id, CASE WHEN e.load_number<>'' THEN (
+   ` + boardLoadIdentityStart
+const boardLoadIdentityStart = `coalesce(e.load_record_id, CASE WHEN e.load_number<>'' THEN (
      SELECT min(l.id) FROM loads l
      WHERE lower(btrim(l.load_id))=lower(btrim(e.load_number)) `
-const boardLoadIdentityEnd = ` HAVING count(*)=1
-   ) END) END `
+const boardLoadIdentityFinish = ` HAVING count(*)=1
+   ) END)`
+const boardLoadIdentityEnd = boardLoadIdentityFinish + ` END `
 const grossBoardResolvedLoad = boardLoadIdentityJoin + boardLoadIdentityEnd
 
 // Entered values take precedence over current source values. Carry uses the same
@@ -256,6 +258,7 @@ func readGrossBoard(ctx context.Context, tx pgx.Tx, week time.Time) (GrossBoard,
 // Financial projections keep their existing roster, inputs and serialized data.
 func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, includeDispatchDetails bool, weeklyEntries []GrossBoardEntry) (GrossBoard, error) {
 	board := GrossBoard{WeekStart: week.Format("2006-01-02"), Drivers: []GrossBoardDriver{}, Entries: []GrossBoardEntry{}, Balances: []GrossBoardBalance{}, PlanningEntries: []GrossBoardPlanningEntry{}}
+	primaryDriver := "payroll_driver_at(d.id,$1::date)=d.id"
 	planningRoster := ""
 	driverTypeColumns, driverTypeJoins := "", ""
 	if includeDispatchDetails {
@@ -264,6 +267,7 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 		if err != nil {
 			return board, err
 		}
+		primaryDriver = boardPrimaryDriverSQL("$1::date")
 		planningRoster = ` OR EXISTS(SELECT 1 FROM gross_board_planning_entries p WHERE p.driver_id=d.id AND p.text<>'' AND p.service_date >= $1::date AND p.service_date < $1::date+7)`
 		// Use the current direct truck assignment for the same type shown on Status Board.
 		driverTypeColumns = `, d.pay_type, coalesce(type_owner.driver_id=d.id,false), coalesce(NOT type_owner.is_company,false)`
@@ -275,7 +279,7 @@ func readGrossBoardSnapshot(ctx context.Context, tx pgx.Tx, week time.Time, incl
 	rows, err := tx.Query(ctx, `SELECT d.id, d.full_name, coalesce(t.id::text,''), coalesce(t.unit_number,''),
  coalesce(dp.id::text,''), coalesce(dp.full_name,historical_dispatcher.dispatcher_name,'Unassigned'), d.active`+driverTypeColumns+`
  FROM drivers d `+weeklyAssignmentJoins+driverTypeJoins+`
- WHERE payroll_driver_at(d.id,$1::date)=d.id AND (((d.active OR (d.termination_date >= $1::date AND d.termination_date < $1::date+7)) AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
+ WHERE `+primaryDriver+` AND (((d.active OR (d.termination_date >= $1::date AND d.termination_date < $1::date+7)) AND `+weeklyDriverStartedSQL+`) OR EXISTS (SELECT 1 FROM `+dispatchBoardEntriesSQL+` e WHERE NOT e.deleted AND e.driver_id=d.id
  AND e.service_date >= $1::date AND e.service_date < $1::date+7) OR EXISTS(SELECT 1 FROM gross_board_transfers moved WHERE moved.driver_id=d.id AND moved.active AND moved.source_date >= $1::date AND moved.source_date < $1::date+7)`+planningRoster+`)
  ORDER BY dp.full_name NULLS LAST, dp.id, d.full_name, d.id`, week)
 	if err != nil {
