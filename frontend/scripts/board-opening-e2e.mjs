@@ -58,6 +58,7 @@ export async function runBoardOpeningE2E({ page, base, setNetworkLatency, sql, s
   }
   console.log('Actual browser/API/PostgreSQL opening at 178 ms RTT', JSON.stringify(results));
   setNetworkLatency(0);
+  await page.unrouteAll({behavior: 'wait'});
   await checkTruckProfileRequests(page, base, sql, schema);
 }
 
@@ -68,13 +69,29 @@ async function checkTruckProfileRequests(page, base, sql, schema) {
     INSERT INTO trucks(unit_number,status) SELECT 'PREFETCH-'||i,'assigned' FROM generate_series(1,60) i;
     INSERT INTO truck_driver_assignments(truck_id,driver_id)
     SELECT t.id,d.id FROM generate_series(1,60) i JOIN trucks t ON t.unit_number='PREFETCH-'||i
-    JOIN drivers d ON d.normalized_name='prefetch driver '||i;`);
+    JOIN drivers d ON d.normalized_name='prefetch driver '||i;
+    INSERT INTO loads(id,load_id,status,load_pay,total_pay,raw_payload)
+    VALUES(987693,'BOARD-DONE-93','Delivered',500,500,'{"stops":[{"ordering":1,"stop_type":"pickup","location":{"city":"Dallas","state":"TX"}}]}');
+    INSERT INTO gross_board_entries(driver_id,service_date,load_number,load_record_id)
+    SELECT id,date_trunc('week',now() AT TIME ZONE 'America/New_York')::date,'BOARD-DONE-93',987693
+    FROM drivers WHERE normalized_name='prefetch driver 1';`);
   await page.mouse.move(1,1);
   let requests = 0;
   const count = req => { if (new URL(req.url()).pathname.startsWith('/trucks/detail')) requests++; };
   page.on('request', count);
   try {
+    const snapshot = page.waitForResponse(res => {
+      const url = new URL(res.url());
+      return url.pathname === '/api/driver-board' && url.searchParams.get('weekPreview') === '1' && res.status() === 200;
+    });
     await page.goto(base+'/driver-board');
+    const payload = await (await snapshot).json();
+    const board = payload.board ?? payload;
+    const driver = board.drivers.find(row => row.fullName === 'Prefetch Driver 1');
+    const weekly = board.loads[driver.id].week.map(i => board.plans[i]);
+    expect(weekly.find(load => load.number === 'BOARD-DONE-93')).toMatchObject({completed:true,stops:[]});
+    const full = await (await page.request.get(base+'/api/driver-board/loads/'+driver.id)).json();
+    expect(full.week.find(load => load.number === 'BOARD-DONE-93').stops[0].location).toBe('Dallas, TX');
     const links = page.locator('main a[href^="/trucks/detail"]');
     await expect.poll(() => links.count()).toBe(60);
     for (let i = 0; i < 60; i += 8) await links.nth(i).scrollIntoViewIfNeeded();

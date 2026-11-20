@@ -210,7 +210,7 @@ export function subscribeGrossEvents(weekStart: string, changed: (board?: GrossB
   return () => { ready.close(); stream.close(); };
 }
 export const fetchDriverBoard = async (weekStart: string, signal?: AbortSignal) => {
-  return readBoardSnapshot<DriverBoard | import("./types").CompactDriverBoard>("status", "/driver-board", { weekStart, overview: "1", compact: "grid" }, signal).then(expandBoard);
+  return readBoardSnapshot<DriverBoard | import("./types").CompactDriverBoard>("status", "/driver-board", { weekStart, overview: "1", compact: "grid", weekPreview: "1" }, signal).then(expandBoard);
 };
 export function saveDriverBoard(entries: DriverBoardEntry[], textBase: Record<string, DriverBoardEntry> = {}) {
   const omitReceipt = (key: string, value: unknown) => key === "fleetStatus" ? undefined : value;

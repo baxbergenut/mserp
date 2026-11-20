@@ -33,6 +33,24 @@ func TestCompactBoardPreservesDifferentSnapshots(t *testing.T) {
 	}
 }
 
+func TestBoardGridOverviewKeepsCompletedMatchIdentityAndCurrentStops(t *testing.T) {
+	id := 23
+	stop := BoardStop{Key: "pickup", Location: "Dallas, TX"}
+	completed := BoardLoad{PlanID: "old", LoadID: &id, Number: "repeat", Completed: true, Stops: []BoardStop{stop}}
+	open := BoardLoad{PlanID: "new", Number: "repeat", Stops: []BoardStop{stop}}
+	full := DriverBoard{Loads: map[string]BoardLoads{"driver": {Week: []BoardLoad{completed, open},
+		Current: &completed, Next: []BoardLoad{open}, Revision: "current"}}}
+	view := BoardGridOverview(full).Loads["driver"]
+	if len(view.Week) != 2 || !view.Week[0].Completed || view.Week[0].Number != open.Number ||
+		view.Week[0].LoadID == nil || *view.Week[0].LoadID != id || len(view.Week[0].Stops) != 0 {
+		t.Fatal("completed weekly choice lost its match identity", view.Week)
+	}
+	if !view.DetailsOmitted || view.Revision != "current" || len(view.Week[1].Stops) != 1 ||
+		len(view.Current.Stops) != 1 || len(view.Next[0].Stops) != 1 || len(full.Loads["driver"].Week[0].Stops) != 1 {
+		t.Fatal("grid preview changed a live stop, detail, or revision")
+	}
+}
+
 func TestCompactBoardGridGrossEvidence(t *testing.T) {
 	board := DriverBoard{GrossEntries: []GrossBoardEntry{{DriverID: "d", Date: "2026-11-19", Slot: 2, LoadNumber: "test", OriginalRate: "100.00", DriverRate: "90.01", Miles: "123.00", Duplicate: true, TripReview: true, Trips: []GrossBoardTrip{{ID: 5}}}}}
 	data, err := json.Marshal(CompactBoardGrid(board))

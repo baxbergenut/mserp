@@ -2,6 +2,7 @@ package repository
 
 import (
 	"encoding/json"
+	"slices"
 	"sort"
 )
 
@@ -106,5 +107,22 @@ func BoardOverview(board DriverBoard) DriverBoard {
 		loads[id] = v
 	}
 	board.Loads = loads
+	return board
+}
+
+// BoardGridOverview keeps completed weekly load identities for the inline
+// number match. Completed choices cannot become a draft's current load.
+// Active loads and the detailed Loads drawer keep their stop information.
+func BoardGridOverview(board DriverBoard) DriverBoard {
+	board = BoardOverview(board)
+	for id, loads := range board.Loads {
+		loads.Week = slices.Clone(loads.Week)
+		for i := range loads.Week {
+			if loads.Week[i].Completed {
+				loads.Week[i].Stops = []BoardStop{}
+			}
+		}
+		board.Loads[id] = loads
+	}
 	return board
 }
