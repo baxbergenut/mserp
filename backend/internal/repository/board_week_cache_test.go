@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -130,6 +131,96 @@ func TestSharedBoardWeekEntriesDatabase(t *testing.T) {
 		}
 		gridRead("gross", 1, 1)
 		gridRead("status", 0, 0)
+	})
+}
+
+func TestBoardQueueSnapshotDatabase(t *testing.T) {
+	withPayrollProjectionDatabase(t, func(t *testing.T, ctx context.Context, pool *pgxpool.Pool, admin *pgx.Conn) {
+		seedPayrollProjectionTest(t, ctx, pool)
+		repo := NewDriverBoardRepository(pool)
+		week, _ := chargeWeek("2026-10-05")
+		driver := []string{projectionDriver}
+		exec := func(sql string, args ...any) {
+			t.Helper()
+			if _, err := admin.Exec(ctx, sql, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		begin := func() pgx.Tx {
+			t.Helper()
+			tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return tx
+		}
+		check := func(tx pgx.Tx, ids []string, wantRead bool) {
+			t.Helper()
+			keys, err := boardWeekRevision(ctx, tx, week, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			measured, metrics := db.WithMetrics(ctx)
+			got, err := repo.readQueueSnapshot(measured, tx, keys.queues, ids)
+			if err != nil {
+				t.Fatal(err)
+			}
+			phases, _ := metrics.Details()
+			_, read := phases["status_queue_payloads"]
+			direct, err := repo.readQueueSnapshot(ctx, tx, "", ids)
+			if err != nil || !reflect.DeepEqual(got, direct) || read != wantRead {
+				t.Fatalf("direct match=%t payload read=%t want=%t: %v", reflect.DeepEqual(got, direct), read, wantRead, err)
+			}
+		}
+		current := func(ids []string, wantRead bool) {
+			t.Helper()
+			tx := begin()
+			defer tx.Rollback(ctx)
+			check(tx, ids, wantRead)
+		}
+		current(driver, true)
+		current(driver, false)
+		exec(`INSERT INTO driver_board_load_state(driver_id,payload) VALUES($1,'{"orderLabels":["first"]}')
+ ON CONFLICT(driver_id) DO UPDATE SET payload=excluded.payload`, projectionDriver)
+		old := begin()
+		defer old.Rollback(ctx)
+		check(old, driver, true)
+		exec(`UPDATE driver_board_load_state SET payload='{"orderLabels":["second"]}' WHERE driver_id=$1`, projectionDriver)
+		current(driver, true)
+		check(old, driver, true)
+		current(driver, true)
+		current(nil, true)
+		current(driver, true)
+		exec(`UPDATE fleet_status_control SET enabled=NOT enabled WHERE singleton`)
+		current(driver, true)
+		exec(`DELETE FROM driver_board_load_state WHERE driver_id=$1`, projectionDriver)
+		current(driver, true)
+		// Release the old snapshot's relation locks before checking DDL fallback.
+		if err := old.Rollback(ctx); err != nil {
+			t.Fatal(err)
+		}
+		exec(`ALTER TABLE driver_board_load_state DISABLE TRIGGER payroll_cache_insert`)
+		exec(`INSERT INTO driver_board_load_state(driver_id,payload) VALUES($1,'{"orderLabels":["untracked"]}')`, projectionDriver)
+		current(driver, true)
+		current(driver, true)
+		exec(`ALTER TABLE driver_board_load_state ENABLE TRIGGER payroll_cache_insert`)
+		current(driver, true)
+		current(driver, false)
+		exec(`TRUNCATE driver_board_load_state`)
+		current(driver, true)
+
+		shadow, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer shadow.Rollback(ctx)
+		if _, err = shadow.Exec(ctx, `CREATE TEMP TABLE payroll_cache_revisions ON COMMIT DROP AS TABLE payroll_cache_revisions`); err != nil {
+			t.Fatal(err)
+		}
+		keys, err := boardWeekRevision(ctx, shadow, week, false)
+		if err != nil || keys.queues != "" {
+			t.Fatalf("shadowed revision table certified queue data: %q %v", keys.queues, err)
+		}
 	})
 }
 

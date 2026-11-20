@@ -101,6 +101,7 @@ type DriverBoard struct {
 }
 
 type DriverBoardRepository struct {
+	queueCache        *boardWeekCache[boardQueueSnapshot]
 	loadSources       *boardLoadSourceCaches
 	weekEntries       *boardWeekCache[[]GrossBoardEntry]
 	workPriority      *PayrollWorkPriority
@@ -114,7 +115,11 @@ type DriverBoardRepository struct {
 
 func NewDriverBoardRepository(pool *pgxpool.Pool, fiveELDConfigured ...bool) *DriverBoardRepository {
 	configured := len(fiveELDConfigured) > 0 && fiveELDConfigured[0]
-	return &DriverBoardRepository{pool: pool, loadSources: new(boardLoadSourceCaches), weekEntries: new(boardWeekCache[[]GrossBoardEntry]), now: time.Now, fiveELDConfigured: configured}
+	return &DriverBoardRepository{
+		pool: pool, now: time.Now, fiveELDConfigured: configured,
+		loadSources: new(boardLoadSourceCaches), weekEntries: new(boardWeekCache[[]GrossBoardEntry]),
+		queueCache: new(boardWeekCache[boardQueueSnapshot]),
+	}
 }
 
 // Ownership and pay method are independent. An owner driving their own truck
@@ -286,30 +291,15 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		result.ELD.Configured = r.fiveELDConfigured
 	}
 	endLoads := db.Phase(ctx, "status_load_views")
-	// Keep large saved queue documents out of the ordered roster query. A left
-	// join to one seed row returns the fleet setting even for an empty board.
-	queueRows, err := tx.Query(ctx, `SELECT (SELECT fleet_status_enabled()), q.driver_id::text, q.payload
- FROM (VALUES (1)) seed(n) LEFT JOIN driver_board_load_state q ON q.driver_id=ANY($1::uuid[])`, ids)
+	queueSnapshot, err := r.readQueueSnapshot(ctx, tx, keys.queues, ids)
 	if err != nil {
 		return result, err
 	}
-	for queueRows.Next() {
-		var id *string
-		var payload []byte
-		if err = queueRows.Scan(&result.StatusSyncEnabled, &id, &payload); err != nil {
-			queueRows.Close()
-			return result, err
-		}
-		if id != nil {
-			row := queues[*id]
-			row.payload = payload
-			queues[*id] = row
-		}
-	}
-	err = queueRows.Err()
-	queueRows.Close()
-	if err != nil {
-		return result, err
+	result.StatusSyncEnabled = queueSnapshot.syncEnabled
+	for id, payload := range queueSnapshot.payloads {
+		row := queues[id]
+		row.payload = payload
+		queues[id] = row
 	}
 	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{jitDisabled: true, roster: queues}, r.loadSources, keys.entries)
 	endLoads()
@@ -358,6 +348,42 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		}
 	}
 	return result, tx.Commit(ctx)
+}
+
+type boardQueueSnapshot struct {
+	syncEnabled bool
+	payloads    map[string][]byte
+}
+
+func (r *DriverBoardRepository) readQueueSnapshot(ctx context.Context, tx pgx.Tx, revision string, ids []string) (boardQueueSnapshot, error) {
+	key := ""
+	if revision != "" {
+		key = revision + "\x00" + strings.Join(ids, ",")
+	}
+	// The map and JSON bytes are only read internally. Decoding each queue gives
+	// every caller its own editable state.
+	return r.queueCache.get(ctx, key, func(s boardQueueSnapshot) boardQueueSnapshot { return s }, func() (boardQueueSnapshot, error) {
+		defer db.Phase(ctx, "status_queue_payloads")()
+		var snapshot boardQueueSnapshot
+		rows, err := tx.Query(ctx, `SELECT (SELECT fleet_status_enabled()), q.driver_id::text, q.payload
+ FROM (VALUES (1)) seed(n) LEFT JOIN driver_board_load_state q ON q.driver_id=ANY($1::uuid[])`, ids)
+		if err != nil {
+			return snapshot, err
+		}
+		defer rows.Close()
+		snapshot.payloads = make(map[string][]byte)
+		for rows.Next() {
+			var id *string
+			var payload []byte
+			if err := rows.Scan(&snapshot.syncEnabled, &id, &payload); err != nil {
+				return snapshot, err
+			}
+			if id != nil {
+				snapshot.payloads[*id] = payload
+			}
+		}
+		return snapshot, rows.Err()
+	})
 }
 
 type BoardPendingDriver struct {

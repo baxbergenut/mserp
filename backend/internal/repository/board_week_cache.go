@@ -12,7 +12,25 @@ import (
 type boardWeekKeys struct {
 	entries  string
 	openings string
+	queues   string
 }
+
+// The queue cache is independent of weekly load revisions. A missing counter,
+// resource-scoped writes or incomplete invalidation triggers require a direct
+// read. Trigger versions also distinguish a disable/enable DDL cycle.
+const boardQueueRevisionSQL = `coalesce((
+ SELECT jsonb_build_array(r.tableoid,t.oid,r.revision,r.xmin::text,t.trigger_versions,fleet_status_enabled())::text
+ FROM payroll_cache_revisions r CROSS JOIN (
+  SELECT tgrelid AS oid, array_agg(xmin::text ORDER BY tgname) AS trigger_versions
+  FROM pg_trigger WHERE tgrelid=to_regclass('driver_board_load_state')
+   AND tgfoid=to_regprocedure('invalidate_payroll_cache()') AND tgenabled IN ('O','A')
+   AND tgqual IS NULL AND tgattr=''::int2vector
+   AND (tgname,tgtype::int) IN (('payroll_cache_insert',4),('payroll_cache_update',16),
+                                ('payroll_cache_delete',8),('payroll_cache_truncate',32))
+  GROUP BY tgrelid HAVING count(*)=4
+ ) t WHERE r.table_name='driver_board_load_state' AND NOT payroll_resource_table(r.table_name)
+   AND (SELECT relnamespace FROM pg_class WHERE oid=r.tableoid)=(SELECT relnamespace FROM pg_class WHERE oid=t.oid)
+),'')`
 
 // The key and the data must be read in the same read-only repeatable snapshot.
 // The four source tables advance their revisions on INSERT, UPDATE, DELETE and
@@ -30,12 +48,16 @@ func boardWeekRevision(ctx context.Context, tx pgx.Tx, week time.Time, openings 
 	}
 	var keys boardWeekKeys
 	var resets string
+	queueRevision := "''::text"
+	if !openings {
+		queueRevision = boardQueueRevisionSQL
+	}
 	err := tx.QueryRow(ctx, `SELECT CASE WHEN count(*)=4 AND NOT bool_or(payroll_resource_table(table_name)) THEN
  jsonb_build_array(current_schema(),$1::date,array_agg(revision ORDER BY table_name),
  (SELECT array_agg(load_id ORDER BY load_id) FROM load_source_availability WHERE NOT present))::text ELSE '' END,
  CASE WHEN $2 THEN coalesce((SELECT jsonb_agg(jsonb_build_array(id,driver_id,week_start,target,week_change) ORDER BY id)
- FROM gross_board_rate_resets WHERE week_start<=$1::date)::text,'') ELSE '' END
- FROM payroll_cache_revisions WHERE table_name IN ('gross_board_entries','gross_board_extra_entries','gross_board_transfers','loads')`, week, openings).Scan(&keys.entries, &resets)
+ FROM gross_board_rate_resets WHERE week_start<=$1::date)::text,'') ELSE '' END, `+queueRevision+`
+ FROM payroll_cache_revisions WHERE table_name IN ('gross_board_entries','gross_board_extra_entries','gross_board_transfers','loads')`, week, openings).Scan(&keys.entries, &resets, &keys.queues)
 	if keys.entries != "" && openings {
 		keys.openings = keys.entries + "\x00" + resets
 	}

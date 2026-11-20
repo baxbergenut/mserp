@@ -167,6 +167,14 @@ replacement. The numeric editor retains selected text through the edit and
 releases it on blur. A focused cell with no selection or draft continues to
 display incoming changes.
 
+Status Board keeps the last displayed roster's dispatch queue documents in API
+memory. In the same repeatable-read transaction as the roster, the existing
+revision query verifies the queue table, its four invalidation triggers, its
+revision and the fleet status setting. A changed roster or queue reloads the
+documents. Missing evidence falls back to the direct read. The
+`status_queue_payloads` phase counts those reads. Commands still read current
+queue state in their write transaction.
+
 ## References
 
 - [PostgreSQL 16: EXPLAIN](https://www.postgresql.org/docs/16/using-explain.html)

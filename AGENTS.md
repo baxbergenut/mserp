@@ -35,7 +35,9 @@ environment and date. Keep historical payroll captures and revision rows. Empty
 Relay/PrePass days can record completion directly. Canonical transactions still
 use their existing locks. Board GETs share only snapshots started after arrival.
 Grid and stream readers can join a build of the same board and week before its
-SQL begins. For Status Board, the transaction snapshots pending hires and their
+SQL begins. Status Board reuses saved queue documents only for the same roster,
+queue revision, enabled invalidation triggers and fleet status setting in that
+snapshot. Missing evidence uses the direct queue read. For Status Board, the transaction snapshots pending hires and their
 active task assignees together. Project those names for each authenticated viewer;
 stream frames also recheck current task access. Map consumes authorized board
 frames directly for dispatch GPS. Its 30-second timer updates displayed ages
