@@ -243,12 +243,18 @@ export function useDriverBoard(lockedDriverId?: string) {
     setSaving(true); setError("");
     try {
       let committed: DriverBoardEntry[];
+      const drafts = Object.values(snapshot);
+      const commands = drafts.map(draft => {
+        const base = baselines[draft.driverId];
+        const dispatchOnly = base?.version > 0 && base.version === draft.version && base.notes === draft.notes &&
+          base.trailerNumber === draft.trailerNumber && base.trailerNote === draft.trailerNote;
+        return { ...draft, dispatchOnly: dispatchOnly || undefined };
+      });
       try {
-        const drafts = Object.values(snapshot);
         const textBase = drafts.every(d => isBoardTextEdit(baselines[d.driverId], d))
           ? Object.fromEntries(drafts.map(d => [d.driverId, baselines[d.driverId]])) : undefined;
         response.current.submitted = performance.now();
-        committed = await saveDriverBoard(drafts, textBase);
+        committed = await saveDriverBoard(commands, textBase);
       } catch (err) {
         if (!(err instanceof APIError) || err.code !== "board_row_changed") throw err;
         const latestEntries = err.currentEntries ?? (await fetchDriverBoard(currentChargeWeek())).entries;
@@ -259,7 +265,12 @@ export function useDriverBoard(lockedDriverId?: string) {
           const latest = latestById.get(draft.driverId), base = baselines[draft.driverId];
           if (!latest || !base || base.version !== draft.version) throw err;
           const { entry, conflicts } = rebaseBoardDraft(base, draft, latest);
-          if (conflicts.length) {
+          if (!conflicts.length && commands.length === 1 && commands[0].dispatchOnly && latest.version > draft.version && err.currentEntries?.length === 1) {
+            // The server already accepts intervening text edits. A rejected
+            // dispatch revision may have changed away and back to the same value.
+            const name = board?.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
+            review.push({ latest, fields: boardConflictGroupFields(["currentLoad"]), message: name + " · Dispatch changed after you started editing. Review before applying your edit." });
+          } else if (conflicts.length) {
             const name = board?.drivers.find(d => d.id === draft.driverId)?.fullName ?? "Driver";
             const fields = conflicts.map(key => key + " is now " + (typeof latest[key] === "object" ? JSON.stringify(latest[key]) : latest[key] || "(empty)"));
             review.push({ latest, fields: boardConflictGroupFields(conflicts), message: name + " · " + fields.join(", ") });

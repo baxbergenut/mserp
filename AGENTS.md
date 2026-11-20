@@ -1725,6 +1725,9 @@ assignment lookup lists.
   percentage drivers. No ownership or pay settings change from this view.
   Driver addresses use the profile's street/city/state/postal fields. The former
   home field is absent from the UI and API; migration 080 consolidates its data.
+  Inline Status Board dispatch-only saves preserve the committed Notes and trailer cells.
+  They may cross text-only revisions under the driver's existing lock; a dispatch change
+  invalidates the previous version even when its value was later restored.
   Immediate Status Board autosave writes changed rows atomically with optimistic versions;
   clearing retains versions, navigation flushes, conflicts retain local drafts,
   and visible idle boards refresh every 30 seconds/on focus. Drafts are never

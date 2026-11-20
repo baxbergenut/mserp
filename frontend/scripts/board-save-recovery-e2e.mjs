@@ -23,13 +23,49 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
       expect((await other.request.put('/api/driver-board',{headers:{'X-CSRF-Token':session.csrfToken},data:{entries:[{...entry,...patch}]}})).status()).toBe(200);
     };
     const input=field=>page.getByLabel(name+' · '+field,{exact:true});
-    await input('Current load').focus();
-    await write({notes:'other user note'});
+    // Establish a saved row, then let the second user win the race after the
+    // browser has already submitted its inline dispatch edit.
+    await write({notes:'initial note'});
+    await page.reload();
+    await expect(input('Notes')).toHaveValue('initial note');
+    let inlineWrites = 0;
+    const concurrentText = async route => {
+      if (route.request().method() === 'PUT') {
+        inlineWrites++;
+        expect(route.request().postDataJSON().entries[0].dispatchOnly).toBe(true);
+        if (inlineWrites === 1) await write({notes:'other user note',trailerNumber:'OTHER-42'});
+      }
+      await route.continue();
+    };
+    await page.route('**/api/driver-board', concurrentText);
+    const inlineReceipt = page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/driver-board');
     await input('Current load').fill('SAVE-52');
-    await expect.poll(async()=> {const e=await read(); return [e.currentLoad,e.notes];}).toEqual(['SAVE-52','other user note']);
+    expect((await inlineReceipt).status()).toBe(200);
+    await expect.poll(async()=> {const e=await read(); return [e.currentLoad,e.notes,e.trailerNumber];}).toEqual(['SAVE-52','other user note','OTHER-42']);
+    await page.unroute('**/api/driver-board', concurrentText);
+    expect(inlineWrites).toBe(1);
     await expect(page.getByText('Saved',{exact:true})).toBeVisible();
     await page.reload();
     await expect(input('Current load')).toHaveValue('SAVE-52');
+    let staleAttempts = 0;
+    const reverseDispatch = async route => {
+      if (route.request().method() === 'PUT' && ++staleAttempts === 1) {
+        const original = await read();
+        await write({destination:'Temporary destination'});
+        await write({destination:original.destination});
+      }
+      await route.continue();
+    };
+    await page.route('**/api/driver-board', reverseDispatch);
+    await input('Current load').fill('UNCOMMITTED-52');
+    const alert=page.getByRole('main').getByRole('alert');
+    await expect(alert).toContainText('Dispatch changed after you started editing');
+    await expect(input('Current load')).toHaveValue('UNCOMMITTED-52');
+    expect((await read()).currentLoad).toBe('SAVE-52');
+    await alert.getByRole('button',{name:'Use saved values'}).click();
+    await expect(input('Current load')).toHaveValue('SAVE-52');
+    expect(staleAttempts).toBe(1);
+    await page.unroute('**/api/driver-board', reverseDispatch);
     await input('Notes').focus();
     await write({notes:'latest on server'});
     let boardReads = 0;
@@ -39,7 +75,6 @@ export async function runBoardSaveRecovery({ page, base, password, sql, schema }
     page.on('request', countReads);
     const rejection = page.waitForResponse(response => response.status() === 409 && new URL(response.url()).pathname === '/api/driver-board');
     await input('Notes').fill('my overlapping change');
-    const alert=page.getByRole('main').getByRole('alert');
     await expect(alert).toContainText('latest on server');
     const rejected = await (await rejection).json();
     expect(rejected.currentEntries).toHaveLength(1);

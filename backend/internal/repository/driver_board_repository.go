@@ -24,7 +24,9 @@ type DriverBoardEntry struct {
 	EffectiveAt       *time.Time        `json:"effectiveAt,omitempty"`
 	UndoID            int64             `json:"undoId,omitempty"`
 	StatusEdited      bool              `json:"statusEdited,omitempty"`
-	// Write-only intent: selecting the same number should still resolve its stops.
+	// DispatchOnly leaves the committed Notes and trailer cells untouched.
+	DispatchOnly bool `json:"dispatchOnly,omitempty"`
+	// Selecting the same number should still resolve its stops.
 	ResolveCurrentLoad bool   `json:"resolveCurrentLoad,omitempty"`
 	DriverID           string `json:"driverId"`
 	CurrentLoad        string `json:"currentLoad"`
@@ -398,6 +400,16 @@ func saveDriverBoardEntries(ctx context.Context, tx pgx.Tx, entries []DriverBoar
 		}
 		if err != nil {
 			return nil, err
+		}
+		if matchCurrentLoad && e.DispatchOnly {
+			// The dispatcher did not edit these cells. Keep their committed values
+			// even when a text-only save landed while this command was in flight.
+			e.Notes, e.TrailerNumber, e.TrailerNote = old.Notes, old.TrailerNumber, old.TrailerNote
+			if e.Version > 0 && e.Version >= old.loadActionVersion && e.Version < old.Version {
+				e.Version = old.Version
+				db.Event(ctx, "board_inline_crossed_text_edit")
+			}
+			e.DispatchOnly = false
 		}
 		if matchCurrentLoad && active && len(entries) == 1 && old.Version != e.Version {
 			return nil, &DriverBoardRowConflict{Entries: []DriverBoardEntry{old}}

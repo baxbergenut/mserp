@@ -22,7 +22,7 @@ func boardTextOnly(base, edit DriverBoardEntry) bool {
 }
 
 func boardTextCandidate(e DriverBoardEntry) bool {
-	return e.Version > 0 && !e.StatusEdited && !e.ResolveCurrentLoad && e.EffectiveAt == nil &&
+	return e.Version > 0 && !e.DispatchOnly && !e.StatusEdited && !e.ResolveCurrentLoad && e.EffectiveAt == nil &&
 		e.StatusReason == "" && e.HomeTime == "" && leaveValues(e.LeavePlan).HomeStart == ""
 }
 
