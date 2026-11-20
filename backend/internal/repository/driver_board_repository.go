@@ -257,7 +257,7 @@ func (r *DriverBoardRepository) get(ctx context.Context, week time.Time, display
 		result.ELD.Configured = r.fiveELDConfigured
 	}
 	endLoads := db.Phase(ctx, "status_load_views")
-	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{}, r.loadSources, key)
+	result.Loads, err = readBoardLoadViewsCached(ctx, tx, ids, r.loadStartDate(""), r.now(), boardLoadViewOptions{jitDisabled: true}, r.loadSources, key)
 	endLoads()
 	if err != nil {
 		return result, err
