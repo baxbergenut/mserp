@@ -65,15 +65,20 @@ func TestBoardCompressionUsesProjectedBytes(t *testing.T) {
 		"drivers": []any{map[string]any{"fullName": "Example", "payType": "cpm", "address": "PRIVATE", "payRate": 0.7}},
 		"entries": []string{strings.Repeat("dispatch note ", 4000)},
 	}
-	read := func(enc string) *httptest.ResponseRecorder {
+	read := func(enc string, permissions ...string) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest("GET", "/gross-board?opening=tab", nil)
 		r.Header.Set(boardSectionsHeader, "v1")
 		r.Header.Set("Accept-Encoding", enc)
-		r = r.WithContext(context.WithValue(r.Context(), authContextKey{}, repository.AuthSession{}))
+		r = r.WithContext(context.WithValue(r.Context(), authContextKey{}, repository.AuthSession{User: repository.AuthUser{Permissions: permissions}}))
 		out := httptest.NewRecorder()
 		writeBoardSnapshot(&permissionResponseWriter{ResponseWriter: out, request: r}, r, board)
 		return out
+	}
+	private := read("br", "board.read", "drivers.private.read")
+	first, err := io.ReadAll(brotli.NewReader(private.Body))
+	if err != nil || !bytes.Contains(first, []byte("PRIVATE")) {
+		t.Fatal("privileged board did not decode with its authorized address", err)
 	}
 	identity := read("identity")
 	compressed := read("gzip, br")
@@ -87,9 +92,18 @@ func TestBoardCompressionUsesProjectedBytes(t *testing.T) {
 	if bytes.Contains(body, []byte("PRIVATE")) {
 		t.Fatal("private fields appeared in compressed snapshot")
 	}
+	if read("gzip;q=1, br;q=0.5").Header().Get("Content-Encoding") != "gzip" {
+		t.Fatal("preferred gzip coding was lost")
+	}
 	if read("br;q=0").Header().Get("Content-Encoding") != "" {
 		t.Fatal("unacceptable coding")
 	}
+	board["entries"] = []string{strings.Repeat("large board ", 100000)}
+	read("br")
+	if idleBoardEncoder.Load() != nil {
+		t.Fatal("oversized board retained its compression workspace")
+	}
+	board["entries"] = []string{strings.Repeat("dispatch note ", 4000)}
 	boardCompressionSlot <- struct{}{}
 	defer func() { <-boardCompressionSlot }()
 	if fallback := read("br"); fallback.Header().Get("Content-Encoding") != "" || !bytes.Equal(fallback.Body.Bytes(), body) {

@@ -8,6 +8,8 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/andybalholm/brotli"
 
@@ -17,6 +19,24 @@ import (
 // Keep compression off the database path and bound CPU during simultaneous openings.
 // Excess requests use the existing proxy gzip path without waiting.
 var boardCompressionSlot = make(chan struct{}, 1)
+
+// The compression slot has one owner. Keep at most its last successful
+// encoder, and release the workspace after the board has been idle.
+var idleBoardEncoder atomic.Pointer[brotli.Writer]
+var boardEncoderExpiry *time.Timer
+
+func closeBoardEncoder(encoder *brotli.Writer, bodySize int) {
+	if err := encoder.Close(); err != nil || bodySize > 1<<20 {
+		return
+	}
+	// Close detaches the response writer. Reset starts a new stream on reuse.
+	idleBoardEncoder.Store(encoder)
+	if boardEncoderExpiry == nil {
+		boardEncoderExpiry = time.AfterFunc(time.Minute, func() { idleBoardEncoder.Store(nil) })
+	} else {
+		boardEncoderExpiry.Reset(time.Minute)
+	}
+}
 
 const boardSectionsHeader = "X-Clustie-Board-Sections"
 
@@ -92,10 +112,17 @@ func writeBoardSections(w http.ResponseWriter, r *http.Request, value any, previ
 		case boardCompressionSlot <- struct{}{}:
 			defer func() { <-boardCompressionSlot }()
 			encoder := brotli.HTTPCompressorWithLevel(w, r, 5)
-			defer encoder.Close()
-			dst = encoder
-			if w.Header().Get("Content-Encoding") == "br" {
+			if br, ok := encoder.(*brotli.Writer); ok {
+				if previous := idleBoardEncoder.Swap(nil); previous != nil {
+					previous.Reset(w)
+					br = previous
+				}
+				dst = br
+				defer closeBoardEncoder(br, len(body))
 				db.Event(r.Context(), "board_response_brotli")
+			} else {
+				dst = encoder
+				defer encoder.Close()
 			}
 		default:
 		}

@@ -289,9 +289,12 @@ func saveLoadState(ctx context.Context, tx pgx.Tx, id string, s boardLoadState) 
 
 // Board readers need stops and load-level appointment fallbacks, not provider
 // documents, trips, contacts or the rest of the imported order payload.
-const boardStopSourceSQL = `jsonb_build_object('stops',l.raw_payload->'stops',
- 'pickup_appointment_time',l.raw_payload->'pickup_appointment_time',
- 'delivery_appointment_time',l.raw_payload->'delivery_appointment_time')`
+// The empty JSON path reads the whole document once. Keep that expression in
+// a subquery so PostgreSQL does not decompress a large payload for each field.
+const boardStopSourceSQL = `(SELECT jsonb_build_object('stops',src.payload->'stops',
+ 'pickup_appointment_time',src.payload->'pickup_appointment_time',
+ 'delivery_appointment_time',src.payload->'delivery_appointment_time')
+ FROM (SELECT l.raw_payload #> '{}' AS payload OFFSET 0) src)`
 
 var boardAddressLocality = regexp.MustCompile(`(?i),\s*([\p{L}][\p{L}\p{M} .'’\-]*?)\s*,?\s+([a-z]{2})\s+([0-9]{5})(?:-[0-9]{4})?$`)
 
