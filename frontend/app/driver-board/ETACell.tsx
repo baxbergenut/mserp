@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
 import type { BoardAutomation, BoardStop } from "@/app/lib/types";
 import { parseETA } from "./board";
@@ -29,7 +29,10 @@ export function ETACell({ name, value, automation, stop, disabled, expanded, onO
   const freshnessId = useId();
   const text = appointmentCellText(value, automation);
   const parts = text.schedule.split(" ");
-  const title = facilityETATitle(value, automation, stop);
+  // An automatic arrival has its own date. Manual clock-only entries use
+  // today's New York date, including when the board stays open overnight.
+  const automaticTitle = useMemo(() => value ? "" : facilityETATitle("", automation, stop), [value, automation, stop]);
+  const title = value ? facilityETATitle(value, automation, stop) : automaticTitle;
   const automaticArrival = !!text.schedule && automation?.arrived && automation.arrivalOverride === "auto";
   const automaticTravel = !!text.travel && (!value || automation?.manualETAValid === false) && automation?.travelMode === "auto";
   const outdated = automaticArrival ? automation.stale : automation?.travelStale;

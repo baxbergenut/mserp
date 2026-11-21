@@ -28,7 +28,7 @@ func TestPerformancePreservesStreaming(t *testing.T) {
 func TestBoardBrowserTimingPhases(t *testing.T) {
 	var output strings.Builder
 	logger := slog.New(slog.NewTextHandler(&output, nil))
-	logBoardClientTimings(logger, "gross-save=250/50/210/224/230~complete,status-load=10/2/5/11/7,status-save=240/60/210,gross-open=190,status-load=30/40/90,unknown=2,status-open=180/bad/150")
+	logBoardClientTimings(logger, "gross-save=250/50/210/224/230~complete,status-load=10/2/5/11/7,status-save=240/60/210,gross-open=190,status-load=30/40/90,unknown=2,status-open=180/bad/150", "")
 	log := output.String()
 	if strings.Count(log, "board browser timing") != 3 || strings.Count(log, "completed_edit=true") != 1 || !strings.Contains(log, "response_to_commit_ms=14 commit_to_frame_ms=6 frame_interval_ms=20") || !strings.Contains(log, "operation=status-save duration_ms=240 before_request_ms=60 request_ms=150 response_to_paint_ms=30") ||
 		!strings.Contains(log, "operation=gross-open duration_ms=190") {
@@ -36,10 +36,25 @@ func TestBoardBrowserTimingPhases(t *testing.T) {
 	}
 }
 
+func TestBoardBrowserTimingRelease(t *testing.T) {
+	var output strings.Builder
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	const release = "0123456789ab"
+	for _, build := range []string{release, "previous", "invalid value", ""} {
+		logBoardClientTimings(logger, "build="+build+",status-open=120", release)
+	}
+	logBoardClientTimings(logger, "build=,status-open=120", "")
+	log := output.String()
+	if strings.Count(log, "operation=status-open") != 5 || strings.Count(log, "current_client_build=true") != 1 ||
+		strings.Contains(log, release) || strings.Contains(log, "previous") || strings.Contains(log, "invalid value") {
+		t.Fatal(log)
+	}
+}
+
 func TestBoardDocumentOpeningTiming(t *testing.T) {
 	var output strings.Builder
 	logBoardClientTimings(slog.New(slog.NewTextHandler(&output, nil)),
-		"status-document-open=324,gross-document-open=290,status-document-open=120001")
+		"status-document-open=324,gross-document-open=290,status-document-open=120001", "")
 	log := output.String()
 	if strings.Count(log, "board browser timing") != 2 || !strings.Contains(log, "operation=status-document-open duration_ms=324") ||
 		!strings.Contains(log, "operation=gross-document-open duration_ms=290") {
@@ -50,7 +65,7 @@ func TestBoardDocumentOpeningTiming(t *testing.T) {
 func TestBoardOpeningNetworkTiming(t *testing.T) {
 	var output strings.Builder
 	logger := slog.New(slog.NewTextHandler(&output, nil))
-	logBoardClientTimings(logger, "status-open=300/0/240/270/275~5/10/200/230/130/85000,gross-open=300/0/240/270/275~5/10/245/250/130/85000,status-save=300/0/240/270/275~5/10/200/230/130/85000")
+	logBoardClientTimings(logger, "status-open=300/0/240/270/275~5/10/200/230/130/85000,gross-open=300/0/240/270/275~5/10/245/250/130/85000,status-save=300/0/240/270/275~5/10/200/230/130/85000", "")
 	log := output.String()
 	if strings.Count(log, "board browser timing") != 3 || strings.Count(log, "ttfb_ms=") != 1 ||
 		!strings.Contains(log, "before_fetch_ms=5 fetch_to_request_ms=5 ttfb_ms=190 response_transfer_ms=30 body_to_view_ms=10 server_headers_ms=130 encoded_body_bytes=85000") {

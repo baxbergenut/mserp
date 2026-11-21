@@ -2,6 +2,8 @@ import tzLookup from "tz-lookup";
 import type { BoardAutomation, BoardStop } from "@/app/lib/types";
 import { parseETA } from "./board";
 
+const facilityFormats = new Map<string, Intl.DateTimeFormat>();
+
 export function roundETAClock(clock: string) {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(clock);
   if (!match) return clock;
@@ -41,6 +43,11 @@ export function facilityETATitle(value: string, automation?: BoardAutomation, st
   try {
     const timeZone = tzLookup(stop.latitude, stop.longitude);
     const rounded = new Date(Math.round(arrival.getTime() / 900000) * 900000);
-    return `ETA ${rounded.toLocaleString("en-US", { timeZone, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" })}`;
+    let format = facilityFormats.get(timeZone);
+    if (!format) {
+      format = new Intl.DateTimeFormat("en-US", { timeZone, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+      facilityFormats.set(timeZone, format);
+    }
+    return `ETA ${format.format(rounded)}`;
   } catch { return ""; }
 }

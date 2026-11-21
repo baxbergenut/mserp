@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState, useSyncExternalStore } from "react";
 import { Check, MapPin, TriangleAlert } from "lucide-react";
 import type { DriverBoardLocation } from "@/app/lib/types";
 import { isOldLocation } from "./board";
@@ -18,20 +18,29 @@ export function formatCoordinates(location: DriverBoardLocation) {
   return `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
 }
 
-export function LocationCell({ name, location }: { name: string; location: DriverBoardLocation | null }) {
+// Pins share one clock. React updates a pin only when its freshness changes.
+const ageListeners = new Set<() => void>();
+let ageTimer: ReturnType<typeof setInterval> | undefined;
+function subscribeAge(notify: () => void) {
+  ageListeners.add(notify);
+  if (ageListeners.size === 1) ageTimer = setInterval(() => ageListeners.forEach(check => check()), 30_000);
+  return () => {
+    ageListeners.delete(notify);
+    if (!ageListeners.size) clearInterval(ageTimer);
+  };
+}
+const noClock = () => () => {};
+
+export const LocationCell = memo(function LocationCell({ name, location }: { name: string; location: DriverBoardLocation | null }) {
   const [feedback, setFeedback] = useState("");
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
+  const old = useSyncExternalStore(location ? subscribeAge : noClock,
+    () => !!location && isOldLocation(location.reportedAt, Date.now()), () => false);
   useEffect(() => {
     if (!feedback) return;
     const timer = setTimeout(() => setFeedback(""), 1500);
     return () => clearTimeout(timer);
   }, [feedback]);
   const coordinates = location ? formatCoordinates(location) : "";
-  const old = location ? isOldLocation(location.reportedAt, now) : false;
   const pinColor = !location ? "text-zinc-400" : old ? "text-orange-400" : "text-emerald-400";
   function copy() {
     if (!navigator.clipboard) { setFeedback("Copy failed"); return; }
@@ -41,4 +50,4 @@ export function LocationCell({ name, location }: { name: string; location: Drive
     title={feedback || (location ? `Copy current location · ${location.source === "samsara" ? "Samsara" : "Five ELD"} updated ${locationTime(location.reportedAt)} NY · ${old ? "Location may be outdated" : "Location up to date"}` : "Location unavailable")}
     className={`flex h-8 w-6 shrink-0 items-center justify-center rounded enabled:hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-blue-500 disabled:opacity-30 ${pinColor}`}
     onClick={copy}>{feedback === "Copied" ? <Check className="h-4 w-4 text-emerald-400" /> : feedback ? <TriangleAlert className="h-4 w-4 text-amber-400" /> : <MapPin className="h-4 w-4" />}<span className="sr-only" role="status">{feedback}</span></button>;
-}
+});
